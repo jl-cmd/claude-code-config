@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""
+Stop hook that blocks Claude responses containing hedging language.
+
+Words like "likely", "probably", "presumably" signal unverified claims.
+When detected, Claude is forced to re-check and respond with verified facts.
+"""
+
+import json
+import os
+import re
+import sys
+
+PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+RESEARCH_MODE_SKILL_SEARCH_PATHS = [
+    os.path.join(PLUGIN_ROOT, "skills", "research-mode", "SKILL.md"),
+    os.path.join(os.path.expanduser("~"), ".claude", "skills", "research-mode", "SKILL.md"),
+    os.path.join(os.path.expanduser("~"), ".claude", "plugins", "marketplaces", "claude-deep-research", "skills", "research-mode", "SKILL.md"),
+]
+
+HEDGING_WORDS = [
+    r"\blikely\b",
+    r"\bunlikely\b",
+    r"\bprobably\b",
+    r"\bprobable\b",
+    r"\bpresumably\b",
+    r"\bperhaps\b",
+    r"\bpossibly\b",
+    r"\bseemingly\b",
+    r"\bapparently\b",
+    r"\barguably\b",
+    r"\bsupposedly\b",
+    r"\bostensibly\b",
+    r"\bconceivably\b",
+    r"\bplausibly\b",
+]
+
+HEDGING_PHRASES = [
+    r"\bmight be\b",
+    r"\bcould be\b",
+    r"\bseems to be\b",
+    r"\bappears to be\b",
+    r"\bin all likelihood\b",
+    r"\bmore likely than not\b",
+    r"\bit.s possible that\b",
+]
+
+ALL_HEDGING_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE) for pattern in HEDGING_WORDS + HEDGING_PHRASES
+]
+
+CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```", re.MULTILINE)
+INLINE_CODE_PATTERN = re.compile(r"`[^`]+`")
+QUOTED_BLOCK_PATTERN = re.compile(r"^>.*$", re.MULTILINE)
+
+
+def strip_code_and_quotes(text: str) -> str:
+    """Remove code blocks, inline code, and blockquotes to avoid false positives."""
+    text = CODE_BLOCK_PATTERN.sub("", text)
+    text = INLINE_CODE_PATTERN.sub("", text)
+    text = QUOTED_BLOCK_PATTERN.sub("", text)
+    return text
+
+
+def find_hedging_words(text: str) -> list[str]:
+    """Return all hedging words/phrases found in the text."""
+    prose_text = strip_code_and_quotes(text)
+    matched_terms = []
+
+    for pattern in ALL_HEDGING_PATTERNS:
+        all_matches = pattern.findall(prose_text)
+        for each_match in all_matches:
+            normalized_term = each_match.strip().lower()
+            if normalized_term not in matched_terms:
+                matched_terms.append(normalized_term)
+
+    return matched_terms
+
+
+def main() -> None:
+    try:
+        hook_input = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        sys.exit(0)
+
+    if hook_input.get("stop_hook_active", False):
+        sys.exit(0)
+
+    assistant_message = hook_input.get("last_assistant_message", "")
+
+    if not assistant_message:
+        sys.exit(0)
+
+    found_hedging_terms = find_hedging_words(assistant_message)
+
+    if not found_hedging_terms:
+        sys.exit(0)
+
+    formatted_term_list = ", ".join(f'"{term}"' for term in found_hedging_terms)
+
+    research_mode_content = "(Could not load research-mode skill file)"
+    for each_skill_path in RESEARCH_MODE_SKILL_SEARCH_PATHS:
+        try:
+            with open(each_skill_path, encoding="utf-8") as skill_file:
+                research_mode_content = skill_file.read()
+                break
+        except OSError:
+            continue
+
+    block_response = {
+        "decision": "block",
+        "reason": (
+            f"ANTI-HALLUCINATION GUARDRAIL: Your response contains hedging language: "
+            f"{formatted_term_list}. "
+            f"These words signal unverified claims. You MUST rewrite your response "
+            f"with these constraints active:\n\n"
+            f"{research_mode_content}\n\n"
+            f"Do NOT simply remove the hedging word and keep the unverified claim. "
+            f"Either VERIFY it with a source or replace it with 'I don't know'.\n\n"
+            f"You MUST re-output the complete, revised response with the corrections applied."
+        ),
+    }
+
+    print(json.dumps(block_response))
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

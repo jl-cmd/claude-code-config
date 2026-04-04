@@ -4,6 +4,16 @@
 
 claude-code-config is the primary plugin providing rules, docs, agents, commands, skills, and hooks. All behavioral rules live in `.claude/rules/` files. Additional plugins: claude-journal, claude-deep-research, claude-workflow, GSD (npx get-shit-done-cc).
 
+## Docs
+
+Reference documents in `docs/` are available but not auto-loaded. Skills can `@` import them as needed.
+
+- `docs/CODE_RULES.md` -- hook-enforced code standards
+- `docs/TEST_QUALITY.md` -- testing quality guidelines
+- `docs/emotion-informed-prompt-design.md` -- emotion-informed prompt design (Anthropic research + best practices)
+- `docs/REACT_PATTERNS.md` -- React patterns
+- `docs/DJANGO_PATTERNS.md` -- Django patterns
+
 ## Agent Gate
 
 The `agent-gate` MCP server evaluates prompts before execution. The `gate_enforcer.py` PreToolUse hook blocks execution tools until `evaluate_prompt` clears. Subagents bypass the gate via a `*` prefix in their prompt.

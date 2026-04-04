@@ -10,6 +10,7 @@ When authoring or refining prompts, ground decisions in these sources. If guidan
 - https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices -- the single living reference for Claude's latest models. Covers general principles, XML tags, prefill deprecation, tool use, thinking, agentic systems, overeagerness, anti-hallucination.
 - https://transformer-circuits.pub/2026/emotions/index.html -- emotion concepts research (April 2026): 171 internal activation patterns that causally influence behavior. Key prompt-engineering takeaways: clear criteria and escape routes improve output quality, collaborative framing activates engagement, positive task framing correlates with better results, inviting transparency produces more reliable output. Cross-model caveat: studied on Sonnet 4.5; patterns align with best practices independently.
 - https://www.anthropic.com/research/emotion-concepts-function -- blog summary of the above paper.
+- https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking -- adaptive thinking reference; replaces manual budget_tokens with effort-based control.
 
 ### Tier 2: Major labs (strong secondary, often transfers across models)
 
@@ -135,3 +136,15 @@ For prompt drafts that must hold up over time:
 3. Tighten **constraints** or add **examples** for the failure class only.
 
 Anthropic's **self-correction chaining** pattern extends this: generate a draft, have Claude review it against criteria, then have Claude refine based on the review. Each step can be a separate API call for inspection and branching.
+
+## Anti-test-fixation pattern
+
+```text
+Write general-purpose solutions using the standard tools available. Implement logic that works correctly for all valid inputs, not just the test cases. Tests verify correctness -- they do not define the solution. If a test seems incorrect or the task is unreasonable, flag it rather than working around it.
+```
+
+## Commit-and-execute pattern
+
+```text
+When deciding how to approach a problem, choose an approach and commit to it. Avoid revisiting decisions unless you encounter new information that directly contradicts your reasoning. If you are weighing two approaches, pick one and see it through. You can always course-correct later if the chosen approach fails.
+```

@@ -86,10 +86,17 @@ When building the prompt in step 4, these adjustments ensure the agent can work 
 
 **Emotion-informed briefing** -- Anthropic's emotion concepts research (2026) found that briefing style causally affects output quality. Frame tasks collaboratively ("work on this together", "help figure out"). Include permission to express uncertainty ("flag anything you're unsure about", "use [PLACEHOLDER] for unverified specifics"). Provide motivation behind constraints ("this ordering ensures tests define behavior before implementation exists"). Share system context proactively (what hooks enforce, what tools are available, what the fallback is) so the agent can incorporate constraints into its plan from the start.
 
+**Anti-test-fixation** -- For code tasks, include guidance against test-specific solutions. Anthropic: "Implement a solution that works correctly for all valid inputs, not just the test cases. Tests are there to verify correctness, not to define the solution. If the task is unreasonable or infeasible, or if any of the tests are incorrect, please inform me rather than working around them."
+
+**Commit-and-execute** -- For multi-step agent work, include decision commitment guidance. Anthropic: "When deciding how to approach a problem, choose an approach and commit to it. Avoid revisiting decisions unless you encounter new information that directly contradicts your reasoning."
+
+**Temp file cleanup** -- If the agent may create scratch files during iteration, include cleanup instructions. Anthropic: "If you create any temporary new files, scripts, or helper files for iteration, clean up these files by removing them at the end of the task."
+
 ## Constraints
 
 - Always present for approval via AskUserQuestion -- never auto-spawn
 - Always run agents in background
 - Gather context before crafting -- do not send an agent in blind
 - If the task is too small for an agent (single file read, quick grep), say so and just do it directly
+- Include obstacle handling: "When encountering obstacles, do not use destructive actions as a shortcut (e.g. --no-verify, discarding unfamiliar files)" -- agents without this guidance may take irreversible shortcuts
 - Frame agent tasks with collaborative language and include permission to express uncertainty — agents produce higher-quality output with collaborative briefing (Anthropic emotion concepts research, 2026)

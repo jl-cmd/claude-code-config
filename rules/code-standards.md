@@ -1,7 +1,9 @@
 # Code Standards
 
-> **MANDATORY REFERENCE:** `~/.claude/docs/CODE_RULES.md` - Load for ALL code generation.
+> **MANDATORY REFERENCE:** CODE_RULES.md - Load for ALL code generation.
 > This is the single source of truth for code standards. Non-negotiable.
+
+@${CLAUDE_PLUGIN_ROOT}/docs/CODE_RULES.md
 
 **Key principles (see CODE_RULES.md for complete reference):**
 - Self-documenting code (no comments)

@@ -4,7 +4,7 @@
     "description": "Claude Code development standards — rules, hooks, agents, commands, and skills",
     "type": "module",
     "bin": {
-        "claude-dev-env": "./bin/install.mjs"
+        "claude-dev-env": "bin/install.mjs"
     },
     "files": [
         "bin/",
@@ -25,6 +25,6 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/jl-cmd/claude-code-config"
+        "url": "git+https://github.com/jl-cmd/claude-code-config.git"
     }
 }

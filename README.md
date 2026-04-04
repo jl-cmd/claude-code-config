@@ -2,19 +2,47 @@
 
 Consistent development standards for Claude Code across every repo. Install once, get TDD enforcement, code quality hooks, specialized agents, and battle-tested rules everywhere.
 
-## Install
+## Quick Start
+
+### Prerequisites
+
+- **Node.js 18+** (includes `npx`)
+- **Python 3.8+** (for hook scripts)
+- **Claude Code CLI** installed and working
+
+### Install
 
 ```bash
 npx claude-dev-env
 ```
 
-To uninstall:
+That's it. The installer will:
+
+1. Detect your Python 3 command (`python3`, `python`, or `py -3`)
+2. Copy 13 rules, 4 docs, 34 agents, 11 commands, and 14 skills to `~/.claude/`
+3. Copy 90+ hook scripts to `~/.claude/hooks/`
+4. Merge 31 hook groups into `~/.claude/settings.json` (preserves your existing hooks)
+5. Write a manifest to `~/.claude/.claude-dev-env-manifest.json` for clean uninstall
+
+### Verify
+
+Start a new Claude Code session. You should see hook activity on your first prompt (code-rules-reminder, hook-structure-context). Run any slash command like `/commit` or `/readability-review` to confirm commands loaded.
+
+### Update
+
+Run the same command again. It overwrites existing files and updates hook entries in place:
+
+```bash
+npx claude-dev-env
+```
+
+### Uninstall
+
+Removes only the files this package installed (tracked via manifest) and cleans hook entries from `settings.json`:
 
 ```bash
 npx claude-dev-env --uninstall
 ```
-
-The installer copies rules, docs, agents, commands, and skills to `~/.claude/` and merges hooks into `~/.claude/settings.json`. It auto-detects your Python 3 command for hook scripts. Running it again updates existing files in place.
 
 ## What This Solves
 

@@ -228,9 +228,9 @@ Installed rules merge with your project's `.claude/` config. To override a rule 
 
 Installed hooks run alongside any hooks already in your `settings.json` or `settings.local.json`. The installer preserves existing hook entries.
 
-## Agent Gate Installer
+## Agent Gate
 
-This repo also includes an npm installer for [agent-gate](https://github.com/jl-cmd/agent-gate), a prompt evaluation gate for Claude Code. See [`installer/README.md`](installer/README.md) for details.
+For a prompt evaluation gate that reviews prompts before execution, see [agent-gate](https://github.com/jl-cmd/agent-gate):
 
 ```bash
 npx agent-gate-installer

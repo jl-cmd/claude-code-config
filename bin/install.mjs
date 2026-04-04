@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const CLAUDE_HOME = join(homedir(), '.claude');
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const MANIFEST_FILE = join(CLAUDE_HOME, '.claude-code-config-manifest.json');
-const PACKAGE_NAME = 'claude-code-config';
+const MANIFEST_FILE = join(CLAUDE_HOME, '.claude-dev-env-manifest.json');
+const PACKAGE_NAME = 'claude-dev-env';
 
 const CONTENT_DIRECTORIES = ['rules', 'docs', 'commands', 'agents'];
 

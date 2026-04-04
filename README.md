@@ -5,13 +5,13 @@ Consistent development standards for Claude Code across every repo. Install once
 ## Install
 
 ```bash
-npx claude-code-config
+npx claude-dev-env
 ```
 
 To uninstall:
 
 ```bash
-npx claude-code-config --uninstall
+npx claude-dev-env --uninstall
 ```
 
 The installer copies rules, docs, agents, commands, and skills to `~/.claude/` and merges hooks into `~/.claude/settings.json`. It auto-detects your Python 3 command for hook scripts. Running it again updates existing files in place.

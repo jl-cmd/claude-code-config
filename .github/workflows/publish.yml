@@ -2,12 +2,31 @@ name: Publish to npm
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      root_released: ${{ steps.release.outputs.release_created }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: release
+        uses: release-please-oss/release-please-action@v5
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
   publish:
+    needs: release
+    if: ${{ needs.release.outputs.root_released == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -18,6 +37,4 @@ jobs:
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ""
+      - run: npm publish --access public

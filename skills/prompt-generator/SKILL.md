@@ -54,6 +54,8 @@ Apply these principles (source: https://platform.claude.com/docs/en/build-with-c
 
 **Golden rule check.** Anthropic: "Show your prompt to a colleague with minimal context on the task and ask them to follow it. If they'd be confused, Claude will be too."
 
+**Commit-and-execute pattern.** Anthropic: "When you're deciding how to approach a problem, choose an approach and commit to it. Avoid revisiting decisions unless you encounter new information that directly contradicts your reasoning." For prompts that guide agents through multi-step work, include this pattern so the agent doesn't spin revisiting decisions.
+
 **For long context** (20k+ tokens): put documents first, query/instructions last. Anthropic: "Queries at the end can improve response quality by up to 30% in tests." Ground responses in quotes from source material before analysis.
 
 ### 5. Control output format
@@ -97,6 +99,9 @@ Before delivering, verify against the rubric:
 - [ ] Emotion-informed: uses collaborative framing (roles, motivation, partnership language)
 - [ ] Emotion-informed: includes permission to express uncertainty ("say so if unsure", placeholder notation)
 - [ ] Emotion-informed: proactive constraint awareness (inform about constraints upfront so the model can incorporate them into its plan)
+- [ ] For code prompts: includes anti-test-fixation ("Write general solutions, not code that only passes specific test cases; if tests seem wrong, flag them")
+- [ ] For agent prompts: includes temp file cleanup ("Clean up temporary files, scripts, or helper files created during the task")
+- [ ] For agent prompts: includes commit-and-execute pattern ("Choose an approach and commit; avoid revisiting decisions without new contradicting information")
 
 ### 9. Deliver
 
@@ -110,7 +115,7 @@ When generating prompts for current Claude models, apply these patterns:
 - **Overtriggering:** Dial back aggressive language. Anthropic: "Where you might have said 'CRITICAL: You MUST use this tool when...', you can use more normal prompting like 'Use this tool when...'."
 - **Overeagerness:** Include scope constraints. Anthropic: "Claude Opus 4.5 and Claude Opus 4.6 have a tendency to overengineer by creating extra files, adding unnecessary abstractions, or building in flexibility that wasn't requested."
 - **Overthinking:** Anthropic: "Replace blanket defaults with more targeted instructions. Instead of 'Default to using [tool],' add guidance like 'Use [tool] when it would enhance your understanding of the problem.'"
-- **Thinking and effort:** Prefer general instructions over prescriptive step plans. Anthropic: "A prompt like 'think thoroughly' often produces better reasoning than a hand-written step-by-step plan." Use the `effort` parameter (`low` | `medium` | `high` | `max`) to control thinking depth rather than manual `budget_tokens`.
+- **Adaptive thinking replaces budget_tokens:** Claude 4.6 uses adaptive thinking (thinking: {type: "adaptive"}) where the model dynamically decides when and how much to think. Use the effort parameter (low | medium | high | max) to control depth. Anthropic: "In internal evaluations, adaptive thinking reliably drives better performance than extended thinking." Manual budget_tokens is deprecated.
 - **Subagent orchestration:** Include guidance for when subagents ARE and ARE NOT warranted. Anthropic: "Use subagents when tasks can run in parallel, require isolated context, or involve independent workstreams that don't need to share state. For simple tasks, sequential operations, single-file edits, or tasks where you need to maintain context across steps, work directly rather than delegating."
 - **Conservative vs proactive action:** For tools that should act, use explicit language ("Change this function"). For tools that should advise, use: "Default to providing information... Only proceed with edits when the user explicitly requests them."
 - **Anti-hallucination:** Anthropic: "Never speculate about code you have not opened. If the user references a specific file, you MUST read the file before answering."
@@ -127,6 +132,7 @@ Examples of actions that warrant confirmation:
 - Destructive operations: deleting files or branches, dropping database tables, rm -rf
 - Hard to reverse operations: git push --force, git reset --hard, amending published commits
 - Operations visible to others: pushing code, commenting on PRs/issues, sending messages
+When encountering obstacles, do not use destructive actions as a shortcut. For example, don't bypass safety checks (e.g. --no-verify) or discard unfamiliar files that may be in-progress work.
 ```
 
 ## Research prompt pattern

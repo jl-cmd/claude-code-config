@@ -48,10 +48,11 @@ As the team lead, your job is to:
 
 After validator reports success:
 1. Shutdown all remaining agents
-2. Delete the team via TeamDelete
-3. Run `python -m pytest tests/ -q` to confirm final count
-4. Commit with descriptive message
-5. Report summary to user
+2. Clean up any temporary files, scripts, or helper files created during iteration
+3. Delete the team via TeamDelete
+4. Run `python -m pytest tests/ -q` to confirm final count
+5. Commit with descriptive message
+6. Report summary to user
 
 ## Agent Prompts
 
@@ -62,6 +63,8 @@ Each agent receives a structured prompt containing:
 - Working directory path
 - Code rules reminder: no magic values, no abbreviations, complete type hints, no new inline comments, imports at top, constants in config/
 - Collaboration guidance: flag ambiguity or uncertainty to teammates and use [PLACEHOLDER] for values you have not verified. Your role contributes to a specific phase of the TDD cycle — the separation between phases is what makes TDD effective.
+- Anti-test-fixation: write general solutions that work for all valid inputs, not just the specific test cases. Tests verify correctness -- they do not define the solution. If a test seems incorrect, flag it rather than working around it.
+- Commit-and-execute: choose an approach and commit to it. Avoid revisiting decisions unless new information directly contradicts your reasoning. Course-correct later if needed.
 
 ### Planner-specific
 - Read the relevant source files before designing
@@ -70,6 +73,7 @@ Each agent receives a structured prompt containing:
 - Create the task breakdown with specific test cases to write
 - Mark task complete and message teammates with assignments
 - If the scope is unclear or requirements are ambiguous, flag this to the orchestrator and propose assumptions for confirmation
+- Commit to an approach and communicate it clearly to teammates -- avoid revisiting architectural decisions unless implementation reveals a fundamental problem
 
 ### Tester-specific
 - Wait for planner to complete (check TaskList)
@@ -86,6 +90,7 @@ Each agent receives a structured prompt containing:
 - Write MINIMUM code to make tests pass — no extras
 - Run the specific test file to verify green
 - Mark task complete, check TaskList for next work
+- Write general solutions that work for all valid inputs -- never hard-code values or create implementations that only satisfy specific test assertions
 - If a failing test seems to test the wrong behavior or has a bug in the test itself, flag it to the validator for review
 
 ### Validator-specific
@@ -111,6 +116,7 @@ The planner decides how many RED tasks to create based on the scope:
 - If implementer's code breaks existing tests, validator fixes the regressions
 - If validator finds issues, create a new fix task and assign to implementer
 - If an agent goes idle repeatedly without progress, send a message with specific instructions
+- When encountering obstacles, use standard tools and approaches -- do not create helper scripts or workarounds to bypass problems; flag the issue for resolution
 
 ## Ownership Boundaries
 

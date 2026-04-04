@@ -111,7 +111,7 @@ Slash commands for common workflows.
 | `recall` | Retrieve prior session context and decisions from Obsidian vault |
 | `remember` | Save decisions, gotchas, and architectural choices to Obsidian vault |
 
-### Hooks (18 registered, 70+ files)
+### Hooks (31 registered, 70+ files)
 
 Automated enforcement that runs on Claude Code events. All hooks use `python3` and `${CLAUDE_PLUGIN_ROOT}` for cross-platform compatibility.
 
@@ -124,9 +124,17 @@ Automated enforcement that runs on Claude Code events. All hooks use `python3` a
 | Write\|Edit | `pyautogui-scroll-blocker` | Prevents pyautogui scroll direction bugs |
 | Write\|Edit | `hook-format-validator` | Validates hook file format on write |
 | Write\|Edit | `run_all_validators` | Runs the full validation suite (30+ checks) |
+| Write\|Edit | `code-rules-enforcer` | Blocks CODE_RULES.md violations (comments, magic values, imports) |
+| Write\|Edit | `tdd-enforcer` | Prompts TDD confirmation when writing production code |
+| Write\|Edit | `code-style-validator` | Checks indentation and function spacing |
+| Write\|Edit | `docker-settings-guard` | Blocks direct edits to Docker settings files |
 | Edit | `refactor-guard` | Ensures refactoring happens only after green tests |
 | Edit | `migration-safety-advisor` | Warns about risky database migration patterns |
 | Bash | `destructive-command-blocker` | Blocks rm -rf, git reset --hard, and other destructive commands |
+| Bash | `block-main-commit` | Blocks direct commits to main/master branch |
+| Bash | `pr-description-enforcer` | Enforces PR description structure and style |
+| Bash | `test-preflight-check` | Validates server health and database before test runs |
+| Task\|Agent | `parallel-task-blocker` | Suggests team orchestration for parallel agent spawning |
 | AskUserQuestion | `attention-needed-notify` | Desktop notification when Claude needs your input |
 
 #### Other Events
@@ -134,13 +142,18 @@ Automated enforcement that runs on Claude Code events. All hooks use `python3` a
 | Event | Hook | What it does |
 |-------|------|-------------|
 | UserPromptSubmit | `hook-structure-context` | Injects hook directory context into session |
+| UserPromptSubmit | `bulk-edit-reminder` | Suggests script-based approach for bulk updates |
+| UserPromptSubmit | `code-rules-reminder` | Injects CODE_RULES.md reminder on code-related prompts |
 | SessionStart (compact) | `compact-context-reinject` | Re-injects critical rules after context compaction |
 | SessionStart | `plugin-data-dir-cleanup` | Cleans stale plugin data on session start |
 | Stop | `attention-needed-notify` | Desktop notification when Claude stops |
+| Stop | `hedging-language-blocker` | Blocks responses with hedging language (anti-hallucination) |
 | SessionEnd | `session-end-cleanup` | Cleans temporary state on session end |
 | ConfigChange | `config-change-guard` | Guards against accidental settings changes |
 | PostToolUse (Write\|Edit) | `mypy_validator` | Runs mypy type checking after file writes |
 | PostToolUse (Write\|Edit) | `e2e-test-validator` | Validates e2e test conventions after writes |
+| PostToolUse (Write\|Edit) | `auto-formatter` | Auto-formats Python (ruff/black) and JS (prettier) on write |
+| PostToolUse (Agent\|Task) | `investigation-tracker-reset` | Resets investigation tracker after delegation |
 | Notification | `claude-notification-handler` | Routes Claude Code notifications to desktop |
 
 #### Validators Module

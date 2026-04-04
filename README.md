@@ -1,24 +1,30 @@
 # claude-code-config
 
-A Claude Code plugin that enforces consistent development standards across every repo you work in. Install once, get TDD enforcement, code quality hooks, specialized agents, and battle-tested rules everywhere.
+Consistent development standards for Claude Code across every repo. Install once, get TDD enforcement, code quality hooks, specialized agents, and battle-tested rules everywhere.
 
 ## Install
 
 ```bash
-claude plugin install jl-cmd/claude-code-config
+npx claude-code-config
 ```
 
-That's it. Rules, hooks, agents, commands, and skills activate automatically on next session start.
+To uninstall:
+
+```bash
+npx claude-code-config --uninstall
+```
+
+The installer copies rules, docs, agents, commands, and skills to `~/.claude/` and merges hooks into `~/.claude/settings.json`. It auto-detects your Python 3 command for hook scripts. Running it again updates existing files in place.
 
 ## What This Solves
 
-Without this plugin, every repo needs its own `.claude/rules/`, `.claude/hooks/`, `.claude/agents/`, etc. That means:
+Without shared config, every repo needs its own `.claude/rules/`, `.claude/hooks/`, `.claude/agents/`, etc. That means:
 
 - Duplicated config across 5+ repos
 - Drift when you update standards in one place but forget others
 - New repos start with zero guardrails
 
-This plugin centralizes all general-purpose Claude Code config. Project-specific rules still live in each repo's `.claude/` directory and merge with these.
+This package centralizes all general-purpose Claude Code config. Project-specific rules still live in each repo's `.claude/` directory and merge with these.
 
 ## What's Included
 
@@ -93,7 +99,7 @@ Slash commands for common workflows.
 | `/initialize` | Session initialization with protocol review |
 | `/sum` | Summarize current work context |
 
-### Skills (13)
+### Skills (14)
 
 | Skill | Purpose |
 |-------|---------|
@@ -104,6 +110,7 @@ Slash commands for common workflows.
 | `anthropic-plan` | Readonly codebase exploration before code changes, produces a plan file |
 | `readability-review` | 8-dimension readability scoring (160 pts) with automatic fixes |
 | `ingest` | Digest codebase into LLM-friendly text files via gitingest |
+| `npm-creator` | Scaffold npm installer packages for Claude Code plugin repos |
 | `rule-audit` | Full enforcement audit of rules, hooks, and docs across user and project layers |
 | `rule-creator` | Create and harden Claude Code rules with positive framing and rationale |
 | `skill-writer` | Guide for creating well-structured Agent Skills |
@@ -113,7 +120,7 @@ Slash commands for common workflows.
 
 ### Hooks (31 registered, 70+ files)
 
-Automated enforcement that runs on Claude Code events. All hooks use `python3` and `${CLAUDE_PLUGIN_ROOT}` for cross-platform compatibility.
+Automated enforcement that runs on Claude Code events. The installer detects your Python 3 command and rewrites hook paths to absolute `~/.claude/hooks/` paths in `settings.json`.
 
 #### PreToolUse (before tool execution)
 
@@ -162,9 +169,17 @@ The `hooks/validators/` directory contains 30+ individual check modules with a f
 
 Abbreviations, code quality, comments, file structure, git conventions, magic values, mypy integration, PR references, Python antipatterns, Python style, React patterns, ruff integration, security, TODO tracking, type safety, useless test detection, and more.
 
+## Also Available as a Plugin
+
+If you prefer the Claude Code plugin system over npm:
+
+```bash
+claude plugin install jl-cmd/claude-code-config
+```
+
 ## Recommended Companion Plugins
 
-These plugins provide additional skills and capabilities that complement this config. Install any that fit your workflow:
+These plugins provide additional skills and capabilities that complement this config:
 
 ```bash
 claude plugin install anthropics/claude-code-plugins        # Official: frontend-design, code-review, playwright, hookify, skill-creator, claude-md-management, serena, pyright-lsp, typescript-lsp, claude-code-setup
@@ -181,14 +196,23 @@ npx get-shit-done-cc
 
 ## Customization
 
-Plugin rules merge with your project's `.claude/` config. To override a plugin rule for a specific project, create a rule with the same filename in your project's `.claude/rules/` directory.
+Installed rules merge with your project's `.claude/` config. To override a rule for a specific project, create a rule with the same filename in your project's `.claude/rules/` directory.
 
-Plugin hooks run alongside any hooks in your project's `settings.json` or `settings.local.json`.
+Installed hooks run alongside any hooks already in your `settings.json` or `settings.local.json`. The installer preserves existing hook entries.
+
+## Agent Gate Installer
+
+This repo also includes an npm installer for [agent-gate](https://github.com/jl-cmd/agent-gate), a prompt evaluation gate for Claude Code. See [`installer/README.md`](installer/README.md) for details.
+
+```bash
+npx agent-gate-installer
+```
 
 ## Requirements
 
-- Claude Code CLI
+- Node.js 18+ (for the installer)
 - Python 3.8+ (for hooks)
+- Claude Code CLI
 
 ## License
 

@@ -93,9 +93,23 @@ Slash commands for common workflows.
 | `/initialize` | Session initialization with protocol review |
 | `/sum` | Summarize current work context |
 
-### Skills (1)
+### Skills (13)
 
-**pr-review-responder** -- Handles GitHub PR review feedback systematically: fetches all comments, creates a checklist, fixes each issue, replies inline, and commits as a single review-fix commit.
+| Skill | Purpose |
+|-------|---------|
+| `prompt-generator` | Write, refine, and structure prompts for Claude with emotion-informed framing |
+| `agent-prompt` | Craft structured agent prompts and spawn background agents after approval |
+| `tdd-team` | Orchestrate a 4-agent TDD team (planner, tester, implementer, validator) |
+| `pr-review-responder` | Systematic PR review response: fetch comments, checklist, fix, reply, commit |
+| `anthropic-plan` | Readonly codebase exploration before code changes, produces a plan file |
+| `readability-review` | 8-dimension readability scoring (160 pts) with automatic fixes |
+| `ingest` | Digest codebase into LLM-friendly text files via gitingest |
+| `rule-audit` | Full enforcement audit of rules, hooks, and docs across user and project layers |
+| `rule-creator` | Create and harden Claude Code rules with positive framing and rationale |
+| `skill-writer` | Guide for creating well-structured Agent Skills |
+| `everything-search` | Fast Windows file search via Everything (voidtools) es.exe |
+| `recall` | Retrieve prior session context and decisions from Obsidian vault |
+| `remember` | Save decisions, gotchas, and architectural choices to Obsidian vault |
 
 ### Hooks (18 registered, 70+ files)
 
@@ -134,6 +148,23 @@ Automated enforcement that runs on Claude Code events. All hooks use `python3` a
 The `hooks/validators/` directory contains 30+ individual check modules with a full test suite:
 
 Abbreviations, code quality, comments, file structure, git conventions, magic values, mypy integration, PR references, Python antipatterns, Python style, React patterns, ruff integration, security, TODO tracking, type safety, useless test detection, and more.
+
+## Recommended Companion Plugins
+
+These plugins provide additional skills and capabilities that complement this config. Install any that fit your workflow:
+
+```bash
+claude plugin install anthropics/claude-code-plugins        # Official: frontend-design, code-review, playwright, hookify, skill-creator, claude-md-management, serena, pyright-lsp, typescript-lsp, claude-code-setup
+claude plugin install anthropics/claude-code-workflows      # Official: python-dev, ui-design, unit-testing, context-management, agent-teams, and more
+claude plugin install jl-cmd/claude-journal                 # Session logging to Obsidian vault (provides /session-log)
+claude plugin install jl-cmd/claude-deep-research           # Deep multi-source research with citations
+claude plugin install jl-cmd/claude-workflow                # Workflow definitions with YAML schemas
+```
+
+GSD (project management) is available as an npm package:
+```bash
+npx get-shit-done-cc
+```
 
 ## Customization
 

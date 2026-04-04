@@ -1,5 +1,5 @@
 {
-  "name": "config",
+  "name": "claude-code-config",
   "description": "Code standards, rules, hooks, agents, and commands for consistent Claude Code development across repos",
   "author": {
     "name": "jl-cmd"

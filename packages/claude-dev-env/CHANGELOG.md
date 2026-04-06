@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+* migrate `prompt-generator` and `agent-prompt` pipeline refinements from local `~/.claude/skills` into `packages/claude-dev-env/skills` so changes remain durable and release-managed in the canonical repository
+* migrate missing hook implementations referenced by `hooks/hooks.json` (`blocking/docker-settings-guard.py`, `session/compact-context-reinject.py`, `session/hook-structure-context.py`) from local `~/.claude/hooks` into canonical package paths to keep hook settings references valid
+
 ## [1.5.0](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.4.1...claude-dev-env-v1.5.0) (2026-04-05)
 
 

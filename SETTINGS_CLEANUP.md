@@ -5,7 +5,7 @@ This guide identifies which ~/.claude/settings.json hook entries are now redunda
 
 ## Principle
 
-The plugin's hooks/hooks.json registers 28 hooks across 8 event types using
+The plugin's hooks/hooks.json registers 31 hooks across 8 event types using
 `${CLAUDE_PLUGIN_ROOT}`. These run automatically when the plugin is installed.
 
 User settings.json hooks that duplicate plugin hooks will fire TWICE because the
@@ -23,6 +23,7 @@ Different strings = no deduplication.
 | PreToolUse | Write\|Edit | sensitive-file-protector.py | blocking/ |
 | PreToolUse | Write\|Edit | pyautogui-scroll-blocker.py | blocking/ |
 | PreToolUse | Write\|Edit | code-rules-enforcer.py | blocking/ |
+| PreToolUse | Write\|Edit | docker-settings-guard.py | blocking/ |
 | PreToolUse | Write\|Edit | tdd-enforcer.py | blocking/ |
 | PreToolUse | Write\|Edit | code-style-validator.py | validation/ |
 | PreToolUse | Write\|Edit | hook-format-validator.py | validation/ |
@@ -35,6 +36,8 @@ Different strings = no deduplication.
 | PreToolUse | AskUserQuestion | attention-needed-notify.py | notification/ |
 | UserPromptSubmit | (all) | bulk-edit-reminder.py | session/ |
 | UserPromptSubmit | (all) | code-rules-reminder.py | session/ |
+| UserPromptSubmit | (all) | hook-structure-context.py | session/ |
+| SessionStart | compact | compact-context-reinject.py | session/ |
 | SessionStart | (all) | plugin-data-dir-cleanup.py | session/ |
 | Stop | (all) | attention-needed-notify.py | notification/ |
 | Stop | (all) | hedging-language-blocker.py | blocking/ |

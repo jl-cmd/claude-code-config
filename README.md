@@ -175,6 +175,8 @@ Automated enforcement that runs on Claude Code events. The installer detects you
 | Bash | `block-main-commit` | Blocks direct commits to main/master branch |
 | Bash | `pr-description-enforcer` | Enforces PR description structure and style |
 | Bash | `test-preflight-check` | Validates server health and database before test runs |
+| Task\|Agent | `parallel-task-blocker` | Blocks disallowed parallel delegation patterns for task safety |
+| Task\|Agent | `agent-execution-intent-gate` | Enforces structured execution intent contract and required scope anchors |
 | AskUserQuestion | `attention-needed-notify` | Desktop notification when Claude needs your input |
 
 #### Other Events
@@ -182,6 +184,7 @@ Automated enforcement that runs on Claude Code events. The installer detects you
 | Event | Hook | What it does |
 |-------|------|-------------|
 | SessionStart | `plugin-data-dir-cleanup` | Cleans stale plugin data on session start |
+| Stop | `prompt-workflow-stop-guard` | Blocks prompt-workflow leakage and missing deterministic checklist/scope/context signals |
 | Stop | `attention-needed-notify` | Desktop notification when Claude stops |
 | Stop | `hedging-language-blocker` | Blocks responses with hedging language (anti-hallucination) |
 | SessionEnd | `session-end-cleanup` | Cleans temporary state on session end |

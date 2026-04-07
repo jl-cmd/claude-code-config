@@ -56,7 +56,6 @@ Different strings = no deduplication.
 | PreToolUse | Read\|Write\|Edit\|Bash\|Glob\|Grep\|Agent\|Task | gate_enforcer.py | Agent-gate (external project at C:/Users/jon/agent-gate/) |
 | PreToolUse | Task\|Agent | agent-gate-subagent-bypass-enforcer.py | Agent-gate specific |
 | PreToolUse | Task\|Agent | gsd-team-upgrade.py | GSD plugin hook |
-| PreToolUse | Glob\|Search\|LS\|etc | gh-wsl-to-windows-redirect.py | Machine-specific WSL/Windows path translation |
 | PreToolUse | Grep | content-search-to-zoekt-redirector.py | Machine-specific Zoekt setup |
 | PreToolUse | Write\|Edit | gsd-prompt-guard.js | GSD plugin hook |
 | UserPromptSubmit | (all) | gate_trigger.py | Agent-gate (external) |
@@ -93,7 +92,7 @@ After confirming the plugin is installed and functional:
 settings.json hooks section should contain ONLY:
 - Agent-gate hooks (gate_enforcer, gate_trigger, session_cleanup, agent-gate-subagent-bypass-enforcer)
 - GSD hooks (gsd-*.js, gsd-team-upgrade.py)
-- Machine-specific hooks (gh-wsl-to-windows-redirect, content-search-to-zoekt-redirector, sync-to-cursor, voice-profile-injector, git-account-switcher, apps-script-context, tasklings-dev-server-reminder, gh-push-failure-detector, cleanup-teammate-session)
+- Machine-specific hooks (content-search-to-zoekt-redirector, sync-to-cursor, voice-profile-injector, git-account-switcher, apps-script-context, tasklings-dev-server-reminder, gh-push-failure-detector, cleanup-teammate-session)
 - SubagentStop notification (optional)
 
 Everything else comes from the plugin.

@@ -104,8 +104,8 @@ def test_blocks_missing_context_control_signals() -> None:
     result = _run_hook(payload)
     response = json.loads(result.stdout)
     assert response["decision"] == "block"
-    assert "Runtime context-control signals missing" in response["reason"]
-    assert "on_demand_skill_loading: true" in response["reason"]
+    assert "Runtime context-control preamble missing" in response["reason"]
+    assert "on-demand skill loading" in response["reason"]
 
 
 def test_blocks_ambiguous_scope_phrasing() -> None:

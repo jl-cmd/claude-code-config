@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import sys
+from pathlib import Path
 
 from prompt_workflow_gate_core import (
     find_ambiguous_scope_terms,
@@ -33,10 +35,28 @@ def _extract_user_context(hook_input: dict) -> str:
     return ""
 
 
-def _build_block(reason: str) -> dict:
+PROMPT_GATE_LOG_PATH: Path = Path.home() / ".claude" / "logs" / "prompt-gate.log"
+USER_FACING_PREFIX: str = "[prompt-gate]"
+
+
+def _append_diagnostic_to_log(brief_label: str, full_reason: str) -> None:
+    try:
+        PROMPT_GATE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        timestamp_iso = datetime.datetime.now().isoformat()
+        log_entry = f"{timestamp_iso}\t{brief_label}\t{full_reason}\n"
+        with PROMPT_GATE_LOG_PATH.open("a", encoding="utf-8") as log_handle:
+            log_handle.write(log_entry)
+    except OSError:
+        pass
+
+
+def _build_block(brief_label: str, full_reason: str) -> dict:
+    _append_diagnostic_to_log(brief_label, full_reason)
     return {
         "decision": "block",
-        "reason": reason,
+        "reason": full_reason,
+        "systemMessage": f"{USER_FACING_PREFIX} {brief_label}",
+        "suppressOutput": True,
     }
 
 
@@ -57,8 +77,11 @@ def main() -> None:
         print(
             json.dumps(
                 _build_block(
-                    "PROMPT-WORKFLOW GATE: Raw internal refinement object leakage detected. "
-                    "Return sanitized user-facing output unless explicit debug intent is present."
+                    brief_label="retrying: sanitize audit format",
+                    full_reason=(
+                        "PROMPT-WORKFLOW GATE: Raw internal refinement object leakage detected. "
+                        "Return sanitized user-facing output unless explicit debug intent is present."
+                    ),
                 )
             )
         )
@@ -69,8 +92,11 @@ def main() -> None:
             print(
                 json.dumps(
                     _build_block(
-                        "PROMPT-WORKFLOW GATE: Deterministic checklist container missing. "
-                        "Include `checklist_results` with all required rows."
+                        brief_label="retrying: add checklist",
+                        full_reason=(
+                            "PROMPT-WORKFLOW GATE: Deterministic checklist container missing. "
+                            "Include `checklist_results` with all required rows."
+                        ),
                     )
                 )
             )
@@ -81,8 +107,11 @@ def main() -> None:
             print(
                 json.dumps(
                     _build_block(
-                        "PROMPT-WORKFLOW GATE: Deterministic checklist rows missing: "
-                        + ", ".join(missing_rows)
+                        brief_label="retrying: complete checklist",
+                        full_reason=(
+                            "PROMPT-WORKFLOW GATE: Deterministic checklist rows missing: "
+                            + ", ".join(missing_rows)
+                        ),
                     )
                 )
             )
@@ -93,8 +122,11 @@ def main() -> None:
             print(
                 json.dumps(
                     _build_block(
-                        "PROMPT-WORKFLOW GATE: Required scope anchors missing: "
-                        + ", ".join(missing_anchors)
+                        brief_label="retrying: add scope anchors",
+                        full_reason=(
+                            "PROMPT-WORKFLOW GATE: Required scope anchors missing: "
+                            + ", ".join(missing_anchors)
+                        ),
                     )
                 )
             )
@@ -105,8 +137,12 @@ def main() -> None:
             print(
                 json.dumps(
                     _build_block(
-                        "PROMPT-WORKFLOW GATE: Runtime context-control signals missing: "
-                        + ", ".join(missing_context_signals)
+                        brief_label="retrying: add runtime signals",
+                        full_reason=(
+                            "PROMPT-WORKFLOW GATE: Runtime context-control preamble missing. "
+                            "Include the two required lines from prompt-workflow-context-controls "
+                            "(minimal instruction layer and on-demand skill loading)."
+                        ),
                     )
                 )
             )
@@ -117,8 +153,11 @@ def main() -> None:
             print(
                 json.dumps(
                     _build_block(
-                        "PROMPT-WORKFLOW GATE: Ambiguous scope phrasing detected: "
-                        + ", ".join(ambiguous_terms)
+                        brief_label="retrying: rephrase scope refs",
+                        full_reason=(
+                            "PROMPT-WORKFLOW GATE: Ambiguous scope phrasing detected: "
+                            + ", ".join(ambiguous_terms)
+                        ),
                     )
                 )
             )

@@ -96,6 +96,8 @@ NEGATIVE_KEYWORDS_IN_ARTIFACT: tuple[str, ...] = (
     "prohibit",
     "forbid",
     "reject",
+    "cannot",
+    "unless",
 )
 
 NEGATIVE_INDIRECT_PATTERNS_IN_ARTIFACT: tuple[str, ...] = (

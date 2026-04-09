@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 SCRIPT_PATH = Path(__file__).parent / "prompt-workflow-stop-guard.py"
 
@@ -145,41 +147,34 @@ def test_allows_positive_phrasing_inside_fenced_xml() -> None:
     assert result.stdout.strip() == ""
 
 
-def test_blocks_negative_keyword_do_not_inside_fenced_xml() -> None:
-    fenced_content = "<instructions>Do not leave return types implicit.</instructions>"
+BANNED_KEYWORD_TEST_CASES: list[tuple[str, str]] = [
+    ("do_not", "<instructions>Do not leave return types implicit.</instructions>"),
+    ("avoid", "<instructions>Avoid missing return types.</instructions>"),
+    ("never", "<constraints>Never store credentials in plain text.</constraints>"),
+    ("without", "<instructions>Deploy without running tests first.</instructions>"),
+    ("prevent", "<constraints>Prevent unauthorized access to the API.</constraints>"),
+    ("reject", "<constraints>Reject all unsigned commits.</constraints>"),
+    ("cannot", "<constraints>The API cannot accept unauthenticated requests.</constraints>"),
+    ("unless", "<constraints>Skip the build step unless the user explicitly approves.</constraints>"),
+    ("must_not", "<constraints>The script must not produce duplicates.</constraints>"),
+    ("must_never", "<constraints>You must never store credentials in environment variables.</constraints>"),
+    ("instead_of", "<instructions>Use explicit types instead of implicit ones.</instructions>"),
+    ("rather_than", "<constraints>Prefer explicit types rather than inferred ones.</constraints>"),
+    ("as_opposed_to", "<instructions>Use Grid as opposed to floats for layout.</instructions>"),
+]
+
+
+@pytest.mark.parametrize(
+    ("banned_pattern_name", "fenced_xml_content"),
+    BANNED_KEYWORD_TEST_CASES,
+    ids=[each_case[0] for each_case in BANNED_KEYWORD_TEST_CASES],
+)
+def test_blocks_banned_pattern_inside_fenced_xml(
+    banned_pattern_name: str,
+    fenced_xml_content: str,
+) -> None:
     payload = {
-        "last_assistant_message": _build_prompt_workflow_message_with_fenced_xml(fenced_content),
-    }
-    result = _run_hook(payload)
-    response = json.loads(result.stdout)
-    assert response["decision"] == "block"
-    assert "negative" in response["reason"].lower() or "banned" in response["reason"].lower()
-
-
-def test_blocks_negative_keyword_avoid_inside_fenced_xml() -> None:
-    fenced_content = "<instructions>Avoid missing return types.</instructions>"
-    payload = {
-        "last_assistant_message": _build_prompt_workflow_message_with_fenced_xml(fenced_content),
-    }
-    result = _run_hook(payload)
-    response = json.loads(result.stdout)
-    assert response["decision"] == "block"
-
-
-def test_blocks_indirect_pattern_instead_of_inside_fenced_xml() -> None:
-    fenced_content = "<instructions>Use explicit types instead of implicit ones.</instructions>"
-    payload = {
-        "last_assistant_message": _build_prompt_workflow_message_with_fenced_xml(fenced_content),
-    }
-    result = _run_hook(payload)
-    response = json.loads(result.stdout)
-    assert response["decision"] == "block"
-
-
-def test_blocks_indirect_pattern_rather_than_inside_fenced_xml() -> None:
-    fenced_content = "<constraints>Prefer explicit types rather than inferred ones.</constraints>"
-    payload = {
-        "last_assistant_message": _build_prompt_workflow_message_with_fenced_xml(fenced_content),
+        "last_assistant_message": _build_prompt_workflow_message_with_fenced_xml(fenced_xml_content),
     }
     result = _run_hook(payload)
     response = json.loads(result.stdout)

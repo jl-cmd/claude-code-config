@@ -3,8 +3,7 @@
 from prompt_workflow_gate_core import (
     find_ambiguous_scope_terms,
     has_checklist_container,
-    has_explicit_execution_intent,
-    has_structured_execution_intent,
+    text_has_agent_prompt_handoff,
     has_internal_object_leak,
     is_prompt_workflow_response,
     missing_context_control_signals,
@@ -13,16 +12,12 @@ from prompt_workflow_gate_core import (
 )
 
 
-def test_execution_intent_marker_detected() -> None:
-    assert has_explicit_execution_intent("execution_intent: explicit")
+def test_agent_prompt_handoff_marker_detected() -> None:
+    assert text_has_agent_prompt_handoff("Use /agent-prompt after approval")
 
 
-def test_structured_execution_intent_detected_from_contract_field() -> None:
-    assert has_structured_execution_intent({"execution_intent": "explicit"})
-
-
-def test_structured_execution_intent_detected_from_boolean_flag() -> None:
-    assert has_structured_execution_intent({"execution_intent_explicit": True})
+def test_no_false_positive_without_agent_prompt_token() -> None:
+    assert not text_has_agent_prompt_handoff("execution_intent: explicit")
 
 
 def test_internal_object_leak_detected() -> None:

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [1.14.2](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.14.1...claude-dev-env-v1.14.2) (2026-04-09)
+
 ### Documentation
 
 * **prompt-generator:** align `SKILL.md`, `TARGET_OUTPUT.md`, eval spec, and runbook with required `<background>` / optional `<illustrations>` section names and nested-fence guidance (matches prompt-workflow Stop hook after [#56](https://github.com/jl-cmd/claude-code-config/pull/56))

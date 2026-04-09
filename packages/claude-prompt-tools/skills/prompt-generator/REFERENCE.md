@@ -7,7 +7,7 @@ When authoring or refining prompts, ground decisions in these sources. If guidan
 ### Tier 1: Anthropic (primary authority for Claude)
 
 - https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview -- overview, links to all sub-guides
-- https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices -- the single living reference for Claude's latest models. Covers general principles, XML tags, prefill deprecation, tool use, thinking, agentic systems, overeagerness, anti-hallucination.
+- https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices -- the single living reference for Claude's latest models. Covers general principles, XML tags, prefill deprecation, tool use, thinking, agentic systems, overeagerness, and evidence-grounded answers.
 - https://transformer-circuits.pub/2026/emotions/index.html -- emotion concepts research (April 2026): 171 internal activation patterns that causally influence behavior. Key prompt-engineering takeaways: clear criteria and escape routes improve output quality, collaborative framing activates engagement, positive task framing correlates with better results, inviting transparency produces more reliable output. Cross-model caveat: studied on Sonnet 4.5; patterns align with best practices independently.
 - https://www.anthropic.com/research/emotion-concepts-function -- blog summary of the above paper.
 - https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking -- adaptive thinking reference; replaces manual budget_tokens with effort-based control.
@@ -137,14 +137,58 @@ For prompt drafts that must hold up over time:
 
 Anthropic's **self-correction chaining** pattern extends this: generate a draft, have Claude review it against criteria, then have Claude refine based on the review. Each step can be a separate API call for inspection and branching.
 
-## Anti-test-fixation pattern
+## General solution quality (tests as verification)
 
 ```text
-Write general-purpose solutions using the standard tools available. Implement logic that works correctly for all valid inputs, not just the test cases. Tests verify correctness -- they do not define the solution. If a test seems incorrect or the task is unreasonable, flag it rather than working around it.
+Write general-purpose solutions using the standard tools available. Implement logic that works correctly for all valid inputs, not just the test cases. Tests verify correctness -- they do not define the solution. If a test seems incorrect or the task is unreasonable, flag it with evidence rather than working around it.
 ```
 
 ## Commit-and-execute pattern
 
 ```text
 When deciding how to approach a problem, choose an approach and commit to it. Avoid revisiting decisions unless you encounter new information that directly contradicts your reasoning. If you are weighing two approaches, pick one and see it through. You can always course-correct later if the chosen approach fails.
+```
+
+## Refinement pipeline -- debug JSON schema
+
+When the user requests debug output for the default refinement pipeline, the full internal object may use this shape:
+
+```json
+{
+  "pipeline_mode": "internal_section_refinement_with_final_audit",
+  "scope_block": {
+    "target_local_roots": ["..."],
+    "target_canonical_roots": ["..."],
+    "target_file_globs": ["..."],
+    "comparison_basis": "...",
+    "completion_boundary": "..."
+  },
+  "required_sections": ["role", "context", "instructions", "constraints", "output_format", "examples"],
+  "base_prompt_xml": "<role>...</role><context>...</context><instructions>...</instructions><constraints>...</constraints><examples>...</examples><output_format>...</output_format>",
+  "section_scope_rule": "Each refiner improves exactly one assigned section and leaves all other sections unchanged.",
+  "section_output_contract": {
+    "required_fields": ["improved_block", "rationale", "concise_diff"]
+  },
+  "merge_output_contract": {
+    "required_fields": ["canonical_prompt_xml"]
+  },
+  "audit_output_contract": {
+    "required_fields": [
+      "overall_status",
+      "checklist_results",
+      "evidence_quotes",
+      "source_refs",
+      "corrective_edits",
+      "retry_count"
+    ]
+  },
+  "checklist_results": {
+    "<row_name>": {
+      "status": "pass|fail",
+      "evidence_quote": "exact quote used for verification",
+      "source_ref": "URL or local path",
+      "fix_if_fail": "concrete edit text (empty only if pass)"
+    }
+  }
+}
 ```

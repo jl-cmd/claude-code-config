@@ -20,17 +20,14 @@ from prompt_workflow_gate_config import (
 )
 
 TRIPLE_BACKTICK = "```"
-FENCE_MARKER_LENGTH = len(TRIPLE_BACKTICK)
-EXPORTED_ARTIFACT_PATTERN = re.compile(
-    r"^<(\?xml\b|prompt\b|runtime_context\b|role\b|background\b|instructions\b|constraints\b|output_format\b|illustrations\b|open_question\b)",
-)
 AUDIT_LINE_PATTERN = re.compile(r"^\s*[●•]?\s*(Audit:\s*.+?)\s*$")
 
 def _line_opens_xml_fence(line: str) -> bool:
     stripped = line.strip()
     if not stripped.startswith(TRIPLE_BACKTICK):
         return False
-    remainder = stripped[FENCE_MARKER_LENGTH:].strip()
+    fence_marker_length = len(TRIPLE_BACKTICK)
+    remainder = stripped[fence_marker_length:].strip()
     return remainder == "xml" or remainder.startswith("xml ")
 
 def _line_is_bare_fence_close(line: str) -> bool:
@@ -108,7 +105,10 @@ def _line_starts_exported_artifact(line: str) -> bool:
         return False
     if _line_opens_xml_fence(stripped):
         return True
-    return EXPORTED_ARTIFACT_PATTERN.match(stripped) is not None
+    exported_artifact_pattern = re.compile(
+        r"^<(\?xml\b|prompt\b|runtime_context\b|role\b|background\b|instructions\b|constraints\b|output_format\b|illustrations\b|open_question\b)",
+    )
+    return exported_artifact_pattern.match(stripped) is not None
 
 def _trim_trailing_blank_lines(lines: list[str]) -> list[str]:
     trimmed = list(lines)

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from typing import Iterable
 
 from prompt_workflow_gate_config import (
@@ -74,6 +75,91 @@ def extract_fenced_xml_content(text: str) -> str:
             continue
         index += 1
     return "\n".join(results)
+
+
+def _line_is_audit_line(line: str) -> bool:
+    return re.match(r"^\s*[●•]?\s*Audit:\s*", line) is not None
+
+
+def _normalize_audit_line(line: str) -> str:
+    match = re.match(r"^\s*[●•]?\s*(Audit:\s*.+?)\s*$", line)
+    if match:
+        return match.group(1).strip()
+    return line.strip()
+
+
+def _line_starts_exported_artifact(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if _line_opens_xml_fence(stripped):
+        return True
+    return re.match(
+        r"^<(\?xml\b|prompt\b|runtime_context\b|role\b|background\b|instructions\b|constraints\b|output_format\b|illustrations\b|open_question\b)",
+        stripped,
+    ) is not None
+
+
+def _trim_flattened_export_tail(lines: list[str]) -> list[str]:
+    trimmed = list(lines)
+    while trimmed and not trimmed[-1].strip():
+        trimmed.pop()
+    while trimmed and trimmed[-1].lstrip().startswith("✻ "):
+        trimmed.pop()
+        while trimmed and not trimmed[-1].strip():
+            trimmed.pop()
+    return trimmed
+
+
+def normalize_prompt_workflow_export(text: str) -> str:
+    """Return the last successful Audit + fenced XML pair from a message or export.
+
+    Saved transcript exports can flatten blocked retry turns and strip the outer
+    ``xml`` fence. This helper keeps only the last successful ``Audit:`` attempt
+    and rebuilds the canonical audit-plus-fence shape used by prompt-workflow
+    hooks and reviewers.
+    """
+    lines = text.splitlines()
+    last_audit_index: int | None = None
+    for index, line in enumerate(lines):
+        if _line_is_audit_line(line):
+            last_audit_index = index
+
+    if last_audit_index is None:
+        return text.strip()
+
+    audit_line = _normalize_audit_line(lines[last_audit_index])
+    trailing_lines = lines[last_audit_index + 1 :]
+    first_artifact_index: int | None = None
+    for index, line in enumerate(trailing_lines):
+        if _line_starts_exported_artifact(line):
+            first_artifact_index = index
+            break
+
+    if first_artifact_index is None:
+        return audit_line
+
+    artifact_lines = _trim_flattened_export_tail(trailing_lines[first_artifact_index:])
+    if not artifact_lines:
+        return audit_line
+
+    artifact_text = "\n".join(artifact_lines).rstrip()
+    if _line_opens_xml_fence(artifact_lines[0]):
+        fenced_body = extract_fenced_xml_content(artifact_text).strip()
+        if not fenced_body:
+            return audit_line
+        return f"{audit_line}\n```xml\n{fenced_body}\n```"
+
+    dedented_body = textwrap.dedent(artifact_text).strip("\n")
+    if not dedented_body:
+        return audit_line
+    return f"{audit_line}\n```xml\n{dedented_body}\n```"
+
+
+def extract_fenced_xml_content_from_export(text: str) -> str:
+    """Extract fenced XML from a canonical message or flattened transcript export."""
+    normalized = normalize_prompt_workflow_export(text)
+    return extract_fenced_xml_content(normalized)
 
 
 def missing_required_xml_sections(text: str) -> list[str]:

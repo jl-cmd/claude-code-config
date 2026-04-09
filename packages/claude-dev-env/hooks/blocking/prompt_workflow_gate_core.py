@@ -112,10 +112,31 @@ FENCED_XML_BLOCK_PATTERN: re.Pattern[str] = re.compile(
     r"```xml\s*\n(.*?)```", re.DOTALL
 )
 
+REQUIRED_XML_SECTIONS: tuple[str, ...] = (
+    "role",
+    "context",
+    "instructions",
+    "constraints",
+    "output_format",
+)
+
 
 def extract_fenced_xml_content(text: str) -> str:
     all_matches = FENCED_XML_BLOCK_PATTERN.findall(text)
     return "\n".join(all_matches)
+
+
+def missing_required_xml_sections(text: str) -> list[str]:
+    fenced_body = extract_fenced_xml_content(text)
+    if not fenced_body.strip():
+        return []
+    missing_sections: list[str] = []
+    for section_name in REQUIRED_XML_SECTIONS:
+        open_tag = re.compile(rf"<{re.escape(section_name)}(\s[^>]*)?>")
+        close_tag = re.compile(rf"</{re.escape(section_name)}>")
+        if not open_tag.search(fenced_body) or not close_tag.search(fenced_body):
+            missing_sections.append(section_name)
+    return missing_sections
 
 
 def find_negative_keywords_in_fenced_xml(

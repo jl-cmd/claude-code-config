@@ -2,6 +2,7 @@
 
 from prompt_workflow_gate_core import (
     extract_fenced_xml_content,
+    extract_fenced_xml_content_from_export,
     find_ambiguous_scope_terms,
     has_checklist_container,
     has_internal_object_leak,
@@ -10,6 +11,7 @@ from prompt_workflow_gate_core import (
     missing_checklist_rows,
     missing_required_xml_sections,
     missing_scope_anchors,
+    normalize_prompt_workflow_export,
 )
 
 
@@ -122,3 +124,80 @@ def test_extract_fenced_xml_preserves_content_after_nested_inner_fence() -> None
     extracted = extract_fenced_xml_content(message)
     assert "</illustrations>" in extracted
     assert "<background>B</background>" in extracted
+
+
+def test_normalize_prompt_workflow_export_rebuilds_fence_from_flattened_transcript() -> None:
+    transcript = (
+        "● Audit: pass 15/15\n"
+        "\n"
+        "  <runtime_context>\n"
+        "  base_minimal_instruction_layer: true\n"
+        "  on_demand_skill_loading: true\n"
+        "  </runtime_context>\n"
+        "\n"
+        "  <role>R</role>\n"
+        "  <background>B</background>\n"
+        "  <instructions>I</instructions>\n"
+        "  <constraints>C</constraints>\n"
+        "  <output_format>O</output_format>\n"
+        "✻ Worked for 1m 7s\n"
+    )
+
+    normalized = normalize_prompt_workflow_export(transcript)
+
+    assert normalized.startswith("Audit: pass 15/15\n```xml\n")
+    assert normalized.endswith("\n```")
+    assert "<runtime_context>" in normalized
+    assert "✻ Worked for 1m 7s" not in normalized
+
+
+def test_normalize_prompt_workflow_export_uses_last_audit_attempt() -> None:
+    transcript = (
+        "● Audit: pass 15/15\n"
+        "\n"
+        "  <role>FIRST</role>\n"
+        "  <background>Old</background>\n"
+        "  <instructions>Old</instructions>\n"
+        "  <constraints>Old</constraints>\n"
+        "  <output_format>Old</output_format>\n"
+        "\n"
+        "● Re-emitting the full artifact with the runtime signals added.\n"
+        "\n"
+        "  Audit: pass 15/15\n"
+        "\n"
+        "  <runtime_context>\n"
+        "  base_minimal_instruction_layer: true\n"
+        "  on_demand_skill_loading: true\n"
+        "  </runtime_context>\n"
+        "\n"
+        "  <role>FINAL</role>\n"
+        "  <background>Fresh</background>\n"
+        "  <instructions>I</instructions>\n"
+        "  <constraints>C</constraints>\n"
+        "  <output_format>O</output_format>\n"
+        "✻ Worked for 2m 8s\n"
+    )
+
+    normalized = normalize_prompt_workflow_export(transcript)
+
+    assert "<role>FINAL</role>" in normalized
+    assert "<role>FIRST</role>" not in normalized
+
+
+def test_extract_fenced_xml_content_from_export_supports_flattened_transcript() -> None:
+    transcript = (
+        "● Audit: pass 15/15\n"
+        "\n"
+        "  <role>R</role>\n"
+        "  <background>B</background>\n"
+        "  <instructions>I</instructions>\n"
+        "  <constraints>C</constraints>\n"
+        "  <output_format>O</output_format>\n"
+        "✻ Worked for 31s\n"
+    )
+
+    extracted = extract_fenced_xml_content_from_export(transcript)
+
+    assert extracted.startswith("<role>R</role>")
+    assert "<output_format>O</output_format>" in extracted
+    assert "Worked for" not in extracted

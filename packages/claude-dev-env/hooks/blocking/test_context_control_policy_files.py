@@ -20,8 +20,8 @@ def test_context_control_rule_exists_with_required_sections() -> None:
 
 def test_hook_spec_exists_with_required_gates() -> None:
     text = HOOK_SPEC_PATH.read_text(encoding="utf-8")
-    assert "Execution handoff + scope anchors (PreToolUse Task/Agent)" in text
+    assert "PreToolUse Task/Agent (removed)" in text
+    assert "agent-execution-intent-gate.py" in text
     assert "Leakage + Checklist + Scope (Stop)" in text
     assert "Required Deterministic Checklist Rows" in text
-    assert "/agent-prompt" in text
     assert "Runtime Context-Control Signals" in text

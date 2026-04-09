@@ -211,7 +211,7 @@ Automated enforcement that runs on Claude Code events. The installer detects you
 | Bash | `block-main-commit` | Blocks direct commits to main/master branch |
 | Bash | `pr-description-enforcer` | Enforces PR description structure and style |
 | Bash | `test-preflight-check` | Validates server health and database before test runs |
-| Task\|Agent | `agent-execution-intent-gate` | When `/agent-prompt` appears in the launch text, enforces scope anchors (no custom tool_input fields) |
+| Task\|Agent | `parallel-task-blocker` | Limits concurrent Task/Agent delegations |
 | AskUserQuestion | `attention-needed-notify` | Desktop notification when Claude needs your input |
 
 #### Other Events

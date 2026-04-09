@@ -54,10 +54,6 @@ INTERNAL_OBJECT_MARKERS: tuple[str, ...] = (
     '"audit_output_contract": {',
 )
 
-# Native Task/Agent tools have no intent metadata; gate on this real slash-command token
-# in description or prompt so execution handoffs stay opt-in without fake tool_input fields.
-EXPLICIT_EXECUTION_MARKERS: tuple[str, ...] = ("/agent-prompt",)
-
 PROMPT_WORKFLOW_RESPONSE_MARKERS: tuple[str, ...] = (
     "checklist_results",
     "overall_status",
@@ -153,10 +149,6 @@ def find_negative_keywords_in_fenced_xml(
 def _contains_any_marker(text: str, markers: Iterable[str]) -> bool:
     lower_text = text.lower()
     return any(marker.lower() in lower_text for marker in markers)
-
-
-def text_has_agent_prompt_handoff(text: str) -> bool:
-    return _contains_any_marker(text, EXPLICIT_EXECUTION_MARKERS)
 
 
 def has_debug_intent(text: str) -> bool:

@@ -3,21 +3,12 @@
 from prompt_workflow_gate_core import (
     find_ambiguous_scope_terms,
     has_checklist_container,
-    text_has_agent_prompt_handoff,
     has_internal_object_leak,
     is_prompt_workflow_response,
     missing_context_control_signals,
     missing_checklist_rows,
     missing_scope_anchors,
 )
-
-
-def test_agent_prompt_handoff_marker_detected() -> None:
-    assert text_has_agent_prompt_handoff("Use /agent-prompt after approval")
-
-
-def test_no_false_positive_without_agent_prompt_token() -> None:
-    assert not text_has_agent_prompt_handoff("execution_intent: explicit")
 
 
 def test_internal_object_leak_detected() -> None:

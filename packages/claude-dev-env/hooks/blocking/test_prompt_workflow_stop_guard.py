@@ -10,6 +10,14 @@ import pytest
 
 SCRIPT_PATH = Path(__file__).parent / "prompt-workflow-stop-guard.py"
 
+
+@pytest.fixture(autouse=True)
+def _disable_prompt_workflow_clipboard_in_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Subprocess hook inherits env; clipboard would be flaky in CI."""
+    monkeypatch.setenv("PROMPT_WORKFLOW_SKIP_CLIPBOARD", "1")
+
 def _run_hook(payload: dict) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPT_PATH)],

@@ -129,7 +129,7 @@ def test_blocks_ambiguous_scope_phrasing() -> None:
 def _wrap_five_section_scaffold(inner_body: str) -> str:
     return (
         "<role>Test role sentence one.</role>\n"
-        "<context>Test context sentence one.</context>\n"
+        "<background>Test background sentence one.</background>\n"
         f"{inner_body}\n"
         "<constraints>Test constraints sentence one.</constraints>\n"
         "<output_format>Test output format sentence one.</output_format>\n"
@@ -226,7 +226,7 @@ def test_permits_negative_keywords_outside_fenced_xml() -> None:
     assert result.stdout.strip() == ""
 
 
-def test_blocks_when_fenced_xml_missing_context_section() -> None:
+def test_blocks_when_fenced_xml_missing_background_section() -> None:
     fenced_body = (
         "<role>Test role sentence one.</role>\n"
         "<instructions>Test instructions sentence one.</instructions>\n"
@@ -239,7 +239,7 @@ def test_blocks_when_fenced_xml_missing_context_section() -> None:
     result = _run_hook(payload)
     response = json.loads(result.stdout)
     assert response["decision"] == "block"
-    assert "context" in response["reason"]
+    assert "background" in response["reason"]
     assert "include all required XML sections" in response["systemMessage"]
 
 

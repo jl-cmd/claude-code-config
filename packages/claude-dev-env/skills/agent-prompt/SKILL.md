@@ -68,7 +68,7 @@ Use simplified mode when either condition is true:
 
 This mode is triggered when execution input includes `pipeline_mode: internal_section_refinement_with_final_audit` or equivalent execution-ready orchestration metadata.
 If present, carry forward the scope block (`target_local_roots`, `target_canonical_roots`, `target_file_globs`, `comparison_basis`, `completion_boundary`) so execution remains artifact-bound.
-Execution launch payload must include `execution_intent: explicit`.
+Execution launches must include `/agent-prompt` plus those scope-anchor tokens in the task description or prompt so the PreToolUse hook can recognize a prompt-workflow handoff (there are no native intent fields on Agent/Task).
 
 1. Spawn exactly 6 refinement agents, one per section in fixed order:
    - `role`
@@ -194,7 +194,7 @@ Section-refinement orchestration is done only when all are true:
 - Gather context before crafting -- do not send an agent in blind
 - Start only after explicit user execution intent; keep prompt authoring/refinement in `/prompt-generator`
 - Default to `section_refinement_with_final_audit` orchestration for execution tasks unless user requests simplified mode
-- Include `execution_intent: explicit` in Task/Agent launch prompts so runtime hooks can enforce deterministic gating
+- Include `/agent-prompt` and scope-anchor tokens in Task/Agent launch text when handing off execution; do not use fake `tool_input` intent fields
 - If the task is too small for an agent (single file read, quick grep), say so and just do it directly
 - Include obstacle handling: "When encountering obstacles, do not use destructive actions as a shortcut (e.g. --no-verify, discarding unfamiliar files)" -- agents without this guidance may take irreversible shortcuts
 - Frame agent tasks with collaborative language and include permission to express uncertainty — agents produce higher-quality output with collaborative briefing (Anthropic emotion concepts research, 2026)

@@ -115,7 +115,7 @@ If `overall_status` is `fail`:
 
 - Prompt refinement remains inside `/prompt-generator`.
 - `/agent-prompt` is used only after explicit execution/delegation intent.
-- Execution launch metadata includes `execution_intent: explicit`.
+- Execution handoffs that go through `/agent-prompt` include `/agent-prompt` and scope-anchor tokens in launch text (not custom tool fields).
 - Final refined prompt content is treated as artifact text during refinement and audit.
 - Execution steps (when requested) are bound to scope block artifacts.
 
@@ -128,9 +128,9 @@ If `overall_status` is `fail`:
 
 Validate fail-closed runtime gates:
 
-1. **Execution-intent gate (PreToolUse Task/Agent)**
-   - Deny execution when `execution_intent: explicit` marker is missing.
-   - Deny execution when required scope anchors are missing from launch payload.
+1. **Execution handoff gate (PreToolUse Task/Agent)**
+   - Applies only when `/agent-prompt` appears in the combined description + prompt.
+   - Deny when scope anchors are missing from that same combined text.
 2. **Stop leakage/scope/checklist gate**
    - Block responses that leak raw internal refinement object fields unless debug intent is explicit.
    - Block responses missing deterministic checklist rows when audit output is present.
@@ -148,7 +148,7 @@ Validate fail-closed runtime gates:
 ## Deterministic vs Semantic Boundary
 
 - **Deterministic (fail-closed):**
-  - Missing execution intent marker
+  - `/agent-prompt` handoff missing scope anchors
   - Missing required scope anchors
   - Raw internal object leakage without debug intent
   - Missing required checklist rows in audit output

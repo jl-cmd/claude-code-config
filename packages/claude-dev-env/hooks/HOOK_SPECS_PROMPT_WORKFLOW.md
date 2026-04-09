@@ -2,20 +2,20 @@
 
 Deterministic runtime gates for prompt workflows.
 
-## Gate: Execution Intent (PreToolUse Task/Agent)
+## Gate: Execution handoff + scope anchors (PreToolUse Task/Agent)
 
 - Hook: `hooks/blocking/agent-execution-intent-gate.py`
 - Event: `PreToolUse`
 - Matcher: `Task|Agent`
-- Fail condition:
-  - Missing structured execution intent contract field:
-    - `tool_input.execution_intent: explicit|execute|delegate`, or
-    - `tool_input.execution_intent_explicit: true`, or
-    - `tool_input.metadata.execution_intent: explicit|execute|delegate`
-  - Missing required scope anchors in launch payload (always enforced when execution launch is evaluated)
-- Compatibility fallback:
-  - Text markers are only accepted when `PROMPT_WORKFLOW_ALLOW_TEXT_INTENT_FALLBACK=1` is set.
-  - Fallback usage is logged to stderr.
+- When it applies: only if the combined task `description` and `prompt` contain the real slash command token `/agent-prompt` (native Agent/Task tools have no intent metadata fields).
+- Fail condition (when the gate applies):
+  - Missing required scope anchors in the same combined text:
+    - `target_local_roots`
+    - `target_canonical_roots`
+    - `target_file_globs`
+    - `comparison_basis`
+    - `completion_boundary`
+- When it does not apply: launches without `/agent-prompt` pass through with no checks from this hook.
 - Action: `deny` with concrete missing requirement list.
 
 ## Gate: Leakage + Checklist + Scope (Stop)

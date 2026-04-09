@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse gate for Task/Agent execution intent and scope anchors."""
+"""PreToolUse gate: scope anchors for `/agent-prompt` execution handoffs only."""
 
 from __future__ import annotations
 
@@ -7,9 +7,8 @@ import json
 import sys
 
 from prompt_workflow_gate_core import (
-    has_explicit_execution_intent,
-    has_structured_execution_intent,
     missing_scope_anchors,
+    text_has_agent_prompt_handoff,
 )
 
 
@@ -39,14 +38,8 @@ def main() -> None:
     description = str(tool_input.get("description", ""))
     combined_text = f"{description}\n{prompt_text}"
 
-    if not has_structured_execution_intent(tool_input):
-        if not has_explicit_execution_intent(combined_text):
-            _deny(
-                "BLOCKED: Missing structured execution intent signal for Agent/Task launch. "
-                "Provide `tool_input.execution_intent: explicit` or "
-                "`tool_input.execution_intent_explicit: true`."
-            )
-            sys.exit(0)
+    if not text_has_agent_prompt_handoff(combined_text):
+        sys.exit(0)
 
     missing_anchors = missing_scope_anchors(combined_text)
     if missing_anchors:

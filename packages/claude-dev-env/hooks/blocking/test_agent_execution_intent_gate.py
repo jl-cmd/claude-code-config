@@ -19,42 +19,39 @@ def _run_hook(payload: dict) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_denies_task_without_explicit_intent_marker() -> None:
+def test_allows_task_without_agent_prompt_handoff() -> None:
     payload = {
         "tool_name": "Task",
         "tool_input": {"prompt": "run the workflow", "description": "delegate"},
     }
     result = _run_hook(payload)
-    response = json.loads(result.stdout)
-    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "structured execution intent signal" in response["hookSpecificOutput"]["permissionDecisionReason"]
+    assert result.stdout.strip() == ""
 
 
-def test_allows_phrase_marker_with_scope_anchors() -> None:
+def test_allows_agent_prompt_with_scope_anchors() -> None:
     payload = {
         "tool_name": "Task",
         "tool_input": {
             "prompt": (
-                "execution_intent: explicit\n"
+                "/agent-prompt\n"
                 "target_local_roots\n"
                 "target_canonical_roots\n"
                 "target_file_globs\n"
                 "comparison_basis\n"
                 "completion_boundary\n"
             ),
-            "description": "explicit delegation intent",
+            "description": "delegate",
         },
     }
     result = _run_hook(payload)
     assert result.stdout.strip() == ""
 
 
-def test_denies_when_scope_anchors_missing() -> None:
+def test_denies_agent_prompt_when_scope_anchors_missing() -> None:
     payload = {
         "tool_name": "Agent",
         "tool_input": {
-            "execution_intent": "explicit",
-            "prompt": "target_local_roots only",
+            "prompt": "/agent-prompt\ntarget_local_roots only",
             "description": "delegate",
         },
     }
@@ -64,12 +61,11 @@ def test_denies_when_scope_anchors_missing() -> None:
     assert "Scope anchors missing" in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_allows_when_intent_and_scope_anchors_present() -> None:
+def test_allows_agent_prompt_in_description_with_anchors() -> None:
     payload = {
         "tool_name": "Task",
         "tool_input": {
-            "execution_intent_explicit": True,
-            "description": "delegate",
+            "description": "/agent-prompt delegation",
             "prompt": (
                 "target_local_roots\n"
                 "target_canonical_roots\n"
@@ -81,4 +77,3 @@ def test_allows_when_intent_and_scope_anchors_present() -> None:
     }
     result = _run_hook(payload)
     assert result.stdout.strip() == ""
-

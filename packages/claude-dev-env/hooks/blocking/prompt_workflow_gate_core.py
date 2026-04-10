@@ -12,6 +12,8 @@ from prompt_workflow_gate_config import (
     COMPILED_NEGATIVE_INDIRECT_PATTERNS,
     COMPILED_NEGATIVE_KEYWORD_PATTERNS,
     DEBUG_INTENT_MARKERS,
+    GATE_PAYLOAD_CLOSE_TAG,
+    GATE_PAYLOAD_OPEN_TAG,
     INTERNAL_OBJECT_MARKERS,
     PROMPT_WORKFLOW_RESPONSE_MARKERS,
     REQUIRED_CHECKLIST_ROWS,
@@ -181,6 +183,21 @@ def extract_fenced_xml_content_from_export(text: str) -> str:
     """Extract fenced XML from a canonical message or flattened transcript export."""
     normalized = normalize_prompt_workflow_export(text)
     return extract_fenced_xml_content(normalized)
+
+def strip_gate_payload(xml_body: str) -> str:
+    """Remove <gate_payload>...</gate_payload> from XML content for clipboard."""
+    gate_payload_pattern = re.compile(
+        re.escape(GATE_PAYLOAD_OPEN_TAG) + r".*?" + re.escape(GATE_PAYLOAD_CLOSE_TAG),
+        re.DOTALL,
+    )
+    return gate_payload_pattern.sub("", xml_body).rstrip()
+
+
+def extract_clipboard_xml_content(text: str) -> str:
+    """Extract fenced XML content with gate_payload stripped for clipboard use."""
+    raw_xml = extract_fenced_xml_content(text)
+    return strip_gate_payload(raw_xml)
+
 
 def missing_required_xml_sections(text: str) -> list[str]:
     fenced_body = extract_fenced_xml_content(text)

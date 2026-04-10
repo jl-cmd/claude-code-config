@@ -102,6 +102,9 @@ REQUIRED_XML_SECTIONS: tuple[str, ...] = (
     "output_format",
 )
 
+GATE_PAYLOAD_OPEN_TAG: str = "<gate_payload>"
+GATE_PAYLOAD_CLOSE_TAG: str = "</gate_payload>"
+
 COMPILED_NEGATIVE_KEYWORD_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(rf"\b{re.escape(keyword)}\b", re.IGNORECASE)
     for keyword in NEGATIVE_KEYWORDS_IN_ARTIFACT

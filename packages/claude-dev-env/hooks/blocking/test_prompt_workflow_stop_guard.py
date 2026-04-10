@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+sys.path.insert(0, str(Path(__file__).parent))
+from prompt_workflow_gate_core import extract_clipboard_xml_content
+
 
 SCRIPT_PATH = Path(__file__).parent / "prompt-workflow-stop-guard.py"
 
@@ -259,3 +262,83 @@ def test_allows_fully_structured_prompt_workflow_output() -> None:
     }
     result = _run_hook(payload)
     assert result.stdout.strip() == ""
+
+
+MACHINE_TAIL_TOKENS: tuple[str, ...] = (
+    "overall_status",
+    "checklist_results",
+    "base_minimal_instruction_layer",
+    "on_demand_skill_loading",
+)
+
+
+def _gate_payload_block() -> str:
+    return (
+        "<gate_payload>\n"
+        "overall_status: pass\n"
+        + _full_checklist_rows()
+        + "target_local_roots\n"
+        "target_canonical_roots\n"
+        "target_file_globs\n"
+        "comparison_basis\n"
+        "completion_boundary\n"
+        "base_minimal_instruction_layer: true\n"
+        "on_demand_skill_loading: true\n"
+        "</gate_payload>\n"
+    )
+
+
+def _build_prompt_workflow_message_with_gate_payload(
+    fenced_xml_body: str,
+) -> str:
+    return (
+        "Audit: pass 15/15\n"
+        "```xml\n"
+        + fenced_xml_body
+        + "\n"
+        + _gate_payload_block()
+        + "```\n"
+    )
+
+
+def test_no_machine_tail_after_closing_fence() -> None:
+    fenced_content = _wrap_five_section_scaffold(
+        "<instructions>Ensure all functions have explicit return types.</instructions>",
+    )
+    message = _build_prompt_workflow_message_with_gate_payload(fenced_content)
+    lines = message.splitlines()
+    last_fence_index: int | None = None
+    for index in range(len(lines) - 1, -1, -1):
+        if lines[index].strip() == "```":
+            last_fence_index = index
+            break
+    assert last_fence_index is not None
+    after_fence = "\n".join(lines[last_fence_index + 1 :])
+    for token in MACHINE_TAIL_TOKENS:
+        assert token not in after_fence, (
+            f"Machine tail token '{token}' found after closing fence"
+        )
+
+
+def test_gate_payload_format_passes_all_hook_gates() -> None:
+    fenced_content = _wrap_five_section_scaffold(
+        "<instructions>Ensure all functions have explicit return types.</instructions>",
+    )
+    message = _build_prompt_workflow_message_with_gate_payload(fenced_content)
+    payload = {"last_assistant_message": message}
+    result = _run_hook(payload)
+    assert result.stdout.strip() == ""
+
+
+def test_clipboard_extraction_strips_gate_payload() -> None:
+    fenced_content = _wrap_five_section_scaffold(
+        "<instructions>Ensure all functions have explicit return types.</instructions>",
+    )
+    message = _build_prompt_workflow_message_with_gate_payload(fenced_content)
+    clipboard_content = extract_clipboard_xml_content(message)
+    assert "<gate_payload>" not in clipboard_content
+    assert "</gate_payload>" not in clipboard_content
+    assert "overall_status" not in clipboard_content
+    assert "checklist_results" not in clipboard_content
+    assert "<role>" in clipboard_content
+    assert "<instructions>" in clipboard_content

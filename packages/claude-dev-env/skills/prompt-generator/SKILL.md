@@ -51,7 +51,7 @@ Match `TARGET_OUTPUT.md`. Summary:
 
 1. **Questions:** Use **AskUserQuestion** for every clarification (one multi-field form per round); keep normal assistant text free of standalone question paragraphs.
 2. **Options:** Supply **2–4** options per question, **recommended option first**; label discovery-sourced choices **`[discovered]`**.
-3. **Final message (exactly):** Line 1 = `Audit: pass 15/15` or `Audit: fail N/15 — [short reason]`; immediately after, output **one** Markdown code fence whose language tag is `xml` and whose body is the **complete** prompt; **send boundary** = right after that fence closes—the visible message is exactly those two consecutive blocks, copy-ready together, before any later user message.
+3. **Final message (exactly):** Line 1 = `Audit: pass 15/15` or `Audit: fail N/15 — [short reason]`; immediately after, output **one** Markdown code fence whose language tag is `xml` and whose body is the **complete** prompt followed by a `<gate_payload>` element containing hook-visible validation markers (overall_status, checklist_results, scope anchors, context-control signals); **send boundary** = right after that fence closes—place **zero** machine-tail tokens after the closing fence. The clipboard path strips `<gate_payload>` automatically so pasted content is clean prompt XML.
 4. **Full audit table / JSON debug object:** Append only after the user uses an explicit debug phrase such as `show debug`, `full audit table`, or `raw internal object`.
 5. **Commit-and-execute:** Pick a drafting approach, run it to completion, ship the XML; change plans only when **new** facts from the user or tools contradict the earlier scope.
 
@@ -72,7 +72,7 @@ Match `TARGET_OUTPUT.md`. Summary:
 
 For the **final** user-visible turn that ships the artifact:
 
-- Compose the message as **audit line → opening fence → XML → closing fence → end**; keep the byte stream free of `tool_use` blocks **between** the opening and closing fences.
+- Compose the message as **audit line → opening fence → XML prompt sections → `<gate_payload>` → closing fence → end**; keep the byte stream free of `tool_use` blocks **between** the opening and closing fences. Place all hook-visible validation markers inside `<gate_payload>` and **zero** machine-tail tokens after the closing fence.
 - **Completeness:** End every numbered step inside `<instructions>` with a complete sentence and a fully written list item. Balance every XML tag explicitly (open and close each `<role>`, `<background>`, `<instructions>`, `<constraints>`, `<output_format>`). The artifact must be copy-pasteable into a new file with zero manual repair.
 - Global pipeline: **discovery tools** (when applicable) → **AskUserQuestion** → **subagent** (draft + refinement + internal audit) → **one** orchestrator reply containing only audit line + fence.
 

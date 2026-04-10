@@ -248,3 +248,7 @@ Shape (field names stable for internal audit helpers and Stop-hook leak detectio
 ```
 
 `checklist_results` keys must include all **14** compliance row ids from `SKILL.md` §11 (for example `reversible_action_and_safety_check_guidance`, `scope_terms_explicit_and_anchored`).
+
+### Gate payload placement (issue #71)
+
+Hook-visible validation markers (`overall_status`, `checklist_results`, scope anchors, context-control signals) live inside a `<gate_payload>...</gate_payload>` element at the end of the fenced XML body, before the closing fence. The Stop hook scans the full `assistant_message` string so all substring checks continue to match. The clipboard path (`prompt_workflow_gate_core.extract_clipboard_xml_content`) strips `<gate_payload>` before copying, producing clean prompt XML for paste. Place **zero** machine-tail tokens after the closing fence. Constants: `GATE_PAYLOAD_OPEN_TAG` and `GATE_PAYLOAD_CLOSE_TAG` in `prompt_workflow_gate_config.py`.

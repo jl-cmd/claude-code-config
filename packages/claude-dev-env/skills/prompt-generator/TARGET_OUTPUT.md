@@ -10,8 +10,9 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 - **Questions:** Deliver every clarifying question through **AskUserQuestion** (one form per round), with **2–4** options per question and the **recommended** option listed **first**. Tag discovery-sourced options **`[discovered]`** when they came from repo search.
 - **Final assistant message (complete handoff in one send):**
   1. **Audit line:** `Audit: pass 15/15` or `Audit: fail N/15 — [reason]`
-  2. **Artifact:** the full XML prompt inside **one** Markdown code fence whose language tag is `xml`
+  2. **Artifact:** the full XML prompt inside **one** Markdown code fence whose language tag is `xml`, with a `<gate_payload>` element appended after the last prompt section inside the fence (see **Gate payload placement** below)
   3. **Send boundary:** stop typing as soon as the closing fence ends—the message body is exactly those two blocks back-to-back, ready to copy; your next tokens belong to the user’s following turn
+- **Gate payload placement:** Hook-visible validation markers (`overall_status`, `checklist_results`, scope anchors, context-control signals) live inside a `<gate_payload>...</gate_payload>` element at the end of the fenced XML body, before the closing fence. The Stop hook scans the full assistant message so it still sees these markers. The clipboard path (`extract_clipboard_xml_content`) strips `<gate_payload>` before copying, so pasted content contains only the prompt sections. Place **zero** machine-tail tokens after the closing fence.
 - **Full audit table / JSON debug bundle:** Stay internal until the user names debug with a phrase such as `show debug`, `full audit table`, or `raw internal object`; then append the table/JSON after the usual audit line + XML fence.
 - **Hook retries:** Keep retry loops inside the subagent or internal pipeline; the user sees at most one short status line such as `Retrying: scope anchor missing` before the successful audit line + fence.
 - **Decision stability:** Pick one drafting approach, carry it to a complete XML artifact, then stop. Change approach only when the user or tool results add **new** facts that contradict the earlier plan; if the draft fails checks, fix forward inside the same structure instead of restarting from scratch.
@@ -24,7 +25,7 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 
 **Q&A:** One AskUserQuestion with **2–4** questions covering: scope (which subtree), audience (human vs agent consumer), desired downstream output shape, and hard constraints (tests, CODE_RULES, deadlines). Populate options from discovery paths and package names.
 
-**Output:** Send audit line, then one `xml` fence with the full prompt, then stop—the handoff message is complete.
+**Output:** Send audit line, then one `xml` fence with the full prompt (gate payload inside the fence), then stop—the handoff message is complete.
 
 ## Scenario 2: Session handoff
 

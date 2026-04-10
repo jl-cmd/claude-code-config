@@ -13,17 +13,17 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 
 ## User-visible output contract
 
-- **Clarity bar:** Every deliverable (`AskUserQuestion` fields, XML body, outcome digest) states concrete outcomes, explicit formats, and checkable done-when signals—aligned with Anthropic [Be clear and direct](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#be-clear-and-direct) and [Control the format of responses](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#control-the-format-of-responses). Prefer what to do and how to verify it over empty prohibitions or vague quality adjectives.
+- **Clarity bar:** Every deliverable states concrete outcomes, explicit formats, and checkable done-when signals—per Anthropic [Be clear and direct](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#be-clear-and-direct) and [Control the format](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#control-the-format-of-responses).
 - **Questions:** Deliver every clarifying question through **AskUserQuestion** (one form per round), with **2–4** options per question and the **recommended** option listed **first**. Tag discovery-sourced options **`[discovered]`** when they came from repo search.
 - **Outcome preview turn (mandatory):** Immediately before the final handoff, emit exactly one assistant turn that contains:
   1. A markdown block titled `### Outcome preview` with bullets only: **What it does**, **Key inputs**, **Done when**, **Quick sample** (about twenty lines max; follow the sample formatting rules in SKILL.md section 7).
   2. **AskUserQuestion** with **2–4** options: **Ship this outcome profile** (recommended first), two **contextual alternates** grounded in discovery, and **Refine with free text** (starts another drafting loop). Observe the preview round cap per SKILL.md Phase 4.
 - **Final assistant message (complete handoff in one send):**
   1. **Artifact:** the full XML prompt inside **one** Markdown code fence whose language tag is `xml`
-  2. **Outcome digest:** after the closing fence, a `## Outcome digest` section repeating (or lightly tightening) the skimmable bullets and sample so the user can verify the paste-ready prompt matches intent **without** opening the whole XML
+  2. **Outcome digest:** after the closing fence, a `## Outcome digest` section with tightened bullets so the user can verify intent at a glance
   3. **Paste-ready section:** The paste-ready prompt artifact remains the single ` ```xml ` block; the digest is for reading, not for pasting into the downstream session
-- **Full audit table / JSON debug bundle:** Stay internal until the user names debug with a phrase such as `show debug`, `full audit table`, or `raw internal object`; then append the table/JSON **after** the Outcome digest. The 15-row compliance audit runs inside the subagent; the fenced XML itself is the proof that validation passed (the file-based validation loop ensures it ships only after exit 0).
-- **File-based validation loop:** The drafting subagent writes the complete output to `data/prompts/.draft-prompt.xml`, runs the validator CLI, and edits the file to fix any violations until the validator exits 0. Only then does the orchestrator read the validated file and output it to the user. The user sees only the finished result.
+- **Full audit table / JSON debug bundle:** Stay internal until the user names debug (`show debug`, `full audit table`, `raw internal object`); then append the table/JSON **after** the Outcome digest.
+- **File-based validation loop:** The subagent writes output to `data/prompts/.draft-prompt.xml`, runs the validator CLI, and fixes violations until exit 0. The orchestrator then outputs the validated result to the user.
 - **Decision stability:** Pick one drafting approach, carry it through preview confirmation, then ship; change approach only when **new** facts from the user or tools contradict the earlier plan; if the draft fails checks, fix forward inside the same structure instead of restarting from scratch.
 
 ## Scenario 1: Fresh chat with brief goal
@@ -99,13 +99,13 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 
 ## Structural invariant E — Render-survival for XML sections
 
-- **Problem (HTML):** Tag names used for prompt XML sections can overlap **HTML5 element names**. Chat renderers may treat those tokens as HTML and hide or alter the content between tags. High-risk examples include: `section`, `summary`, `details`, `header`, `footer`, `main`, `aside`, `article`, `nav`, `figure`. The former required name `context` matched an HTML element; **required** sections now use `<background>` for situational grounding so the name stays off that list. The raw assistant text may be complete while the **rendered** message looks like sections are missing.
-- **Problem (nested Markdown fences):** A ` ```bash ` (or other inner) line inside the outer ` ```xml ` block is still a line of text in the transcript, but many Markdown renderers treat it as **opening a nested code fence**, which **closes the outer fence early**. Everything after that point (including `</illustrations>` and other closing tags) can appear outside the code block or look “swallowed.” Hooks historically used a regex that stopped at the **first** triple-backtick line; `extract_fenced_xml_content` now walks inner fences (` ```lang ` … closing `` ``` ``) before accepting the outer `` ``` `` that ends the `xml` block.
+- **Problem (HTML):** Tag names overlapping HTML5 elements (`section`, `summary`, `details`, `header`, `footer`, `main`, `aside`, `article`, `nav`, `figure`) can be hidden by chat renderers. Required sections use `<background>` (replacing former `context`) to stay off that list.
+- **Problem (nested Markdown fences):** Inner fences (` ```bash `) inside the outer ` ```xml ` block can close the outer fence early in many renderers. `extract_fenced_xml_content` walks inner fence pairs before accepting the outer closing fence.
 - **Outcome digest:** Follow the sample formatting rules in SKILL.md section 7 inside `## Outcome digest` so a second outer ` ```xml ` block never appears—multiple `xml` fences concatenate in `extract_fenced_xml_content` and would corrupt clipboard copy.
 - **Primary mitigation:** When the fenced XML artifact **contains any tag whose local name is on the HTML-collision list**, or when the artifact is **large enough that render truncation is likely**, the orchestrator **must write the full artifact to a file** (default: under `data/prompts/` or a path the user supplied earlier) and **paste the absolute file path** in the chat message. Pair the path with a **short section inventory** confirming all five required sections (`role`, `background`, `instructions`, `constraints`, `output_format`) are present in the file.
 - **Authoring rules for code inside `<illustrations>`:** Follow the sample formatting rules in SKILL.md section 7. Hooks and clipboard treat complete triple-backtick pairs as one unit inside the outer `` ```xml `` fence.
 - **Fallback when file write is unavailable:** Escape the **opening angle bracket** of colliding tags (for example `&lt;section>` — user restores `<` when pasting) or use another distinctive wrapper **documented in the same message**, so the user can recover literal XML. State explicitly that the user should restore brackets when copying into another system.
-- **Structural safety net:** Regardless of renderer behavior, the **file-based validation loop** ensures any prompt-workflow response whose fenced XML is missing any required opening/closing section tag pair is corrected before the user sees it. The validator CLI (`prompt_workflow_validate.py`) enforces section presence, scope anchors, checklist rows, context-control signals, and positive phrasing. Methodology: [Anthropic — Agent Skills: evaluation and iteration](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#evaluation-and-iteration).
+- **Structural safety net:** The **file-based validation loop** corrects missing section tag pairs before user output. The validator CLI enforces section presence, scope anchors, checklist rows, context-control signals, and positive phrasing.
 
 ## XML artifact (minimum sections)
 
@@ -121,7 +121,7 @@ Add `<illustrations>` when format or tone is easy to misunderstand; nest section
 
 ## File-based validation loop (primary enforcement)
 
-The drafting subagent writes the complete artifact (fenced XML plus Outcome digest plus hook validation block) to `data/prompts/.draft-prompt.xml`, then runs the validator CLI against that file. If the validator exits 2 (blocked), the subagent reads stderr for violation codes, edits the draft file to fix the flagged issues, and re-runs. This loop repeats until exit 0 (allowed). Only then does the orchestrator read the validated file, extract only the fenced XML and Outcome digest (stripping the hook validation block), output those to the user, and delete the temp file. The user sees only the finished result.
+The subagent writes the complete artifact (fenced XML + Outcome digest + hook validation block) to `data/prompts/.draft-prompt.xml`, runs the validator, and fixes violations (exit 2) until exit 0. The orchestrator then strips the hook validation block and outputs fence + digest.
 
     python packages/claude-dev-env/hooks/blocking/prompt_workflow_validate.py data/prompts/.draft-prompt.xml
 
@@ -129,4 +129,4 @@ The same checks are available as a Python function via `from prompt_workflow_val
 
 ## Internal 15-row compliance checklist (audit numerator)
 
-The 15-row compliance audit maps to the named rows in `SKILL.md` (§11 **Compliance audit — 15-row checklist**), including `reversible_action_and_safety_check_guidance` and `scope_terms_explicit_and_anchored`. The subagent evaluates all 15 rows internally; the fenced XML itself is the proof that validation passed (the file-based validation loop ensures it ships only after exit 0). **Default user path:** keep the table internal; print the expanded table + JSON only after an explicit debug request.
+The 15-row compliance audit maps to the named rows in `SKILL.md` §11. **Default user path:** keep the table internal; print the expanded table + JSON only after an explicit debug request.

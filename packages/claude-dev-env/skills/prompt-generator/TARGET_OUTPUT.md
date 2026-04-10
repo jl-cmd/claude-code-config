@@ -9,11 +9,11 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 ## Terminology
 
 - **Outcome preview gate** — Mandatory `AskUserQuestion` turn **after** the drafting subagent returns candidate XML internally and **before** the orchestrator emits the fenced artifact. Confirms the user recognizes what executing the generated prompt will produce.
-- **Outcome digest** — Skimmable markdown block **after** the closing ` ``` ` of the single `xml` fence on the final handoff: bullets for what the prompt produces, key inputs, done criteria, and a short sample excerpt (see `SKILL.md` §9).
+- **Outcome digest** — Skimmable markdown block **after** the closing ` ``` ` of the single `xml` fence on the final handoff: bullets for downstream deliverables, primary inputs or tools, done criteria, and a short sample excerpt (see `SKILL.md` §9).
 
 ## User-visible output contract
 
-- **Clarity bar:** Every deliverable states concrete outcomes, explicit formats, and checkable done-when signals—per Anthropic [Be clear and direct](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#be-clear-and-direct) and [Control the format](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#control-the-format-of-responses).
+- **Clarity bar:** Every deliverable (`AskUserQuestion` fields, XML body, outcome digest) states concrete outcomes, explicit formats, and checkable done-when signals—aligned with Anthropic [Be clear and direct](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#be-clear-and-direct) and [Control the format of responses](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#control-the-format-of-responses). Prefer what to do and how to verify it over empty prohibitions or vague quality adjectives.
 - **Questions:** Deliver every clarifying question through **AskUserQuestion** (one form per round), with **2–4** options per question and the **recommended** option listed **first**. Tag discovery-sourced options **`[discovered]`** when they came from repo search.
 - **Outcome preview turn (mandatory):** Immediately before the final handoff, emit exactly one assistant turn that contains:
   1. A markdown block titled `### Outcome preview` with bullets only: **What it does**, **Key inputs**, **Done when**, **Quick sample** (about twenty lines max; follow the sample formatting rules in SKILL.md section 7).
@@ -22,7 +22,7 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
   1. **Artifact:** the full XML prompt inside **one** Markdown code fence whose language tag is `xml`
   2. **Outcome digest:** after the closing fence, a `## Outcome digest` section with tightened bullets so the user can verify intent at a glance
   3. **Paste-ready section:** The paste-ready prompt artifact remains the single ` ```xml ` block; the digest is for reading, not for pasting into the downstream session
-- **Full audit table / JSON debug bundle:** Stay internal until the user names debug (`show debug`, `full audit table`, `raw internal object`); then append the table/JSON **after** the Outcome digest.
+- **Full audit table / JSON debug bundle:** Stay internal until the user names debug with a phrase such as `show debug`, `full audit table`, or `raw internal object`; then append the table/JSON **after** the Outcome digest.
 - **File-based validation loop:** The subagent writes output to `data/prompts/.draft-prompt.xml`, runs the validator CLI, and fixes violations until exit 0. The orchestrator then outputs the validated result to the user.
 - **Decision stability:** Pick one drafting approach, carry it through preview confirmation, then ship; change approach only when **new** facts from the user or tools contradict the earlier plan; if the draft fails checks, fix forward inside the same structure instead of restarting from scratch.
 
@@ -99,8 +99,8 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 
 ## Structural invariant E — Render-survival for XML sections
 
-- **Problem (HTML):** Tag names overlapping HTML5 elements (`section`, `summary`, `details`, `header`, `footer`, `main`, `aside`, `article`, `nav`, `figure`) can be hidden by chat renderers. Required sections use `<background>` (replacing former `context`) to stay off that list.
-- **Problem (nested Markdown fences):** Inner fences (` ```bash `) inside the outer ` ```xml ` block can close the outer fence early in many renderers. `extract_fenced_xml_content` walks inner fence pairs before accepting the outer closing fence.
+- **Problem (HTML):** Tag names used for prompt XML sections can overlap **HTML5 element names**. Chat renderers may treat those tokens as HTML and hide or alter the content between tags. High-risk examples include: `section`, `summary`, `details`, `header`, `footer`, `main`, `aside`, `article`, `nav`, `figure`. The former required name `context` matched an HTML element; **required** sections now use `<background>` for situational grounding so the name stays off that list. The raw assistant text may be complete while the **rendered** message looks like sections are missing.
+- **Problem (nested Markdown fences):** A ` ```bash ` (or other inner) line inside the outer ` ```xml ` block is still a line of text in the transcript, but many Markdown renderers treat it as **opening a nested code fence**, which **closes the outer fence early**. Everything after that point (including `</illustrations>` and other closing tags) can appear outside the code block or look “swallowed.” `extract_fenced_xml_content` now walks inner fences (` ```lang ` … closing `` ``` ``) before accepting the outer `` ``` `` that ends the `xml` block.
 - **Outcome digest:** Follow the sample formatting rules in SKILL.md section 7 inside `## Outcome digest` so a second outer ` ```xml ` block never appears—multiple `xml` fences concatenate in `extract_fenced_xml_content` and would corrupt clipboard copy.
 - **Primary mitigation:** When the fenced XML artifact **contains any tag whose local name is on the HTML-collision list**, or when the artifact is **large enough that render truncation is likely**, the orchestrator **must write the full artifact to a file** (default: under `data/prompts/` or a path the user supplied earlier) and **paste the absolute file path** in the chat message. Pair the path with a **short section inventory** confirming all five required sections (`role`, `background`, `instructions`, `constraints`, `output_format`) are present in the file.
 - **Authoring rules for code inside `<illustrations>`:** Follow the sample formatting rules in SKILL.md section 7. Hooks and clipboard treat complete triple-backtick pairs as one unit inside the outer `` ```xml `` fence.
@@ -118,6 +118,7 @@ Include at least:
 - `<output_format>...</output_format>`
 
 Add `<illustrations>` when format or tone is easy to misunderstand; nest sections when the task has natural hierarchy. **Long code samples belong in `<illustrations>`** — follow the sample formatting rules in SKILL.md section 7.
+
 
 ## File-based validation loop (primary enforcement)
 

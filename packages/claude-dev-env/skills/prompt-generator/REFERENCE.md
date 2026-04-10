@@ -209,7 +209,7 @@ When deciding how to approach a problem, choose an approach and commit to it. Av
 
 ## Debug JSON schema (prompt-generator pipeline)
 
-Use **only** when the user explicitly requests debug output (for example `show debug`, `full audit table`, `raw internal object`). Default assistant turns complete the normal handoff first: **audit line** + one `xml` fence + **`## Outcome digest`** + optional hook validation block (defined in SKILL.md Terminology; see also `TARGET_OUTPUT.md`); this JSON object is an optional appendix **after** that handoff (and after any hook validation block).
+Emit when the user explicitly requests debug output (for example `show debug`, `full audit table`, `raw internal object`). Default assistant turns complete the normal handoff first: **audit line** + one `xml` fence + **`## Outcome digest`** + optional hook validation block (defined in SKILL.md Terminology; see also `TARGET_OUTPUT.md`); this JSON object is an optional appendix **after** that handoff (and after any hook validation block).
 
 Shape (field names stable for internal audit helpers and Stop-hook leak detection):
 

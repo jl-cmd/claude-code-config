@@ -43,6 +43,12 @@ If sources disagree, apply tier order: Anthropic first, then OpenAI/Google/Micro
 
 See SKILL.md §§107-115 (Phases 4-5) and `TARGET_OUTPUT.md` for the full contract. **Clipboard safety:** `extract_fenced_xml_content` concatenates every ` ```xml ` block—follow §7 sample formatting so clipboard copy stays the lone artifact body.
 
+### Outcome preview gate and digest (`prompt-generator`)
+
+Human checkpoint before the paste-ready artifact ships: the orchestrator runs an **Outcome preview** turn (`### Outcome preview` bullets built from the **preview summary**, defined in SKILL.md Terminology) plus **AskUserQuestion** (**Ship** recommended first, two contextual alternates, **Refine with free text**), then emits `Audit`, a single ` ```xml ` fence, and **`## Outcome digest`** after the fence. Rationale matches collaborative checkpoints in `templates/skill-from-ground-up.md` and the refinement pattern in `templates/skill-refinement-package.md`. `ARCHITECTURE.md` lists all files in this skill package.
+
+**Clipboard safety:** `prompt_workflow_gate_core.extract_fenced_xml_content` concatenates every ` ```xml ` block in the message—follow the sample formatting rules in SKILL.md section 7 so clipboard copy stays the lone artifact body. Full contract: `TARGET_OUTPUT.md`.
+
 ## Harness design patterns (Anthropic blog, April 2026)
 
 Primary URL: https://claude.com/blog/harnessing-claudes-intelligence. Structured inventory: `docs/references/anthropic-harnessing-claudes-intelligence-technique-inventory.md`.
@@ -201,7 +207,7 @@ When deciding how to approach a problem, choose an approach and commit to it. Av
 
 ## Debug JSON schema (prompt-generator pipeline)
 
-Emit when the user explicitly requests debug output (for example `show debug`, `full audit table`, `raw internal object`). Default assistant turns complete the normal handoff first: one `xml` fence + **`## Outcome digest`** (see also `TARGET_OUTPUT.md`); this JSON object is an optional appendix **after** that handoff.
+Use **only** when the user explicitly requests debug output (for example `show debug`, `full audit table`, `raw internal object`). Default assistant turns complete the normal handoff first: one `xml` fence + **`## Outcome digest`** (see also `TARGET_OUTPUT.md`); this JSON object is an optional appendix **after** that handoff.
 
 Shape (field names stable for internal audit helpers and Stop-hook leak detection):
 

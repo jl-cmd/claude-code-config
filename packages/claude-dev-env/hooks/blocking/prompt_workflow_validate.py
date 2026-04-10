@@ -33,10 +33,6 @@ from prompt_workflow_gate_core import (
     missing_scope_anchors,
 )
 
-BLOCKED_EXIT_CODE: int = 2
-ALLOWED_EXIT_CODE: int = 0
-
-
 @dataclass(frozen=True)
 class ValidationReason:
     code: str
@@ -55,9 +51,6 @@ class ValidationResult:
     @property
     def reason_codes(self) -> list[str]:
         return [each_reason.code for each_reason in self.reasons]
-
-
-ALLOWED_RESULT: ValidationResult = ValidationResult(allowed=True)
 
 
 def _blocked(code: str, message: str) -> ValidationResult:
@@ -169,8 +162,10 @@ def validate_prompt_workflow(
     Returns ``ValidationResult.allowed == True`` when every gate passes.
     The first failing gate short-circuits and its reason is returned.
     """
+    allowed_result = ValidationResult(allowed=True)
+
     if not assistant_message.strip():
-        return ALLOWED_RESULT
+        return allowed_result
 
     debug_requested = has_debug_intent(user_context)
 
@@ -179,7 +174,7 @@ def validate_prompt_workflow(
         return leak_result
 
     if not is_prompt_workflow_response(assistant_message):
-        return ALLOWED_RESULT
+        return allowed_result
 
     workflow_checks = (
         _check_required_sections,
@@ -194,28 +189,29 @@ def validate_prompt_workflow(
         if gate_result is not None:
             return gate_result
 
-    return ALLOWED_RESULT
-
-
-def _read_assistant_text_from_arguments() -> str:
-    if len(sys.argv) > 1:
-        file_path = Path(sys.argv[1])
-        return file_path.read_text(encoding="utf-8")
-    if not sys.stdin.isatty():
-        return sys.stdin.read()
-    sys.stderr.write("Usage: prompt_workflow_validate.py [path/to/draft.md]\n")
-    sys.stderr.write("       cat draft.md | prompt_workflow_validate.py\n")
-    sys.exit(BLOCKED_EXIT_CODE)
+    return allowed_result
 
 
 def main() -> None:
-    assistant_text = _read_assistant_text_from_arguments()
+    blocked_exit_code: int = 2
+    allowed_exit_code: int = 0
+
+    if len(sys.argv) > 1:
+        file_path = Path(sys.argv[1])
+        assistant_text = file_path.read_text(encoding="utf-8")
+    elif not sys.stdin.isatty():
+        assistant_text = sys.stdin.read()
+    else:
+        sys.stderr.write("Usage: prompt_workflow_validate.py [path/to/draft.md]\n")
+        sys.stderr.write("       cat draft.md | prompt_workflow_validate.py\n")
+        sys.exit(blocked_exit_code)
+
     validation_result = validate_prompt_workflow(assistant_text)
     if validation_result.allowed:
-        sys.exit(ALLOWED_EXIT_CODE)
+        sys.exit(allowed_exit_code)
     for each_reason in validation_result.reasons:
         sys.stderr.write(f"[{each_reason.code}] {each_reason.message}\n")
-    sys.exit(BLOCKED_EXIT_CODE)
+    sys.exit(blocked_exit_code)
 
 
 if __name__ == "__main__":

@@ -25,7 +25,7 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
   4. **Hook validation block (when used, defined in SKILL.md Terminology):** When the workflow emits the hook validation block, place it **after** the Outcome digest so `extract_fenced_xml_content` still returns only the XML body for clipboard copy
   5. **Paste-ready section:** The paste-ready prompt artifact remains the single ` ```xml ` block; the digest and hook validation block are for reading and hook validation, not for pasting into the downstream session
 - **Full audit table / JSON debug bundle:** Stay internal until the user names debug with a phrase such as `show debug`, `full audit table`, or `raw internal object`; then append the table/JSON **after** the Outcome digest and any hook validation block.
-- **Hook retries:** Keep retry loops inside the subagent or internal pipeline; the user sees at most one short status line such as `Retrying: scope anchor missing` before the successful audit line + fence + digest.
+- **File-based validation loop:** The drafting subagent writes the complete output to `data/prompts/.draft-prompt.xml`, runs the validator CLI, and edits the file to fix any violations until the validator exits 0. Only then does the orchestrator read the validated file and output it to the user. The user sees only the finished result.
 - **Decision stability:** Pick one drafting approach, carry it through preview confirmation, then ship; change approach only when **new** facts from the user or tools contradict the earlier plan; if the draft fails checks, fix forward inside the same structure instead of restarting from scratch.
 
 ## Scenario 1: Fresh chat with brief goal
@@ -107,7 +107,7 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 - **Primary mitigation:** When the fenced XML artifact **contains any tag whose local name is on the HTML-collision list**, or when the artifact is **large enough that render truncation is likely**, the orchestrator **must write the full artifact to a file** (default: under `data/prompts/` or a path the user supplied earlier) and **paste the absolute file path** in the chat message. Pair the path with a **short section inventory** confirming all five required sections (`role`, `background`, `instructions`, `constraints`, `output_format`) are present in the file.
 - **Authoring rules for code inside `<illustrations>`:** Follow the sample formatting rules in SKILL.md section 7. Hooks and clipboard treat complete triple-backtick pairs as one unit inside the outer `` ```xml `` fence.
 - **Fallback when file write is unavailable:** Escape the **opening angle bracket** of colliding tags (for example `&lt;section>` — user restores `<` when pasting) or use another distinctive wrapper **documented in the same message**, so the user can recover literal XML. State explicitly that the user should restore brackets when copying into another system.
-- **Structural safety net:** Regardless of renderer behavior, the **Stop hook section-presence gate** blocks any prompt-workflow response whose fenced XML is missing any required opening/closing section tag pair. Methodology: [Anthropic — Agent Skills: evaluation and iteration](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#evaluation-and-iteration).
+- **Structural safety net:** Regardless of renderer behavior, the **file-based validation loop** ensures any prompt-workflow response whose fenced XML is missing any required opening/closing section tag pair is corrected before the user sees it. The validator CLI (`prompt_workflow_validate.py`) enforces section presence, scope anchors, checklist rows, context-control signals, and positive phrasing. Methodology: [Anthropic — Agent Skills: evaluation and iteration](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#evaluation-and-iteration).
 
 ## XML artifact (minimum sections)
 
@@ -120,6 +120,14 @@ Include at least:
 - `<output_format>...</output_format>`
 
 Add `<illustrations>` when format or tone is easy to misunderstand; nest sections when the task has natural hierarchy. **Long code samples belong in `<illustrations>`** — follow the sample formatting rules in SKILL.md section 7.
+
+## File-based validation loop (primary enforcement)
+
+The drafting subagent writes the complete artifact (audit line plus fenced XML plus Outcome digest plus hook validation block) to `data/prompts/.draft-prompt.xml`, then runs the validator CLI against that file. If the validator exits 2 (blocked), the subagent reads stderr for violation codes, edits the draft file to fix the flagged issues, and re-runs. This loop repeats until exit 0 (allowed). Only then does the orchestrator read the validated file, output its content to the user, and delete the temp file. The user sees only the finished result.
+
+    python packages/claude-dev-env/hooks/blocking/prompt_workflow_validate.py data/prompts/.draft-prompt.xml
+
+The same checks are available as a Python function via `from prompt_workflow_validate import validate_prompt_workflow` for integration in tests and tooling.
 
 ## Internal 15-row compliance checklist (audit numerator)
 

@@ -8,23 +8,22 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 
 ## Terminology
 
-- **Outcome preview gate** — Mandatory `AskUserQuestion` turn **after** the drafting subagent returns candidate XML internally and **before** the orchestrator emits the final `Audit` line and fenced artifact. Confirms the user recognizes what executing the generated prompt will produce.
-- **Outcome digest** — Skimmable markdown block **after** the closing ` ``` ` of the single `xml` fence on the final handoff: bullets for downstream deliverables, primary inputs or tools, done criteria, and a short sample excerpt (see `SKILL.md` §9).
+- **Outcome preview gate** — Mandatory `AskUserQuestion` turn **after** the drafting subagent returns candidate XML internally and **before** the orchestrator emits the fenced artifact. Confirms the user recognizes what executing the generated prompt will produce.
+- **Outcome digest** — Skimmable markdown block **after** the closing ` ``` ` of the single `xml` fence on the final handoff: bullets for what the prompt produces, key inputs, done criteria, and a short sample excerpt (see `SKILL.md` §9).
 
 ## User-visible output contract
 
-- **Clarity bar:** Every deliverable (`AskUserQuestion` fields, audit line, XML body, outcome digest) states concrete outcomes, explicit formats, and checkable done-when signals—aligned with Anthropic [Be clear and direct](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#be-clear-and-direct) and [Control the format of responses](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#control-the-format-of-responses). Prefer what to do and how to verify it over empty prohibitions or vague quality adjectives.
+- **Clarity bar:** Every deliverable (`AskUserQuestion` fields, XML body, outcome digest) states concrete outcomes, explicit formats, and checkable done-when signals—aligned with Anthropic [Be clear and direct](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#be-clear-and-direct) and [Control the format of responses](https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices#control-the-format-of-responses). Prefer what to do and how to verify it over empty prohibitions or vague quality adjectives.
 - **Questions:** Deliver every clarifying question through **AskUserQuestion** (one form per round), with **2–4** options per question and the **recommended** option listed **first**. Tag discovery-sourced options **`[discovered]`** when they came from repo search.
 - **Outcome preview turn (mandatory):** Immediately before the final handoff, emit exactly one assistant turn that contains:
-  1. A markdown block titled `### Outcome preview` with bullets only: **What the downstream executor produces**, **Primary inputs or tools**, **Done when**, **Sample excerpt** (about twenty lines max; follow the sample formatting rules in SKILL.md section 7).
+  1. A markdown block titled `### Outcome preview` with bullets only: **What it does**, **Key inputs**, **Done when**, **Quick sample** (about twenty lines max; follow the sample formatting rules in SKILL.md section 7).
   2. **AskUserQuestion** with **2–4** options: **Ship this outcome profile** (recommended first), two **contextual alternates** grounded in discovery, and **Refine with free text** (starts another drafting loop). Observe the preview round cap per SKILL.md Phase 4.
 - **Final assistant message (complete handoff in one send):**
-  1. **Audit line:** `Audit: pass 15/15` or `Audit: fail N/15 — [reason]`
-  2. **Artifact:** the full XML prompt inside **one** Markdown code fence whose language tag is `xml`
-  3. **Outcome digest:** after the closing fence, a `## Outcome digest` section repeating (or lightly tightening) the skimmable bullets and sample so the user can verify the paste-ready prompt matches intent **without** opening the whole XML
-  4. **Hook validation block (when used, defined in SKILL.md Terminology):** When the workflow emits the hook validation block, place it **after** the Outcome digest so `extract_fenced_xml_content` still returns only the XML body for clipboard copy
-  5. **Paste-ready section:** The paste-ready prompt artifact remains the single ` ```xml ` block; the digest and hook validation block are for reading and hook validation, not for pasting into the downstream session
-- **Full audit table / JSON debug bundle:** Stay internal until the user names debug with a phrase such as `show debug`, `full audit table`, or `raw internal object`; then append the table/JSON **after** the Outcome digest and any hook validation block.
+  1. **Artifact:** the full XML prompt inside **one** Markdown code fence whose language tag is `xml`
+  2. **Outcome digest:** after the closing fence, a `## Outcome digest` section repeating (or lightly tightening) the skimmable bullets and sample so the user can verify the paste-ready prompt matches intent **without** opening the whole XML
+  3. **Hook validation block (when used, defined in SKILL.md Terminology):** When the workflow emits the hook validation block, place it **after** the Outcome digest so `extract_fenced_xml_content` still returns only the XML body for clipboard copy
+  4. **Paste-ready section:** The paste-ready prompt artifact remains the single ` ```xml ` block; the digest and hook validation block are for reading and hook validation, not for pasting into the downstream session
+- **Full audit table / JSON debug bundle:** Stay internal until the user names debug with a phrase such as `show debug`, `full audit table`, or `raw internal object`; then append the table/JSON **after** the Outcome digest and any hook validation block. The 15-row compliance audit runs inside the subagent; the fenced XML itself is the proof that validation passed (the file-based validation loop ensures it ships only after exit 0).
 - **File-based validation loop:** The drafting subagent writes the complete output to `data/prompts/.draft-prompt.xml`, runs the validator CLI, and edits the file to fix any violations until the validator exits 0. Only then does the orchestrator read the validated file and output it to the user. The user sees only the finished result.
 - **Decision stability:** Pick one drafting approach, carry it through preview confirmation, then ship; change approach only when **new** facts from the user or tools contradict the earlier plan; if the draft fails checks, fix forward inside the same structure instead of restarting from scratch.
 
@@ -36,7 +35,7 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 
 **Q&A:** One AskUserQuestion with **2–4** questions covering: scope (which subtree), audience (human vs agent consumer), desired downstream output shape, and hard constraints (tests, CODE_RULES, deadlines). Populate options from discovery paths and package names.
 
-**Output:** After drafting, run the **Outcome preview** turn; then send audit line, `xml` fence, **Outcome digest**, and any hook validation block—the handoff message is complete.
+**Output:** After drafting, run the **Outcome preview** turn; then send `xml` fence, **Outcome digest**, and any hook validation block—the handoff message is complete.
 
 ## Scenario 2: Session handoff
 
@@ -46,7 +45,7 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 
 **Q&A:** One AskUserQuestion with **1–2** questions, e.g. “Rank these next actions for the new session” or “Exclude these areas from scope,” each with **2–4** concrete options drawn from the thread.
 
-**Output:** After drafting, run the **Outcome preview** turn; then send audit line, `xml` fence, **Outcome digest**, and any hook validation block.
+**Output:** After drafting, run the **Outcome preview** turn; then send `xml` fence, **Outcome digest**, and any hook validation block.
 
 **Handoff prompt quality:** `<background>` must include the bullet lists above so a new session can continue with **zero** access to this chat. Quote decision text verbatim where precision matters.
 
@@ -60,13 +59,13 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 
 **Requirements checklist:** The generated XML must mention every user-stated requirement by name (timeouts, selectors, config extraction, TDD, CODE_RULES, test safety, etc.); if one is out of scope, put the reason in `<open_question>`.
 
-**Output:** After drafting, run the **Outcome preview** turn; then send audit line, `xml` fence, **Outcome digest**, and any hook validation block.
+**Output:** After drafting, run the **Outcome preview** turn; then send `xml` fence, **Outcome digest**, and any hook validation block.
 
 ## Scenario 4: Noisy context, stable output
 
 **Trigger:** `/prompt-generator ...` after a long thread with unrelated topics, tool errors, or tangents.
 
-**Output shape:** Same as Scenario 1 for the final message: audit line, one `xml` fence, **Outcome digest**, then any hook validation block.
+**Output shape:** Same as Scenario 1 for the final message: one `xml` fence, **Outcome digest**, then any hook validation block.
 
 **Content focus:** Keep the generated XML aligned with the latest `/prompt-generator` request (e.g. “security-focused code review agent”). Populate the subagent brief from: the user’s literal request string, a **one-paragraph** summary of on-topic facts, and path-grounded discovery notes—leave stack traces, failed commands, and off-topic thread history out of that brief so they never reach the XML body.
 
@@ -77,7 +76,7 @@ This file is the **target output spec** for eval-driven iteration of the `prompt
 ## Structural invariant A — Tool-free artifact output
 
 - **Order:** discovery tool calls (when used) → **AskUserQuestion** → subagent (draft + internal audit) → **Outcome preview** turn (`### Outcome preview` + **AskUserQuestion**) → optional refinement loops → **one** final assistant message.
-- **Final message composition:** That message is plain text only, in order: audit line → opening ` ```xml ` fence → XML body → closing fence → `## Outcome digest` → optional hook validation block → end-of-message. Run every `tool_use` in earlier turns; between the opening and closing `xml` fence, emit only the characters of the XML payload.
+- **Final message composition:** That message is plain text only, in order: opening ` ```xml ` fence → XML body → closing fence → `## Outcome digest` → optional hook validation block → end-of-message. Run every `tool_use` in earlier turns; between the opening and closing `xml` fence, emit only the characters of the XML payload.
 
 ## Structural invariant B — Fenced block closes cleanly
 
@@ -123,7 +122,7 @@ Add `<illustrations>` when format or tone is easy to misunderstand; nest section
 
 ## File-based validation loop (primary enforcement)
 
-The drafting subagent writes the complete artifact (audit line plus fenced XML plus Outcome digest plus hook validation block) to `data/prompts/.draft-prompt.xml`, then runs the validator CLI against that file. If the validator exits 2 (blocked), the subagent reads stderr for violation codes, edits the draft file to fix the flagged issues, and re-runs. This loop repeats until exit 0 (allowed). Only then does the orchestrator read the validated file, output its content to the user, and delete the temp file. The user sees only the finished result.
+The drafting subagent writes the complete artifact (fenced XML plus Outcome digest plus hook validation block) to `data/prompts/.draft-prompt.xml`, then runs the validator CLI against that file. If the validator exits 2 (blocked), the subagent reads stderr for violation codes, edits the draft file to fix the flagged issues, and re-runs. This loop repeats until exit 0 (allowed). Only then does the orchestrator read the validated file, output its content to the user, and delete the temp file. The user sees only the finished result.
 
     python packages/claude-dev-env/hooks/blocking/prompt_workflow_validate.py data/prompts/.draft-prompt.xml
 
@@ -131,4 +130,4 @@ The same checks are available as a Python function via `from prompt_workflow_val
 
 ## Internal 15-row compliance checklist (audit numerator)
 
-The `15` in `Audit: pass 15/15` maps to the named rows in `SKILL.md` (§11 **Compliance audit — 15-row checklist**), including `reversible_action_and_safety_check_guidance` and `scope_terms_explicit_and_anchored`. **Default user path:** keep the table internal; print the expanded table + JSON only after an explicit debug request. On failure, set the audit line to `Audit: fail N/15 — [primary theme]` where the theme names one concrete gap (e.g. `scope_block missing completion_boundary`, `output_format lacks acceptance checks`).
+The 15-row compliance audit maps to the named rows in `SKILL.md` (§11 **Compliance audit — 15-row checklist**), including `reversible_action_and_safety_check_guidance` and `scope_terms_explicit_and_anchored`. The subagent evaluates all 15 rows internally; the fenced XML itself is the proof that validation passed (the file-based validation loop ensures it ships only after exit 0). **Default user path:** keep the table internal; print the expanded table + JSON only after an explicit debug request.

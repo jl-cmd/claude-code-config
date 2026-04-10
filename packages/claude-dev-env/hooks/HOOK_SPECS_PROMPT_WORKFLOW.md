@@ -19,7 +19,7 @@ The former `agent-execution-intent-gate.py` hook is **removed**. Native Agent/Ta
   - Scope-bound text uses banned ambiguous scope terms
   - Banned negative keywords found inside fenced XML artifact
   - Fenced XML artifact missing required sections
-- Enforcement: The drafting subagent writes the draft file, runs the validator, reads stderr violations (each prefixed with `[reason_code]`), edits the file, and re-runs until exit 0. The former `prompt-workflow-stop-guard.py` Stop hook is removed.
+- Enforcement: The drafting subagent writes the draft file, runs the validator, reads stderr violations (each prefixed with `[reason_code]`), edits the file, and re-runs until exit 0.
 
 ## Required Scope Anchors
 

@@ -227,27 +227,23 @@ class TestValidatePromptWorkflowFunction:
         assert validation_result.allowed is True
 
 
-_BANNED_KEYWORD_CASES: list[tuple[str, str]] = [
-    ("do_not", "<instructions>Do not leave return types implicit.</instructions>"),
-    ("avoid", "<instructions>Avoid missing return types.</instructions>"),
-    ("never", "<constraints>Never store credentials in plain text.</constraints>"),
-    ("without", "<instructions>Deploy without running tests first.</instructions>"),
-    ("prevent", "<constraints>Prevent unauthorized access to the API.</constraints>"),
-    ("reject", "<constraints>Reject all unsigned commits.</constraints>"),
-    ("cannot", "<constraints>The API cannot accept unauthenticated requests.</constraints>"),
-    ("unless", "<constraints>Skip the build step unless the user explicitly approves.</constraints>"),
-    ("must_not", "<constraints>The script must not produce duplicates.</constraints>"),
-    ("must_never", "<constraints>You must never store credentials in environment variables.</constraints>"),
-    ("instead_of", "<instructions>Use explicit types instead of implicit ones.</instructions>"),
-    ("rather_than", "<constraints>Prefer explicit types rather than inferred ones.</constraints>"),
-    ("as_opposed_to", "<instructions>Use Grid as opposed to floats for layout.</instructions>"),
-]
-
-
 @pytest.mark.parametrize(
     ("banned_pattern_name", "fenced_xml_content"),
-    _BANNED_KEYWORD_CASES,
-    ids=[each_case[0] for each_case in _BANNED_KEYWORD_CASES],
+    [
+        ("do_not", "<instructions>Do not leave return types implicit.</instructions>"),
+        ("avoid", "<instructions>Avoid missing return types.</instructions>"),
+        ("never", "<constraints>Never store credentials in plain text.</constraints>"),
+        ("without", "<instructions>Deploy without running tests first.</instructions>"),
+        ("prevent", "<constraints>Prevent unauthorized access to the API.</constraints>"),
+        ("reject", "<constraints>Reject all unsigned commits.</constraints>"),
+        ("cannot", "<constraints>The API cannot accept unauthenticated requests.</constraints>"),
+        ("unless", "<constraints>Skip the build step unless the user explicitly approves.</constraints>"),
+        ("must_not", "<constraints>The script must not produce duplicates.</constraints>"),
+        ("must_never", "<constraints>You must never store credentials in environment variables.</constraints>"),
+        ("instead_of", "<instructions>Use explicit types instead of implicit ones.</instructions>"),
+        ("rather_than", "<constraints>Prefer explicit types rather than inferred ones.</constraints>"),
+        ("as_opposed_to", "<instructions>Use Grid as opposed to floats for layout.</instructions>"),
+    ],
 )
 def test_blocks_banned_pattern_inside_fenced_xml(
     banned_pattern_name: str,

@@ -41,7 +41,7 @@ If sources disagree on a technique, apply in order: Anthropic documentation firs
 
 ### Outcome preview gate and digest (`prompt-generator`)
 
-Human checkpoint before the paste-ready artifact ships: the orchestrator runs an **Outcome preview** turn (`### Outcome preview` bullets built from the **preview summary**, defined in SKILL.md Terminology) plus **AskUserQuestion** (**Ship** recommended first, two contextual alternates, **Refine with free text**), then emits `Audit`, a single ` ```xml ` fence, and **`## Outcome digest`** after the fence. Rationale matches collaborative checkpoints in `templates/skill-from-ground-up.md` and the refinement pattern in `templates/skill-refinement-package.md`. `ARCHITECTURE.md` lists all files in this skill package.
+Human checkpoint before the paste-ready artifact ships: the orchestrator runs an **Outcome preview** turn (`### Outcome preview` bullets built from the **preview summary**, defined in SKILL.md Terminology) plus **AskUserQuestion** (**Ship** recommended first, two contextual alternates, **Refine with free text**), then emits a single ` ```xml ` fence and **`## Outcome digest`** after the fence. Rationale matches collaborative checkpoints in `templates/skill-from-ground-up.md` and the refinement pattern in `templates/skill-refinement-package.md`. `ARCHITECTURE.md` lists all files in this skill package.
 
 **Clipboard safety:** `prompt_workflow_gate_core.extract_fenced_xml_content` concatenates every ` ```xml ` block in the message—follow the sample formatting rules in SKILL.md section 7 so clipboard copy stays the lone artifact body. Full contract: `TARGET_OUTPUT.md`.
 
@@ -209,7 +209,7 @@ When deciding how to approach a problem, choose an approach and commit to it. Av
 
 ## Debug JSON schema (prompt-generator pipeline)
 
-Emit when the user explicitly requests debug output (for example `show debug`, `full audit table`, `raw internal object`). Default assistant turns complete the normal handoff first: **audit line** + one `xml` fence + **`## Outcome digest`** + optional hook validation block (defined in SKILL.md Terminology; see also `TARGET_OUTPUT.md`); this JSON object is an optional appendix **after** that handoff (and after any hook validation block).
+Emit when the user explicitly requests debug output (for example `show debug`, `full audit table`, `raw internal object`). Default assistant turns complete the normal handoff first: one `xml` fence + **`## Outcome digest`** + optional hook validation block (defined in SKILL.md Terminology; see also `TARGET_OUTPUT.md`); this JSON object is an optional appendix **after** that handoff (and after any hook validation block).
 
 Shape (field names stable for internal audit helpers and Stop-hook leak detection):
 

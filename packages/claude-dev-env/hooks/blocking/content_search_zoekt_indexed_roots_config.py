@@ -1,4 +1,4 @@
-"""Resolve Zoekt-indexed filesystem roots from environment, JSON file, or built-in defaults."""
+"""Resolve Zoekt-indexed filesystem roots from environment or JSON file (no built-in roots in this package)."""
 
 import json
 import os
@@ -24,13 +24,8 @@ def _default_config_relative_parts() -> tuple[str, str]:
     return (".claude", "zoekt-indexed-roots.json")
 
 
-def _built_in_fallback_windows_roots() -> tuple[str, ...]:
-    return (
-        "Y:/Information Technology/Scripts/Automation/Python/CDP Automations/",
-        "Y:/Information Technology/Scripts/Automation/Python/",
-        "C:/Users/jon/.claude/",
-        "Y:/Craft a Tale/Behavioral App/",
-    )
+def _built_in_fallback_roots() -> tuple[str, ...]:
+    return ()
 
 
 def _parse_json_roots_list(raw: str) -> list[str] | None:
@@ -123,7 +118,7 @@ def _raw_roots_resolution_order() -> list[str]:
     from_file = _roots_from_json_file()
     if from_file is not None:
         return from_file
-    return list(_built_in_fallback_windows_roots())
+    return list(_built_in_fallback_roots())
 
 
 @lru_cache(maxsize=1)

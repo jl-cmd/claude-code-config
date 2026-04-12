@@ -8,15 +8,14 @@ def get_zoekt_redirect_message() -> str:
         "Also available: mcp__zoekt__search_symbols, mcp__zoekt__find_references, mcp__zoekt__file_content. "
         "Example: mcp__zoekt__search(query=\"verify_theme_assets file:\\.py$\")\n\n"
         "INDEX ROOTS (when Grep/Search in a tree is redirected): set ZOEKT_REDIRECT_INDEXED_ROOTS to a JSON array "
-        "of absolute paths, or ~/.claude/zoekt-indexed-roots.json as {\"roots\": [\"Y:/your/repo/\", ...]}. "
+        "of absolute paths, or ~/.claude/zoekt-indexed-roots.json as {\"roots\": [\"/abs/path/to/repo/\", ...]}. "
         "Optional ZOEKT_REDIRECT_INDEXED_ROOTS_FILE points to a different JSON file. "
-        "WSL /mnt/<drive>/... prefixes are derived from Windows roots automatically.\n\n"
-        "ZOEKT REPO -> FILESYSTEM PATH MAPPING (for editing files found via Zoekt):\n"
-        "  Python           -> Y:/Information Technology/Scripts/Automation/Python/\n"
-        "  CDP Automations  -> Y:/Information Technology/Scripts/Automation/Python/CDP Automations/\n"
-        "  Behavioral App   -> Y:/Craft a Tale/Behavioral App/\n"
-        "  llm-settings       -> C:/Users/jon/.claude/\n"
-        "Example: Zoekt returns 'Python - shared_utils/foo.py' -> edit 'Y:/Information Technology/Scripts/Automation/Python/shared_utils/foo.py'"
+        "WSL /mnt/<drive>/... prefixes are derived from Windows roots automatically. "
+        "This package ships no built-in roots (public repo); you must configure roots locally.\n\n"
+        "ZOEKT REPO LABEL -> LOCAL DISK (for editing files after a Zoekt hit): "
+        "keep the same directories in zoekt-indexed-roots.json as you index in Zoekt. "
+        "Example pattern only — yours will differ: if Zoekt shows \"acme-lib - src/foo.py\" and that repo "
+        "lives at /srv/checkout/acme-lib/ on your machine, edit /srv/checkout/acme-lib/src/foo.py."
     )
 
 

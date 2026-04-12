@@ -1,4 +1,4 @@
-"""Tests for Zoekt indexed root resolution (env, file, defaults, WSL variants)."""
+"""Tests for Zoekt indexed root resolution (env, file, empty built-in fallback, WSL variants)."""
 
 import json
 import os
@@ -83,7 +83,7 @@ class IndexedRootsConfigTests(unittest.TestCase):
             clear_indexed_root_prefixes_cache()
             self.assertTrue(is_in_indexed_repo("Y:/parent/child/file.py"))
 
-    def test_invalid_environment_json_falls_through_to_defaults(self) -> None:
+    def test_invalid_environment_json_falls_through_to_empty_builtin(self) -> None:
         with patch(
             "content_search_zoekt_indexed_roots_config._roots_from_json_file",
             return_value=None,
@@ -95,7 +95,7 @@ class IndexedRootsConfigTests(unittest.TestCase):
             ):
                 clear_indexed_root_prefixes_cache()
                 prefixes = indexed_root_prefixes()
-        self.assertTrue(len(prefixes) > 0)
+        self.assertEqual(prefixes, ())
 
 
 if __name__ == "__main__":

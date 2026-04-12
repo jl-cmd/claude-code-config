@@ -1,4 +1,4 @@
-"""Normalize paths and test membership under Zoekt-indexed roots (Windows and WSL prefixes)."""
+"""Normalize paths and test membership under Zoekt-indexed roots (from env, JSON file, or defaults)."""
 
 import re
 
@@ -13,25 +13,12 @@ def is_specific_file(path: str) -> bool:
 
 
 def is_in_indexed_repo(path: str) -> bool:
-    indexed_paths = (
-        "y:/information technology/scripts/automation/python/cdp automations/",
-        "y:/information technology/scripts/automation/python/",
-        "c:/users/jon/.claude/",
-        "y:/craft a tale/behavioral app/",
-    )
-    indexed_paths_wsl = (
-        "/mnt/y/information technology/scripts/automation/python/cdp automations/",
-        "/mnt/y/information technology/scripts/automation/python/",
-        "/mnt/c/users/jon/.claude/",
-        "/mnt/y/craft a tale/behavioral app/",
-    )
+    from content_search_zoekt_indexed_roots_config import indexed_root_prefixes
+
     norm = normalize_path(path)
     if not norm.endswith("/"):
         norm += "/"
-    for prefix in indexed_paths:
-        if norm.startswith(prefix):
-            return True
-    for prefix in indexed_paths_wsl:
+    for prefix in indexed_root_prefixes():
         if norm.startswith(prefix):
             return True
     return False

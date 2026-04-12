@@ -1,3 +1,6 @@
+"""JSON shape for Claude Code PreToolUse deny: hookSpecificOutput plus short systemMessage."""
+
+
 def build_block_payload(
     brief_label: str,
     permission_decision_reason: str,

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""PreToolUse hook: deny Grep, Search, and shell search in indexed trees; steer to Zoekt MCP."""
+
 import json
 import os
 import sys

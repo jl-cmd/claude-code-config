@@ -1,3 +1,5 @@
+"""Subprocess integration tests for content-search-to-zoekt-redirector PreToolUse hook."""
+
 import json
 import pathlib
 import subprocess

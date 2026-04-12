@@ -1,3 +1,5 @@
+"""Match Bash one-liners that act as content search (grep, rg, findstr, etc.)."""
+
 import re
 
 

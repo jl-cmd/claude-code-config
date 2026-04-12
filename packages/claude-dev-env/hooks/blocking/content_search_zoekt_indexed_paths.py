@@ -1,3 +1,5 @@
+"""Normalize paths and test membership under Zoekt-indexed roots (Windows and WSL prefixes)."""
+
 import re
 
 

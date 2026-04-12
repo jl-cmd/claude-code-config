@@ -1,3 +1,5 @@
+"""Unit tests for Zoekt redirector PreToolUse deny payload (build_block_payload)."""
+
 import json
 import pathlib
 import sys

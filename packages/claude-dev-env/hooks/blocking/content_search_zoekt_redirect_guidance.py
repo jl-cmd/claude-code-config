@@ -1,3 +1,6 @@
+"""Zoekt MCP usage and repo-to-disk path mapping for PreToolUse permissionDecisionReason."""
+
+
 def get_zoekt_redirect_message() -> str:
     return (
         "Use Zoekt MCP instead: mcp__zoekt__search(query=\"your pattern\"). "

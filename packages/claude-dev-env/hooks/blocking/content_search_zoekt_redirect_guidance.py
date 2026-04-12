@@ -1,16 +1,17 @@
-from typing import Final
+def get_zoekt_redirect_message() -> str:
+    return (
+        "Use Zoekt MCP instead: mcp__zoekt__search(query=\"your pattern\"). "
+        "Supports regex, 'file:pattern' for file filtering, 'lang:py' for language. "
+        "Also available: mcp__zoekt__search_symbols, mcp__zoekt__find_references, mcp__zoekt__file_content. "
+        "Example: mcp__zoekt__search(query=\"verify_theme_assets file:\\.py$\")\n\n"
+        "ZOEKT REPO -> FILESYSTEM PATH MAPPING (for editing files found via Zoekt):\n"
+        "  Python           -> Y:/Information Technology/Scripts/Automation/Python/\n"
+        "  CDP Automations  -> Y:/Information Technology/Scripts/Automation/Python/CDP Automations/\n"
+        "  Behavioral App   -> Y:/Craft a Tale/Behavioral App/\n"
+        "  llm-settings       -> C:/Users/jon/.claude/\n"
+        "Example: Zoekt returns 'Python - shared_utils/foo.py' -> edit 'Y:/Information Technology/Scripts/Automation/Python/shared_utils/foo.py'"
+    )
 
-ZOEKT_REDIRECT_MESSAGE = (
-    "Use Zoekt MCP instead: mcp__zoekt__search(query=\"your pattern\"). "
-    "Supports regex, 'file:pattern' for file filtering, 'lang:py' for language. "
-    "Also available: mcp__zoekt__search_symbols, mcp__zoekt__find_references, mcp__zoekt__file_content. "
-    "Example: mcp__zoekt__search(query=\"verify_theme_assets file:\\.py$\")\n\n"
-    "ZOEKT REPO -> FILESYSTEM PATH MAPPING (for editing files found via Zoekt):\n"
-    "  Python           -> Y:/Information Technology/Scripts/Automation/Python/\n"
-    "  CDP Automations  -> Y:/Information Technology/Scripts/Automation/Python/CDP Automations/\n"
-    "  Behavioral App   -> Y:/Craft a Tale/Behavioral App/\n"
-    "  llm-settings       -> C:/Users/jon/.claude/\n"
-    "Example: Zoekt returns 'Python - shared_utils/foo.py' -> edit 'Y:/Information Technology/Scripts/Automation/Python/shared_utils/foo.py'"
-)
 
-ZOEKT_REDIRECT_GUIDANCE: Final[str] = ZOEKT_REDIRECT_MESSAGE
+def get_zoekt_redirect_guidance() -> str:
+    return get_zoekt_redirect_message()

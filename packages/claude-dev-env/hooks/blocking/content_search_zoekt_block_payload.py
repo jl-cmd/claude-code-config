@@ -1,9 +1,5 @@
-from typing import Final
-
-DESTRUCTIVE_GATE_LABEL_PREFIX: Final[str] = "[destructive-gate]"
-
-
 def build_block_payload(brief_label: str, full_reason: str) -> dict:
+    destructive_gate_label_prefix = "[destructive-gate]"
     return {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -11,6 +7,6 @@ def build_block_payload(brief_label: str, full_reason: str) -> dict:
         },
         "decision": "block",
         "reason": full_reason,
-        "systemMessage": f"{DESTRUCTIVE_GATE_LABEL_PREFIX} {brief_label}",
+        "systemMessage": f"{destructive_gate_label_prefix} {brief_label}",
         "suppressOutput": True,
     }

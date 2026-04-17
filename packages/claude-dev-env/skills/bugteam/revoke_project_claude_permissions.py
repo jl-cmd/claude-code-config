@@ -6,6 +6,8 @@ entry from ~/.claude/settings.json. Safe to run when no prior grant exists.
 """
 
 import json
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,11 @@ AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "project Claude Code config tree; edits inside are routine"
 )
 JSON_INDENT_SPACES: int = 2
+TEMP_FILE_SUFFIX: str = ".tmp"
+
+
+def is_valid_project_root(candidate_path: Path) -> bool:
+    return (candidate_path / ".git").exists() or (candidate_path / ".claude").exists()
 
 
 def get_current_project_path() -> str:
@@ -40,10 +47,14 @@ def load_settings(settings_path: Path) -> dict[str, Any]:
     return json.loads(settings_path.read_text(encoding="utf-8"))
 
 
-def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
-    settings_path.write_text(
-        json.dumps(settings, indent=JSON_INDENT_SPACES), encoding="utf-8"
-    )
+def save_settings_atomically(
+    settings_path: Path, settings_payload: dict[str, Any]
+) -> None:
+    temporary_path = settings_path.with_suffix(settings_path.suffix + TEMP_FILE_SUFFIX)
+    with temporary_path.open("w", encoding="utf-8") as settings_file:
+        json.dump(settings_payload, settings_file, indent=JSON_INDENT_SPACES)
+        settings_file.write("\n")
+    os.replace(temporary_path, settings_path)
 
 
 def remove_values_from_list(target_list: list[str], values_to_remove: set[str]) -> int:
@@ -91,6 +102,14 @@ def remove_auto_mode_environment_entry(
 
 
 def revoke_permissions_for_current_directory() -> None:
+    project_root_path = Path.cwd()
+    if not is_valid_project_root(project_root_path):
+        print(
+            f"ERROR: cwd {project_root_path} has no .git or .claude directory. "
+            f"Run from a project root.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     project_path = get_current_project_path()
     permission_rules = build_permission_rules(project_path)
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(
@@ -104,7 +123,7 @@ def revoke_permissions_for_current_directory() -> None:
     environment_entries_removed_count = remove_auto_mode_environment_entry(
         settings, environment_entry
     )
-    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
+    save_settings_atomically(CLAUDE_USER_SETTINGS_PATH, settings)
     print(f"Project path: {project_path}")
     print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
     print(f"Allow rules removed: {rules_removed_count} of {len(permission_rules)}")

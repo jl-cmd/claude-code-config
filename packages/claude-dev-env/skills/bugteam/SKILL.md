@@ -30,6 +30,7 @@ Refusal cases:
 - **Claude Code version too old.** Run `claude --version`. If older than v2.1.32, respond: `Claude Code v<version> is older than the v2.1.32 minimum for agent teams. Upgrade first.` and stop.
 - **No PR or upstream diff.** Respond exactly: `No PR or upstream diff. /bugteam needs a target.` and stop.
 - **Working tree dirty with uncommitted changes the user did not stage.** Respond: `Uncommitted changes detected. Stash, commit, or revert before /bugteam.` and stop. Reason: the fix teammate will commit the working tree, mixing user-uncommitted work into automated fixes.
+- **Required subagents not installed.** Before Step 0, verify `code-quality-agent` and `clean-coder` subagent types exist in the available agents list. If either is missing, respond: `Required subagent type <name> not installed. /bugteam needs both code-quality-agent and clean-coder available.` and stop.
 
 ## The Process
 
@@ -38,7 +39,7 @@ Refusal cases:
 Before spawning any teammates, grant the team session write access to the project's `.claude/**` tree:
 
 ```bash
-python scripts/grant_project_claude_permissions.py
+python "${CLAUDE_SKILL_DIR}/grant_project_claude_permissions.py"
 ```
 
 The script reads `Path.cwd()` and writes idempotent allow rules into `~/.claude/settings.json`. Run from the project root. If it fails (non-zero exit), surface the error and stop — do not proceed without the grant.
@@ -61,7 +62,7 @@ This session is the **team lead**. Create a team using the agent teams feature. 
 
 Team specification:
 
-- **Team name:** `bugteam-pr-<number>` (or `bugteam-<head-branch>` if no PR)
+- **Team name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` (or `bugteam-<head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured at team-creation time from the lead session and prevents two concurrent invocations on the same PR from colliding.
 - **Roles defined up front (spawned per loop, not at team creation):**
   - `bugfind` — uses subagent type `code-quality-agent`, model sonnet
   - `bugfix` — uses subagent type `clean-coder`, model sonnet
@@ -77,7 +78,7 @@ last_action = "fresh"
 last_findings = None
 audit_log = []
 starting_sha = git rev-parse HEAD
-team_name = "bugteam-pr-<number>"
+team_name = "bugteam-pr-<number>-<YYYYMMDDHHMMSS>"
 ```
 
 ### Step 3: The cycle
@@ -98,11 +99,14 @@ Repeat until an exit condition fires:
 
 ### AUDIT action (clean-room teammate, fresh per loop)
 
-Capture a fresh PR diff for this loop:
+Capture a fresh PR diff for this loop into a per-team scoped directory so concurrent `/bugteam` runs do not collide:
 
 ```
-gh pr diff <number> -R <owner>/<repo> > .bugteam-loop-<N>.patch
+mkdir -p "${TMPDIR:-/tmp}/bugteam-<team_name>"
+gh pr diff <number> -R <owner>/<repo> > "${TMPDIR:-/tmp}/bugteam-<team_name>/loop-<N>.patch"
 ```
+
+`<team_name>` is the value captured in Step 2 (already includes the timestamp suffix). The platform-equivalent on Windows is `%TEMP%\bugteam-<team_name>\loop-<N>.patch`.
 
 Spawn a NEW `bugfind` teammate for this loop using the `code-quality-agent` subagent type. The teammate is fresh: no prior loop's findings, no chat history, no inherited audit context. Per the docs: *"The lead's conversation history does not carry over."* — and we further guarantee independence by spawning a new teammate per loop rather than reusing one.
 
@@ -177,14 +181,14 @@ If `git rev-parse HEAD` did not change, exit reason = `stuck — bugfix teammate
 When the cycle exits (any reason):
 
 1. **Clean up the team as the lead.** Per the docs: *"When you're done, ask the lead to clean up: 'Clean up the team'. This removes the shared team resources. When the lead runs cleanup, it checks for active teammates and fails if any are still running, so shut them down first."* The lead is THIS session — call cleanup directly. If any teammate is still alive (e.g., from an aborted shutdown), shut it down first.
-2. Delete every `.bugteam-loop-*.patch` from the working directory.
+2. Delete the per-team scoped temp directory: `rm -rf "${TMPDIR:-/tmp}/bugteam-<team_name>"` (Windows: `rmdir /s /q "%TEMP%\bugteam-<team_name>"`).
 
 ### Step 5: Revoke project permissions (mandatory, runs always)
 
 After team cleanup completes — including on error, cap-reached, or stuck exits — run:
 
 ```bash
-python scripts/revoke_project_claude_permissions.py
+python "${CLAUDE_SKILL_DIR}/revoke_project_claude_permissions.py"
 ```
 
 This removes the allow rules and additionalDirectories entry that Step 0 added. Revoke is non-negotiable: leaving the grant in place means future sessions inherit elevated permissions on this project's `.claude/**` tree without the user opting in. Run this even if Step 4 cleanup partially failed; surface the cleanup error separately in the final report.
@@ -222,7 +226,7 @@ If exit = `cap reached`, name the remaining bug count and recommend `/findbugs` 
 - **One commit per fix action.** Loops produce one commit per loop, not one per bug.
 - **No `--force`, no `--amend`, no rebase, no base change** at any point.
 - **Lead-only cleanup.** Per the docs: *"Always use the lead to clean up. Teammates should not run cleanup because their team context may not resolve correctly, potentially leaving resources in an inconsistent state."* This session is the lead; teammates never call cleanup.
-- **Cleanup `.bugteam-loop-*.patch` on exit.** Working directory ends clean.
+- **Cleanup the per-team scoped temp directory on exit.** `${TMPDIR:-/tmp}/bugteam-<team_name>/` is deleted entirely so no loop patches leak between runs.
 
 ## Examples
 

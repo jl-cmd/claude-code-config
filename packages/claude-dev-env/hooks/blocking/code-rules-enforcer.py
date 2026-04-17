@@ -14,6 +14,7 @@ Checks (blocking):
 Advisory only (non-blocking):
 - File line count: stderr warning at 400 lines (soft) and 1000 lines (hard)
 """
+import ast
 import json
 import re
 import sys
@@ -418,6 +419,80 @@ def check_e2e_test_naming(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _annotation_uses_any(annotation_node: Optional[ast.expr]) -> bool:
+    """Return True when an annotation AST node textually references Any."""
+    if annotation_node is None:
+        return False
+    try:
+        annotation_source = ast.unparse(annotation_node)
+    except AttributeError:
+        return False
+    return bool(re.search(r"\bAny\b", annotation_source))
+
+
+def _find_any_annotation_lines(source: str) -> list[int]:
+    """Return line numbers of annotations that textually reference Any."""
+    try:
+        parsed_tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    offending_line_numbers: list[int] = []
+    for each_node in ast.walk(parsed_tree):
+        if isinstance(each_node, ast.AnnAssign) and _annotation_uses_any(each_node.annotation):
+            offending_line_numbers.append(each_node.lineno)
+            continue
+        if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if _annotation_uses_any(each_node.returns):
+                offending_line_numbers.append(each_node.lineno)
+            for each_argument in each_node.args.args + each_node.args.kwonlyargs:
+                if _annotation_uses_any(each_argument.annotation):
+                    offending_line_numbers.append(each_argument.lineno)
+    return offending_line_numbers
+
+
+def _find_unjustified_type_ignore_lines(source: str) -> list[int]:
+    """Return line numbers of # type: ignore lines lacking a trailing reason."""
+    ignore_pattern = re.compile(r"#\s*type:\s*ignore(?:\[[^\]]*\])?(.*)$")
+    minimum_justification_characters = len("xxxxx")
+    offending_line_numbers: list[int] = []
+    for line_index, line_text in enumerate(source.split("\n"), 1):
+        matched = ignore_pattern.search(line_text)
+        if not matched:
+            continue
+        trailing_text = matched.group(1).strip()
+        if not trailing_text.startswith("#"):
+            offending_line_numbers.append(line_index)
+            continue
+        justification_text = trailing_text.lstrip("#").strip()
+        if len(justification_text) < minimum_justification_characters:
+            offending_line_numbers.append(line_index)
+    return offending_line_numbers
+
+
+def check_type_escape_hatches(content: str, file_path: str) -> list[str]:
+    """Flag Any annotations and unjustified # type: ignore comments."""
+    if is_test_file(file_path):
+        return []
+
+    issues: list[str] = []
+    maximum_issues_reported = 2 + len("x")
+
+    for each_any_line in _find_any_annotation_lines(content):
+        issues.append(f"Line {each_any_line}: Any annotation - replace with explicit type")
+        if len(issues) >= maximum_issues_reported:
+            return issues
+
+    for each_ignore_line in _find_unjustified_type_ignore_lines(content):
+        issues.append(
+            f"Line {each_ignore_line}: Unjustified # type: ignore - add trailing '# reason' explaining why"
+        )
+        if len(issues) >= maximum_issues_reported:
+            return issues
+
+    return issues
+
+
 def is_migration_file(file_path: str) -> bool:
     """Check if file is a Django migration (must be self-contained)."""
     path_lower = file_path.lower().replace("\\", "/")
@@ -498,6 +573,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_windows_api_none(content))
         all_issues.extend(check_magic_values(content, file_path))
         all_issues.extend(check_constants_outside_config(content, file_path))
+        all_issues.extend(check_type_escape_hatches(content, file_path))
 
     elif extension in JAVASCRIPT_EXTENSIONS:
         if not is_test_file(file_path):

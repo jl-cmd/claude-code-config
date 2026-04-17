@@ -33,10 +33,10 @@ ADVISORY_LINE_THRESHOLD_SOFT = 400
 ADVISORY_LINE_THRESHOLD_HARD = 1000
 
 
-_type_checking_block_pattern = re.compile(r"^(?P<indent>\s*)if\s+(typing\.)?TYPE_CHECKING\s*:\s*$")
-_import_statement_prefixes: tuple[str, ...] = ("import ", "from ")
-_not_inside_type_checking_block = -1
-_max_issues_per_check = 3
+TYPE_CHECKING_BLOCK_PATTERN = re.compile(r"^(?P<indent>\s*)if\s+(typing\.)?TYPE_CHECKING\s*:\s*$")
+IMPORT_STATEMENT_PREFIXES: tuple[str, ...] = ("import ", "from ")
+NOT_INSIDE_TYPE_CHECKING_BLOCK = -1
+MAX_ISSUES_PER_CHECK = 3
 
 
 def get_file_extension(file_path: str) -> str:
@@ -276,12 +276,18 @@ def check_imports_at_top(content: str) -> list[str]:
     An import lexically inside an ``if TYPE_CHECKING:`` block is exempt.
     An import inside a function body is flagged even if the file uses TYPE_CHECKING
     elsewhere at module scope.
+
+    Only the innermost ``if TYPE_CHECKING:`` block is tracked: a second, nested
+    ``if TYPE_CHECKING:`` header overwrites the outer block's indent so that when
+    control dedents back to the outer block's body, the tracker resets. Nested
+    TYPE_CHECKING blocks are rare in practice, so this simpler single-level tracking
+    is preferred over maintaining a stack of indent levels.
     """
     issues: list[str] = []
     lines = content.split("\n")
     inside_function = False
     function_indent = 0
-    type_checking_block_indent = _not_inside_type_checking_block
+    type_checking_block_indent = NOT_INSIDE_TYPE_CHECKING_BLOCK
 
     for line_number, each_line in enumerate(lines, 1):
         stripped = each_line.strip()
@@ -291,11 +297,11 @@ def check_imports_at_top(content: str) -> list[str]:
 
         current_indent = len(each_line) - len(each_line.lstrip())
 
-        if type_checking_block_indent != _not_inside_type_checking_block:
+        if type_checking_block_indent != NOT_INSIDE_TYPE_CHECKING_BLOCK:
             if current_indent <= type_checking_block_indent:
-                type_checking_block_indent = _not_inside_type_checking_block
+                type_checking_block_indent = NOT_INSIDE_TYPE_CHECKING_BLOCK
 
-        type_checking_match = _type_checking_block_pattern.match(each_line)
+        type_checking_match = TYPE_CHECKING_BLOCK_PATTERN.match(each_line)
         if type_checking_match:
             type_checking_block_indent = len(type_checking_match.group("indent"))
             continue
@@ -310,12 +316,12 @@ def check_imports_at_top(content: str) -> list[str]:
             if current_indent <= function_indent and stripped and not stripped.startswith(("#", "@", ")")):
                 inside_function = False
 
-        is_inside_type_checking_block = type_checking_block_indent != _not_inside_type_checking_block
+        is_inside_type_checking_block = type_checking_block_indent != NOT_INSIDE_TYPE_CHECKING_BLOCK
         if inside_function and not is_inside_type_checking_block:
-            if stripped.startswith(_import_statement_prefixes):
+            if stripped.startswith(IMPORT_STATEMENT_PREFIXES):
                 issues.append(f"Line {line_number}: Import inside function - move to top of file")
 
-        if len(issues) >= _max_issues_per_check:
+        if len(issues) >= MAX_ISSUES_PER_CHECK:
             break
 
     return issues

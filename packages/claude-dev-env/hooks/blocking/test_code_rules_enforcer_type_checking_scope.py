@@ -45,7 +45,8 @@ def test_should_flag_runtime_import_inside_function_even_if_file_uses_type_check
     )
     issues = check_imports_at_top(content)
     assert len(issues) == 1
-    assert "import os" in issues[0] or "Import inside function" in issues[0]
+    assert issues[0].startswith("Line 7:")
+    assert "Import inside function" in issues[0]
 
 
 def test_should_still_allow_top_level_imports() -> None:

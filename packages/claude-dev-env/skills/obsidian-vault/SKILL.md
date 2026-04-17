@@ -1,7 +1,7 @@
 ---
 name: obsidian-vault
 description: >-
-  On-demand Obsidian vault context retrieval for C:\Users\jon\SessionLog\.
+  On-demand Obsidian vault context retrieval for C:/Users/jon/SessionLog/.
   Search sessions/, decisions/, and Research/ before substantive project work.
   Triggers: obsidian-vault, session context, vault search, prior decisions.
 ---
@@ -41,6 +41,13 @@ and pure-reference lookups do not need vault context.
    remote, working directory, or topic under discussion). Then search by
    content keywords such as `blocked`, `superseded`, `decision`, `gotcha`,
    plus task-specific terms (component names, error messages, library names).
+
+   Concrete example:
+
+   ```
+   mcp__obsidian__search_notes({ query: "claude-code-config", searchFrontmatter: true })
+   mcp__obsidian__search_notes({ query: "superseded decision themes-pr-stack" })
+   ```
 
 2. **Scope to the three vault folders.**
    - `sessions/` — session reports (`type: session-report`, `project`,
@@ -87,7 +94,7 @@ notes existed.
 
 ## Vault Location
 
-`C:\Users\jon\SessionLog\` on this workspace, accessed via the
+`C:/Users/jon/SessionLog/` on this workspace, accessed via the
 `mcp__obsidian__*` MCP server. The path comes from the MCP server's
 configuration (or `OBSIDIAN_VAULT_PATH`); this skill does not read the
 filesystem directly and should not hard-code paths in code it produces.

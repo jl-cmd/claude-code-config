@@ -17,11 +17,11 @@ from _claude_permissions_common import (  # noqa: E402
     get_current_project_path,
     load_settings,
     save_settings,
+    PERMISSION_ALLOW_TOOLS,
 )
 
 
 CLAUDE_USER_SETTINGS_PATH: Path = Path.home() / ".claude" / "settings.json"
-PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
 AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "Trusted local workspace: {project_path}/.claude/** is the user's "
     "project Claude Code config tree; edits inside are routine"
@@ -78,11 +78,6 @@ def revoke_permissions_for_current_directory() -> None:
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(
         project_path=project_path
     )
-    if not CLAUDE_USER_SETTINGS_PATH.exists():
-        print(f"Project path: {project_path}")
-        print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
-        print("No settings file found; nothing to revoke.")
-        return
     settings = load_settings(CLAUDE_USER_SETTINGS_PATH)
     rules_removed_count = remove_rules_from_allow_list(settings, permission_rules)
     directories_removed_count = remove_directory_from_additional_directories(

@@ -21,11 +21,11 @@ from _claude_permissions_common import (  # noqa: E402
     get_current_project_path,
     load_settings,
     save_settings,
+    PERMISSION_ALLOW_TOOLS,
 )
 
 
 CLAUDE_USER_SETTINGS_PATH: Path = Path.home() / ".claude" / "settings.json"
-PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
 AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "Trusted local workspace: {project_path}/.claude/** is the user's "
     "project Claude Code config tree; edits inside are routine"

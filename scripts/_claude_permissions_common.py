@@ -18,11 +18,15 @@ GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = (
     ")",
     "{",
     "}",
-    "\\",
-    "!",
 )
 
 JSON_INDENT_SPACES: int = 2
+PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
+
+
+def exit_with_error(message: str) -> None:
+    print(f"Error: {message}", file=sys.stderr)
+    raise SystemExit(1)
 
 
 def path_contains_glob_metacharacters(candidate_path: str) -> bool:
@@ -63,12 +67,12 @@ def load_settings(settings_path: Path) -> dict[str, Any]:
             settings_path.read_text(encoding=TEXT_FILE_ENCODING)
         )
     except json.JSONDecodeError as decode_error:
-        raise SystemExit(
+        exit_with_error(
             f"Refusing to modify {settings_path}: existing file is not valid JSON "
             f"({decode_error}). Fix or back up the file manually, then re-run."
         )
     if not isinstance(parsed_settings, dict):
-        raise SystemExit(
+        exit_with_error(
             f"Refusing to modify {settings_path}: existing file's root is "
             f"{type(parsed_settings).__name__}, not a JSON object. Fix or back up "
             f"the file manually, then re-run."
@@ -88,13 +92,13 @@ def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
         ) as temporary_file:
             temporary_file.write(serialized_settings)
         os.replace(temporary_file_path, settings_path)
-    except Exception:
+    except OSError as io_error:
         try:
             if os.path.exists(temporary_file_path):
                 os.unlink(temporary_file_path)
         except OSError:
             pass
-        raise
+        exit_with_error(f"Failed to save settings to {settings_path}: {io_error}")
 
 
 def append_if_missing(target_list: list[str], new_value: str) -> bool:
@@ -111,7 +115,7 @@ def ensure_dict_section(settings: dict[str, Any], section_name: str) -> dict[str
         settings[section_name] = replacement_section
         return replacement_section
     if not isinstance(existing_section, dict):
-        raise SystemExit(
+        exit_with_error(
             f"Refusing to modify settings key {section_name!r}: existing value "
             f"is {type(existing_section).__name__}, not a JSON object. Fix or "
             f"remove the key manually, then re-run."
@@ -126,14 +130,9 @@ def ensure_list_entry(section: dict[str, Any], entry_name: str) -> list[Any]:
         section[entry_name] = replacement_entry
         return replacement_entry
     if not isinstance(existing_entry, list):
-        raise SystemExit(
+        exit_with_error(
             f"Refusing to modify settings entry {entry_name!r}: existing value "
             f"is {type(existing_entry).__name__}, not a JSON array. Fix or "
             f"remove the entry manually, then re-run."
         )
     return existing_entry
-
-
-def exit_with_error(message: str) -> None:
-    print(f"Error: {message}", file=sys.stderr)
-    raise SystemExit(1)

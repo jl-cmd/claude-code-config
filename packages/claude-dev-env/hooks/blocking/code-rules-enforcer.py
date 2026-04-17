@@ -279,9 +279,17 @@ def check_imports_at_top(content: str) -> list[str]:
 
     Only the innermost ``if TYPE_CHECKING:`` block is tracked: a second, nested
     ``if TYPE_CHECKING:`` header overwrites the outer block's indent so that when
-    control dedents back to the outer block's body, the tracker resets. Nested
-    TYPE_CHECKING blocks are rare in practice, so this simpler single-level tracking
-    is preferred over maintaining a stack of indent levels.
+    control dedents back to the outer block's body, the tracker resets.
+
+    Known limitation: nested ``if TYPE_CHECKING:`` blocks are NOT supported. After
+    a nested inner block ends, subsequent lines at the OUTER block's body indent
+    are treated as outside any TYPE_CHECKING scope, so function-body imports there
+    WILL be flagged as violations even though they are lexically guarded by the
+    outer block. Rewrite to a single top-level ``if TYPE_CHECKING:`` block to avoid
+    this false positive. Nested TYPE_CHECKING blocks are rare in practice, so this
+    simpler single-level tracking is preferred over maintaining a stack of indent
+    levels. The pinned behavior is covered by
+    ``test_should_track_only_innermost_type_checking_block``.
     """
     issues: list[str] = []
     lines = content.split("\n")

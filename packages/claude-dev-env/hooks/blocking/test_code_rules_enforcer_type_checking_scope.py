@@ -89,3 +89,24 @@ def test_should_flag_function_import_after_type_checking_block_ends() -> None:
     issues = check_imports_at_top(content)
     assert len(issues) == 1
     assert "Import inside function" in issues[0]
+
+
+def test_should_track_only_innermost_type_checking_block() -> None:
+    """Pin documented single-level tracking: after a nested inner block ends,
+    subsequent function-body imports at the outer block's indent are flagged
+    as if outside any TYPE_CHECKING scope. See check_imports_at_top docstring.
+    """
+    content = (
+        "from typing import TYPE_CHECKING\n"
+        "\n"
+        "if TYPE_CHECKING:\n"
+        "    def helper():\n"
+        "        if TYPE_CHECKING:\n"
+        "            from a import A\n"
+        "        from b import B\n"
+        "        return B\n"
+    )
+    issues = check_imports_at_top(content)
+    assert len(issues) == 1
+    assert issues[0].startswith("Line 7:")
+    assert "Import inside function" in issues[0]

@@ -146,7 +146,12 @@ gh workflow run fan-out-ai-rules.yml -R jl-cmd/claude-code-config
 
 The dispatcher workflow authenticates as a GitHub App to obtain installation tokens with
 `contents: write`, `metadata: read`, `actions: read`, and `issues: write` permissions.
-Target repos use only the default `GITHUB_TOKEN` — no secrets are needed there.
+Target repos normally use the default `GITHUB_TOKEN`. If **repository rulesets** require
+pull requests for pushes to the default branch and your bypass list does not include
+**GitHub Actions**, add a repository secret **`SYNC_AI_RULES_PUSH_TOKEN`**: a fine-grained
+or classic PAT from a **repository admin** (with `contents: write`). The listener workflow
+uses it for `actions/checkout` and for API calls in the sync script so pushes match the
+admin bypass. If the secret is unset, the workflow falls back to `github.token`.
 
 ### Steps
 
@@ -196,6 +201,11 @@ workflow. Run `scripts/bootstrap-listeners.sh` to install it.
 **Dispatch fires but listener never runs**
 `repository_dispatch` events only trigger workflows on the default branch. Confirm the
 listener workflow is merged to the default branch (not only on a PR branch).
+
+**Push rejected: repository rule violations (PR required)**
+Rulesets that block direct pushes to `main` apply to `github-actions[bot]` unless that
+actor is bypassed. If **GitHub Actions** is not available as a bypass in your UI, add
+`SYNC_AI_RULES_PUSH_TOKEN` (admin PAT) as above, then re-run the workflow.
 
 **GitHub App token expires during a long dispatch run**
 Installation tokens are valid for one hour. If the dispatcher has more than ~4,000 repos

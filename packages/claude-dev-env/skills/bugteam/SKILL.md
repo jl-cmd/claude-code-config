@@ -133,34 +133,49 @@ The team narrates its work to the PR via a **GitHub pull-request review** per lo
 
 **Ordering:** bugfind audits FIRST, buffers the findings, validates anchors against the captured diff, then posts the review ONCE at the end. The review body names the finding count authoritatively. Do NOT post any issue comment before or during the audit.
 
-CLI shapes (teammate runs these):
+CLI shapes (teammate runs these). All three POSTs use the same robust pattern: build the JSON payload with `jq` (pulling file contents in with `--rawfile` or `-Rs` so markdown with backticks, newlines, and quotes survives intact), then pipe the JSON to `gh api ... --input -` on stdin. This avoids every shell-quoting edge case.
 
-- Per-loop review (one POST creates the parent review AND all child finding comments):
+- **Per-loop review (one POST creates the parent review AND all child finding comments).** Build the `comments[]` array programmatically from the buffered, diff-anchored findings. The shape per finding is `{path, line, side: "RIGHT", body: <finding markdown>}` for single-line anchors; use `{path, start_line, start_side: "RIGHT", line, side: "RIGHT", body: ...}` for multi-line ranges (all four fields required).
 
   ```
-  gh api repos/<owner>/<repo>/pulls/<number>/reviews \
-    -X POST \
-    -f commit_id=<head_sha_at_post_time> \
-    -f event=COMMENT \
-    -F body=@<tmp_review_body.md> \
-    -f 'comments[][path]=<file_1>' \
-    -F 'comments[][line]=<line_1>' \
-    -f 'comments[][side]=RIGHT' \
-    -f 'comments[][body]=@<tmp_finding_1.md>' \
-    -f 'comments[][path]=<file_2>' \
-    -F 'comments[][line]=<line_2>' \
-    -f 'comments[][side]=RIGHT' \
-    -f 'comments[][body]=@<tmp_finding_2.md>' \
-    [... one quadruple per anchored finding ...]
+  jq -n \
+    --rawfile review_body <tmp_review_body.md> \
+    --arg commit_id "$(git rev-parse HEAD)" \
+    --rawfile finding_body_1 <tmp_finding_1.md> \
+    --arg path_1 "<file_1>" \
+    --argjson line_1 <line_1> \
+    [... one finding_body_K / path_K / line_K triple per anchored finding ...] \
+    '{
+       commit_id: $commit_id,
+       event: "COMMENT",
+       body: $review_body,
+       comments: [
+         {path: $path_1, line: $line_1, side: "RIGHT", body: $finding_body_1}
+         [, ... one object per anchored finding ...]
+       ]
+     }' \
+  | gh api repos/<owner>/<repo>/pulls/<number>/reviews -X POST --input -
   ```
 
   Response JSON carries the parent review `id` / `html_url` plus a `comments` array of child comments, each with its own `id` and `html_url`. Harvest the child entries in index order and match them to the finding list the teammate posted.
 
-- Fix reply: `gh api repos/<owner>/<repo>/pulls/<number>/comments/<finding_comment_id>/replies -X POST -f body=@<tmp>` → returns JSON. (Endpoint unchanged; works on review-created comments.)
+- **Fix reply** — replying to a child finding comment only needs `body`:
+
+  ```
+  jq -Rs '{body: .}' < <tmp_reply.md> \
+  | gh api repos/<owner>/<repo>/pulls/<number>/comments/<finding_comment_id>/replies -X POST --input -
+  ```
+
+- **Review-POST failure fallback** — top-level PR comment via the issue-comments endpoint (`{issue_number}` is the PR number):
+
+  ```
+  jq -Rs '{body: .}' < <tmp_fallback.md> \
+  | gh api repos/<owner>/<repo>/issues/<number>/comments -X POST --input -
+  ```
 
 `<head_sha_at_post_time>` = the SHA at the moment the review is posted (run `git rev-parse HEAD` in the teammate's working dir immediately before the POST). The review anchors its finding comments to the head SHA at audit time, which is the SHA before this loop's fix lands.
 
-Use `--body-file` everywhere, not `--body` — the existing `gh-body-backtick-guard` hook blocks inline bodies that contain backticks, and bug descriptions almost always contain code excerpts. The review body AND every per-finding body must each live in their own temp files.
+Write each body (review body and every per-finding body) to its own temp file before running the jq pipeline. The `jq --rawfile` / `jq -Rs` pattern loads file contents as a single string into the JSON payload, which preserves backticks, newlines, and quotes intact. The existing `gh-body-backtick-guard` hook blocks `--body "..."` inline bodies; this pattern sidesteps the hook entirely because the body never appears on the command line.
 
 **Review body shape** (content of `<tmp_review_body.md>`):
 
@@ -177,7 +192,7 @@ If the audit returns zero findings, the teammate still posts ONE review with `ev
 
 **Anchor-validation fallback (teammate handles).** GitHub rejects the entire review POST if any `comments[]` entry targets a line not in the diff. Before posting, the bugfind teammate validates every finding's `(file, line)` against the captured diff. Findings whose anchor is not in the diff are NOT added to `comments[]`; they are listed in the review body under `### Findings without a diff anchor`. The outcome XML records `used_fallback="true"` for each such finding, with `finding_comment_id=""` and `finding_comment_url=<review_url>` (the parent review URL, since no child comment exists for it). The teammate logs the fallback count in its outcome XML so the lead's final report can count fallbacks. Cycle continues; no anchor failure aborts the loop.
 
-**Review POST failure fallback.** If the review POST itself fails (rate limit, network, malformed payload), the teammate falls back to a single top-level issue comment containing the review body plus every finding inline (severity, file:line, description). Every finding in that run carries `used_fallback="true"` and the issue-comment URL as `finding_comment_url`. Use `gh pr comment <number> -R <owner>/<repo> --body-file <tmp>` for the fallback.
+**Review POST failure fallback.** If the review POST itself fails (rate limit, network, malformed payload), the teammate falls back to a single top-level issue comment containing the review body plus every finding inline (severity, file:line, description). Every finding in that run carries `used_fallback="true"` and the issue-comment URL as `finding_comment_url`. Use the Review-POST failure fallback CLI shape above (`jq -Rs | gh api .../issues/<number>/comments --input -`).
 
 **GitHub REST endpoints the teammate POSTs to:**
 
@@ -278,8 +293,10 @@ The teammate's spawn prompt is the full XML below — copy it verbatim with the 
      entries to anchored findings in index order.
   7. If the review POST itself fails, use Step 2.5's Review POST failure
      fallback (single issue comment with full body and all findings inline).
-  8. Use --body-file (never --body) to avoid the gh-body-backtick-guard hook,
-     for the review body, every finding body, and any fallback body.
+  8. Write every body (review body, each finding body, any fallback body) to
+     its own temp file and load it into the JSON payload via jq's --rawfile
+     or -Rs, then `gh api ... --input -`. Never pass a body via --body or -f
+     body=<inline-string>.
 </comment_posting>
 
 <output_format>
@@ -364,7 +381,7 @@ Prompt skeleton:
      - "Fixed in <commit_sha>" if the bug was addressed by your commit
      - "Could not address this loop: <one-line reason>" if you skipped or failed it
      - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
-     Use --body-file (the existing gh-body-backtick-guard hook blocks --body).
+     Use the Fix reply CLI shape from Step 2.5 (`jq -Rs | gh api .../comments/<id>/replies --input -`). Write every reply body to a temp file first.
   7. Write `.bugteam-loop-<N>.outcomes.xml` (schema below) and return its path.
 </execution>
 

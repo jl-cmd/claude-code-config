@@ -37,3 +37,15 @@ def test_is_test_file_should_not_match_conftest_substring_in_filename() -> None:
 
 def test_is_test_file_should_not_match_conftest_in_directory_name() -> None:
     assert is_test_file("C:/proj/conftestdata/foo.py") is False
+
+
+def test_is_test_file_should_not_match_prefixed_conftest_py() -> None:
+    assert is_test_file("C:/proj/myconftest.py") is False
+
+
+def test_is_test_file_should_not_match_underscore_prefixed_conftest_py() -> None:
+    assert is_test_file("C:/proj/foo_conftest.py") is False
+
+
+def test_is_test_file_should_match_conftest_py_with_backslash_separators() -> None:
+    assert is_test_file("C:\\proj\\subdir\\conftest.py") is True

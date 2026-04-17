@@ -36,9 +36,9 @@ def test_check_magic_values_should_flag_literal_two_in_function_body() -> None:
         "    return threshold\n"
     )
     issues = code_rules_enforcer.check_magic_values(source, PRODUCTION_FILE_PATH)
-    assert any("2" in issue for issue in issues), (
-        f"Expected magic-value issue for literal 2, got: {issues}"
-    )
+    assert any(
+        issue.endswith("Magic value 2 - extract to named constant") for issue in issues
+    ), f"Expected magic-value issue for literal 2, got: {issues}"
 
 
 def test_check_magic_values_should_flag_literal_one_hundred_in_function_body() -> None:
@@ -48,9 +48,9 @@ def test_check_magic_values_should_flag_literal_one_hundred_in_function_body() -
         "    return scaled\n"
     )
     issues = code_rules_enforcer.check_magic_values(source, PRODUCTION_FILE_PATH)
-    assert any("100" in issue for issue in issues), (
-        f"Expected magic-value issue for literal 100, got: {issues}"
-    )
+    assert any(
+        issue.endswith("Magic value 100 - extract to named constant") for issue in issues
+    ), f"Expected magic-value issue for literal 100, got: {issues}"
 
 
 def test_check_magic_values_should_still_allow_zero_one_minus_one() -> None:

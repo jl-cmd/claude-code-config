@@ -26,6 +26,40 @@ _CONTAINER_LITERAL_TYPES: Tuple[Type[ast.AST], ...] = (
     ast.Set,
 )
 
+SOURCE_ENCODING: str = "utf-8"
+
+CONFIG_PATH_PATTERNS: frozenset[str] = frozenset(
+    {
+        "config/",
+        "config\\",
+        "/config.",
+        "\\config.",
+        "settings.py",
+    }
+)
+
+TEST_PATH_PATTERNS: frozenset[str] = frozenset(
+    {
+        "test_",
+        "_test.",
+        ".test.",
+        ".spec.",
+        "conftest.py",
+        "/tests/",
+        "\\tests\\",
+        "/tests.py",
+        "\\tests.py",
+    }
+)
+
+
+def is_config_file(file_path: str) -> bool:
+    return any(pattern in file_path for pattern in CONFIG_PATH_PATTERNS)
+
+
+def is_test_file(file_path: str) -> bool:
+    return any(pattern in file_path for pattern in TEST_PATH_PATTERNS)
+
 
 def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
     violations: List[Violation] = []
@@ -144,8 +178,10 @@ def _is_upper_snake_name(name: str) -> bool:
 
 def validate_file(file_path: Path) -> List[Violation]:
     filename = str(file_path)
+    if is_test_file(filename) or is_config_file(filename):
+        return []
     try:
-        source = file_path.read_text(encoding="utf-8")
+        source = file_path.read_text(encoding=SOURCE_ENCODING)
         tree = ast.parse(source)
     except Exception as error:
         return [Violation(filename, 0, f"Error: {error}")]

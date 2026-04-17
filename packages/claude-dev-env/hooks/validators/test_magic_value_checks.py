@@ -1,13 +1,20 @@
 """Tests for magic value detection."""
 
 import ast
+import tempfile
+from pathlib import Path
 
 import pytest
 
 from magic_value_checks import (
     check_magic_values,
+    validate_file,
 )
 from validator_base import Violation
+
+
+MAGIC_NUMBER_SOURCE = "x = 42\n"
+PRODUCTION_TEMPDIR_PREFIX = "prod_"
 
 
 GOOD_NAMED_CONSTANTS = '''
@@ -328,3 +335,52 @@ class TestMagicValues:
         tree = ast.parse(FALSE_LITERAL_IN_FUNCTION)
         violations = check_magic_values(tree, "test.py")
         assert violations == []
+
+
+class TestValidateFilePathExemptions:
+    def test_validate_file_should_skip_test_underscore_py_files(
+        self, tmp_path: Path
+    ) -> None:
+        tests_directory = tmp_path / "tests"
+        tests_directory.mkdir()
+        test_module_path = tests_directory / "test_foo.py"
+        test_module_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(test_module_path) == []
+
+    def test_validate_file_should_skip_dot_test_tsx_files(
+        self, tmp_path: Path
+    ) -> None:
+        tsx_test_path = tmp_path / "Button.test.tsx"
+        tsx_test_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(tsx_test_path) == []
+
+    def test_validate_file_should_skip_config_directory(
+        self, tmp_path: Path
+    ) -> None:
+        config_directory = tmp_path / "config"
+        config_directory.mkdir()
+        constants_path = config_directory / "constants.py"
+        constants_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(constants_path) == []
+
+    def test_validate_file_should_skip_settings_py(self, tmp_path: Path) -> None:
+        settings_path = tmp_path / "settings.py"
+        settings_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(settings_path) == []
+
+    def test_validate_file_should_still_scan_production_py_files(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix=PRODUCTION_TEMPDIR_PREFIX
+        ) as temporary_root:
+            source_directory = Path(temporary_root) / "src"
+            source_directory.mkdir()
+            production_path = source_directory / "app.py"
+            production_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+            violations = validate_file(production_path)
+            assert len(violations) == 1
+            assert "42" in violations[0].message

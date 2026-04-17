@@ -6,11 +6,22 @@ entries into the user-scope settings at ~/.claude/settings.json and prints
 the four changes applied.
 """
 
-import json
-import os
-import tempfile
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _claude_permissions_common import (  # noqa: E402
+    append_if_missing,
+    build_permission_rules,
+    ensure_dict_section,
+    ensure_list_entry,
+    exit_with_error,
+    get_current_project_path,
+    load_settings,
+    save_settings,
+)
 
 
 CLAUDE_USER_SETTINGS_PATH: Path = Path.home() / ".claude" / "settings.json"
@@ -19,114 +30,6 @@ AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "Trusted local workspace: {project_path}/.claude/** is the user's "
     "project Claude Code config tree; edits inside are routine"
 )
-JSON_INDENT_SPACES: int = 2
-TEXT_FILE_ENCODING: str = "utf-8"
-GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = (
-    "*", "?", "[", "]", "(", ")", "{", "}", "\\", "!",
-)
-
-
-def path_contains_glob_metacharacters(candidate_path: str) -> bool:
-    return any(
-        each_character in candidate_path
-        for each_character in GLOB_METACHARACTERS_IN_PATH
-    )
-
-
-def get_current_project_path() -> str:
-    normalized_project_path = str(Path.cwd()).replace("\\", "/")
-    if path_contains_glob_metacharacters(normalized_project_path):
-        raise ValueError(
-            f"Current directory path contains glob metacharacters and cannot "
-            f"be used to build permission rules safely: {normalized_project_path}"
-        )
-    return normalized_project_path
-
-
-def build_permission_rule(tool_name: str, project_path: str) -> str:
-    return f"{tool_name}({project_path}/.claude/**)"
-
-
-def build_permission_rules(project_path: str) -> list[str]:
-    return [
-        build_permission_rule(each_tool, project_path)
-        for each_tool in PERMISSION_ALLOW_TOOLS
-    ]
-
-
-def load_settings(settings_path: Path) -> dict[str, Any]:
-    if not settings_path.exists():
-        return {}
-    try:
-        parsed_settings = json.loads(settings_path.read_text(encoding=TEXT_FILE_ENCODING))
-    except json.JSONDecodeError as decode_error:
-        raise SystemExit(
-            f"Refusing to modify {settings_path}: existing file is not valid JSON "
-            f"({decode_error}). Fix or back up the file manually, then re-run."
-        )
-    if not isinstance(parsed_settings, dict):
-        raise SystemExit(
-            f"Refusing to modify {settings_path}: existing file's root is "
-            f"{type(parsed_settings).__name__}, not a JSON object. Fix or back up "
-            f"the file manually, then re-run."
-        )
-    return parsed_settings
-
-
-def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    serialized_settings = json.dumps(settings, indent=JSON_INDENT_SPACES)
-    temporary_file_descriptor, temporary_file_path = tempfile.mkstemp(
-        prefix=settings_path.name, dir=str(settings_path.parent)
-    )
-    try:
-        with os.fdopen(temporary_file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as temporary_file:
-            temporary_file.write(serialized_settings)
-        os.replace(temporary_file_path, settings_path)
-    except Exception:
-        try:
-            if os.path.exists(temporary_file_path):
-                os.unlink(temporary_file_path)
-        except OSError:
-            pass
-        raise
-
-
-def append_if_missing(target_list: list[str], new_value: str) -> bool:
-    if new_value in target_list:
-        return False
-    target_list.append(new_value)
-    return True
-
-
-def ensure_dict_section(settings: dict[str, Any], section_name: str) -> dict[str, Any]:
-    existing_section = settings.get(section_name)
-    if existing_section is None:
-        replacement_section: dict[str, Any] = {}
-        settings[section_name] = replacement_section
-        return replacement_section
-    if not isinstance(existing_section, dict):
-        raise SystemExit(
-            f"Refusing to modify settings key {section_name!r}: existing value "
-            f"is {type(existing_section).__name__}, not a JSON object. Fix or "
-            f"remove the key manually, then re-run."
-        )
-    return existing_section
-
-
-def ensure_list_entry(section: dict[str, Any], entry_name: str) -> list[Any]:
-    existing_entry = section.get(entry_name)
-    if existing_entry is None:
-        replacement_entry: list[Any] = []
-        section[entry_name] = replacement_entry
-        return replacement_entry
-    if not isinstance(existing_entry, list):
-        raise SystemExit(
-            f"Refusing to modify settings entry {entry_name!r}: existing value "
-            f"is {type(existing_entry).__name__}, not a JSON array. Fix or "
-            f"remove the entry manually, then re-run."
-        )
-    return existing_entry
 
 
 def add_rules_to_allow_list(settings: dict[str, Any], rules_to_add: list[str]) -> int:
@@ -159,7 +62,7 @@ def add_auto_mode_environment_entry(settings: dict[str, Any], entry_text: str) -
 
 def grant_permissions_for_current_directory() -> None:
     project_path = get_current_project_path()
-    permission_rules = build_permission_rules(project_path)
+    permission_rules = build_permission_rules(project_path, PERMISSION_ALLOW_TOOLS)
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(
         project_path=project_path
     )
@@ -182,4 +85,7 @@ def grant_permissions_for_current_directory() -> None:
 
 
 if __name__ == "__main__":
-    grant_permissions_for_current_directory()
+    try:
+        grant_permissions_for_current_directory()
+    except ValueError as path_error:
+        exit_with_error(str(path_error))

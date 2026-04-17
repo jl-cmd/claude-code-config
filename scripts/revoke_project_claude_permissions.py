@@ -5,11 +5,19 @@ allow rules, the additionalDirectories entry, and the autoMode environment
 entry from ~/.claude/settings.json. Safe to run when no prior grant exists.
 """
 
-import json
-import os
-import tempfile
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from _claude_permissions_common import (  # noqa: E402
+    build_permission_rules,
+    exit_with_error,
+    get_current_project_path,
+    load_settings,
+    save_settings,
+)
 
 
 CLAUDE_USER_SETTINGS_PATH: Path = Path.home() / ".claude" / "settings.json"
@@ -18,77 +26,6 @@ AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "Trusted local workspace: {project_path}/.claude/** is the user's "
     "project Claude Code config tree; edits inside are routine"
 )
-JSON_INDENT_SPACES: int = 2
-TEXT_FILE_ENCODING: str = "utf-8"
-GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = (
-    "*", "?", "[", "]", "(", ")", "{", "}", "\\", "!",
-)
-
-
-def path_contains_glob_metacharacters(candidate_path: str) -> bool:
-    return any(
-        each_character in candidate_path
-        for each_character in GLOB_METACHARACTERS_IN_PATH
-    )
-
-
-def get_current_project_path() -> str:
-    normalized_project_path = str(Path.cwd()).replace("\\", "/")
-    if path_contains_glob_metacharacters(normalized_project_path):
-        raise ValueError(
-            f"Current directory path contains glob metacharacters and cannot "
-            f"be used to build permission rules safely: {normalized_project_path}"
-        )
-    return normalized_project_path
-
-
-def build_permission_rule(tool_name: str, project_path: str) -> str:
-    return f"{tool_name}({project_path}/.claude/**)"
-
-
-def build_permission_rules(project_path: str) -> list[str]:
-    return [
-        build_permission_rule(each_tool, project_path)
-        for each_tool in PERMISSION_ALLOW_TOOLS
-    ]
-
-
-def load_settings(settings_path: Path) -> dict[str, Any]:
-    if not settings_path.exists():
-        return {}
-    try:
-        parsed_settings = json.loads(settings_path.read_text(encoding=TEXT_FILE_ENCODING))
-    except json.JSONDecodeError as decode_error:
-        raise SystemExit(
-            f"Refusing to modify {settings_path}: existing file is not valid JSON "
-            f"({decode_error}). Fix or back up the file manually, then re-run."
-        )
-    if not isinstance(parsed_settings, dict):
-        raise SystemExit(
-            f"Refusing to modify {settings_path}: existing file's root is "
-            f"{type(parsed_settings).__name__}, not a JSON object. Fix or back up "
-            f"the file manually, then re-run."
-        )
-    return parsed_settings
-
-
-def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    serialized_settings = json.dumps(settings, indent=JSON_INDENT_SPACES)
-    temporary_file_descriptor, temporary_file_path = tempfile.mkstemp(
-        prefix=settings_path.name, dir=str(settings_path.parent)
-    )
-    try:
-        with os.fdopen(temporary_file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as temporary_file:
-            temporary_file.write(serialized_settings)
-        os.replace(temporary_file_path, settings_path)
-    except Exception:
-        try:
-            if os.path.exists(temporary_file_path):
-                os.unlink(temporary_file_path)
-        except OSError:
-            pass
-        raise
 
 
 def remove_values_from_list(target_list: list[str], values_to_remove: set[str]) -> int:
@@ -137,7 +74,7 @@ def remove_auto_mode_environment_entry(
 
 def revoke_permissions_for_current_directory() -> None:
     project_path = get_current_project_path()
-    permission_rules = build_permission_rules(project_path)
+    permission_rules = build_permission_rules(project_path, PERMISSION_ALLOW_TOOLS)
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(
         project_path=project_path
     )
@@ -154,13 +91,22 @@ def revoke_permissions_for_current_directory() -> None:
     environment_entries_removed_count = remove_auto_mode_environment_entry(
         settings, environment_entry
     )
-    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
+    total_changes_count = (
+        rules_removed_count + directories_removed_count + environment_entries_removed_count
+    )
     print(f"Project path: {project_path}")
     print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
     print(f"Allow rules removed: {rules_removed_count} of {len(permission_rules)}")
     print(f"Additional directories removed: {directories_removed_count}")
     print(f"Auto-mode environment entries removed: {environment_entries_removed_count}")
+    if total_changes_count == 0:
+        print("No changes needed; settings file left untouched.")
+        return
+    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
 
 
 if __name__ == "__main__":
-    revoke_permissions_for_current_directory()
+    try:
+        revoke_permissions_for_current_directory()
+    except ValueError as path_error:
+        exit_with_error(str(path_error))

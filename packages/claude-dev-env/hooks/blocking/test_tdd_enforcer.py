@@ -187,3 +187,47 @@ def test_should_allow_edit_when_bypass_sentinel_present_in_new_string(
     completed = _run_hook_with_payload(payload)
 
     assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_production_file_inside_directory_containing_skip_substring(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    mockingbird_directory = sandbox / "mockingbird"
+    mockingbird_directory.mkdir()
+    production_file = mockingbird_directory / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_when_test_file_contains_only_production_stem_without_test_function(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+    sibling_test = sandbox / "test_orders.py"
+    sibling_test.write_text("orders = 'mentioned but no test function'\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_allow_when_large_test_file_has_valid_test_function_past_first_chunk(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+    sibling_test = sandbox / "test_orders.py"
+    padding_byte_count = 250_000
+    padding_comment = "# " + ("x" * padding_byte_count) + "\n"
+    sibling_test.write_text(padding_comment + "def test_fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "allow"

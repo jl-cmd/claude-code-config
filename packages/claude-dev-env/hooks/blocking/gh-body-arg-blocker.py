@@ -83,13 +83,12 @@ def _uses_body_string_arg(command: str) -> bool:
     heredoc-wrapped --body arguments are exactly the pattern this hook exists
     to block; otherwise approves unparseable input (out of scope).
     """
-    logical_line = get_logical_first_line(command)
-    if not _GH_BODY_SUBCOMMANDS.search(logical_line):
+    if not _GH_BODY_SUBCOMMANDS.search(get_logical_first_line(command)):
         return False
     try:
         significant_tokens = list(iter_significant_tokens(command))
     except ValueError:
-        return _logical_line_has_bare_body_token(logical_line)
+        return _logical_line_has_bare_body_token(get_logical_first_line(command))
     for each_token, _remaining_tokens in significant_tokens:
         if each_token in all_body_flags:
             return True

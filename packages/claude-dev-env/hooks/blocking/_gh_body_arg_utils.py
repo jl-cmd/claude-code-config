@@ -44,11 +44,9 @@ all_value_flag_equals_prefixes: tuple[str, ...] = tuple(
     sorted((f"{each_flag}=" for each_flag in all_value_flags), key=len, reverse=True)
 )
 
-all_body_equals_prefixes: tuple[str, ...] = ("--body=", "-b=")
-
 _all_equals_prefixes_for_skip: tuple[str, ...] = tuple(
     sorted(
-        set(all_value_flag_equals_prefixes) | set(all_body_equals_prefixes),
+        set(all_value_flag_equals_prefixes) | set(all_body_flag_prefixes),
         key=len,
         reverse=True,
     )
@@ -109,13 +107,17 @@ def _quoted_value_starts_split(value_token: str) -> bool:
     first_character = value_token[0]
     if first_character not in {'"', "'"}:
         return False
-    return value_token.count(first_character) % 2 == 1
+    inside_quote = True
+    for each_character in value_token[1:]:
+        if each_character == first_character:
+            inside_quote = not inside_quote
+    return inside_quote
 
 
 def count_extra_tokens_to_skip_for_split_quoted_value(
     remaining_tokens: list[str],
     value_token: str,
-) -> int:
+) -> int | None:
     if not _quoted_value_starts_split(value_token):
         return 0
     opening_quote = value_token[0]
@@ -124,7 +126,7 @@ def count_extra_tokens_to_skip_for_split_quoted_value(
         extra_tokens_consumed += 1
         if each_remaining_token.count(opening_quote) % 2 == 1:
             return extra_tokens_consumed
-    return 0
+    return None
 
 
 def _match_equals_prefix_for_skip(token: str) -> str | None:
@@ -166,7 +168,7 @@ def iter_significant_tokens(command: str) -> Iterator[tuple[str, list[str]]]:
                 value_token,
             )
             yield current_token, remaining_tokens
-            token_index += 1 + split_value_extra_tokens
+            token_index += 1 + (split_value_extra_tokens or 0)
             continue
         if current_token in all_value_flags:
             if not remaining_tokens or _is_flag_shaped(remaining_tokens[0]):
@@ -178,8 +180,8 @@ def iter_significant_tokens(command: str) -> Iterator[tuple[str, list[str]]]:
                 remaining_tokens[1:],
                 value_token,
             )
-            yield current_token, remaining_tokens[1 + split_value_extra_tokens:]
-            token_index += 1 + 1 + split_value_extra_tokens
+            yield current_token, remaining_tokens[1 + (split_value_extra_tokens or 0):]
+            token_index += 1 + 1 + (split_value_extra_tokens or 0)
             continue
         yield current_token, remaining_tokens
         token_index += 1

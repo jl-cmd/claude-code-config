@@ -206,3 +206,49 @@ def test_extract_body_reassembles_split_quoted_equals_value() -> None:
     """`--body="has multiple spaces inside"` must reassemble across posix=False tokens."""
     command = 'gh pr create --title "T" --body="this body has multiple words"'
     assert extract_body_from_command(command) == "this body has multiple words"
+
+
+def test_read_body_file_rejects_relative_path_traversal(tmp_path) -> None:
+    import importlib.util, pathlib, sys
+    _HOOK_DIR = pathlib.Path(__file__).parent
+    if str(_HOOK_DIR) not in sys.path:
+        sys.path.insert(0, str(_HOOK_DIR))
+    spec = importlib.util.spec_from_file_location('pde', _HOOK_DIR / 'pr-description-enforcer.py')
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    import os, pytest
+    sentinel_file = tmp_path / 'secret.txt'
+    sentinel_file.write_text('secret')
+    rel_path = os.path.relpath(str(sentinel_file))
+    if '..' not in rel_path:
+        pytest.skip('file is under cwd, not a traversal case')
+    with pytest.raises(m.PathTraversalError):
+        m._read_body_file_contents(rel_path)
+
+
+def test_read_body_file_allows_absolute_path_outside_cwd(tmp_path) -> None:
+    import importlib.util, pathlib, sys
+    _HOOK_DIR = pathlib.Path(__file__).parent
+    spec = importlib.util.spec_from_file_location('pde2', _HOOK_DIR / 'pr-description-enforcer.py')
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    body_file = tmp_path / 'body.md'
+    body_file.write_text('hello')
+    result = m._read_body_file_contents(str(body_file))
+    assert result == 'hello'
+
+
+def test_reassemble_split_quoted_value_returns_none_for_unclosed_quote() -> None:
+    import importlib.util, pathlib, sys
+    _HOOK_DIR = pathlib.Path(__file__).parent
+    spec = importlib.util.spec_from_file_location('pde3', _HOOK_DIR / 'pr-description-enforcer.py')
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    result = m._reassemble_split_quoted_value("'unclosed", [])
+    assert result is None
+
+
+def test_extract_body_returns_none_for_unclosed_quote_value() -> None:
+    result = extract_body_from_command("gh pr create --title T --body='unclosed")
+    assert result is None or isinstance(result, str)
+

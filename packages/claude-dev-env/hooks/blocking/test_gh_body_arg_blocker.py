@@ -333,3 +333,43 @@ def test_space_form_value_flag_remaining_excludes_consumed_value() -> None:
     all_yielded = list(iter_significant_tokens('gh pr create --title MyTitle --body "desc"'))
     title_remaining = next(remaining for token, remaining in all_yielded if token == "--title")
     assert "MyTitle" not in title_remaining
+
+
+def test_quoted_value_starts_split_unclosed_single_quote() -> None:
+    from _gh_body_arg_utils import _quoted_value_starts_split
+    assert _quoted_value_starts_split("'it") is True
+
+
+def test_quoted_value_starts_split_fully_closed() -> None:
+    from _gh_body_arg_utils import _quoted_value_starts_split
+    assert _quoted_value_starts_split("'hello'") is False
+
+
+def test_quoted_value_starts_split_double_quote_unclosed() -> None:
+    from _gh_body_arg_utils import _quoted_value_starts_split
+    assert _quoted_value_starts_split('"hello') is True
+
+
+def test_count_extra_tokens_returns_none_when_exhausted() -> None:
+    from _gh_body_arg_utils import count_extra_tokens_to_skip_for_split_quoted_value
+    result = count_extra_tokens_to_skip_for_split_quoted_value([], "'unclosed")
+    assert result is None
+
+
+def test_count_extra_tokens_returns_none_no_closing_in_remaining() -> None:
+    from _gh_body_arg_utils import count_extra_tokens_to_skip_for_split_quoted_value
+    result = count_extra_tokens_to_skip_for_split_quoted_value(["word", "another"], "'unclosed")
+    assert result is None
+
+
+def test_count_extra_tokens_returns_zero_for_self_contained() -> None:
+    from _gh_body_arg_utils import count_extra_tokens_to_skip_for_split_quoted_value
+    result = count_extra_tokens_to_skip_for_split_quoted_value(["next"], "'complete'")
+    assert result == 0
+
+
+def test_all_body_flag_prefixes_used_for_equals_skip() -> None:
+    from _gh_body_arg_utils import _all_equals_prefixes_for_skip, all_body_flag_prefixes
+    for each_prefix in all_body_flag_prefixes:
+        assert each_prefix in _all_equals_prefixes_for_skip
+

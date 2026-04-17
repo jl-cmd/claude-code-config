@@ -2,6 +2,9 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
+
+import shlex
 
 from _gh_body_arg_utils import (
     all_body_flag_prefixes,
@@ -11,6 +14,7 @@ from _gh_body_arg_utils import (
     body_file_short_flag,
     body_file_short_flag_prefix,
     count_extra_tokens_to_skip_for_split_quoted_value,
+    get_logical_first_line,
     iter_significant_tokens,
 )
 
@@ -37,6 +41,10 @@ all_quote_characters: frozenset[str] = frozenset({'"', "'"})
 file_encoding_utf8: str = "utf-8"
 
 
+
+class PathTraversalError(Exception):
+    pass
+
 def _is_flag_shaped_token(token: str) -> bool:
     if len(token) < 2:
         return False
@@ -60,8 +68,22 @@ def _is_unresolvable_shell_value(token: str) -> bool:
 
 
 def _read_body_file_contents(file_path: str) -> str | None:
+    resolved_path = Path(file_path).resolve()
+    allowed_root = Path.cwd().resolve()
+    given_path = Path(file_path)
+    if not given_path.is_absolute():
+        try:
+            resolved_path.relative_to(allowed_root)
+        except ValueError:
+            raise PathTraversalError("relative path resolves outside allowed root")
+    if resolved_path.is_symlink():
+        symlink_target = Path(os.readlink(str(resolved_path))).resolve()
+        try:
+            symlink_target.relative_to(allowed_root)
+        except ValueError:
+            raise PathTraversalError("symlink target resolves outside allowed root")
     try:
-        with open(file_path, "r", encoding=file_encoding_utf8) as body_file:
+        with open(resolved_path, "r", encoding=file_encoding_utf8, errors="replace") as body_file:
             return body_file.read()
     except (FileNotFoundError, IsADirectoryError, PermissionError, OSError):
         return None
@@ -75,7 +97,10 @@ def _resolve_body_file_value(raw_value_token: str) -> str | None:
         return ""
     if stripped_value == body_file_stdin_sentinel:
         return ""
-    return _read_body_file_contents(stripped_value)
+    try:
+        return _read_body_file_contents(stripped_value)
+    except PathTraversalError:
+        return None
 
 
 def _resolve_body_string_value(raw_value_token: str) -> str:
@@ -85,11 +110,13 @@ def _resolve_body_string_value(raw_value_token: str) -> str:
     return stripped_value
 
 
-def _reassemble_split_quoted_value(first_value_token: str, remaining_tokens: list[str]) -> str:
+def _reassemble_split_quoted_value(first_value_token: str, remaining_tokens: list[str]) -> str | None:
     extra_tokens_consumed = count_extra_tokens_to_skip_for_split_quoted_value(
         remaining_tokens,
         first_value_token,
     )
+    if extra_tokens_consumed is None:
+        return None
     if extra_tokens_consumed == 0:
         return first_value_token
     continuation_tokens = remaining_tokens[:extra_tokens_consumed]
@@ -110,47 +137,85 @@ def _match_body_file_equals_prefix(token: str) -> str | None:
     return None
 
 
+def _scan_raw_tokens_for_body(all_raw_tokens: list[str]) -> str | None | bool:
+    """Return the body value from a raw token list, or False if no body flag found.
+
+    Returns False when no body/body-file flag is present (caller should continue).
+    Returns None when a body-file flag is present but malformed (no value follows).
+    Returns str for body string values (may be empty for shell vars/sentinels).
+    """
+    token_index = 0
+    while token_index < len(all_raw_tokens):
+        current_token = all_raw_tokens[token_index]
+        remaining_raw = all_raw_tokens[token_index + 1:]
+        body_equals_prefix = _match_body_flag_equals_prefix(current_token)
+        if body_equals_prefix is not None:
+            first_value_token = current_token[len(body_equals_prefix):]
+            full_value_token = _reassemble_split_quoted_value(first_value_token, remaining_raw)
+            if full_value_token is None:
+                return None
+            return _resolve_body_string_value(full_value_token)
+        body_file_equals_prefix = _match_body_file_equals_prefix(current_token)
+        if body_file_equals_prefix is not None:
+            first_value_token = current_token[len(body_file_equals_prefix):]
+            full_value_token = _reassemble_split_quoted_value(first_value_token, remaining_raw)
+            if full_value_token is None:
+                return None
+            return _resolve_body_file_value(full_value_token)
+        if current_token in all_body_flags:
+            if not remaining_raw or _is_flag_shaped_token(remaining_raw[0]):
+                return None
+            first_value_token = remaining_raw[0]
+            full_value_token = _reassemble_split_quoted_value(first_value_token, remaining_raw[1:])
+            if full_value_token is None:
+                return None
+            return _resolve_body_string_value(full_value_token)
+        if current_token in {body_file_flag, body_file_short_flag}:
+            if not remaining_raw or _is_flag_shaped_token(remaining_raw[0]):
+                return None
+            first_value_token = remaining_raw[0]
+            full_value_token = _reassemble_split_quoted_value(first_value_token, remaining_raw[1:])
+            if full_value_token is None:
+                return None
+            return _resolve_body_file_value(full_value_token)
+        token_index += 1
+    return False
+
+
 def extract_body_from_command(command: str) -> str | None:
     """Return the PR body content for validation, or None if unextractable.
 
-    Scans the logical first line using the shared gh-arg iterator so that
-    --body / --body-file embedded inside a quoted --title value does not
-    false-match. For --body / -b returns the body string literal (or empty
-    string for a shell variable). For --body-file reads the referenced file
-    and returns its contents (None if the file is missing, empty string for a
-    shell variable or stdin sentinel). When --body-file is immediately
-    followed by another flag (malformed H5 case), returns None so no
-    validation runs on corrupt input.
+    Uses iter_significant_tokens to skip values of non-body value-taking flags
+    so that --body/--body-file embedded in a quoted --title value never false-matches.
+    For space-form body-file flags, scans the raw token list directly because
+    iter_significant_tokens consumes the value token (yielding remaining-after-value).
     """
+    logical_line = get_logical_first_line(command)
+    if not logical_line:
+        return None
+    try:
+        all_raw_tokens = shlex.split(logical_line, posix=False)
+    except ValueError:
+        return None
     try:
         all_significant_tokens = list(iter_significant_tokens(command))
     except ValueError:
         return None
 
-    for each_token, each_remaining_tokens in all_significant_tokens:
-        body_equals_prefix = _match_body_flag_equals_prefix(each_token)
-        if body_equals_prefix is not None:
-            first_value_token = each_token[len(body_equals_prefix):]
-            full_value_token = _reassemble_split_quoted_value(first_value_token, each_remaining_tokens)
-            return _resolve_body_string_value(full_value_token)
-        body_file_equals_prefix = _match_body_file_equals_prefix(each_token)
-        if body_file_equals_prefix is not None:
-            first_value_token = each_token[len(body_file_equals_prefix):]
-            full_value_token = _reassemble_split_quoted_value(first_value_token, each_remaining_tokens)
-            return _resolve_body_file_value(full_value_token)
-        if each_token in all_body_flags:
-            if not each_remaining_tokens or _is_flag_shaped_token(each_remaining_tokens[0]):
-                return None
-            first_value_token = each_remaining_tokens[0]
-            full_value_token = _reassemble_split_quoted_value(first_value_token, each_remaining_tokens[1:])
-            return _resolve_body_string_value(full_value_token)
-        if each_token in {body_file_flag, body_file_short_flag}:
-            if not each_remaining_tokens or _is_flag_shaped_token(each_remaining_tokens[0]):
-                return None
-            first_value_token = each_remaining_tokens[0]
-            full_value_token = _reassemble_split_quoted_value(first_value_token, each_remaining_tokens[1:])
-            return _resolve_body_file_value(full_value_token)
-    return None
+    significant_token_set = {each_token for each_token, _ in all_significant_tokens}
+    body_flag_found_in_significant = (
+        any(each_token in all_body_flags for each_token in significant_token_set)
+        or any(_match_body_flag_equals_prefix(each_token) is not None for each_token in significant_token_set)
+        or any(_match_body_file_equals_prefix(each_token) is not None for each_token in significant_token_set)
+        or any(each_token in {body_file_flag, body_file_short_flag} for each_token in significant_token_set)
+    )
+    if not body_flag_found_in_significant:
+        return None
+
+    result = _scan_raw_tokens_for_body(all_raw_tokens)
+    if result is False:
+        return None
+    return result
 
 
 def validate_pr_body(body: str) -> list[str]:

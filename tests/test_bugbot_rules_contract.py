@@ -14,11 +14,20 @@ def test_bugbot_documents_upper_snake_exemptions_matching_hook() -> None:
     text = _bugbot_text()
     assert "/migrations/" in text
     assert "_tab.py" in text
-    assert "states.py" in text
-    assert "modules.py" in text
+    assert "/states.py" in text
+    assert "/modules.py" in text
     assert "/workflow/" in text
     assert "conftest" in text
     assert "/tests/" in text
+
+
+def test_bugbot_workflow_registry_phrasing_describes_substring_match() -> None:
+    """BUGBOT phrasing must describe substring matching (hook behavior), not basename-only matching."""
+    text = _bugbot_text()
+    assert "substring" in text.lower()
+    assert "basename is `states.py`" not in text
+    assert "basename is `modules.py`" not in text
+    assert "basename ends with `_tab.py`" not in text
 
 
 def test_bugbot_file_length_matches_hook_advisory_behavior() -> None:

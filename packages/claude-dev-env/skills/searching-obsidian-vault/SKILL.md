@@ -3,9 +3,12 @@ name: searching-obsidian-vault
 description: >-
   Retrieves Obsidian vault context from %USERPROFILE%/SessionLog/ via the
   configured mcp__obsidian__* server. Searches sessions/, decisions/, and
-  Research/. Use when starting substantive project work, when the user
-  references prior decisions or prior context, or when a task might repeat
-  or reverse a prior decision.
+  Research/. Use when the user says "we decided", "last time", "previously",
+  "did we ever", "why did we", or "remember when"; when the user asks why
+  existing code was built a certain way or whether an approach was tried
+  before; when starting a session in a git repo whose name matches a
+  project folder under sessions/; or when the user names a specific
+  component, decision, gotcha, or prior research note.
 ---
 
 # Obsidian Vault
@@ -25,14 +28,20 @@ moments so the downstream flag can be set honestly.
 
 Invoke automatically when any of the following holds:
 
-- Starting substantive project work in a new session.
-- The user references prior work, prior decisions, or prior context.
-- A task might repeat or reverse a prior decision.
-- Context is needed on *why* something was built a certain way.
-- The user encounters a component or system with known history.
+- The user says "we decided", "last time", "previously", "did we ever",
+  "why did we", or "remember when".
+- The user asks why existing code was built a certain way, or whether an
+  approach was tried before.
+- A new session starts in a git repo whose name matches a project folder
+  under `sessions/`.
+- The user names a specific component, feature, or architectural decision
+  that a session or decision note might exist for.
+- The user mentions "session", "decision", "gotcha", "superseded", or
+  "prior research" by name.
 
-If none of these apply, skip the skill. Trivial questions, one-off scripts,
-and pure-reference lookups do not need vault context.
+Skip the skill for isolated lookups with no project history (e.g. one-off
+utility scripts, pure syntax questions, fresh repos with no
+`sessions/[project]/` folder).
 
 ## Search Algorithm
 

@@ -7,14 +7,24 @@ Note: Only checks for magic numbers. Magic string detection is not implemented.
 """
 
 import ast
+import re
 import sys
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, FrozenSet, List, Tuple, Type
 
 from validator_base import Violation
 
 
-ALLOWED_NUMBERS = frozenset({-1, 0, 1, 2, 100})
+ALLOWED_NUMBERS: FrozenSet[int] = frozenset({-1, 0, 1, 2, 100})
+
+_UPPER_SNAKE_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+_CONTAINER_LITERAL_TYPES: Tuple[Type[ast.AST], ...] = (
+    ast.Dict,
+    ast.List,
+    ast.Tuple,
+    ast.Set,
+)
 
 
 def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
@@ -53,6 +63,8 @@ def _is_in_constant_definition(
         parent = parent_by_child[id(current_node)]
         if _is_upper_snake_constant_assignment(parent):
             return True
+        if not isinstance(parent, _CONTAINER_LITERAL_TYPES):
+            return False
         current_node = parent
     return False
 
@@ -60,13 +72,17 @@ def _is_in_constant_definition(
 def _is_upper_snake_constant_assignment(node: ast.AST) -> bool:
     if isinstance(node, ast.Assign):
         for target in node.targets:
-            if isinstance(target, ast.Name) and target.id.isupper():
+            if isinstance(target, ast.Name) and _is_upper_snake_name(target.id):
                 return True
         return False
     if isinstance(node, ast.AnnAssign):
         target = node.target
-        return isinstance(target, ast.Name) and target.id.isupper()
+        return isinstance(target, ast.Name) and _is_upper_snake_name(target.id)
     return False
+
+
+def _is_upper_snake_name(name: str) -> bool:
+    return bool(_UPPER_SNAKE_NAME_PATTERN.match(name))
 
 
 def validate_file(file_path: Path) -> List[Violation]:

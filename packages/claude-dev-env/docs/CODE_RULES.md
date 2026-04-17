@@ -58,7 +58,7 @@ The "Constants location" rule is enforced at Write time. The hook exempts these 
 |---|---|
 | `config/*` | Canonical home for scalar constants. |
 | `/migrations/` (Django migrations) | Migration files are self-contained by framework convention; their UPPER_SNAKE identifiers are operation names, not misplaced configuration. |
-| `_tab.py`, `states.py`, `modules.py`, `/workflow/` | Workflow state and module registries declare `StateDefinition` / `WorkflowModule` instances as module-level singletons using UPPER_SNAKE names. These are registry entries, not constants to hoist. |
+| `/workflow/`, `_tab.py`, `/states.py`, `/modules.py` (path normalized to forward slashes, matched as substrings) | Workflow state and module registries declare `StateDefinition` / `WorkflowModule` instances as module-level singletons using UPPER_SNAKE names. These are registry entries, not constants to hoist. |
 | Test files (`test_*.py`, `*_test.py`, `*.spec.*`, `conftest.py`, paths under `/tests/`) | Test files may define local constants without using `config/`. |
 
 Any production file outside these families that defines an UPPER_SNAKE at module scope is still flagged and must be moved to `config/`.

@@ -227,15 +227,15 @@ def poll_listener_run_conclusion(
     )
     dispatched_at_parsed = parse_iso_timestamp(dispatched_at)
 
-    network_error_attempt_count = 0
+    all_attempts_were_network_errors = True
     for attempt_index in range(LISTENER_POLL_MAX_ATTEMPTS):
         status_code, response_body, _ = make_github_api_request(path, token)
         if status_code == HTTP_STATUS_NOT_FOUND:
             return LISTENER_STATUS_MISSING
         if status_code == NETWORK_ERROR_STATUS_CODE:
-            network_error_attempt_count += 1
             time.sleep(LISTENER_POLL_INTERVAL_SECONDS)
             continue
+        all_attempts_were_network_errors = False
         if status_code != HTTP_STATUS_OK or response_body is None:
             return LISTENER_STATUS_POLL_ERROR
 
@@ -269,7 +269,7 @@ def poll_listener_run_conclusion(
             return LISTENER_STATUS_PENDING
         time.sleep(LISTENER_POLL_INTERVAL_SECONDS)
 
-    if network_error_attempt_count == LISTENER_POLL_MAX_ATTEMPTS:
+    if all_attempts_were_network_errors:
         return LISTENER_STATUS_POLL_ERROR
     return LISTENER_STATUS_PENDING
 

@@ -327,10 +327,12 @@ def add_issue_comment(
     with urllib.request.urlopen(
         api_request, timeout=GITHUB_API_REQUEST_TIMEOUT_SECONDS
     ) as http_response:
-        http_response.read()
+        response_body_text = http_response.read().decode("utf-8")
         comment_status_code = http_response.status
     if comment_status_code != HTTP_STATUS_CREATED:
-        raise RuntimeError(f"Comment creation returned status {comment_status_code}")
+        raise RuntimeError(
+            f"Comment creation returned status {comment_status_code}: {response_body_text}"
+        )
 
 
 def write_step_summary(text: str) -> None:
@@ -379,11 +381,6 @@ def commit_and_push_sync(
 
     last_push_error: Optional[subprocess.CalledProcessError] = None
     for attempt_index in range(COMMIT_PUSH_MAX_ATTEMPTS):
-        subprocess.run(
-            ["git", "rebase", "--abort"],
-            check=False,
-            capture_output=True,
-        )
         try:
             subprocess.run(["git", "fetch", "origin"], check=True)
             subprocess.run(
@@ -394,6 +391,11 @@ def commit_and_push_sync(
             return
         except subprocess.CalledProcessError as push_error:
             last_push_error = push_error
+            subprocess.run(
+                ["git", "rebase", "--abort"],
+                check=False,
+                capture_output=True,
+            )
             if attempt_index == COMMIT_PUSH_MAX_ATTEMPTS - 1:
                 break
             time.sleep(COMMIT_PUSH_RETRY_SLEEP_SECONDS)

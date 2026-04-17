@@ -679,39 +679,93 @@ def check_banned_identifiers(content: str, file_path: str) -> list[str]:
     return issues
 
 
-def _is_boolean_assignment(node: ast.AST) -> bool:
-    if isinstance(node, ast.Assign):
-        return isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool)
-    if isinstance(node, ast.AnnAssign):
-        value_is_bool = (
-            node.value is not None
-            and isinstance(node.value, ast.Constant)
-            and isinstance(node.value.value, bool)
-        )
-        annotation_is_bool = (
-            isinstance(node.annotation, ast.Name) and node.annotation.id == "bool"
-        )
-        return value_is_bool or annotation_is_bool
-    return False
+def _is_bool_constant(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, bool)
 
 
-def _boolean_target_names(node: ast.AST) -> list[str]:
-    if isinstance(node, ast.Assign):
-        return [target.id for target in node.targets if isinstance(target, ast.Name)]
-    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+def _rhs_names_if_all_bool(value_node: ast.AST, target_node: ast.AST) -> list[str]:
+    """Return names from a tuple assignment target when every RHS element is a bool constant.
+
+    Handles cases like `valid, permitted = True, False` where target is a Tuple
+    and value is a Tuple of bool constants. Returns empty list otherwise.
+    """
+    if not isinstance(target_node, ast.Tuple):
+        return []
+    if not isinstance(value_node, ast.Tuple):
+        return []
+    if len(target_node.elts) != len(value_node.elts):
+        return []
+    if not all(_is_bool_constant(element) for element in value_node.elts):
+        return []
+    names: list[str] = []
+    for element in target_node.elts:
+        if isinstance(element, ast.Name):
+            names.append(element.id)
+    return names
+
+
+def _assign_target_names_for_bool(node: ast.Assign) -> list[str]:
+    if not node.targets:
+        return []
+    names: list[str] = []
+    for target in node.targets:
+        if isinstance(target, ast.Name) and _is_bool_constant(node.value):
+            names.append(target.id)
+        else:
+            names.extend(_rhs_names_if_all_bool(node.value, target))
+    return names
+
+
+def _annassign_target_name_for_bool(node: ast.AnnAssign) -> list[str]:
+    if not isinstance(node.target, ast.Name):
+        return []
+    annotation_is_bool = isinstance(node.annotation, ast.Name) and node.annotation.id == "bool"
+    value_is_bool = node.value is not None and _is_bool_constant(node.value)
+    if annotation_is_bool and value_is_bool:
         return [node.target.id]
     return []
 
 
+def _walrus_name_for_bool(node: ast.NamedExpr) -> list[str]:
+    if not isinstance(node.target, ast.Name):
+        return []
+    if not _is_bool_constant(node.value):
+        return []
+    return [node.target.id]
+
+
 def _collect_boolean_assignments(tree: ast.Module) -> list[tuple[str, int, bool]]:
-    collected: list[tuple[str, int, bool]] = []
-    module_level_nodes = set(id(statement) for statement in tree.body)
+    """Collect boolean-constant assignments with (name, line_number, is_upper_snake_scope).
+
+    `is_upper_snake_scope` is True for module-level statements and direct class body
+    statements, where UPPER_SNAKE constants are acceptable (dataclass fields, class
+    constants). Function/method scope is False.
+    """
+    upper_snake_scope_ids: set[int] = set()
+    for statement in tree.body:
+        upper_snake_scope_ids.add(id(statement))
     for node in ast.walk(tree):
-        if not _is_boolean_assignment(node):
+        if isinstance(node, ast.ClassDef):
+            for class_statement in node.body:
+                upper_snake_scope_ids.add(id(class_statement))
+    collected: list[tuple[str, int, bool]] = []
+    for node in ast.walk(tree):
+        names: list[str] = []
+        line_number = 0
+        if isinstance(node, ast.Assign):
+            names = _assign_target_names_for_bool(node)
+            line_number = node.lineno
+        elif isinstance(node, ast.AnnAssign):
+            names = _annassign_target_name_for_bool(node)
+            line_number = node.lineno
+        elif isinstance(node, ast.NamedExpr):
+            names = _walrus_name_for_bool(node)
+            line_number = node.lineno
+        if not names:
             continue
-        is_module_level = id(node) in module_level_nodes
-        for name in _boolean_target_names(node):
-            collected.append((name, node.lineno, is_module_level))
+        is_in_upper_snake_scope = id(node) in upper_snake_scope_ids
+        for name in names:
+            collected.append((name, line_number, is_in_upper_snake_scope))
     return collected
 
 
@@ -721,15 +775,24 @@ def check_boolean_naming(content: str, file_path: str) -> list[str]:
         return []
     if is_hook_infrastructure(file_path):
         return []
+    if is_config_file(file_path):
+        return []
+    if is_workflow_registry_file(file_path):
+        return []
     try:
         tree = ast.parse(content)
-    except SyntaxError:
+    except SyntaxError as parse_error:
+        print(
+            f"[CODE_RULES advisory] {file_path}: boolean-naming check skipped - "
+            f"SyntaxError at line {parse_error.lineno}: {parse_error.msg}",
+            file=sys.stderr,
+        )
         return []
     issues: list[str] = []
-    for name, line_number, is_module_level in _collect_boolean_assignments(tree):
+    for name, line_number, is_in_upper_snake_scope in _collect_boolean_assignments(tree):
         if len(name) == 1:
             continue
-        if is_module_level and UPPER_SNAKE_CONSTANT_PATTERN.match(name):
+        if is_in_upper_snake_scope and UPPER_SNAKE_CONSTANT_PATTERN.match(name):
             continue
         if name.startswith(BOOLEAN_NAME_PREFIXES):
             continue

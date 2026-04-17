@@ -3,7 +3,7 @@
 Run from the project root whose .claude/** you want a Claude Code session
 (including spawned subagents) to edit without prompting. Writes idempotent
 entries into the user-scope settings at ~/.claude/settings.json and prints
-the four changes applied.
+the changes applied. No-op when the entries already exist.
 """
 
 import sys
@@ -65,8 +65,12 @@ def grant_permissions_for_current_directory() -> None:
     )
     settings = load_settings(CLAUDE_USER_SETTINGS_PATH)
     rules_added_count = add_rules_to_allow_list(settings, permission_rules)
-    directories_added_count = add_directory_to_additional_directories(settings, project_path)
-    environment_entries_added_count = add_auto_mode_environment_entry(settings, environment_entry)
+    directories_added_count = add_directory_to_additional_directories(
+        settings, project_path
+    )
+    environment_entries_added_count = add_auto_mode_environment_entry(
+        settings, environment_entry
+    )
     total_changes_count = (
         rules_added_count + directories_added_count + environment_entries_added_count
     )

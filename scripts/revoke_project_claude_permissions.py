@@ -3,6 +3,8 @@
 Run from the same project root you previously granted. Removes the matching
 allow rules, the additionalDirectories entry, and the autoMode environment
 entry from ~/.claude/settings.json. Safe to run when no prior grant exists.
+After removals, prunes any newly empty lists and their parent permissions or
+autoMode sections so repeated grant/revoke cycles leave no dead structure.
 """
 
 import sys
@@ -16,6 +18,7 @@ from _claude_permissions_common import (  # noqa: E402
     exit_with_error,
     get_current_project_path,
     load_settings,
+    prune_empty_list_then_empty_section,
     save_settings,
     AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
     PERMISSION_ALLOW_TOOLS,
@@ -69,6 +72,14 @@ def remove_auto_mode_environment_entry(
     return remove_values_from_list(existing_environment, {entry_text})
 
 
+def prune_settings_after_revoke(settings: dict[str, Any]) -> None:
+    prune_empty_list_then_empty_section(settings, "permissions", "allow")
+    prune_empty_list_then_empty_section(
+        settings, "permissions", "additionalDirectories"
+    )
+    prune_empty_list_then_empty_section(settings, "autoMode", "environment")
+
+
 def revoke_permissions_for_current_directory() -> None:
     project_path = get_current_project_path()
     permission_rules = build_permission_rules(project_path, PERMISSION_ALLOW_TOOLS)
@@ -84,19 +95,24 @@ def revoke_permissions_for_current_directory() -> None:
         settings, environment_entry
     )
     total_changes_count = (
-        rules_removed_count + directories_removed_count + environment_entries_removed_count
+        rules_removed_count
+        + directories_removed_count
+        + environment_entries_removed_count
     )
     if total_changes_count == 0:
         print(f"Project path: {project_path}")
         print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
         print("No changes to revoke; settings file left untouched.")
         return
+    prune_settings_after_revoke(settings)
     save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
     print(f"Project path: {project_path}")
     print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
     print(f"Allow rules removed: {rules_removed_count} of {len(permission_rules)}")
     print(f"Additional directories removed: {directories_removed_count}")
-    print(f"Auto-mode environment entries removed: {environment_entries_removed_count}")
+    print(
+        f"Auto-mode environment entries removed: {environment_entries_removed_count}"
+    )
 
 
 if __name__ == "__main__":

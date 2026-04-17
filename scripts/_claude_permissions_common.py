@@ -1,9 +1,17 @@
-"""Shared helpers for grant_project_claude_permissions and revoke_project_claude_permissions."""
+"""Shared helpers for grant_project_claude_permissions and revoke_project_claude_permissions.
+
+Writes to ~/.claude/settings.json are atomic and permission-preserving: the
+target file's existing POSIX mode is captured, a sibling temp file is
+created via os.open with O_CREAT | O_EXCL and the preserved mode, content
+is written, then os.replace swaps it into place. Output is serialized with
+sort_keys=True for a stable on-disk layout; the first run on a hand-ordered
+settings file produces a one-time re-sort diff, subsequent writes are stable.
+"""
 
 import json
 import os
+import stat
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -24,6 +32,8 @@ GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = (
 JSON_INDENT_SPACES: int = 2
 PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
 
+DEFAULT_SETTINGS_FILE_MODE: int = 0o600
+ATOMIC_WRITE_TEMPORARY_SUFFIX: str = ".tmp"
 
 AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "Trusted local workspace: {project_path}/.claude/** is the user's "
@@ -79,9 +89,11 @@ def load_settings(settings_path: Path) -> dict[str, Any]:
     if not settings_path.exists():
         return {}
     try:
-        parsed_settings = json.loads(
-            settings_path.read_text(encoding=TEXT_FILE_ENCODING)
-        )
+        raw_text = settings_path.read_text(encoding=TEXT_FILE_ENCODING)
+    except OSError as read_error:
+        exit_with_error(f"Failed to read {settings_path}: {read_error}")
+    try:
+        parsed_settings = json.loads(raw_text)
     except json.JSONDecodeError as decode_error:
         exit_with_error(
             f"Refusing to modify {settings_path}: existing file is not valid JSON "
@@ -96,25 +108,53 @@ def load_settings(settings_path: Path) -> dict[str, Any]:
     return parsed_settings
 
 
+def get_mode_to_preserve(settings_path: Path) -> int:
+    try:
+        stat_result = os.stat(settings_path)
+    except FileNotFoundError:
+        return DEFAULT_SETTINGS_FILE_MODE
+    except OSError as stat_error:
+        exit_with_error(f"Failed to stat {settings_path}: {stat_error}")
+    return stat.S_IMODE(stat_result.st_mode)
+
+
+def write_atomically_with_mode(
+    temporary_path: Path, serialized_content: str, file_mode: int
+) -> None:
+    file_descriptor = os.open(
+        str(temporary_path),
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        file_mode,
+    )
+    with os.fdopen(file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as writer:
+        writer.write(serialized_content)
+
+
 def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
     settings_path.parent.mkdir(parents=True, exist_ok=True)
-    serialized_settings = json.dumps(settings, indent=JSON_INDENT_SPACES)
-    temporary_file_descriptor, temporary_file_path = tempfile.mkstemp(
-        prefix=settings_path.name, dir=str(settings_path.parent)
+    serialized_settings = json.dumps(
+        settings, indent=JSON_INDENT_SPACES, sort_keys=True
     )
+    temporary_path = settings_path.with_suffix(
+        settings_path.suffix + ATOMIC_WRITE_TEMPORARY_SUFFIX
+    )
+    mode_to_preserve = get_mode_to_preserve(settings_path)
     try:
-        with os.fdopen(
-            temporary_file_descriptor, "w", encoding=TEXT_FILE_ENCODING
-        ) as temporary_file:
-            temporary_file.write(serialized_settings)
-        os.replace(temporary_file_path, settings_path)
-    except OSError as io_error:
         try:
-            if os.path.exists(temporary_file_path):
-                os.unlink(temporary_file_path)
-        except OSError:
-            pass
-        exit_with_error(f"Failed to save settings to {settings_path}: {io_error}")
+            write_atomically_with_mode(
+                temporary_path, serialized_settings, mode_to_preserve
+            )
+            os.replace(str(temporary_path), str(settings_path))
+        except OSError as os_error:
+            exit_with_error(
+                f"Failed to write settings atomically to {settings_path}: {os_error}"
+            )
+    finally:
+        if temporary_path.exists():
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
 
 
 def append_if_missing(target_list: list[str], new_value: str) -> bool:
@@ -124,7 +164,9 @@ def append_if_missing(target_list: list[str], new_value: str) -> bool:
     return True
 
 
-def ensure_dict_section(settings: dict[str, Any], section_name: str) -> dict[str, Any]:
+def ensure_dict_section(
+    settings: dict[str, Any], section_name: str
+) -> dict[str, Any]:
     """Return an existing dict section or create an empty one if absent.
 
     A missing key and an explicit JSON null are treated identically: both
@@ -166,3 +208,16 @@ def ensure_list_entry(section: dict[str, Any], entry_name: str) -> list[Any]:
             f"remove the entry manually, then re-run."
         )
     return existing_entry
+
+
+def prune_empty_list_then_empty_section(
+    settings: dict[str, Any], section_key: str, list_key: str
+) -> None:
+    section = settings.get(section_key)
+    if not isinstance(section, dict):
+        return
+    list_entry = section.get(list_key)
+    if isinstance(list_entry, list) and len(list_entry) == 0:
+        del section[list_key]
+    if len(section) == 0:
+        del settings[section_key]

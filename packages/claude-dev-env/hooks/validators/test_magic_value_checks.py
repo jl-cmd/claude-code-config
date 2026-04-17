@@ -71,6 +71,11 @@ LIMIT = -100
 OFFSET = -5
 '''
 
+ALLOWED_TYPED_NEGATIVE_UPPER_CONSTANT = '''
+LIMIT: int = -100
+OFFSET: int = -5
+'''
+
 DOUBLE_NEGATED_LITERAL = '''
 def process():
     return --5
@@ -132,7 +137,14 @@ class TestMagicValues:
         violations = check_magic_values(tree, "test.py")
         assert violations == []
 
-    def test_double_negation_reports_single_violation_for_inner_literal(self) -> None:
+    def test_typed_negative_upper_constant_allowed(self) -> None:
+        tree = ast.parse(ALLOWED_TYPED_NEGATIVE_UPPER_CONSTANT)
+        violations = check_magic_values(tree, "test.py")
+        assert violations == []
+
+    def test_double_negation_reports_collapsed_positive_value(self) -> None:
         tree = ast.parse(DOUBLE_NEGATED_LITERAL)
         violations = check_magic_values(tree, "test.py")
         assert len(violations) == 1
+        assert "5" in violations[0].message
+        assert "-5" not in violations[0].message

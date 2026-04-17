@@ -31,8 +31,8 @@ PRODUCTION_FILE_PATH = "packages/claude-dev-env/hooks/blocking/example_productio
 
 def test_check_magic_values_should_flag_literal_two_in_function_body() -> None:
     source = (
-        "def compute_something(value):\n"
-        "    threshold = value * 2\n"
+        "def compute_something(amount):\n"
+        "    threshold = amount * 2\n"
         "    return threshold\n"
     )
     issues = code_rules_enforcer.check_magic_values(source, PRODUCTION_FILE_PATH)
@@ -43,8 +43,8 @@ def test_check_magic_values_should_flag_literal_two_in_function_body() -> None:
 
 def test_check_magic_values_should_flag_literal_one_hundred_in_function_body() -> None:
     source = (
-        "def compute_percentage(value):\n"
-        "    scaled = value * 100\n"
+        "def compute_percentage(amount):\n"
+        "    scaled = amount * 100\n"
         "    return scaled\n"
     )
     issues = code_rules_enforcer.check_magic_values(source, PRODUCTION_FILE_PATH)

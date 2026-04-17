@@ -29,14 +29,26 @@ ALLOWED_SMALL_NUMBERS = '''
 def process():
     count = 0
     increment = 1
-    doubled = count * 2
-    return count + 1
+    negative = -1
+    return count + increment + negative
 '''
 
 ALLOWED_EMPTY_STRING = '''
 def process():
     result = ""
     return result
+'''
+
+BAD_LITERAL_TWO = '''
+def process():
+    doubled = something * 2
+    return doubled
+'''
+
+BAD_LITERAL_ONE_HUNDRED = '''
+def process():
+    percentage = fraction * 100
+    return percentage
 '''
 
 
@@ -59,5 +71,22 @@ class TestMagicValues:
 
     def test_empty_string_allowed(self) -> None:
         tree = ast.parse(ALLOWED_EMPTY_STRING)
+        violations = check_magic_values(tree, "test.py")
+        assert violations == []
+
+    def test_check_magic_values_should_flag_literal_two_in_function_body(self) -> None:
+        tree = ast.parse(BAD_LITERAL_TWO)
+        violations = check_magic_values(tree, "test.py")
+        assert len(violations) == 1
+        assert "2" in violations[0].message
+
+    def test_check_magic_values_should_flag_literal_one_hundred_in_function_body(self) -> None:
+        tree = ast.parse(BAD_LITERAL_ONE_HUNDRED)
+        violations = check_magic_values(tree, "test.py")
+        assert len(violations) == 1
+        assert "100" in violations[0].message
+
+    def test_check_magic_values_should_still_allow_zero_one_minus_one(self) -> None:
+        tree = ast.parse(ALLOWED_SMALL_NUMBERS)
         violations = check_magic_values(tree, "test.py")
         assert violations == []

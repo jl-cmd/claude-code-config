@@ -14,7 +14,7 @@ from typing import List, Set
 from validator_base import Violation
 
 
-ALLOWED_NUMBERS: Set[int] = frozenset({-1, 0, 1, 2, 100})
+ALLOWED_NUMBERS: Set[int] = frozenset({-1, 0, 1})
 
 
 def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:

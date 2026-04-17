@@ -1,9 +1,9 @@
 ---
 name: obsidian-vault
 description: >-
-  On-demand Obsidian vault context retrieval for C:/Users/jon/SessionLog/.
-  Search sessions/, decisions/, and Research/ before substantive project work.
-  Triggers: obsidian-vault, session context, vault search, prior decisions.
+  On-demand Obsidian vault context retrieval via the configured mcp__obsidian__*
+  server. Search sessions/, decisions/, and Research/ before substantive project
+  work. Triggers: obsidian-vault, session context, vault search, prior decisions.
 ---
 
 # Obsidian Vault
@@ -94,10 +94,12 @@ notes existed.
 
 ## Vault Location
 
-`C:/Users/jon/SessionLog/` on this workspace, accessed via the
-`mcp__obsidian__*` MCP server. The path comes from the MCP server's
-configuration (or `OBSIDIAN_VAULT_PATH`); this skill does not read the
-filesystem directly and should not hard-code paths in code it produces.
+The vault is accessed entirely through the `mcp__obsidian__*` MCP server.
+Its filesystem location comes from the MCP server's own configuration (or
+the `OBSIDIAN_VAULT_PATH` environment variable when a caller needs to
+resolve it outside the MCP server). This skill does not read the filesystem
+directly and must not hard-code vault paths in code it produces — resolve
+the path at run time from the server or environment.
 
 ## Reference
 

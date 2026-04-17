@@ -71,14 +71,37 @@ def test_should_select_only_repos_listed_in_filter() -> None:
     assert selected == (first_target, second_target)
 
 
-def test_should_drop_unknown_repos_from_filter(capsys: pytest.CaptureFixture[str]) -> None:
+def test_should_exit_with_config_error_when_any_only_filter_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_repo_root = tmp_path / "fake-repo"
+    workflow_directory = fake_repo_root / ".github" / "workflows"
+    workflow_directory.mkdir(parents=True)
+    (workflow_directory / "claude.yml").write_bytes(b"name: Claude Code\n")
+    monkeypatch.setattr(sync_engine, "resolve_repo_root", lambda: fake_repo_root)
+    monkeypatch.setattr(
+        sync_engine,
+        "parse_command_line_arguments",
+        lambda: argparse.Namespace(
+            dry_run=True,
+            only=[sync_config.TARGET_REPOS[0], "typo/unknown-repo"],
+        ),
+    )
+
+    exit_code = sync_engine.main()
+
+    assert exit_code == sync_config.EXIT_CODE_CONFIG_ERROR
+    captured_streams = capsys.readouterr()
+    assert "typo/unknown-repo" in captured_streams.err
+
+
+def test_should_raise_on_any_unknown_filter_even_with_valid_repos() -> None:
     first_target = sync_config.TARGET_REPOS[0]
     unknown_repository = "never-heard-of/this-repo"
-    selected = sync_engine.select_target_repos([first_target, unknown_repository])
-    assert selected == (first_target,)
-    captured_streams = capsys.readouterr()
-    assert unknown_repository in captured_streams.err
-    assert captured_streams.err.startswith(f"UNKNOWN: {unknown_repository}")
+    with pytest.raises(ValueError, match="never-heard-of/this-repo"):
+        sync_engine.select_target_repos([first_target, unknown_repository])
 
 
 def test_should_return_none_when_gh_api_reports_http_404(

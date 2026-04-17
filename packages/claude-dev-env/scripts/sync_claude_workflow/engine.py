@@ -134,11 +134,11 @@ def sync_single_repo(
 def select_target_repos(only_filter: list[str]) -> tuple[str, ...]:
     if not only_filter:
         return TARGET_REPOS
-    all_valid_filters = [each_repo for each_repo in only_filter if each_repo in TARGET_REPOS]
     all_unknown_filters = [each_repo for each_repo in only_filter if each_repo not in TARGET_REPOS]
-    for each_unknown in all_unknown_filters:
-        print(f"UNKNOWN: {each_unknown} is not in TARGET_REPOS", file=sys.stderr)
-    return tuple(all_valid_filters)
+    if all_unknown_filters:
+        all_unknown_names = ", ".join(all_unknown_filters)
+        raise ValueError(f"unknown --only filter(s) not in TARGET_REPOS: {all_unknown_names}")
+    return tuple(each_repo for each_repo in only_filter if each_repo in TARGET_REPOS)
 
 
 def parse_command_line_arguments() -> argparse.Namespace:
@@ -168,13 +168,10 @@ def main() -> int:
     except FileNotFoundError as missing_canonical_error:
         print(f"FAILED (config): {missing_canonical_error}", file=sys.stderr)
         return EXIT_CODE_CONFIG_ERROR
-    selected_repos = select_target_repos(arguments.only)
-    if arguments.only and not selected_repos:
-        unknown_filter_names = ", ".join(arguments.only)
-        print(
-            f"FAILED (config): --only filter(s) matched no known repos: {unknown_filter_names}",
-            file=sys.stderr,
-        )
+    try:
+        selected_repos = select_target_repos(arguments.only)
+    except ValueError as unknown_filter_error:
+        print(f"FAILED (config): {unknown_filter_error}", file=sys.stderr)
         return EXIT_CODE_CONFIG_ERROR
 
     print(

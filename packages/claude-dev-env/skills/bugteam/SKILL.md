@@ -62,7 +62,9 @@ This session is the **team lead**. Create a team using the agent teams feature. 
 
 Team specification:
 
-- **Team name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` (or `bugteam-<head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured at team-creation time from the lead session and prevents two concurrent invocations on the same PR from colliding.
+- **Team name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` (or `bugteam-<sanitized-head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured at team-creation time from the lead session and prevents two concurrent invocations on the same PR from colliding.
+- **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the team_name template, replace any path-unsafe character (`/`, `\`, `:`, ` `) with `-`. Example: `feat/foo` → `feat-foo`; team_name becomes `bugteam-feat-foo-<YYYYMMDDHHMMSS>`. Apply this sanitization BEFORE the team_name is captured, not after — every downstream use of `team_name` (team creation, scoped temp dir, cleanup) sees the safe form.
+- **Per-team temp directory (resolved once, reused everywhere):** After team_name is captured, resolve a portable absolute path with a Claude-side lookup: `Path(os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp") / f"bugteam-{team_name}"`. Capture the resolved absolute path as `<team_temp_dir>` and pass that literal path to every shell command that follows. Shell-side parameter expansion (`${TMPDIR:-/tmp}`) is forbidden because cmd.exe and PowerShell do not expand it.
 - **Roles defined up front (spawned per loop, not at team creation):**
   - `bugfind` — uses subagent type `code-quality-agent`, model sonnet
   - `bugfix` — uses subagent type `clean-coder`, model sonnet
@@ -78,7 +80,8 @@ last_action = "fresh"
 last_findings = None
 audit_log = []
 starting_sha = git rev-parse HEAD
-team_name = "bugteam-pr-<number>-<YYYYMMDDHHMMSS>"
+team_name = "bugteam-pr-<number>-<YYYYMMDDHHMMSS>"  # no-PR fallback uses sanitized branch
+team_temp_dir = "<resolved-absolute-path>/bugteam-<team_name>"
 ```
 
 ### Step 3: The cycle
@@ -99,14 +102,14 @@ Repeat until an exit condition fires:
 
 ### AUDIT action (clean-room teammate, fresh per loop)
 
-Capture a fresh PR diff for this loop into a per-team scoped directory so concurrent `/bugteam` runs do not collide:
+Capture a fresh PR diff for this loop into the per-team scoped directory so concurrent `/bugteam` runs do not collide. Use the literal `<team_temp_dir>` resolved once in Step 2 — do NOT rewrite the path with shell expansion:
 
 ```
-mkdir -p "${TMPDIR:-/tmp}/bugteam-<team_name>"
-gh pr diff <number> -R <owner>/<repo> > "${TMPDIR:-/tmp}/bugteam-<team_name>/loop-<N>.patch"
+mkdir -p "<team_temp_dir>"
+gh pr diff <number> -R <owner>/<repo> > "<team_temp_dir>/loop-<N>.patch"
 ```
 
-`<team_name>` is the value captured in Step 2 (already includes the timestamp suffix). The platform-equivalent on Windows is `%TEMP%\bugteam-<team_name>\loop-<N>.patch`.
+`<team_temp_dir>` is the absolute path captured in Step 2 (already includes the sanitized team_name and timestamp suffix). Claude resolves the portable temp root once via `Path(os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp") / f"bugteam-{team_name}"` and passes the literal absolute path to every shell command. This works identically on macOS, Linux, Windows cmd.exe, and PowerShell because the shell never has to interpret `${TMPDIR:-/tmp}` or `%TEMP%`.
 
 Spawn a NEW `bugfind` teammate for this loop using the `code-quality-agent` subagent type. The teammate is fresh: no prior loop's findings, no chat history, no inherited audit context. Per the docs: *"The lead's conversation history does not carry over."* — and we further guarantee independence by spawning a new teammate per loop rather than reusing one.
 
@@ -181,7 +184,7 @@ If `git rev-parse HEAD` did not change, exit reason = `stuck — bugfix teammate
 When the cycle exits (any reason):
 
 1. **Clean up the team as the lead.** Per the docs: *"When you're done, ask the lead to clean up: 'Clean up the team'. This removes the shared team resources. When the lead runs cleanup, it checks for active teammates and fails if any are still running, so shut them down first."* The lead is THIS session — call cleanup directly. If any teammate is still alive (e.g., from an aborted shutdown), shut it down first.
-2. Delete the per-team scoped temp directory: `rm -rf "${TMPDIR:-/tmp}/bugteam-<team_name>"` (Windows: `rmdir /s /q "%TEMP%\bugteam-<team_name>"`).
+2. Delete the per-team scoped temp directory using the literal `<team_temp_dir>` path captured in Step 2: `rm -rf "<team_temp_dir>"` on Unix, `rmdir /s /q "<team_temp_dir>"` on Windows. The path is the resolved absolute literal — never use shell `${TMPDIR:-/tmp}` or `%TEMP%` expansion at this step either.
 
 ### Step 5: Revoke project permissions (mandatory, runs always)
 
@@ -226,7 +229,7 @@ If exit = `cap reached`, name the remaining bug count and recommend `/findbugs` 
 - **One commit per fix action.** Loops produce one commit per loop, not one per bug.
 - **No `--force`, no `--amend`, no rebase, no base change** at any point.
 - **Lead-only cleanup.** Per the docs: *"Always use the lead to clean up. Teammates should not run cleanup because their team context may not resolve correctly, potentially leaving resources in an inconsistent state."* This session is the lead; teammates never call cleanup.
-- **Cleanup the per-team scoped temp directory on exit.** `${TMPDIR:-/tmp}/bugteam-<team_name>/` is deleted entirely so no loop patches leak between runs.
+- **Cleanup the per-team scoped temp directory on exit.** The resolved `<team_temp_dir>` (absolute literal captured in Step 2) is deleted entirely so no loop patches leak between runs.
 
 ## Examples
 

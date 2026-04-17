@@ -24,7 +24,8 @@ TEMP_FILE_SUFFIX: str = ".tmp"
 
 
 def is_valid_project_root(candidate_path: Path) -> bool:
-    return (candidate_path / ".git").exists() or (candidate_path / ".claude").exists()
+    git_marker_path = candidate_path / ".git"
+    return git_marker_path.exists()
 
 
 def get_current_project_path() -> str:
@@ -52,9 +53,14 @@ def save_settings_atomically(
     settings_path: Path, settings_payload: dict[str, Any]
 ) -> None:
     temporary_path = settings_path.with_suffix(settings_path.suffix + TEMP_FILE_SUFFIX)
-    with temporary_path.open("w", encoding="utf-8") as settings_file:
-        json.dump(settings_payload, settings_file, indent=JSON_INDENT_SPACES)
-        settings_file.write("\n")
+    try:
+        with temporary_path.open("w", encoding="utf-8") as settings_file:
+            json.dump(settings_payload, settings_file, indent=JSON_INDENT_SPACES)
+            settings_file.write("\n")
+    except Exception:
+        if temporary_path.exists():
+            temporary_path.unlink()
+        raise
     os.replace(temporary_path, settings_path)
 
 
@@ -93,7 +99,7 @@ def grant_permissions_for_current_directory() -> None:
     project_root_path = Path.cwd()
     if not is_valid_project_root(project_root_path):
         print(
-            f"ERROR: cwd {project_root_path} has no .git or .claude directory. "
+            f"ERROR: cwd {project_root_path} has no .git directory. "
             f"Run from a project root.",
             file=sys.stderr,
         )

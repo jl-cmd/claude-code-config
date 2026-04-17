@@ -30,7 +30,13 @@ Determine the audit target in this order:
 
 ### Step 2: Capture the full PR diff
 
-Capture the diff to a scoped temp path: `${TMPDIR:-/tmp}/findbugs-pr-$$.patch` (or platform-equivalent — on Windows use `%TEMP%\findbugs-pr-<pid>.patch`). Use a per-invocation suffix (PID, timestamp, or UUID) to avoid collisions with parallel `/findbugs` runs. Capture the resolved absolute path as `<diff_temp_path>` for use in later steps.
+Resolve the temp diff path **once, Claude-side**, before invoking any shell command. Use a portable lookup that works on macOS, Linux, Windows cmd.exe, and PowerShell:
+
+```
+diff_temp_path = Path(os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp") / f"findbugs-pr-{os.getpid()}.patch"
+```
+
+`os.getpid()` supplies the per-invocation suffix that prevents collisions with parallel `/findbugs` runs (a UUID or timestamp is equally acceptable). Capture the resolved absolute path as `<diff_temp_path>` and pass that **literal** path to every shell command that follows. Shell-side parameter expansion (`${TMPDIR:-/tmp}`, `$$`, `%TEMP%`) is forbidden because cmd.exe and PowerShell do not honor it.
 
 When a PR exists: `gh pr diff <number> -R <owner>/<repo> > "<diff_temp_path>"`.
 

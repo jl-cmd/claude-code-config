@@ -1,9 +1,10 @@
 ---
 name: obsidian-vault
 description: >-
-  On-demand Obsidian vault context retrieval via the configured mcp__obsidian__*
-  server. Search sessions/, decisions/, and Research/ before substantive project
-  work. Triggers: obsidian-vault, session context, vault search, prior decisions.
+  On-demand Obsidian vault context retrieval for %USERPROFILE%/SessionLog/
+  via the configured mcp__obsidian__* server. Search sessions/, decisions/,
+  and Research/ before substantive project work. Triggers: obsidian-vault,
+  session context, vault search, prior decisions.
 ---
 
 # Obsidian Vault
@@ -94,12 +95,15 @@ notes existed.
 
 ## Vault Location
 
-The vault is accessed entirely through the `mcp__obsidian__*` MCP server.
-Its filesystem location comes from the MCP server's own configuration (or
-the `OBSIDIAN_VAULT_PATH` environment variable when a caller needs to
-resolve it outside the MCP server). This skill does not read the filesystem
-directly and must not hard-code vault paths in code it produces — resolve
-the path at run time from the server or environment.
+The vault lives at `%USERPROFILE%/SessionLog/` on this workspace
+(expanding to the user's Windows profile directory). It is accessed
+entirely through the `mcp__obsidian__*` MCP server, whose own
+configuration holds the concrete path; `OBSIDIAN_VAULT_PATH` serves the
+same role on systems that resolve the vault outside the MCP server. This
+skill does not read the filesystem directly and must not hard-code a
+user-specific path like `C:/Users/<name>/SessionLog/` in code it
+produces — expand `%USERPROFILE%` (or read `OBSIDIAN_VAULT_PATH`) at run
+time.
 
 ## Reference
 

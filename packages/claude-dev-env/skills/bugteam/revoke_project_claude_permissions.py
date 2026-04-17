@@ -3,69 +3,35 @@
 Run from the same project root you previously granted. Removes the matching
 allow rules, the additionalDirectories entry, and the autoMode environment
 entry from ~/.claude/settings.json. Safe to run when no prior grant exists.
+After removals, prunes any newly empty lists and their parent permissions or
+autoMode sections so repeated grant/revoke cycles leave no dead structure.
 """
 
-import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from _claude_permissions_common import (  # noqa: E402
+    build_permission_rules,
+    exit_with_error,
+    get_current_project_path,
+    load_settings,
+    prune_empty_list_then_empty_section,
+    save_settings,
+    AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
+    PERMISSION_ALLOW_TOOLS,
+)
+
 
 CLAUDE_USER_SETTINGS_PATH: Path = Path.home() / ".claude" / "settings.json"
-PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
-AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
-    "Trusted local workspace: {project_path}/.claude/** is the user's "
-    "project Claude Code config tree; edits inside are routine"
-)
-JSON_INDENT_SPACES: int = 2
-TEMP_FILE_SUFFIX: str = ".tmp"
 
 
 def is_valid_project_root(candidate_path: Path) -> bool:
     git_marker_path = candidate_path / ".git"
-    return git_marker_path.exists()
-
-
-def get_current_project_path() -> str:
-    return str(Path.cwd()).replace("\\", "/")
-
-
-def build_permission_rule(tool_name: str, project_path: str) -> str:
-    return f"{tool_name}({project_path}/.claude/**)"
-
-
-def build_permission_rules(project_path: str) -> list[str]:
-    return [
-        build_permission_rule(each_tool, project_path)
-        for each_tool in PERMISSION_ALLOW_TOOLS
-    ]
-
-
-def load_settings(settings_path: Path) -> dict[str, Any]:
-    if not settings_path.exists():
-        return {}
-    return json.loads(settings_path.read_text(encoding="utf-8"))
-
-
-def save_settings_atomically(
-    settings_path: Path, settings_payload: dict[str, Any]
-) -> None:
-    process_specific_temp_suffix = f"{TEMP_FILE_SUFFIX}.{os.getpid()}"
-    temporary_path = settings_path.with_suffix(
-        settings_path.suffix + process_specific_temp_suffix
-    )
-    try:
-        with temporary_path.open("w", encoding="utf-8") as settings_file:
-            json.dump(settings_payload, settings_file, indent=JSON_INDENT_SPACES)
-            settings_file.write("\n")
-            settings_file.flush()
-            os.fsync(settings_file.fileno())
-    except Exception:
-        if temporary_path.exists():
-            temporary_path.unlink()
-        raise
-    os.replace(temporary_path, settings_path)
+    claude_marker_path = candidate_path / ".claude"
+    return git_marker_path.exists() or claude_marker_path.exists()
 
 
 def remove_values_from_list(target_list: list[str], values_to_remove: set[str]) -> int:
@@ -112,17 +78,25 @@ def remove_auto_mode_environment_entry(
     return remove_values_from_list(existing_environment, {entry_text})
 
 
+def prune_settings_after_revoke(settings: dict[str, Any]) -> None:
+    prune_empty_list_then_empty_section(settings, "permissions", "allow")
+    prune_empty_list_then_empty_section(
+        settings, "permissions", "additionalDirectories"
+    )
+    prune_empty_list_then_empty_section(settings, "autoMode", "environment")
+
+
 def revoke_permissions_for_current_directory() -> None:
     project_root_path = Path.cwd()
     if not is_valid_project_root(project_root_path):
         print(
-            f"ERROR: cwd {project_root_path} has no .git directory. "
-            f"Run from a project root.",
+            f"ERROR: cwd {project_root_path} is not a project root "
+            f"(no .git or .claude). Run from a project root.",
             file=sys.stderr,
         )
         raise SystemExit(1)
     project_path = get_current_project_path()
-    permission_rules = build_permission_rules(project_path)
+    permission_rules = build_permission_rules(project_path, PERMISSION_ALLOW_TOOLS)
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(
         project_path=project_path
     )
@@ -134,13 +108,29 @@ def revoke_permissions_for_current_directory() -> None:
     environment_entries_removed_count = remove_auto_mode_environment_entry(
         settings, environment_entry
     )
-    save_settings_atomically(CLAUDE_USER_SETTINGS_PATH, settings)
+    total_changes_count = (
+        rules_removed_count
+        + directories_removed_count
+        + environment_entries_removed_count
+    )
+    if total_changes_count == 0:
+        print(f"Project path: {project_path}")
+        print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
+        print("No changes to revoke; settings file left untouched.")
+        return
+    prune_settings_after_revoke(settings)
+    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
     print(f"Project path: {project_path}")
     print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
     print(f"Allow rules removed: {rules_removed_count} of {len(permission_rules)}")
     print(f"Additional directories removed: {directories_removed_count}")
-    print(f"Auto-mode environment entries removed: {environment_entries_removed_count}")
+    print(
+        f"Auto-mode environment entries removed: {environment_entries_removed_count}"
+    )
 
 
 if __name__ == "__main__":
-    revoke_permissions_for_current_directory()
+    try:
+        revoke_permissions_for_current_directory()
+    except ValueError as path_error:
+        exit_with_error(str(path_error))

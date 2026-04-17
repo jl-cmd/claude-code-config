@@ -2,6 +2,17 @@ name: Claude Code (reusable)
 
 on:
   workflow_call:
+    inputs:
+      prompt:
+        description: "Optional explicit prompt. When empty, the action auto-detects the request from the triggering event (e.g., @claude mentions)."
+        required: false
+        type: string
+        default: ""
+      allowed_bots:
+        description: "Comma-separated list of bot usernames allowed to trigger Claude, or '*' for all. Default empty rejects all bots."
+        required: false
+        type: string
+        default: ""
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
@@ -22,4 +33,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: "--system-prompt-file /tmp/system-prompt.xml"
+          prompt: ${{ inputs.prompt }}
+          allowed_bots: ${{ inputs.allowed_bots }}
+          exclude_comments_by_actor: "claude[bot]"
           track_progress: true

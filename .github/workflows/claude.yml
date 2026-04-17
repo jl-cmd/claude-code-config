@@ -1,0 +1,57 @@
+name: Claude Code
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    uses: jl-cmd/claude-code-config/.github/workflows/claude-reusable.yml@main
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+  claude-bugbot-review:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, 'bugbot')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, 'bugbot')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, 'bugbot'))
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    uses: jl-cmd/claude-code-config/.github/workflows/claude-reusable.yml@main
+    with:
+      allowed_bots: "*"
+      prompt: |
+        A comment mentioning Cursor Bugbot has appeared on this pull request. Perform an independent debug review of the code changes per the rules in your system prompt.
+
+        Triggering comment body:
+        ---
+        ${{ github.event.comment.body || github.event.review.body }}
+        ---
+
+        Workflow:
+        1. Read the full PR diff.
+        2. For each concern raised by Bugbot, independently verify whether it is a real issue or a false positive. Cite file_path:line_number. Mark each as Valid, False positive, or Needs investigation.
+        3. Review the diff against your system prompt's code_quality, scope_discipline, and problem_solving standards (OWASP, naming, types, right-sized engineering). Flag additional issues Bugbot missed.
+        4. Post inline review comments on the PR for each real finding with a concrete suggested fix. Do not push commits.
+        5. Post a single summary comment: how many Bugbot findings were valid, how many were false positives, and a count of additional issues you discovered.
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

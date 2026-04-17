@@ -1,10 +1,11 @@
 ---
-name: obsidian-vault
+name: searching-obsidian-vault
 description: >-
-  On-demand Obsidian vault context retrieval for %USERPROFILE%/SessionLog/
-  via the configured mcp__obsidian__* server. Search sessions/, decisions/,
-  and Research/ before substantive project work. Triggers: obsidian-vault,
-  session context, vault search, prior decisions.
+  Retrieves Obsidian vault context from %USERPROFILE%/SessionLog/ via the
+  configured mcp__obsidian__* server. Searches sessions/, decisions/, and
+  Research/. Use when starting substantive project work, when the user
+  references prior decisions or prior context, or when a task might repeat
+  or reverse a prior decision.
 ---
 
 # Obsidian Vault
@@ -45,9 +46,15 @@ and pure-reference lookups do not need vault context.
 
    Concrete example:
 
-   ```
-   mcp__obsidian__search_notes({ query: "claude-code-config", searchFrontmatter: true })
-   mcp__obsidian__search_notes({ query: "superseded decision themes-pr-stack" })
+   ```xml
+   <invoke name="mcp__obsidian__search_notes">
+     <parameter name="query">claude-code-config</parameter>
+     <parameter name="searchFrontmatter">true</parameter>
+   </invoke>
+
+   <invoke name="mcp__obsidian__search_notes">
+     <parameter name="query">superseded decision themes-pr-stack</parameter>
+   </invoke>
    ```
 
 2. **Scope to the three vault folders.**

@@ -1,7 +1,10 @@
 """Specifications for the fan-out dispatch script's pure filtering and formatting logic."""
 
+import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
@@ -123,3 +126,166 @@ class TestBuildStaleSection:
         section = fan_out_dispatch.build_stale_section(["JonEcho/some-repo"])
 
         assert "Stale listeners" in section
+
+
+FAKE_TOKEN = "ghs_fake_installation_token"
+FAKE_OWNER = "JonEcho"
+FAKE_REPO = "some-repo"
+DISPATCHED_AT_EARLY = "2024-04-17T12:00:00+00:00"
+RUN_CREATED_AT_LATER = "2024-04-17T12:30:00Z"
+HTTP_STATUS_INTERNAL_SERVER_ERROR = 500
+
+
+class TestPollListenerSurfacesPollError:
+    """Non-404 HTTP errors on the poll call must surface as LISTENER_STATUS_POLL_ERROR."""
+
+    def should_return_poll_error_when_github_returns_server_error(self) -> None:
+        with patch.object(
+            fan_out_dispatch,
+            "make_github_api_request",
+            return_value=(HTTP_STATUS_INTERNAL_SERVER_ERROR, None, None),
+        ):
+            conclusion = fan_out_dispatch.poll_listener_run_conclusion(
+                FAKE_OWNER, FAKE_REPO, FAKE_TOKEN, DISPATCHED_AT_EARLY
+            )
+
+        assert conclusion == fan_out_dispatch.LISTENER_STATUS_POLL_ERROR
+
+    def should_return_missing_only_when_github_returns_not_found(self) -> None:
+        with patch.object(
+            fan_out_dispatch,
+            "make_github_api_request",
+            return_value=(fan_out_dispatch.HTTP_STATUS_NOT_FOUND, None, None),
+        ):
+            conclusion = fan_out_dispatch.poll_listener_run_conclusion(
+                FAKE_OWNER, FAKE_REPO, FAKE_TOKEN, DISPATCHED_AT_EARLY
+            )
+
+        assert conclusion == fan_out_dispatch.LISTENER_STATUS_MISSING
+
+
+class TestExitCodeFailsOnListenerProblems:
+    """Exit code must reflect dispatch failures and listener-side problems."""
+
+    def should_exit_zero_when_every_dispatch_succeeded_and_every_conclusion_succeeded(
+        self,
+    ) -> None:
+        exit_code = fan_out_dispatch.compute_exit_code(
+            dispatch_status_by_repo={
+                "jl-cmd/one": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED,
+                "jl-cmd/two": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED,
+            },
+            conclusion_by_repo={
+                "jl-cmd/one": fan_out_dispatch.LISTENER_CONCLUSION_SUCCESS,
+                "jl-cmd/two": fan_out_dispatch.LISTENER_CONCLUSION_SUCCESS,
+            },
+        )
+
+        assert exit_code == 0
+
+    def should_exit_nonzero_when_any_dispatch_failed(self) -> None:
+        exit_code = fan_out_dispatch.compute_exit_code(
+            dispatch_status_by_repo={
+                "jl-cmd/one": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED,
+                "jl-cmd/two": fan_out_dispatch.DISPATCH_STATUS_FAILED,
+            },
+            conclusion_by_repo={
+                "jl-cmd/one": fan_out_dispatch.LISTENER_CONCLUSION_SUCCESS,
+            },
+        )
+
+        assert exit_code == 1
+
+    def should_exit_nonzero_when_any_listener_conclusion_failed(self) -> None:
+        exit_code = fan_out_dispatch.compute_exit_code(
+            dispatch_status_by_repo={
+                "jl-cmd/one": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED,
+            },
+            conclusion_by_repo={
+                "jl-cmd/one": fan_out_dispatch.LISTENER_CONCLUSION_FAILURE,
+            },
+        )
+
+        assert exit_code == 1
+
+    def should_exit_nonzero_when_any_listener_conclusion_is_pending(self) -> None:
+        exit_code = fan_out_dispatch.compute_exit_code(
+            dispatch_status_by_repo={
+                "jl-cmd/one": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED,
+            },
+            conclusion_by_repo={
+                "jl-cmd/one": fan_out_dispatch.LISTENER_STATUS_PENDING,
+            },
+        )
+
+        assert exit_code == 1
+
+    def should_exit_nonzero_when_any_listener_conclusion_is_poll_error(self) -> None:
+        exit_code = fan_out_dispatch.compute_exit_code(
+            dispatch_status_by_repo={
+                "jl-cmd/one": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED,
+            },
+            conclusion_by_repo={
+                "jl-cmd/one": fan_out_dispatch.LISTENER_STATUS_POLL_ERROR,
+            },
+        )
+
+        assert exit_code == 1
+
+
+class TestTimestampComparisonUsesDatetimeParse:
+    """Timestamps with Z suffix and microsecond offsets must compare numerically."""
+
+    def should_parse_z_terminated_iso_timestamp_to_utc_datetime(self) -> None:
+        parsed = fan_out_dispatch.parse_iso_timestamp("2024-04-17T12:30:00Z")
+
+        assert parsed is not None
+        assert parsed == datetime(2024, 4, 17, 12, 30, 0, tzinfo=timezone.utc)
+
+    def should_parse_offset_iso_timestamp_to_datetime(self) -> None:
+        parsed = fan_out_dispatch.parse_iso_timestamp("2024-04-17T12:30:00.123456+00:00")
+
+        assert parsed is not None
+        assert parsed.year == 2024
+        assert parsed.microsecond == 123456
+
+    def should_return_none_for_unparseable_text(self) -> None:
+        parsed = fan_out_dispatch.parse_iso_timestamp("")
+
+        assert parsed is None
+
+    def should_rank_z_terminated_run_as_later_than_microsecond_offset_dispatch(
+        self,
+    ) -> None:
+        dispatch_moment = fan_out_dispatch.parse_iso_timestamp(
+            "2024-04-17T12:30:00.000000+00:00"
+        )
+        run_moment = fan_out_dispatch.parse_iso_timestamp("2024-04-17T12:30:01Z")
+
+        assert dispatch_moment is not None
+        assert run_moment is not None
+        assert run_moment >= dispatch_moment
+
+
+class TestSourceCommitEmptyFallback:
+    """Empty SOURCE_COMMIT env var falls back to UNKNOWN_COMMIT_PLACEHOLDER."""
+
+    def should_treat_empty_source_commit_as_unknown_placeholder(self) -> None:
+        with patch.dict(os.environ, {"SOURCE_COMMIT": ""}, clear=False):
+            resolved = (
+                os.environ.get("SOURCE_COMMIT")
+                or fan_out_dispatch.UNKNOWN_COMMIT_PLACEHOLDER
+            )
+
+        assert resolved == fan_out_dispatch.UNKNOWN_COMMIT_PLACEHOLDER
+
+    def should_preserve_non_empty_source_commit_value(self) -> None:
+        with patch.dict(
+            os.environ, {"SOURCE_COMMIT": "abc1234deadbeef"}, clear=False
+        ):
+            resolved = (
+                os.environ.get("SOURCE_COMMIT")
+                or fan_out_dispatch.UNKNOWN_COMMIT_PLACEHOLDER
+            )
+
+        assert resolved == "abc1234deadbeef"

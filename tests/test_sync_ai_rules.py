@@ -1,5 +1,6 @@
 """Specifications for the AI rules sync listener script."""
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Generator
@@ -489,3 +490,97 @@ class TestGitignoreWildcard:
         bugbot_path = git_repo / ".cursor" / "BUGBOT.md"
         assert copilot_path.exists()
         assert bugbot_path.exists()
+
+
+class TestStripSyncHeaderMarkerOrder:
+    """When the end marker appears before the start marker, strip should return None."""
+
+    def should_return_none_when_end_marker_precedes_start_marker(self) -> None:
+        content = (
+            f"{sync_ai_rules.SYNC_HEADER_END_MARKER}\n"
+            f"body in between\n"
+            f"{sync_ai_rules.SYNC_HEADER_START_MARKER}\n"
+        )
+
+        assert sync_ai_rules.strip_sync_header(content) is None
+
+
+class TestFindLastBotCommitUsesCommitterEmail:
+    """Drift detection uses the committer email, not the author email."""
+
+    def should_detect_bot_commit_when_author_is_human_and_committer_is_bot(
+        self, git_repo: Path
+    ) -> None:
+        destination_path = ".github/copilot-instructions.md"
+        full_path = git_repo / destination_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_text("body content\n", encoding="utf-8")
+
+        env_with_committer_override = {
+            **os.environ,
+            "GIT_COMMITTER_NAME": sync_ai_rules.BOT_AUTHOR_NAME,
+            "GIT_COMMITTER_EMAIL": sync_ai_rules.BOT_AUTHOR_EMAIL,
+            "GIT_AUTHOR_NAME": "Human Contributor",
+            "GIT_AUTHOR_EMAIL": "human@example.com",
+        }
+        subprocess.run(
+            ["git", "add", destination_path],
+            cwd=str(git_repo),
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "sync commit with bot committer"],
+            cwd=str(git_repo),
+            check=True,
+            capture_output=True,
+            env=env_with_committer_override,
+        )
+
+        bot_commit_hash = sync_ai_rules.find_last_bot_commit_hash(destination_path)
+
+        assert bot_commit_hash is not None
+
+
+class TestCrlfLineEndingsRoundTrip:
+    """CRLF line endings in existing content must not break SHA comparison or header strip."""
+
+    def should_strip_sync_header_when_content_has_crlf_endings(self) -> None:
+        lf_content = sync_ai_rules.build_destination_content(
+            "# Body\n\nLine one.\n", "abc", "2024-01-01T00:00:00+00:00"
+        )
+        crlf_content = lf_content.replace("\n", "\r\n")
+
+        stripped = sync_ai_rules.strip_sync_header(crlf_content)
+
+        assert stripped == "# Body\n\nLine one.\n"
+
+    def should_produce_same_sha_for_lf_and_crlf_versions(self) -> None:
+        lf_body = "# Body\n\nLine one.\n"
+        crlf_body = lf_body.replace("\n", "\r\n")
+
+        assert sync_ai_rules.compute_sha256(lf_body) == sync_ai_rules.compute_sha256(
+            crlf_body
+        )
+
+
+class TestWhitespaceOnlyDestinationWarning:
+    """Whitespace-only file with prior bot commit should warn and continue."""
+
+    def should_log_warning_when_destination_is_whitespace_only_after_bot_history(
+        self,
+        git_repo: Path,
+        sync_env: None,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        run_sync_with_canonical_body()
+
+        bugbot_path = git_repo / ".cursor" / "BUGBOT.md"
+        bugbot_path.write_text("   \n\n", encoding="utf-8")
+        capsys.readouterr()
+
+        run_sync_with_canonical_body()
+
+        captured = capsys.readouterr()
+        assert "lost its sync header" in captured.err
+        assert ".cursor/BUGBOT.md" in captured.err

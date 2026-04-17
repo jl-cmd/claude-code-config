@@ -5,7 +5,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -52,8 +51,8 @@ def _decision_from(completed: subprocess.CompletedProcess[str]) -> str | None:
 
 
 def _sandbox(tmp_path: Path) -> Path:
-    del tmp_path
-    isolated_root = Path(tempfile.mkdtemp(prefix="sandbox_"))
+    isolated_root = tmp_path / "sandbox"
+    isolated_root.mkdir()
     (isolated_root / ".git").mkdir()
     return isolated_root
 

@@ -30,10 +30,11 @@ Determine the audit target in this order:
 
 ### Step 2: Capture the full PR diff
 
-Resolve the temp diff path **once, Claude-side**, before invoking any shell command. Use a portable lookup that works on macOS, Linux, Windows cmd.exe, and PowerShell:
+Resolve the temp diff path **once, Claude-side**, before invoking any shell command. Use Python's `tempfile.gettempdir()` which honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix. Avoid hand-rolled env var chains. The lookup works on macOS, Linux, Windows cmd.exe, and PowerShell:
 
 ```
-diff_temp_path = Path(os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp") / f"findbugs-pr-{os.getpid()}.patch"
+import tempfile
+diff_temp_path = Path(tempfile.gettempdir()) / f"findbugs-pr-{os.getpid()}.patch"
 ```
 
 `os.getpid()` supplies the per-invocation suffix that prevents collisions with parallel `/findbugs` runs (a UUID or timestamp is equally acceptable). Capture the resolved absolute path as `<diff_temp_path>` and pass that **literal** path to every shell command that follows. Shell-side parameter expansion (`${TMPDIR:-/tmp}`, `$$`, `%TEMP%`) is forbidden because cmd.exe and PowerShell do not honor it.

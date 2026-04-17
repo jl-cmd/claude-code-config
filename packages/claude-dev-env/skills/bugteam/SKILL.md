@@ -42,6 +42,8 @@ Before spawning any teammates, grant the team session write access to the projec
 python "${CLAUDE_SKILL_DIR}/grant_project_claude_permissions.py"
 ```
 
+Note: `${CLAUDE_SKILL_DIR}` is a Claude Code host-managed token, pre-substituted by the runtime before any shell sees it. Unlike `${TMPDIR}` and similar shell parameter expansions, it does not depend on the shell's expansion semantics, so it works identically on Unix and Windows shells.
+
 The script reads `Path.cwd()` and writes idempotent allow rules into `~/.claude/settings.json`. Run from the project root. If it fails (non-zero exit), surface the error and stop — do not proceed without the grant.
 
 This is the FIRST action of every `/bugteam` invocation, before any team creation, before any agent spawn. The corresponding revoke runs at Step 5 regardless of how the cycle exits.
@@ -63,8 +65,8 @@ This session is the **team lead**. Create a team using the agent teams feature. 
 Team specification:
 
 - **Team name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` (or `bugteam-<sanitized-head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured at team-creation time from the lead session and prevents two concurrent invocations on the same PR from colliding.
-- **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the team_name template, replace any path-unsafe character (`/`, `\`, `:`, ` `) with `-`. Example: `feat/foo` → `feat-foo`; team_name becomes `bugteam-feat-foo-<YYYYMMDDHHMMSS>`. Apply this sanitization BEFORE the team_name is captured, not after — every downstream use of `team_name` (team creation, scoped temp dir, cleanup) sees the safe form.
-- **Per-team temp directory (resolved once, reused everywhere):** After team_name is captured, resolve a portable absolute path with a Claude-side lookup: `Path(os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp") / f"bugteam-{team_name}"`. Capture the resolved absolute path as `<team_temp_dir>` and pass that literal path to every shell command that follows. Shell-side parameter expansion (`${TMPDIR:-/tmp}`) is forbidden because cmd.exe and PowerShell do not expand it.
+- **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the team_name template, replace every character that is NOT in `[A-Za-z0-9._-]` with `-`. This whitelist covers safe portable filename characters and rejects all OS-reserved or shell-special chars including `/ \ : * ? < > | "` and ASCII control chars (0x00–0x1F). Example: `feat/foo*bar` → `feat-foo-bar`; team_name becomes `bugteam-feat-foo-bar-<YYYYMMDDHHMMSS>`. Apply this sanitization BEFORE the team_name is captured, not after — every downstream use of `team_name` (team creation, scoped temp dir, cleanup) sees the safe form.
+- **Per-team temp directory (resolved once, reused everywhere):** After team_name is captured, resolve a portable absolute path with a Claude-side lookup using Python's `tempfile.gettempdir()`, which honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix: `Path(tempfile.gettempdir()) / f"bugteam-{team_name}"` (requires `import tempfile`). Avoid hand-rolled env var chains. Capture the resolved absolute path as `<team_temp_dir>` and pass that literal path to every shell command that follows. Shell-side parameter expansion (`${TMPDIR:-/tmp}`) is forbidden because cmd.exe and PowerShell do not expand it.
 - **Roles defined up front (spawned per loop, not at team creation):**
   - `bugfind` — uses subagent type `code-quality-agent`, model sonnet
   - `bugfix` — uses subagent type `clean-coder`, model sonnet
@@ -109,7 +111,7 @@ mkdir -p "<team_temp_dir>"
 gh pr diff <number> -R <owner>/<repo> > "<team_temp_dir>/loop-<N>.patch"
 ```
 
-`<team_temp_dir>` is the absolute path captured in Step 2 (already includes the sanitized team_name and timestamp suffix). Claude resolves the portable temp root once via `Path(os.environ.get("TMPDIR") or os.environ.get("TEMP") or "/tmp") / f"bugteam-{team_name}"` and passes the literal absolute path to every shell command. This works identically on macOS, Linux, Windows cmd.exe, and PowerShell because the shell never has to interpret `${TMPDIR:-/tmp}` or `%TEMP%`.
+`<team_temp_dir>` is the absolute path captured in Step 2 (already includes the sanitized team_name and timestamp suffix). Claude resolves the portable temp root once via `Path(tempfile.gettempdir()) / f"bugteam-{team_name}"` (requires `import tempfile`) and passes the literal absolute path to every shell command. `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix, so this works identically on macOS, Linux, Windows cmd.exe, and PowerShell because the shell never has to interpret `${TMPDIR:-/tmp}` or `%TEMP%`.
 
 Spawn a NEW `bugfind` teammate for this loop using the `code-quality-agent` subagent type. The teammate is fresh: no prior loop's findings, no chat history, no inherited audit context. Per the docs: *"The lead's conversation history does not carry over."* — and we further guarantee independence by spawning a new teammate per loop rather than reusing one.
 
@@ -184,7 +186,7 @@ If `git rev-parse HEAD` did not change, exit reason = `stuck — bugfix teammate
 When the cycle exits (any reason):
 
 1. **Clean up the team as the lead.** Per the docs: *"When you're done, ask the lead to clean up: 'Clean up the team'. This removes the shared team resources. When the lead runs cleanup, it checks for active teammates and fails if any are still running, so shut them down first."* The lead is THIS session — call cleanup directly. If any teammate is still alive (e.g., from an aborted shutdown), shut it down first.
-2. Delete the per-team scoped temp directory using the literal `<team_temp_dir>` path captured in Step 2: `rm -rf "<team_temp_dir>"` on Unix, `rmdir /s /q "<team_temp_dir>"` on Windows. The path is the resolved absolute literal — never use shell `${TMPDIR:-/tmp}` or `%TEMP%` expansion at this step either.
+2. Delete the per-team scoped temp directory using Python: `shutil.rmtree(team_temp_dir, ignore_errors=True)` (requires `import shutil`). This works on every platform without OS-detection branching. Pass the literal absolute path Claude resolved at Step 2 — do NOT defer to the shell, and never use shell `${TMPDIR:-/tmp}` or `%TEMP%` expansion at this step either.
 
 ### Step 5: Revoke project permissions (mandatory, runs always)
 

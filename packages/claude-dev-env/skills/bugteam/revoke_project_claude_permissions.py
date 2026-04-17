@@ -56,6 +56,8 @@ def save_settings_atomically(
         with temporary_path.open("w", encoding="utf-8") as settings_file:
             json.dump(settings_payload, settings_file, indent=JSON_INDENT_SPACES)
             settings_file.write("\n")
+            settings_file.flush()
+            os.fsync(settings_file.fileno())
     except Exception:
         if temporary_path.exists():
             temporary_path.unlink()

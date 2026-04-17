@@ -450,6 +450,48 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def check_fstring_structural_literals(content: str, file_path: str) -> list[str]:
+    """Flag f-strings whose non-interpolated fragments are structural literals.
+
+    After stripping every ``{...}`` interpolation from an f-string, if the
+    remaining literal text contains path separators, a ``://`` scheme, or
+    regex metacharacters (``\\d``, ``\\w``, ``\\s``, ``^``, ``$``) and is
+    longer than one character, the remainder is treated as a magic value
+    that should live in config. Respects the same config/test path
+    exemptions as :func:`check_magic_values`.
+    """
+    if is_config_file(file_path) or is_test_file(file_path):
+        return []
+
+    fstring_detect_pattern = re.compile(r'f["\']([^"\']*)["\']')
+    fstring_interpolation_pattern = re.compile(r"\{[^{}]*\}")
+    structural_markers = ("/", "\\", "://", "\\d", "\\w", "\\s", "^", "$")
+    non_magic_literals = {"", "True", "False"}
+    minimum_stripped_length = 2
+    maximum_issues_before_stop = 100
+
+    issues: list[str] = []
+    for line_number, each_line in enumerate(content.split("\n"), 1):
+        for fstring_body in fstring_detect_pattern.findall(each_line):
+            stripped_body = fstring_interpolation_pattern.sub("", fstring_body)
+            if stripped_body in non_magic_literals:
+                continue
+            if len(stripped_body) < minimum_stripped_length:
+                continue
+            has_structural_marker = any(each_marker in stripped_body for each_marker in structural_markers)
+            if not has_structural_marker:
+                continue
+            issues.append(
+                f"Line {line_number}: Structural literal inside f-string {stripped_body!r} - extract to config"
+            )
+            break
+
+        if len(issues) >= maximum_issues_before_stop:
+            break
+
+    return issues
+
+
 def check_e2e_test_naming(content: str, file_path: str) -> list[str]:
     """Check for online/offline in test names (spec files only)."""
     if not is_spec_file(file_path):
@@ -731,6 +773,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_logging_fstrings(content))
         all_issues.extend(check_windows_api_none(content))
         all_issues.extend(check_magic_values(content, file_path))
+        all_issues.extend(check_fstring_structural_literals(content, file_path))
         all_issues.extend(check_constants_outside_config(content, file_path))
         all_issues.extend(check_type_escape_hatches(content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))

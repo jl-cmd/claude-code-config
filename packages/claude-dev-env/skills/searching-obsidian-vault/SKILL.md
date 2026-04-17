@@ -12,11 +12,9 @@ description: >-
 
 ## Overview
 
-This skill captures the `<obsidian_vault>` policy from
-`~/.claude/system-prompts/software-engineer.xml` so it can be loaded on demand
-instead of remaining always-on in the system prompt. Invoke it when prior
-session history, decisions, or research from the Obsidian vault would change
-how the current task is executed.
+Invoke this skill when prior session history, decisions, or research from
+the Obsidian vault would change how the current task is executed. Load it
+on demand rather than keeping the full vault policy always-on.
 
 The retrieval *mechanics* live in `/recall`. The
 `vault_context_retrieved` frontmatter bookkeeping lives in `/session-log`
@@ -112,10 +110,9 @@ user-specific path like `C:/Users/<name>/SessionLog/` in code it
 produces — expand `%USERPROFILE%` (or read `OBSIDIAN_VAULT_PATH`) at run
 time.
 
-## Reference
+## Related Skills
 
-- Policy source: `~/.claude/system-prompts/software-engineer.xml`, section
-  `<obsidian_vault>`.
-- Related skills: `/recall` performs the retrieval mechanics end-to-end with
-  user-facing output; `/session-log` consumes the `vault_context_retrieved`
-  flag this skill is responsible for keeping honest.
+- `/recall` performs the retrieval mechanics end-to-end with user-facing
+  output.
+- `/session-log` consumes the `vault_context_retrieved` flag this skill is
+  responsible for keeping honest.

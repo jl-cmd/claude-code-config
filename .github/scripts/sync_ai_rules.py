@@ -35,7 +35,9 @@ SOURCE_REPO_TRAILER_KEY = "Source-Repo"
 SOURCE_PATH_TRAILER_KEY = "Source-Path"
 SYNC_SOURCE_COMMIT_TRAILER_KEY = "Sync-Source-Commit"
 GITHUB_API_BASE_URL = "https://api.github.com"
+GITHUB_API_VERSION_HEADER = "2022-11-28"
 HEADER_SEPARATOR_LENGTH = 2
+SHA_DISPLAY_LENGTH = 16
 UNKNOWN_COMMIT_PLACEHOLDER = "unknown"
 
 
@@ -57,8 +59,10 @@ def build_sync_header(source_commit: str, synced_at: str) -> str:
     )
 
 
-def build_destination_content(body: str, source_commit: str, synced_at: str) -> str:
-    return build_sync_header(source_commit, synced_at) + "\n" + body
+def build_destination_content(
+    canonical_body: str, source_commit: str, synced_at: str
+) -> str:
+    return build_sync_header(source_commit, synced_at) + "\n" + canonical_body
 
 
 def strip_sync_header(content: str) -> Optional[str]:
@@ -89,10 +93,10 @@ def find_last_bot_commit_hash(destination_path: str) -> Optional[str]:
         text=True,
         check=True,
     )
-    for log_line in completed.stdout.splitlines():
-        parts = log_line.split(" ", 1)
-        if len(parts) == 2 and parts[1].strip() == BOT_AUTHOR_EMAIL:
-            return parts[0]
+    for each_log_line in completed.stdout.splitlines():
+        hash_and_email = each_log_line.split(" ", 1)
+        if len(hash_and_email) == 2 and hash_and_email[1].strip() == BOT_AUTHOR_EMAIL:
+            return hash_and_email[0]
     return None
 
 
@@ -157,8 +161,8 @@ def check_destination_policy(
     if actual_body_sha256 != stored_body_sha256:
         return (
             f"Drift detected in {destination_path}: "
-            f"expected body SHA256={stored_body_sha256[:16]}…, "
-            f"actual={actual_body_sha256[:16]}…"
+            f"expected body SHA256={stored_body_sha256[:SHA_DISPLAY_LENGTH]}…, "
+            f"actual={actual_body_sha256[:SHA_DISPLAY_LENGTH]}…"
         )
     return None
 
@@ -190,9 +194,9 @@ def open_github_issue(
     github_token: str,
     repository: str,
     title: str,
-    body: str,
+    issue_body_text: str,
 ) -> None:
-    issue_payload = json.dumps({"title": title, "body": body}).encode("utf-8")
+    issue_payload = json.dumps({"title": title, "body": issue_body_text}).encode("utf-8")
     api_request = urllib.request.Request(
         f"{GITHUB_API_BASE_URL}/repos/{repository}/issues",
         data=issue_payload,
@@ -200,7 +204,7 @@ def open_github_issue(
             "Authorization": f"Bearer {github_token}",
             "Accept": "application/vnd.github+json",
             "Content-Type": "application/json",
-            "X-GitHub-Api-Version": "2022-11-28",
+            "X-GitHub-Api-Version": GITHUB_API_VERSION_HEADER,
         },
         method="POST",
     )
@@ -252,26 +256,28 @@ def report_drift_errors(
     github_token: str,
     github_repository: str,
 ) -> None:
-    for error_message in all_errors:
-        print(f"::error::{error_message}", file=sys.stderr)
+    for each_error_message in all_errors:
+        print(f"::error::{each_error_message}", file=sys.stderr)
 
-    issue_body = (
+    issue_body_text = (
         "## AI Rules Sync: Drift Detected\n\n"
-        + "\n".join(f"- {error_message}" for error_message in all_errors)
+        + "\n".join(f"- {each_error_message}" for each_error_message in all_errors)
         + "\n\n**Action required:** Resolve the drift manually, or delete the affected "
         "file(s) and re-run with `force_initial_overwrite=true`."
     )
 
     if github_token and github_repository:
-        for destination_path in DESTINATION_PATHS:
-            has_drift_for_path = any(destination_path in error for error in all_errors)
+        for each_destination_path in DESTINATION_PATHS:
+            has_drift_for_path = any(
+                each_destination_path in each_error for each_error in all_errors
+            )
             if has_drift_for_path:
                 try:
                     open_github_issue(
                         github_token,
                         github_repository,
-                        f"AI rules sync: drift detected in {destination_path}",
-                        issue_body,
+                        f"AI rules sync: drift detected in {each_destination_path}",
+                        issue_body_text,
                     )
                 except Exception as issue_error:
                     print(
@@ -280,7 +286,7 @@ def report_drift_errors(
                     )
 
     drift_summary = "## Sync failed: drift detected\n\n" + "\n".join(
-        f"- {error}" for error in all_errors
+        f"- {each_error}" for each_error in all_errors
     )
     write_step_summary(drift_summary)
 
@@ -349,7 +355,7 @@ def main() -> int:
         f"- Source commit: `{source_commit}`\n"
         f"- Body SHA256: `{canonical_body_sha256}`\n"
         f"- Destinations updated: "
-        + ", ".join(f"`{path}`" for path in all_written_paths)
+        + ", ".join(f"`{each_path}`" for each_path in all_written_paths)
     )
     write_step_summary(success_summary)
     return 0

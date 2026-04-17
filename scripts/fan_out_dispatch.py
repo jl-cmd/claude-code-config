@@ -30,10 +30,11 @@ RECONCILIATION_WAIT_SECONDS = 60
 STALE_LISTENER_THRESHOLD_DAYS = 14
 REPOS_PER_PAGE = 100
 RETRY_AFTER_DEFAULT_SECONDS = 60
+HTTP_STATUS_OK = 200
+HTTP_STATUS_NO_CONTENT = 204
+HTTP_STATUS_FORBIDDEN = 403
 HTTP_STATUS_NOT_FOUND = 404
 HTTP_STATUS_TOO_MANY_REQUESTS = 429
-HTTP_STATUS_FORBIDDEN = 403
-HTTP_STATUS_NO_CONTENT = 204
 SECONDS_PER_DAY = 86400
 
 DISPATCH_STATUS_SENT = "sent"
@@ -47,13 +48,13 @@ def make_github_api_request(
     path: str,
     token: str,
     method: str = "GET",
-    payload: Optional[dict] = None,
-) -> tuple[int, Optional[dict]]:
+    payload: Optional[dict[str, object]] = None,
+) -> tuple[int, Optional[dict[str, object]]]:
     url = f"{GITHUB_API_BASE_URL}{path}"
-    body_bytes = json.dumps(payload).encode("utf-8") if payload else None
+    payload_bytes = json.dumps(payload).encode("utf-8") if payload else None
     api_request = urllib.request.Request(
         url,
-        data=body_bytes,
+        data=payload_bytes,
         headers={
             "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
@@ -72,17 +73,17 @@ def make_github_api_request(
         return http_error.code, None
 
 
-def enumerate_installation_repos(token: str) -> list[dict]:
-    all_repos: list[dict] = []
+def enumerate_installation_repos(token: str) -> list[dict[str, object]]:
+    all_repos: list[dict[str, object]] = []
     page_number = 1
     while True:
         path = (
             f"/installation/repositories?per_page={REPOS_PER_PAGE}&page={page_number}"
         )
-        status_code, body = make_github_api_request(path, token)
-        if status_code != 200 or body is None:
+        status_code, response_body = make_github_api_request(path, token)
+        if status_code != HTTP_STATUS_OK or response_body is None:
             break
-        page_repos = body.get("repositories", [])
+        page_repos = response_body.get("repositories", [])
         all_repos.extend(page_repos)
         if len(page_repos) < REPOS_PER_PAGE:
             break
@@ -90,7 +91,7 @@ def enumerate_installation_repos(token: str) -> list[dict]:
     return all_repos
 
 
-def is_target_repo(repo: dict) -> bool:
+def is_target_repo(repo: dict[str, object]) -> bool:
     owner_login = repo.get("owner", {}).get("login", "")
     is_owned_by_target_account = owner_login in ("JonEcho", "jl-cmd")
     is_archived = repo.get("archived", True)
@@ -110,14 +111,14 @@ def is_target_repo(repo: dict) -> bool:
 def check_opt_out_sentinel(owner: str, repo_name: str, token: str) -> bool:
     path = f"/repos/{owner}/{repo_name}/contents/{OPT_OUT_SENTINEL_RELATIVE_PATH}"
     status_code, _ = make_github_api_request(path, token)
-    return status_code == 200
+    return status_code == HTTP_STATUS_OK
 
 
 def dispatch_sync_event_with_retry(
     owner: str,
     repo_name: str,
     token: str,
-    dispatch_payload: dict,
+    dispatch_payload: dict[str, object],
 ) -> bool:
     path = f"/repos/{owner}/{repo_name}/dispatches"
     status_code, _ = make_github_api_request(
@@ -156,11 +157,11 @@ def poll_listener_run_conclusion(
         f"/{LISTENER_WORKFLOW_FILENAME}/runs"
         f"?event=repository_dispatch&per_page=1"
     )
-    status_code, body = make_github_api_request(path, token)
-    if status_code == HTTP_STATUS_NOT_FOUND or body is None:
+    status_code, response_body = make_github_api_request(path, token)
+    if status_code == HTTP_STATUS_NOT_FOUND or response_body is None:
         return LISTENER_STATUS_MISSING
 
-    all_workflow_runs = body.get("workflow_runs", [])
+    all_workflow_runs = response_body.get("workflow_runs", [])
     if not all_workflow_runs:
         return LISTENER_STATUS_MISSING
 
@@ -186,11 +187,11 @@ def is_listener_stale(
         f"/{LISTENER_WORKFLOW_FILENAME}/runs"
         f"?per_page=1"
     )
-    status_code, body = make_github_api_request(path, token)
-    if status_code == HTTP_STATUS_NOT_FOUND or body is None:
+    status_code, response_body = make_github_api_request(path, token)
+    if status_code == HTTP_STATUS_NOT_FOUND or response_body is None:
         return True
 
-    all_workflow_runs = body.get("workflow_runs", [])
+    all_workflow_runs = response_body.get("workflow_runs", [])
     if not all_workflow_runs:
         return True
 

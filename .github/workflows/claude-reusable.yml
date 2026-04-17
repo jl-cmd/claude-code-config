@@ -13,11 +13,6 @@ on:
         required: false
         type: string
         default: ""
-      exclude_comments_by_actor:
-        description: "Comma-separated list of actor usernames whose comments are excluded from triggering Claude. Default 'claude[bot]' prevents the action from re-processing its own prior comments. Pass an empty string to disable exclusion when you want multi-turn context."
-        required: false
-        type: string
-        default: "claude[bot]"
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
@@ -40,5 +35,5 @@ jobs:
           claude_args: "--system-prompt-file /tmp/system-prompt.xml"
           prompt: ${{ inputs.prompt }}
           allowed_bots: ${{ inputs.allowed_bots }}
-          exclude_comments_by_actor: ${{ inputs.exclude_comments_by_actor }}
+          exclude_comments_by_actor: "claude[bot]"
           track_progress: true

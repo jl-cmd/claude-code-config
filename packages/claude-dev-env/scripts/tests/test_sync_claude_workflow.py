@@ -363,3 +363,44 @@ def test_should_exit_with_config_error_when_canonical_file_missing(
     assert exit_code == sync_config.EXIT_CODE_CONFIG_ERROR
     captured_streams = capsys.readouterr()
     assert "Canonical workflow missing" in captured_streams.err
+
+
+def test_should_raise_when_stderr_contains_http_404_as_non_terminal_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_subprocess_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["gh", "api"],
+            returncode=1,
+            stdout="",
+            stderr="retried after HTTP 404 redirect, now HTTP 422",
+        )
+
+    monkeypatch.setattr(sync_engine.subprocess, "run", fake_subprocess_run)
+    with pytest.raises(RuntimeError):
+        sync_engine.fetch_remote_file_metadata("owner/repo")
+
+
+def test_should_reject_repo_root_missing_canonical_workflow(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fake_git_dir = tmp_path / ".git"
+    fake_git_dir.mkdir()
+    fake_script_file = tmp_path / "scripts" / "sync_claude_workflow" / "engine.py"
+    fake_script_file.parent.mkdir(parents=True)
+    fake_script_file.touch()
+
+    monkeypatch.setattr(sync_engine, "_ENGINE_FILE", fake_script_file)
+
+    original_exists = Path.exists
+
+    def exists_blocking_canonical(self: Path) -> bool:
+        if self.name == "claude.yml":
+            return False
+        return original_exists(self)
+
+    monkeypatch.setattr(Path, "exists", exists_blocking_canonical)
+
+    with pytest.raises(RuntimeError):
+        sync_engine.resolve_repo_root()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -22,13 +23,16 @@ from sync_claude_workflow.config import (
     TARGET_WORKFLOW_PATH,
 )
 
+_ENGINE_FILE: Path = Path(__file__).resolve()
+
 
 def resolve_repo_root() -> Path:
-    script_file = Path(__file__).resolve()
-    for candidate in (script_file, *script_file.parents):
-        if (candidate / ".git").exists():
+    for candidate in (_ENGINE_FILE, *_ENGINE_FILE.parents):
+        if (candidate / ".git").exists() and (candidate / CANONICAL_WORKFLOW_PATH_IN_THIS_REPO).exists():
             return candidate
-    raise RuntimeError("Could not locate repository root from script location")
+    raise RuntimeError(
+        f"Could not locate repository root containing both .git and {CANONICAL_WORKFLOW_PATH_IN_THIS_REPO}"
+    )
 
 
 def read_canonical_workflow_bytes(repo_root: Path) -> bytes:
@@ -47,7 +51,7 @@ def fetch_remote_file_metadata(repository_full_name: str) -> dict[str, str] | No
         check=False,
     )
     if completed.returncode != 0:
-        if GH_API_NOT_FOUND_STDERR_TOKEN in completed.stderr:
+        if re.search(r'\bHTTP 404\b', completed.stderr) and not re.search(r'HTTP 404.*HTTP \d{3}', completed.stderr):
             return None
         raise RuntimeError(f"gh api {api_path} failed: {completed.stderr.strip()}")
     try:
@@ -138,7 +142,7 @@ def select_target_repos(only_filter: list[str]) -> tuple[str, ...]:
     if all_unknown_filters:
         all_unknown_names = ", ".join(all_unknown_filters)
         raise ValueError(f"unknown --only filter(s) not in TARGET_REPOS: {all_unknown_names}")
-    return tuple(each_repo for each_repo in only_filter if each_repo in TARGET_REPOS)
+    return tuple(only_filter)
 
 
 def parse_command_line_arguments() -> argparse.Namespace:

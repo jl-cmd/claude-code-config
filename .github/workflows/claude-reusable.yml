@@ -18,6 +18,7 @@ jobs:
     concurrency:
       group: claude-mention-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
       cancel-in-progress: true
+    # contents: write is scoped to the event's default ref by claude-code-action; no explicit checkout ref override is needed.
     permissions:
       contents: write
       pull-requests: write

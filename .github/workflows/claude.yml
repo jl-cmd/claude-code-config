@@ -16,7 +16,15 @@ jobs:
       contains(github.event.comment.body, '@claude') ||
       contains(github.event.review.body, '@claude') ||
       contains(github.event.issue.body, '@claude') ||
-      (github.event.sender.login == 'cursor[bot]' && (contains(github.event.comment.body, '<!-- BUGBOT_REVIEW -->') || contains(github.event.review.body, '<!-- BUGBOT_REVIEW -->')))
+      (
+        github.event.sender.login == 'cursor[bot]' &&
+        (
+          contains(github.event.comment.body, '<!-- BUGBOT_REVIEW -->') ||
+          contains(github.event.review.body, '<!-- BUGBOT_REVIEW -->')
+        ) &&
+        !contains(github.event.comment.body, 'found no new issues') &&
+        !contains(github.event.review.body, 'found no new issues')
+      )
     permissions:
       contents: write
       pull-requests: write

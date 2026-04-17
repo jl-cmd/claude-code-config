@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 
 TEXT_FILE_ENCODING: str = "utf-8"
@@ -25,7 +25,13 @@ JSON_INDENT_SPACES: int = 2
 PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
 
 
-def exit_with_error(message: str) -> None:
+AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
+    "Trusted local workspace: {project_path}/.claude/** is the user's "
+    "project Claude Code config tree; edits inside are routine"
+)
+
+
+def exit_with_error(message: str) -> NoReturn:
     print(f"Error: {message}", file=sys.stderr)
     raise SystemExit(1)
 

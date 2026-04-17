@@ -17,15 +17,12 @@ from _claude_permissions_common import (  # noqa: E402
     get_current_project_path,
     load_settings,
     save_settings,
+    AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
     PERMISSION_ALLOW_TOOLS,
 )
 
 
 CLAUDE_USER_SETTINGS_PATH: Path = Path.home() / ".claude" / "settings.json"
-AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
-    "Trusted local workspace: {project_path}/.claude/** is the user's "
-    "project Claude Code config tree; edits inside are routine"
-)
 
 
 def remove_values_from_list(target_list: list[str], values_to_remove: set[str]) -> int:

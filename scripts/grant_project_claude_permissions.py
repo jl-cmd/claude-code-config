@@ -21,7 +21,9 @@ AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
 )
 JSON_INDENT_SPACES: int = 2
 TEXT_FILE_ENCODING: str = "utf-8"
-GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = ("*", "?", "[", "]", "(", ")")
+GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = (
+    "*", "?", "[", "]", "(", ")", "{", "}", "\\", "!",
+)
 
 
 def path_contains_glob_metacharacters(candidate_path: str) -> bool:
@@ -57,10 +59,17 @@ def load_settings(settings_path: Path) -> dict[str, Any]:
         return {}
     try:
         parsed_settings = json.loads(settings_path.read_text(encoding=TEXT_FILE_ENCODING))
-    except json.JSONDecodeError:
-        return {}
+    except json.JSONDecodeError as decode_error:
+        raise SystemExit(
+            f"Refusing to modify {settings_path}: existing file is not valid JSON "
+            f"({decode_error}). Fix or back up the file manually, then re-run."
+        )
     if not isinstance(parsed_settings, dict):
-        return {}
+        raise SystemExit(
+            f"Refusing to modify {settings_path}: existing file's root is "
+            f"{type(parsed_settings).__name__}, not a JSON object. Fix or back up "
+            f"the file manually, then re-run."
+        )
     return parsed_settings
 
 
@@ -74,9 +83,12 @@ def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
         with os.fdopen(temporary_file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as temporary_file:
             temporary_file.write(serialized_settings)
         os.replace(temporary_file_path, settings_path)
-    except BaseException:
-        if os.path.exists(temporary_file_path):
-            os.unlink(temporary_file_path)
+    except Exception:
+        try:
+            if os.path.exists(temporary_file_path):
+                os.unlink(temporary_file_path)
+        except OSError:
+            pass
         raise
 
 
@@ -89,19 +101,31 @@ def append_if_missing(target_list: list[str], new_value: str) -> bool:
 
 def ensure_dict_section(settings: dict[str, Any], section_name: str) -> dict[str, Any]:
     existing_section = settings.get(section_name)
-    if not isinstance(existing_section, dict):
+    if existing_section is None:
         replacement_section: dict[str, Any] = {}
         settings[section_name] = replacement_section
         return replacement_section
+    if not isinstance(existing_section, dict):
+        raise SystemExit(
+            f"Refusing to modify settings key {section_name!r}: existing value "
+            f"is {type(existing_section).__name__}, not a JSON object. Fix or "
+            f"remove the key manually, then re-run."
+        )
     return existing_section
 
 
 def ensure_list_entry(section: dict[str, Any], entry_name: str) -> list[Any]:
     existing_entry = section.get(entry_name)
-    if not isinstance(existing_entry, list):
+    if existing_entry is None:
         replacement_entry: list[Any] = []
         section[entry_name] = replacement_entry
         return replacement_entry
+    if not isinstance(existing_entry, list):
+        raise SystemExit(
+            f"Refusing to modify settings entry {entry_name!r}: existing value "
+            f"is {type(existing_entry).__name__}, not a JSON array. Fix or "
+            f"remove the entry manually, then re-run."
+        )
     return existing_entry
 
 
@@ -125,10 +149,12 @@ def add_directory_to_additional_directories(
     return 0
 
 
-def add_auto_mode_environment_entry(settings: dict[str, Any], entry_text: str) -> bool:
+def add_auto_mode_environment_entry(settings: dict[str, Any], entry_text: str) -> int:
     auto_mode_section = ensure_dict_section(settings, "autoMode")
     existing_environment = ensure_list_entry(auto_mode_section, "environment")
-    return append_if_missing(existing_environment, entry_text)
+    if append_if_missing(existing_environment, entry_text):
+        return 1
+    return 0
 
 
 def grant_permissions_for_current_directory() -> None:
@@ -140,13 +166,19 @@ def grant_permissions_for_current_directory() -> None:
     settings = load_settings(CLAUDE_USER_SETTINGS_PATH)
     rules_added_count = add_rules_to_allow_list(settings, permission_rules)
     directories_added_count = add_directory_to_additional_directories(settings, project_path)
-    environment_added = add_auto_mode_environment_entry(settings, environment_entry)
-    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
+    environment_entries_added_count = add_auto_mode_environment_entry(settings, environment_entry)
+    total_changes_count = (
+        rules_added_count + directories_added_count + environment_entries_added_count
+    )
     print(f"Project path: {project_path}")
     print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
     print(f"Allow rules added: {rules_added_count} of {len(permission_rules)}")
     print(f"Additional directories added: {directories_added_count}")
-    print(f"Auto-mode environment entry added: {environment_added}")
+    print(f"Auto-mode environment entries added: {environment_entries_added_count}")
+    if total_changes_count == 0:
+        print("No changes needed; settings file left untouched.")
+        return
+    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
 
 
 if __name__ == "__main__":

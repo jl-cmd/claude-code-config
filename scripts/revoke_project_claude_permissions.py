@@ -20,7 +20,9 @@ AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
 )
 JSON_INDENT_SPACES: int = 2
 TEXT_FILE_ENCODING: str = "utf-8"
-GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = ("*", "?", "[", "]", "(", ")")
+GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = (
+    "*", "?", "[", "]", "(", ")", "{", "}", "\\", "!",
+)
 
 
 def path_contains_glob_metacharacters(candidate_path: str) -> bool:
@@ -56,10 +58,17 @@ def load_settings(settings_path: Path) -> dict[str, Any]:
         return {}
     try:
         parsed_settings = json.loads(settings_path.read_text(encoding=TEXT_FILE_ENCODING))
-    except json.JSONDecodeError:
-        return {}
+    except json.JSONDecodeError as decode_error:
+        raise SystemExit(
+            f"Refusing to modify {settings_path}: existing file is not valid JSON "
+            f"({decode_error}). Fix or back up the file manually, then re-run."
+        )
     if not isinstance(parsed_settings, dict):
-        return {}
+        raise SystemExit(
+            f"Refusing to modify {settings_path}: existing file's root is "
+            f"{type(parsed_settings).__name__}, not a JSON object. Fix or back up "
+            f"the file manually, then re-run."
+        )
     return parsed_settings
 
 
@@ -73,9 +82,12 @@ def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
         with os.fdopen(temporary_file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as temporary_file:
             temporary_file.write(serialized_settings)
         os.replace(temporary_file_path, settings_path)
-    except BaseException:
-        if os.path.exists(temporary_file_path):
-            os.unlink(temporary_file_path)
+    except Exception:
+        try:
+            if os.path.exists(temporary_file_path):
+                os.unlink(temporary_file_path)
+        except OSError:
+            pass
         raise
 
 

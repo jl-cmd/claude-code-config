@@ -9,6 +9,8 @@ import shlex
 from _gh_body_arg_utils import (
     all_body_flag_prefixes,
     all_body_flags,
+    all_value_flag_equals_prefixes,
+    all_value_flags,
     body_file_flag,
     body_file_flag_prefix,
     body_file_short_flag,
@@ -40,6 +42,18 @@ body_file_stdin_sentinel: str = "-"
 all_quote_characters: frozenset[str] = frozenset({'"', "'"})
 file_encoding_utf8: str = "utf-8"
 
+_non_body_value_flags: frozenset[str] = all_value_flags - {body_file_flag, body_file_short_flag}
+
+_non_body_value_flag_equals_prefixes: tuple[str, ...] = tuple(
+    sorted(
+        (
+            prefix for prefix in all_value_flag_equals_prefixes
+            if not prefix.startswith("--body") and not prefix.startswith("-b=")
+        ),
+        key=len,
+        reverse=True,
+    )
+)
 
 
 class PathTraversalError(Exception):
@@ -68,20 +82,20 @@ def _is_unresolvable_shell_value(token: str) -> bool:
 
 
 def _read_body_file_contents(file_path: str) -> str | None:
-    resolved_path = Path(file_path).resolve()
-    allowed_root = Path.cwd().resolve()
     given_path = Path(file_path)
+    allowed_root = Path.cwd().resolve()
+    if given_path.is_symlink():
+        resolved_target = given_path.resolve()
+        try:
+            resolved_target.relative_to(allowed_root)
+        except ValueError:
+            raise PathTraversalError("symlink target resolves outside allowed root")
+    resolved_path = given_path.resolve()
     if not given_path.is_absolute():
         try:
             resolved_path.relative_to(allowed_root)
         except ValueError:
             raise PathTraversalError("relative path resolves outside allowed root")
-    if resolved_path.is_symlink():
-        symlink_target = Path(os.readlink(str(resolved_path))).resolve()
-        try:
-            symlink_target.relative_to(allowed_root)
-        except ValueError:
-            raise PathTraversalError("symlink target resolves outside allowed root")
     try:
         with open(resolved_path, "r", encoding=file_encoding_utf8, errors="replace") as body_file:
             return body_file.read()
@@ -90,13 +104,18 @@ def _read_body_file_contents(file_path: str) -> str | None:
 
 
 def _resolve_body_file_value(raw_value_token: str) -> str | None:
+    """Return file contents, or None when the body cannot be audited.
+
+    None means body is present but unauditable -- skip enforcement.
+    This covers: stdin sentinel, unresolvable shell variables, and path-traversal-rejected paths.
+    """
     stripped_value = _strip_surrounding_quotes(raw_value_token)
     if not stripped_value:
-        return ""
-    if _is_unresolvable_shell_value(stripped_value):
-        return ""
+        return None
     if stripped_value == body_file_stdin_sentinel:
-        return ""
+        return None
+    if _is_unresolvable_shell_value(stripped_value):
+        return None
     try:
         return _read_body_file_contents(stripped_value)
     except PathTraversalError:
@@ -137,6 +156,13 @@ def _match_body_file_equals_prefix(token: str) -> str | None:
     return None
 
 
+def _match_non_body_value_flag_equals_prefix(token: str) -> str | None:
+    for each_prefix in _non_body_value_flag_equals_prefixes:
+        if token.startswith(each_prefix):
+            return each_prefix
+    return None
+
+
 def _scan_raw_tokens_for_body(all_raw_tokens: list[str]) -> str | None | bool:
     """Return the body value from a raw token list, or False if no body flag found.
 
@@ -148,6 +174,20 @@ def _scan_raw_tokens_for_body(all_raw_tokens: list[str]) -> str | None | bool:
     while token_index < len(all_raw_tokens):
         current_token = all_raw_tokens[token_index]
         remaining_raw = all_raw_tokens[token_index + 1:]
+        non_body_equals_prefix = _match_non_body_value_flag_equals_prefix(current_token)
+        if non_body_equals_prefix is not None:
+            first_value_token = current_token[len(non_body_equals_prefix):]
+            extra_skip = count_extra_tokens_to_skip_for_split_quoted_value(remaining_raw, first_value_token)
+            token_index += 1 + (extra_skip or 0)
+            continue
+        if current_token in _non_body_value_flags:
+            if remaining_raw and not _is_flag_shaped_token(remaining_raw[0]):
+                first_value_token = remaining_raw[0]
+                extra_skip = count_extra_tokens_to_skip_for_split_quoted_value(remaining_raw[1:], first_value_token)
+                token_index += 1 + 1 + (extra_skip or 0)
+                continue
+            token_index += 1
+            continue
         body_equals_prefix = _match_body_flag_equals_prefix(current_token)
         if body_equals_prefix is not None:
             first_value_token = current_token[len(body_equals_prefix):]
@@ -182,23 +222,34 @@ def _scan_raw_tokens_for_body(all_raw_tokens: list[str]) -> str | None | bool:
     return False
 
 
-def extract_body_from_command(command: str) -> str | None:
+def extract_body_from_command(
+    command: str,
+    pre_tokenized: tuple[str, list[str]] | None = None,
+) -> str | None:
     """Return the PR body content for validation, or None if unextractable.
 
     Uses iter_significant_tokens to skip values of non-body value-taking flags
     so that --body/--body-file embedded in a quoted --title value never false-matches.
     For space-form body-file flags, scans the raw token list directly because
     iter_significant_tokens consumes the value token (yielding remaining-after-value).
+
+    If pre_tokenized is provided as (logical_line, raw_tokens), reuses those instead
+    of recomputing the logical line and shlex split a second time.
     """
-    logical_line = get_logical_first_line(command)
-    if not logical_line:
-        return None
+    if pre_tokenized is not None:
+        logical_line, all_raw_tokens = pre_tokenized
+    else:
+        logical_line = get_logical_first_line(command)
+        if not logical_line:
+            return None
+        try:
+            all_raw_tokens = shlex.split(logical_line, posix=False)
+        except ValueError:
+            return None
     try:
-        all_raw_tokens = shlex.split(logical_line, posix=False)
-    except ValueError:
-        return None
-    try:
-        all_significant_tokens = list(iter_significant_tokens(command))
+        all_significant_tokens = list(
+            iter_significant_tokens(command, pre_tokenized=(logical_line, all_raw_tokens))
+        )
     except ValueError:
         return None
 
@@ -264,6 +315,9 @@ def main() -> None:
         sys.exit(0)
 
     body = extract_body_from_command(command)
+
+    if body is None:
+        sys.exit(0)
 
     if not body:
         sys.exit(0)

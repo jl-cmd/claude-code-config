@@ -136,7 +136,10 @@ def _match_equals_prefix_for_skip(token: str) -> str | None:
     return None
 
 
-def iter_significant_tokens(command: str) -> Iterator[tuple[str, list[str]]]:
+def iter_significant_tokens(
+    command: str,
+    pre_tokenized: tuple[str, list[str]] | None = None,
+) -> Iterator[tuple[str, list[str]]]:
     """Yield (token, remaining_tokens) for every flag/positional after continuation join.
 
     Joins bash/PowerShell continuations, tokenizes with shlex.split(posix=False),
@@ -150,12 +153,24 @@ def iter_significant_tokens(command: str) -> Iterator[tuple[str, list[str]]]:
     value-missing: the flag is yielded but the flag-shaped follower is NOT
     skipped (so a malformed --body-file --body "x" still yields --body).
 
-    Raises ValueError if the logical line is unparseable by shlex.
+    When count_extra_tokens_to_skip_for_split_quoted_value returns None (opening
+    quote never closed among remaining tokens), raises ValueError so callers can
+    conservatively block -- the token stream is irrecoverably malformed.
+
+    If pre_tokenized is provided as (logical_line, raw_tokens), reuses those
+    instead of recomputing from command. The command argument is still required
+    for the public signature but is unused when pre_tokenized is given.
+
+    Raises ValueError if the logical line is unparseable by shlex, or if an
+    unclosed quoted value is detected in a value-taking flag.
     """
-    logical_line = get_logical_first_line(command)
-    if not logical_line:
-        return
-    all_tokens = shlex.split(logical_line, posix=False)
+    if pre_tokenized is not None:
+        logical_line, all_tokens = pre_tokenized
+    else:
+        logical_line = get_logical_first_line(command)
+        if not logical_line:
+            return
+        all_tokens = shlex.split(logical_line, posix=False)
     token_index = 0
     while token_index < len(all_tokens):
         current_token = all_tokens[token_index]
@@ -167,8 +182,10 @@ def iter_significant_tokens(command: str) -> Iterator[tuple[str, list[str]]]:
                 remaining_tokens,
                 value_token,
             )
+            if split_value_extra_tokens is None:
+                raise ValueError("unclosed quoted value in equals-form flag")
             yield current_token, remaining_tokens
-            token_index += 1 + (split_value_extra_tokens or 0)
+            token_index += 1 + split_value_extra_tokens
             continue
         if current_token in all_value_flags:
             if not remaining_tokens or _is_flag_shaped(remaining_tokens[0]):
@@ -180,8 +197,10 @@ def iter_significant_tokens(command: str) -> Iterator[tuple[str, list[str]]]:
                 remaining_tokens[1:],
                 value_token,
             )
-            yield current_token, remaining_tokens[1 + (split_value_extra_tokens or 0):]
-            token_index += 1 + 1 + (split_value_extra_tokens or 0)
+            if split_value_extra_tokens is None:
+                raise ValueError("unclosed quoted value in space-form flag")
+            yield current_token, remaining_tokens[1 + split_value_extra_tokens:]
+            token_index += 1 + 1 + split_value_extra_tokens
             continue
         yield current_token, remaining_tokens
         token_index += 1

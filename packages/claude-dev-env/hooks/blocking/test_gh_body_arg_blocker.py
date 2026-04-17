@@ -18,6 +18,8 @@ hook_module = importlib.util.module_from_spec(hook_spec)
 hook_spec.loader.exec_module(hook_module)
 _uses_body_string_arg = hook_module._uses_body_string_arg
 
+from _gh_body_arg_utils import iter_significant_tokens
+
 
 def test_blocks_issue_create_with_body_string() -> None:
     assert _uses_body_string_arg('gh issue create --title "T" --body "text"')
@@ -307,3 +309,27 @@ def test_blocks_short_b_equals_spaced_value() -> None:
     assert _uses_body_string_arg(
         "gh pr create --title 'T' -b='has space'"
     )
+
+
+def test_blocks_body_after_unclosed_quoted_title() -> None:
+    """loop2-1: unclosed quote in --title= must not consume --body token.
+
+    shlex.split(posix=False) keeps --title="unclosed as one token whose value
+    starts with a quote but has no closing match among subsequent tokens.
+    count_extra_tokens_to_skip_for_split_quoted_value must return 0 (not the
+    full remaining list length) so the following --body flag stays visible.
+    """
+    assert _uses_body_string_arg(
+        'gh pr create --title="unclosed --body "real body"'
+    )
+
+
+def test_space_form_value_flag_remaining_excludes_consumed_value() -> None:
+    """loop2-2: remaining_tokens for space-form value flag must not include the consumed value.
+
+    When iter_significant_tokens yields (--title, remaining) for --title MyTitle,
+    remaining must contain only tokens after MyTitle — not MyTitle itself.
+    """
+    all_yielded = list(iter_significant_tokens('gh pr create --title MyTitle --body "desc"'))
+    title_remaining = next(remaining for token, remaining in all_yielded if token == "--title")
+    assert "MyTitle" not in title_remaining

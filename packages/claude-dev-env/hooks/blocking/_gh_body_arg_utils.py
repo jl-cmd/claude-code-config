@@ -124,7 +124,7 @@ def count_extra_tokens_to_skip_for_split_quoted_value(
         extra_tokens_consumed += 1
         if each_remaining_token.count(opening_quote) % 2 == 1:
             return extra_tokens_consumed
-    return extra_tokens_consumed
+    return 0
 
 
 def _match_equals_prefix_for_skip(token: str) -> str | None:
@@ -178,7 +178,7 @@ def iter_significant_tokens(command: str) -> Iterator[tuple[str, list[str]]]:
                 remaining_tokens[1:],
                 value_token,
             )
-            yield current_token, remaining_tokens
+            yield current_token, remaining_tokens[1 + split_value_extra_tokens:]
             token_index += 1 + 1 + split_value_extra_tokens
             continue
         yield current_token, remaining_tokens

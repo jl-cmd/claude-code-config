@@ -9,7 +9,7 @@ Note: Only checks for magic numbers. Magic string detection is not implemented.
 import ast
 import sys
 from pathlib import Path
-from typing import List, Set
+from typing import Dict, List, Set
 
 from validator_base import Violation
 
@@ -19,6 +19,7 @@ ALLOWED_NUMBERS: Set[int] = frozenset({-1, 0, 1, 2, 100})
 
 def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
     violations: List[Violation] = []
+    parent_by_child = _build_parent_map(tree)
 
     constant_names: Set[str] = set()
     for node in ast.walk(tree):
@@ -30,7 +31,7 @@ def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant):
             if isinstance(node.value, int) and node.value not in ALLOWED_NUMBERS:
-                if not _is_in_constant_definition(node, tree):
+                if not _is_in_constant_definition(node, parent_by_child):
                     violations.append(
                         Violation(
                             filename,
@@ -42,13 +43,31 @@ def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
     return violations
 
 
-def _is_in_constant_definition(node: ast.Constant, tree: ast.AST) -> bool:
+def _build_parent_map(tree: ast.AST) -> Dict[int, ast.AST]:
+    parent_by_child: Dict[int, ast.AST] = {}
     for parent in ast.walk(tree):
-        if isinstance(parent, ast.Assign):
-            for target in parent.targets:
-                if isinstance(target, ast.Name) and target.id.isupper():
-                    if parent.value is node:
-                        return True
+        for child in ast.iter_child_nodes(parent):
+            parent_by_child[id(child)] = parent
+    return parent_by_child
+
+
+def _is_in_constant_definition(
+    node: ast.Constant,
+    parent_by_child: Dict[int, ast.AST],
+) -> bool:
+    current_node: ast.AST = node
+    while id(current_node) in parent_by_child:
+        parent = parent_by_child[id(current_node)]
+        if isinstance(parent, ast.Assign) and _has_upper_case_name_target(parent):
+            return True
+        current_node = parent
+    return False
+
+
+def _has_upper_case_name_target(assignment: ast.Assign) -> bool:
+    for target in assignment.targets:
+        if isinstance(target, ast.Name) and target.id.isupper():
+            return True
     return False
 
 

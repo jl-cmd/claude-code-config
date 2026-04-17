@@ -281,6 +281,30 @@ def test_should_raise_runtime_error_when_api_payload_is_not_a_mapping(
         sync_engine.fetch_remote_file_metadata("owner/repo")
 
 
+def test_should_exit_with_config_error_when_all_only_filters_are_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake_repo_root = tmp_path / "fake-repo"
+    workflow_directory = fake_repo_root / ".github" / "workflows"
+    workflow_directory.mkdir(parents=True)
+    (workflow_directory / "claude.yml").write_bytes(b"name: Claude Code\n")
+    monkeypatch.setattr(sync_engine, "resolve_repo_root", lambda: fake_repo_root)
+    monkeypatch.setattr(
+        sync_engine,
+        "parse_command_line_arguments",
+        lambda: argparse.Namespace(dry_run=True, only=["typo/name", "also/unknown"]),
+    )
+
+    exit_code = sync_engine.main()
+
+    assert exit_code == sync_config.EXIT_CODE_CONFIG_ERROR
+    captured_streams = capsys.readouterr()
+    assert "typo/name" in captured_streams.err
+    assert "also/unknown" in captured_streams.err
+
+
 def test_should_exit_with_config_error_when_canonical_file_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

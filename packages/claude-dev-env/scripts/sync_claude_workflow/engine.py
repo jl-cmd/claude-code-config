@@ -47,12 +47,12 @@ def fetch_remote_file_metadata(repository_full_name: str) -> dict[str, str] | No
         check=False,
     )
     if completed.returncode != 0:
-        if GH_API_NOT_FOUND_STDERR_TOKEN in completed.stderr:
+        if completed.returncode == 1 and GH_API_NOT_FOUND_STDERR_TOKEN in completed.stderr:
             return None
         raise RuntimeError(f"gh api {api_path} failed: {completed.stderr.strip()}")
     try:
         decoded_payload = json.loads(completed.stdout)
-    except ValueError as decode_error:
+    except json.JSONDecodeError as decode_error:
         raise RuntimeError(
             f"gh api {api_path} returned non-JSON stdout: {decode_error}"
         ) from decode_error
@@ -169,6 +169,13 @@ def main() -> int:
         print(f"FAILED (config): {missing_canonical_error}", file=sys.stderr)
         return EXIT_CODE_CONFIG_ERROR
     selected_repos = select_target_repos(arguments.only)
+    if arguments.only and not selected_repos:
+        unknown_filter_names = ", ".join(arguments.only)
+        print(
+            f"FAILED (config): --only filter(s) matched no known repos: {unknown_filter_names}",
+            file=sys.stderr,
+        )
+        return EXIT_CODE_CONFIG_ERROR
 
     print(
         f"Syncing {TARGET_WORKFLOW_PATH} to {len(selected_repos)} repo(s) "

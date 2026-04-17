@@ -711,10 +711,8 @@ class TestCommitAndPushSyncAbortsRebaseOnConflict:
             if command[:2] == ["git", "push"]
         ]
         assert len(push_positions) >= 2
-        assert any(
-            rebase_abort_positions[0] < push_positions[0]
-            for _ in [0]
-        )
+        assert rebase_abort_positions, "expected at least one git rebase --abort call before push"
+        assert rebase_abort_positions[0] < push_positions[0]
         assert any(
             push_positions[0] < abort_position < push_positions[1]
             for abort_position in rebase_abort_positions

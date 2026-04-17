@@ -41,7 +41,8 @@ HTTP_STATUS_NOT_FOUND = 404
 HTTP_STATUS_TOO_MANY_REQUESTS = 429
 SECONDS_PER_DAY = 86400
 
-DISPATCH_STATUS_SUCCEEDED = "sent"
+DISPATCH_STATUS_SUCCEEDED = "succeeded"
+NETWORK_ERROR_STATUS_CODE = 0
 DISPATCH_STATUS_OPTED_OUT = "opted-out"
 DISPATCH_STATUS_FAILED = "dispatch-failed"
 LISTENER_STATUS_MISSING = "listener-missing"
@@ -118,6 +119,12 @@ def enumerate_installation_repos(token: str) -> list[dict[str, object]]:
             f"/installation/repositories?per_page={REPOS_PER_PAGE}&page={page_number}"
         )
         status_code, response_body, _ = make_github_api_request(path, token)
+        if status_code == NETWORK_ERROR_STATUS_CODE:
+            print(
+                "::error::Network error during enumeration; aborting run",
+                file=sys.stderr,
+            )
+            break
         if status_code != HTTP_STATUS_OK or response_body is None:
             break
         page_repos = response_body.get("repositories", [])
@@ -327,10 +334,14 @@ def build_stale_section(all_stale_repos: list[str]) -> str:
     return f"\n\n## Stale listeners\n\nThese repos have no listener run in the past {STALE_LISTENER_THRESHOLD_DAYS} days:\n\n{stale_entries}"
 
 
+def resolve_source_commit_from_environment() -> str:
+    return os.environ.get("SOURCE_COMMIT") or UNKNOWN_COMMIT_PLACEHOLDER
+
+
 def main() -> int:
     jonecho_token = os.environ.get("JONECHO_TOKEN", "")
     jlcmd_token = os.environ.get("JLCMD_TOKEN", "")
-    source_commit = os.environ.get("SOURCE_COMMIT") or UNKNOWN_COMMIT_PLACEHOLDER
+    source_commit = resolve_source_commit_from_environment()
     source_sha = os.environ.get("SOURCE_SHA", "")
     dispatched_at = datetime.now(timezone.utc).isoformat()
 
@@ -370,9 +381,12 @@ def main() -> int:
     all_dispatched_repos: list[tuple[str, str, str]] = []
 
     for repo in all_target_repos:
-        owner = repo["owner"]["login"]
-        repo_name = repo["name"]
-        full_repo_name = repo["full_name"]
+        owner = repo.get("owner", {}).get("login")
+        repo_name = repo.get("name")
+        full_repo_name = repo.get("full_name")
+        if not owner or not repo_name or not full_repo_name:
+            print(f"::debug::Skipping malformed repo entry: {repo}", file=sys.stderr)
+            continue
         token = token_by_owner.get(owner, "")
 
         if check_opt_out_sentinel(owner, repo_name, token):

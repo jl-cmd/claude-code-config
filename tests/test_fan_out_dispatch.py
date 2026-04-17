@@ -84,7 +84,7 @@ class TestBuildSummaryTable:
 
     def should_list_each_repo_in_its_own_row(self) -> None:
         dispatch_status_by_repo = {
-            "JonEcho/alpha": "sent",
+            "JonEcho/alpha": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED,
             "JonEcho/beta": "opted-out",
         }
 
@@ -94,7 +94,7 @@ class TestBuildSummaryTable:
         assert "JonEcho/beta" in table
 
     def should_show_listener_conclusion_alongside_dispatch_status(self) -> None:
-        dispatch_status_by_repo = {"JonEcho/alpha": "sent"}
+        dispatch_status_by_repo = {"JonEcho/alpha": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED}
         conclusion_by_repo = {"JonEcho/alpha": "success"}
 
         table = fan_out_dispatch.build_summary_table(
@@ -104,7 +104,7 @@ class TestBuildSummaryTable:
         assert "success" in table
 
     def should_show_notes_when_provided(self) -> None:
-        dispatch_status_by_repo = {"JonEcho/alpha": "sent"}
+        dispatch_status_by_repo = {"JonEcho/alpha": fan_out_dispatch.DISPATCH_STATUS_SUCCEEDED}
         notes_by_repo = {"JonEcho/alpha": "drift or sync error"}
 
         table = fan_out_dispatch.build_summary_table(
@@ -276,10 +276,7 @@ class TestSourceCommitEmptyFallback:
 
     def should_treat_empty_source_commit_as_unknown_placeholder(self) -> None:
         with patch.dict(os.environ, {"SOURCE_COMMIT": ""}, clear=False):
-            resolved = (
-                os.environ.get("SOURCE_COMMIT")
-                or fan_out_dispatch.UNKNOWN_COMMIT_PLACEHOLDER
-            )
+            resolved = fan_out_dispatch.resolve_source_commit_from_environment()
 
         assert resolved == fan_out_dispatch.UNKNOWN_COMMIT_PLACEHOLDER
 
@@ -287,10 +284,7 @@ class TestSourceCommitEmptyFallback:
         with patch.dict(
             os.environ, {"SOURCE_COMMIT": "abc1234deadbeef"}, clear=False
         ):
-            resolved = (
-                os.environ.get("SOURCE_COMMIT")
-                or fan_out_dispatch.UNKNOWN_COMMIT_PLACEHOLDER
-            )
+            resolved = fan_out_dispatch.resolve_source_commit_from_environment()
 
         assert resolved == "abc1234deadbeef"
 

@@ -328,6 +328,9 @@ def add_issue_comment(
         api_request, timeout=GITHUB_API_REQUEST_TIMEOUT_SECONDS
     ) as http_response:
         http_response.read()
+        comment_status_code = http_response.status
+    if comment_status_code != HTTP_STATUS_CREATED:
+        raise RuntimeError(f"Comment creation returned status {comment_status_code}")
 
 
 def write_step_summary(text: str) -> None:

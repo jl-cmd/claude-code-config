@@ -567,6 +567,7 @@ class TestCrlfLineEndingsRoundTrip:
         stripped = sync_ai_rules.strip_sync_header(crlf_content)
 
         assert stripped == "# Body\n\nLine one.\n"
+        assert "\r" not in stripped
 
     def should_produce_same_sha_for_lf_and_crlf_versions(self) -> None:
         lf_body = "# Body\n\nLine one.\n"
@@ -712,11 +713,12 @@ class TestCommitAndPushSyncAbortsRebaseOnConflict:
         ]
         assert len(push_positions) >= 2
         assert rebase_abort_positions, "expected at least one git rebase --abort call before push"
-        assert rebase_abort_positions[0] < push_positions[0]
-        assert any(
-            push_positions[0] < abort_position < push_positions[1]
-            for abort_position in rebase_abort_positions
-        )
+        assert len(rebase_abort_positions) >= len(push_positions)
+        for each_index in range(len(push_positions) - 1):
+            assert any(
+                push_positions[each_index] < abort_position < push_positions[each_index + 1]
+                for abort_position in rebase_abort_positions
+            )
 
 
 class TestOpenGithubIssueRaisesOnNonCreatedStatus:

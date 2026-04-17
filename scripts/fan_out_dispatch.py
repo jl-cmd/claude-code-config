@@ -188,7 +188,7 @@ def dispatch_sync_event_with_retry(
         path, token, method="POST", payload=dispatch_payload
     )
 
-    if status_code in (HTTP_STATUS_FORBIDDEN, HTTP_STATUS_TOO_MANY_REQUESTS):
+    if status_code == HTTP_STATUS_TOO_MANY_REQUESTS:
         sleep_seconds = (
             retry_after_seconds
             if retry_after_seconds is not None
@@ -227,10 +227,15 @@ def poll_listener_run_conclusion(
     )
     dispatched_at_parsed = parse_iso_timestamp(dispatched_at)
 
+    network_error_attempt_count = 0
     for attempt_index in range(LISTENER_POLL_MAX_ATTEMPTS):
         status_code, response_body, _ = make_github_api_request(path, token)
         if status_code == HTTP_STATUS_NOT_FOUND:
             return LISTENER_STATUS_MISSING
+        if status_code == NETWORK_ERROR_STATUS_CODE:
+            network_error_attempt_count += 1
+            time.sleep(LISTENER_POLL_INTERVAL_SECONDS)
+            continue
         if status_code != HTTP_STATUS_OK or response_body is None:
             return LISTENER_STATUS_POLL_ERROR
 
@@ -264,6 +269,8 @@ def poll_listener_run_conclusion(
             return LISTENER_STATUS_PENDING
         time.sleep(LISTENER_POLL_INTERVAL_SECONDS)
 
+    if network_error_attempt_count == LISTENER_POLL_MAX_ATTEMPTS:
+        return LISTENER_STATUS_POLL_ERROR
     return LISTENER_STATUS_PENDING
 
 
@@ -381,13 +388,19 @@ def main() -> int:
     all_dispatched_repos: list[tuple[str, str, str]] = []
 
     for repo in all_target_repos:
-        owner = repo.get("owner", {}).get("login")
+        owner = (repo.get("owner") or {}).get("login")
         repo_name = repo.get("name")
         full_repo_name = repo.get("full_name")
         if not owner or not repo_name or not full_repo_name:
             print(f"::debug::Skipping malformed repo entry: {repo}", file=sys.stderr)
             continue
-        token = token_by_owner.get(owner, "")
+        token = token_by_owner.get(owner)
+        if token is None:
+            print(
+                f"::warning::No installation token available for owner {owner}; skipping {full_repo_name}",
+                file=sys.stderr,
+            )
+            continue
 
         if check_opt_out_sentinel(owner, repo_name, token):
             dispatch_status_by_repo[full_repo_name] = DISPATCH_STATUS_OPTED_OUT
@@ -419,7 +432,7 @@ def main() -> int:
             compute_exit_summary_line(dispatch_status_by_repo, {}),
             file=sys.stderr,
         )
-        return 0
+        return compute_exit_code(dispatch_status_by_repo, {})
 
     print(
         f"Dispatched to {len(all_dispatched_repos)} repos. "
@@ -483,6 +496,9 @@ def compute_exit_summary_line(
     dispatch_failed_count = sum(
         1 for status in dispatch_status_by_repo.values() if status == DISPATCH_STATUS_FAILED
     )
+    dispatch_opted_out_count = sum(
+        1 for status in dispatch_status_by_repo.values() if status == DISPATCH_STATUS_OPTED_OUT
+    )
     conclusion_success_count = sum(
         1 for each_conclusion in conclusion_by_repo.values() if each_conclusion == LISTENER_CONCLUSION_SUCCESS
     )
@@ -498,6 +514,7 @@ def compute_exit_summary_line(
     return (
         f"dispatch_success={dispatch_success_count} "
         f"dispatch_failed={dispatch_failed_count} "
+        f"dispatch_opted_out={dispatch_opted_out_count} "
         f"conclusion_success={conclusion_success_count} "
         f"conclusion_failure={conclusion_failure_count} "
         f"conclusion_pending={conclusion_pending_count} "

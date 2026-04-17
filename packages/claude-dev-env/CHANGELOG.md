@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.22.1](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.22.0...claude-dev-env-v1.22.1) (2026-04-17)
+
+
+### Bug Fixes
+
+* centralize /bugteam permission scripts and harden portability ([#138](https://github.com/jl-cmd/claude-code-config/issues/138)) ([815428b](https://github.com/jl-cmd/claude-code-config/commit/815428b84d1787b6713a91a6daee07bfcf3e90b7))
+
+## [1.22.0](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.21.2...claude-dev-env-v1.22.0) (2026-04-17)
+
+
+### Features
+
+* add /findbugs, /fixbugs, /bugteam skills for autonomous code-quality audit-and-fix cycles ([#135](https://github.com/jl-cmd/claude-code-config/issues/135)) ([ef2a89b](https://github.com/jl-cmd/claude-code-config/commit/ef2a89b458f9fa9bacb1b4e0532c9c2c883f945e))
+
+## [1.21.2](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.21.1...claude-dev-env-v1.21.2) (2026-04-17)
+
+
+### Bug Fixes
+
+* **sync:** force-add listener destinations past gitignore wildcards ([#130](https://github.com/jl-cmd/claude-code-config/issues/130)) ([7dbb1af](https://github.com/jl-cmd/claude-code-config/commit/7dbb1af2cb8a39f2e3a77431d8f97cd6ebcdfa3a))
+
 ## [1.21.1](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.21.0...claude-dev-env-v1.21.1) (2026-04-17)
 
 

@@ -17,7 +17,8 @@ def test_bugbot_documents_upper_snake_exemptions_matching_hook() -> None:
     assert "states.py" in text
     assert "modules.py" in text
     assert "/workflow/" in text
-    assert "test" in text.lower()
+    assert "conftest" in text
+    assert "/tests/" in text
 
 
 def test_bugbot_file_length_matches_hook_advisory_behavior() -> None:

@@ -348,14 +348,6 @@ class TestValidateFilePathExemptions:
 
         assert validate_file(test_module_path) == []
 
-    def test_validate_file_should_skip_dot_test_tsx_files(
-        self, tmp_path: Path
-    ) -> None:
-        tsx_test_path = tmp_path / "Button.test.tsx"
-        tsx_test_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
-
-        assert validate_file(tsx_test_path) == []
-
     def test_validate_file_should_skip_config_directory(
         self, tmp_path: Path
     ) -> None:
@@ -402,37 +394,6 @@ class TestValidateFilePathExemptions:
         conftest_helpers_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
 
         assert validate_file(conftest_helpers_path) == []
-
-    def test_validate_file_should_skip_hook_infrastructure(
-        self, tmp_path: Path
-    ) -> None:
-        """Hook files under .claude/hooks/ are standalone infrastructure, not project code."""
-        hooks_directory = tmp_path / ".claude" / "hooks" / "blocking"
-        hooks_directory.mkdir(parents=True)
-        hook_path = hooks_directory / "my_hook.py"
-        hook_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
-
-        assert validate_file(hook_path) == []
-
-    def test_validate_file_should_skip_migrations_directory(
-        self, tmp_path: Path
-    ) -> None:
-        """Django migrations use literal values by convention (must be self-contained)."""
-        migrations_directory = tmp_path / "migrations"
-        migrations_directory.mkdir()
-        migration_path = migrations_directory / "0001_initial.py"
-        migration_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
-
-        assert validate_file(migration_path) == []
-
-    def test_validate_file_should_skip_workflow_tab_files(
-        self, tmp_path: Path
-    ) -> None:
-        """Workflow tab files hold StateDefinition singletons, not misplaced literals."""
-        workflow_tab_path = tmp_path / "analysis_tab.py"
-        workflow_tab_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
-
-        assert validate_file(workflow_tab_path) == []
 
     def test_validate_file_should_still_scan_production_py_files(self) -> None:
         """Use tempfile with a non-test prefix instead of the pytest tmp_path fixture.

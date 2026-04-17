@@ -28,7 +28,6 @@ TEST_PATH_PATTERNS: frozenset[str] = frozenset(
     {
         "test_",
         "_test.",
-        ".test.",
         ".spec.",
         "conftest",
         "/tests/",
@@ -92,7 +91,7 @@ def is_workflow_registry_file(file_path: str) -> bool:
     )
 
 
-def is_migration_path(file_path: str) -> bool:
+def is_migration_file(file_path: str) -> bool:
     path_normalized = file_path.lower().replace("\\", "/")
     return any(
         pattern.replace("\\", "/") in path_normalized

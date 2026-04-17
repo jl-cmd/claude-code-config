@@ -14,10 +14,7 @@ from typing import Dict, FrozenSet, List, Set, Tuple, Type
 
 from exempt_paths import (
     is_config_file,
-    is_hook_infrastructure,
-    is_migration_path,
     is_test_file,
-    is_workflow_registry_file,
 )
 from validator_base import Violation
 
@@ -150,13 +147,7 @@ def _is_upper_snake_name(name: str) -> bool:
 
 
 def _is_exempt_path(file_path: str) -> bool:
-    return (
-        is_test_file(file_path)
-        or is_config_file(file_path)
-        or is_hook_infrastructure(file_path)
-        or is_workflow_registry_file(file_path)
-        or is_migration_path(file_path)
-    )
+    return is_test_file(file_path) or is_config_file(file_path)
 
 
 def validate_file(file_path: Path) -> List[Violation]:
@@ -164,8 +155,8 @@ def validate_file(file_path: Path) -> List[Violation]:
     if _is_exempt_path(filename):
         return []
     try:
-        source = file_path.read_text(encoding="utf8")
-        tree = ast.parse(source)
+        source_bytes = file_path.read_bytes()
+        tree = ast.parse(source_bytes)
     except Exception as error:
         return [Violation(filename, 0, f"Error: {error}")]
 

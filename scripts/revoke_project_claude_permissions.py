@@ -89,15 +89,17 @@ def revoke_permissions_for_current_directory() -> None:
     total_changes_count = (
         rules_removed_count + directories_removed_count + environment_entries_removed_count
     )
+    if total_changes_count == 0:
+        print(f"Project path: {project_path}")
+        print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
+        print("No changes to revoke; settings file left untouched.")
+        return
+    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
     print(f"Project path: {project_path}")
     print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
     print(f"Allow rules removed: {rules_removed_count} of {len(permission_rules)}")
     print(f"Additional directories removed: {directories_removed_count}")
     print(f"Auto-mode environment entries removed: {environment_entries_removed_count}")
-    if total_changes_count == 0:
-        print("No changes needed; settings file left untouched.")
-        return
-    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
 
 
 if __name__ == "__main__":

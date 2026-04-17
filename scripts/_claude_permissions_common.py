@@ -18,6 +18,7 @@ GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = (
     ")",
     "{",
     "}",
+    ",",
 )
 
 JSON_INDENT_SPACES: int = 2
@@ -36,12 +37,21 @@ def path_contains_glob_metacharacters(candidate_path: str) -> bool:
     )
 
 
+def path_contains_whitespace(candidate_path: str) -> bool:
+    return any(each_character.isspace() for each_character in candidate_path)
+
+
 def get_current_project_path() -> str:
     normalized_project_path = str(Path.cwd()).replace("\\", "/")
     if path_contains_glob_metacharacters(normalized_project_path):
         raise ValueError(
             f"Current directory path contains glob metacharacters and cannot "
             f"be used to build permission rules safely: {normalized_project_path}"
+        )
+    if path_contains_whitespace(normalized_project_path):
+        raise ValueError(
+            f"Current directory path contains whitespace and cannot be used "
+            f"to build permission rules safely: {normalized_project_path}"
         )
     return normalized_project_path
 
@@ -109,6 +119,13 @@ def append_if_missing(target_list: list[str], new_value: str) -> bool:
 
 
 def ensure_dict_section(settings: dict[str, Any], section_name: str) -> dict[str, Any]:
+    """Return an existing dict section or create an empty one if absent.
+
+    A missing key and an explicit JSON null are treated identically: both
+    produce a fresh empty dict stored back into settings. Any other non-dict
+    value (string, list, number, bool) calls exit_with_error to avoid
+    overwriting user data.
+    """
     existing_section = settings.get(section_name)
     if existing_section is None:
         replacement_section: dict[str, Any] = {}
@@ -124,6 +141,13 @@ def ensure_dict_section(settings: dict[str, Any], section_name: str) -> dict[str
 
 
 def ensure_list_entry(section: dict[str, Any], entry_name: str) -> list[Any]:
+    """Return an existing list entry or create an empty one if absent.
+
+    A missing key and an explicit JSON null are treated identically: both
+    produce a fresh empty list stored back into the section. Any other
+    non-list value (string, dict, number, bool) calls exit_with_error to
+    avoid overwriting user data.
+    """
     existing_entry = section.get(entry_name)
     if existing_entry is None:
         replacement_entry: list[Any] = []

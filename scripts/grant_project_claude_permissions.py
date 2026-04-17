@@ -73,15 +73,17 @@ def grant_permissions_for_current_directory() -> None:
     total_changes_count = (
         rules_added_count + directories_added_count + environment_entries_added_count
     )
+    if total_changes_count == 0:
+        print(f"Project path: {project_path}")
+        print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
+        print("No changes needed; settings file left untouched.")
+        return
+    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
     print(f"Project path: {project_path}")
     print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
     print(f"Allow rules added: {rules_added_count} of {len(permission_rules)}")
     print(f"Additional directories added: {directories_added_count}")
     print(f"Auto-mode environment entries added: {environment_entries_added_count}")
-    if total_changes_count == 0:
-        print("No changes needed; settings file left untouched.")
-        return
-    save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
 
 
 if __name__ == "__main__":

@@ -9,34 +9,29 @@ Note: Only checks for magic numbers. Magic string detection is not implemented.
 import ast
 import sys
 from pathlib import Path
-from typing import List, Set
+from typing import FrozenSet, List, Set
 
 from validator_base import Violation
 
 
-ALLOWED_NUMBERS: Set[int] = frozenset({-1, 0, 1})
+ALLOWED_NUMBERS: FrozenSet[int] = frozenset({-1, 0, 1})
 
 
 def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
     violations: List[Violation] = []
-
-    constant_names: Set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id.isupper():
-                    constant_names.add(target.id)
-
-    negated_constants: Set[int] = _collect_negated_constant_ids(tree)
+    negated_literal_ids: Set[int] = set()
 
     for node in ast.walk(tree):
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
             operand = node.operand
+            if isinstance(operand, ast.UnaryOp):
+                continue
             if isinstance(operand, ast.Constant) and isinstance(operand.value, int):
+                negated_literal_ids.add(id(operand))
                 signed_value = -operand.value
                 if signed_value in ALLOWED_NUMBERS:
                     continue
-                if _is_in_constant_definition(operand, tree):
+                if _is_in_constant_definition(node, tree):
                     continue
                 violations.append(
                     Violation(
@@ -49,7 +44,7 @@ def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
         if isinstance(node, ast.Constant):
             if not isinstance(node.value, int):
                 continue
-            if id(node) in negated_constants:
+            if id(node) in negated_literal_ids:
                 continue
             if node.value in ALLOWED_NUMBERS:
                 continue
@@ -66,17 +61,7 @@ def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
     return violations
 
 
-def _collect_negated_constant_ids(tree: ast.AST) -> Set[int]:
-    negated_ids: Set[int] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-            operand = node.operand
-            if isinstance(operand, ast.Constant) and isinstance(operand.value, int):
-                negated_ids.add(id(operand))
-    return negated_ids
-
-
-def _is_in_constant_definition(node: ast.Constant, tree: ast.AST) -> bool:
+def _is_in_constant_definition(node: ast.AST, tree: ast.AST) -> bool:
     for parent in ast.walk(tree):
         if isinstance(parent, ast.Assign):
             for target in parent.targets:

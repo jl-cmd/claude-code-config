@@ -66,6 +66,16 @@ def process():
     return percentage
 '''
 
+ALLOWED_NEGATIVE_UPPER_CONSTANT_ASSIGNMENT = '''
+LIMIT = -100
+OFFSET = -5
+'''
+
+DOUBLE_NEGATED_LITERAL = '''
+def process():
+    return --5
+'''
+
 
 class TestMagicValues:
     def test_named_constants_pass(self) -> None:
@@ -116,3 +126,13 @@ class TestMagicValues:
         violations = check_magic_values(tree, "test.py")
         assert len(violations) == 1
         assert "100" in violations[0].message
+
+    def test_negative_upper_constant_assignment_allowed(self) -> None:
+        tree = ast.parse(ALLOWED_NEGATIVE_UPPER_CONSTANT_ASSIGNMENT)
+        violations = check_magic_values(tree, "test.py")
+        assert violations == []
+
+    def test_double_negation_reports_single_violation_for_inner_literal(self) -> None:
+        tree = ast.parse(DOUBLE_NEGATED_LITERAL)
+        violations = check_magic_values(tree, "test.py")
+        assert len(violations) == 1

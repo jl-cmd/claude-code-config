@@ -332,6 +332,8 @@ After the teammate writes the XML and returns, the lead reads `.bugteam-loop-<N>
 
 `last_action = "audited"`. `last_findings = parsed`. Append `(loop=N, action="audit", counts={P0,P1,P2}, sha=current_HEAD, review_url=<url>, finding_count=<n>, fallback_count=<n>)` to `audit_log`.
 
+**Parallel auditors from loop 4 onward (`loop_count >= 4`).** Once the cycle has made it through three full audit/fix rounds without converging, the next audit spawns THREE bugfind teammates in parallel — named `bugfind-loop-<N>-a`, `bugfind-loop-<N>-b`, `bugfind-loop-<N>-c` — each with an identical spawn prompt (same diff path, same rubric, same loop number). `a` is the post-owner; `b` and `c` write their outcome XML to `<team_temp_dir>/loop-<N>-b.outcomes.xml` and `...-c.outcomes.xml` respectively, then shut down. `a` reads all three outcome XML files, merges findings by `(file, line, category_letter)` (same tuple collapses to one finding, keeping the longest description and the highest severity of the group), re-assigns merged-finding IDs as `loopN-K`, and posts the single per-loop review per the standard posting protocol above. The lead shuts down `b` and `c` first, then `a` after its post completes.
+
 ### FIX action (fresh teammate, only sees latest audit)
 
 Spawn a NEW `bugfix` teammate for this loop using the `clean-coder` teammate role, model sonnet. The teammate sees ONLY the most recent audit's findings — no prior-loop findings, no prior-loop fix history, no chat history.

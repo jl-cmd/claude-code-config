@@ -47,7 +47,7 @@ Refusal cases — check in order; first match short-circuits and stops:
 
 - **Agent teams not enabled.** Check `claude config get env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and `~/.claude/settings.json`. If neither sets it to `"1"`, respond: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 not set. /bugteam requires the agent teams feature. See https://code.claude.com/docs/en/agent-teams#enable-agent-teams.` and stop.
 - **Claude Code version too old.** Run `claude --version`. If older than v2.1.32, respond: `Claude Code v<version> is older than the v2.1.32 minimum for agent teams. Upgrade first.` and stop.
-- **No PR or upstream diff.** Respond exactly: `No PR or upstream diff. /bugteam needs a target.` and stop.
+- **Missing PR or upstream diff.** Respond exactly: `No PR or upstream diff. /bugteam needs a target.` and stop.
 - **Working tree dirty with uncommitted changes the user did not stage.** Respond: `Uncommitted changes detected. Stash, commit, or revert before /bugteam.` and stop. Reason: the fix teammate will commit the working tree, mixing user-uncommitted work into automated fixes.
 - **Required subagents not installed.** Before Step 0, verify `code-quality-agent` and `clean-coder` subagent types exist in the available agents list. If either is missing, respond: `Required subagent type <name> not installed. /bugteam needs both code-quality-agent and clean-coder available.` and stop.
 
@@ -88,7 +88,7 @@ Same resolution path as `/findbugs`:
 2. Fall back to `git merge-base HEAD origin/<default>` then `git diff <merge-base>...HEAD`.
 3. Neither → refuse per the refusal cases above.
 
-Capture: `<owner>/<repo>`, head branch, base branch, PR number, PR URL. This scope persists across every loop — `/bugteam` never re-prompts the user mid-cycle.
+Capture: `<owner>/<repo>`, head branch, base branch, PR number, PR URL. This scope persists across every loop — `/bugteam` runs to completion from the single up-front confirmation.
 
 ### Step 2: Create the agent team
 
@@ -97,8 +97,8 @@ This session is the **team lead**. Create a team using the agent teams feature. 
 Team specification:
 
 - **Team name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` (or `bugteam-<sanitized-head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured at team-creation time from the lead session and prevents two concurrent invocations on the same PR from colliding.
-- **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the team_name template, replace every character that is NOT in `[A-Za-z0-9._-]` with `-`. This whitelist covers safe portable filename characters and rejects all OS-reserved or shell-special chars including `/ \ : * ? < > | "` and ASCII control chars (0x00–0x1F). Example: `feat/foo*bar` → `feat-foo-bar`; team_name becomes `bugteam-feat-foo-bar-<YYYYMMDDHHMMSS>`. Apply this sanitization BEFORE the team_name is captured, not after — every downstream use of `team_name` (team creation, scoped temp dir, cleanup) sees the safe form.
-- **Per-team temp directory (resolved once, reused everywhere):** After team_name is captured, resolve a portable absolute path with a Claude-side lookup using Python's `tempfile.gettempdir()`, which honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix: `Path(tempfile.gettempdir()) / team_name` (requires `import tempfile`). The `team_name` value already carries the `bugteam-` prefix, so do NOT add it again here. Avoid hand-rolled env var chains. Capture the resolved absolute path as `<team_temp_dir>` and pass that literal path to every shell command that follows. Shell-side parameter expansion (`${TMPDIR:-/tmp}`) is forbidden because cmd.exe and PowerShell do not expand it.
+- **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the team_name template, replace every character outside `[A-Za-z0-9._-]` with `-`. The whitelist keeps safe portable filename characters only; OS-reserved and shell-special characters (`/ \ : * ? < > | "` plus ASCII control chars 0x00–0x1F) fall outside the whitelist and become `-`. Example: `feat/foo*bar` → `feat-foo-bar`; team_name becomes `bugteam-feat-foo-bar-<YYYYMMDDHHMMSS>`. Apply the sanitization when team_name is first assembled so every downstream use (team creation, scoped temp dir, cleanup) sees the safe form.
+- **Per-team temp directory (resolved once, reused everywhere):** After team_name is captured, resolve a portable absolute path with a Claude-side lookup using Python's `tempfile.gettempdir()`, which honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix: `Path(tempfile.gettempdir()) / team_name` (requires `import tempfile`). The `team_name` value already carries the `bugteam-` prefix, so keep it as-is here. Let `tempfile.gettempdir()` do the lookup; use its result directly. Capture the resolved absolute path as `<team_temp_dir>` and pass that literal path to every shell command that follows. Claude performs all temp-root resolution, so every shell (bash, cmd.exe, PowerShell) receives the same literal absolute value.
 - **Roles defined up front (spawned per loop, not at team creation):**
   - `bugfind` — uses teammate role `code-quality-agent`, model sonnet
   - `bugfix` — uses teammate role `clean-coder`, model sonnet
@@ -125,13 +125,13 @@ Each entry: `{loop, finding_id, finding_comment_id, finding_comment_url, used_fa
 
 ### Step 2.5: PR comment lifecycle (one review per loop)
 
-The team narrates its work to the PR via a **GitHub pull-request review** per loop so findings render as a tree under a single parent review (like Cursor Bugbot). **Teammates own all PR comment posting** — bugfind posts the review (parent body + child finding comments in one batched POST), bugfix posts fix replies. The lead never calls `gh pr comment`, `gh api repos/.../pulls/<n>/comments`, or `gh api repos/.../pulls/<n>/reviews`. The lead's only PR-write action is the final description rewrite at Step 4.5 (via `pr-description-writer` agent).
+The team narrates its work to the PR via a **GitHub pull-request review** per loop so findings render as a tree under a single parent review (like Cursor Bugbot). **Teammates own all PR comment posting** — bugfind posts the review (parent body + child finding comments in one batched POST), bugfix posts fix replies. All comment, review, and reply POSTs belong to the teammates. The lead's single PR-write action is the final description rewrite at Step 4.5 (via `pr-description-writer` agent).
 
 - **Per-loop review** — one `POST /pulls/<number>/reviews` per loop, posted by the bugfind teammate AFTER auditing. The review body is the loop header (with audit counts); the review's `comments[]` array holds one anchored finding per P0/P1/P2 finding. GitHub renders this as a single collapsible thread with each finding as a child comment — the tree shape Cursor Bugbot produces.
 
 - **Fix replies** — replies to each child finding comment. Posted by the bugfix teammate after the commit lands. Body: `Fixed in <commit_sha>` if addressed, or `Could not address this loop: <one-line reason>` if not. The `/pulls/<number>/comments/<id>/replies` endpoint works on any review comment, including those created as part of a review, so this shape is unchanged.
 
-**Ordering:** bugfind audits FIRST, buffers the findings, validates anchors against the captured diff, then posts the review ONCE at the end. The review body names the finding count authoritatively. Do NOT post any issue comment before or during the audit.
+**Ordering:** bugfind audits FIRST, buffers the findings, validates anchors against the captured diff, then posts the review ONCE at the end. The review body names the finding count authoritatively. Keep all posting bunched into that single end-of-loop review POST.
 
 CLI shapes (teammate runs these). All three POSTs use the same robust pattern: build the JSON payload with `jq` (pulling file contents in with `--rawfile` or `-Rs` so markdown with backticks, newlines, and quotes survives intact), then pipe the JSON to `gh api ... --input -` on stdin. This avoids every shell-quoting edge case.
 
@@ -175,7 +175,7 @@ CLI shapes (teammate runs these). All three POSTs use the same robust pattern: b
 
 `<head_sha_at_post_time>` = the SHA at the moment the review is posted (run `git rev-parse HEAD` in the teammate's working dir immediately before the POST). The review anchors its finding comments to the head SHA at audit time, which is the SHA before this loop's fix lands.
 
-Write each body (review body and every per-finding body) to its own temp file before running the jq pipeline. The `jq --rawfile` / `jq -Rs` pattern loads file contents as a single string into the JSON payload, which preserves backticks, newlines, and quotes intact. The existing `gh-body-backtick-guard` hook blocks `--body "..."` inline bodies; this pattern sidesteps the hook entirely because the body never appears on the command line.
+Write each body (review body and every per-finding body) to its own temp file before running the jq pipeline. The `jq --rawfile` / `jq -Rs` pattern loads file contents as a single string into the JSON payload, which preserves backticks, newlines, and quotes intact. The body stays inside the file the jq pipeline reads — it reaches GitHub as part of the JSON payload — which keeps it compatible with the `gh-body-backtick-guard` hook that scans command-line `--body` arguments.
 
 **Review body shape** (content of `<tmp_review_body.md>`):
 
@@ -219,18 +219,18 @@ Repeat until an exit condition fires:
 
 ### AUDIT action (clean-room teammate, fresh per loop)
 
-Capture a fresh PR diff for this loop into the per-team scoped directory so concurrent `/bugteam` runs do not collide. Use the literal `<team_temp_dir>` resolved once in Step 2 — do NOT rewrite the path with shell expansion:
+Capture a fresh PR diff for this loop into the per-team scoped directory so each concurrent `/bugteam` run keeps its patches isolated. Use the literal `<team_temp_dir>` resolved once in Step 2 — Claude resolves the absolute path, and every shell receives the same literal value:
 
 ```
 mkdir -p "<team_temp_dir>"
 gh pr diff <number> -R <owner>/<repo> > "<team_temp_dir>/loop-<N>.patch"
 ```
 
-`<team_temp_dir>` is the absolute path captured in Step 2 (already includes the sanitized team_name and timestamp suffix, and `team_name` itself is already prefixed with `bugteam-`). Claude resolves the portable temp root once via `Path(tempfile.gettempdir()) / team_name` (requires `import tempfile`) and passes the literal absolute path to every shell command. `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix, so this works identically on macOS, Linux, Windows cmd.exe, and PowerShell because the shell never has to interpret `${TMPDIR:-/tmp}` or `%TEMP%`.
+`<team_temp_dir>` is the absolute path captured in Step 2 (already includes the sanitized team_name and timestamp suffix, and `team_name` itself is already prefixed with `bugteam-`). Claude resolves the portable temp root once via `Path(tempfile.gettempdir()) / team_name` (requires `import tempfile`) and passes the literal absolute path to every shell command. `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix, so this works identically on macOS, Linux, Windows cmd.exe, and PowerShell: Claude resolves the literal path once and every shell receives the same absolute value.
 
 Spawn a NEW `bugfind` teammate for this loop using the `code-quality-agent` subagent type. The teammate is fresh: no prior loop's findings, no chat history, no inherited audit context. Per the docs: *"The lead's conversation history does not carry over."* — and we further guarantee independence by spawning a new teammate per loop rather than reusing one.
 
-The teammate's spawn prompt is the full XML below — copy it verbatim with the placeholders substituted. **Forbid all conversation references** in the spawn prompt. No "as we discussed," "the earlier issue," "fix from the prior loop," "you previously identified." Each loop's audit teammate has no idea other loops happened.
+The teammate's spawn prompt is the full XML below — copy it verbatim with the placeholders substituted. **Keep the spawn prompt context-free.** Reference only the PR scope, audit rubric, and this loop number. Write each instruction as a standalone statement so the teammate treats the prompt as a fresh brief — every audit starts from first principles.
 
 ```xml
 <context>
@@ -269,8 +269,8 @@ The teammate's spawn prompt is the full XML below — copy it verbatim with the 
 </constraints>
 
 <comment_posting>
-  1. Audit the diff against the 10 categories above. Do NOT post anything yet;
-     buffer the findings in memory.
+  1. Audit the diff against the 10 categories above. Buffer the findings
+     in memory; all posting happens at step 6 once anchors are validated.
   2. Assign each finding a stable finding_id of exactly the form `loopN-K`
      where K is 1-based within this loop.
   3. Validate every finding's (file, line) against the captured diff. Split
@@ -293,10 +293,10 @@ The teammate's spawn prompt is the full XML below — copy it verbatim with the 
      entries to anchored findings in index order.
   7. If the review POST itself fails, use Step 2.5's Review POST failure
      fallback (single issue comment with full body and all findings inline).
-  8. Write every body (review body, each finding body, any fallback body) to
-     its own temp file and load it into the JSON payload via jq's --rawfile
-     or -Rs, then `gh api ... --input -`. Never pass a body via --body or -f
-     body=<inline-string>.
+  8. Write every body (review body, each finding body, any fallback body)
+     to its own temp file. Load each file into the JSON payload via jq's
+     `--rawfile` or `-Rs`, then pipe the jq output to `gh api ... --input -`
+     so every body reaches GitHub as file contents inside the JSON payload.
 </comment_posting>
 
 <output_format>
@@ -375,7 +375,7 @@ Prompt skeleton:
        capture the hook's stderr, write status=hook_blocked for every finding in this loop
        (the commit was atomic; if it failed, no finding was applied), populate hook_output
        on each outcome, and return WITHOUT retrying. The lead will treat this loop as no-progress.
-  5. git push (NEVER --force, NEVER --force-with-lease).
+  5. git push with a plain fast-forward push (the default, no flag overrides).
   6. For each bug, post a fix reply to its finding_comment_id via the
      Step 2.5 reply CLI shape:
      - "Fixed in <commit_sha>" if the bug was addressed by your commit
@@ -403,9 +403,10 @@ Prompt skeleton:
 <constraints>
   - Modify only files referenced in bugs_to_fix.
   - One commit on the existing branch, then push.
-  - Do NOT rebase, amend, --force, --force-with-lease, or change the PR base.
-  - Do NOT skip git hooks.
-  - git add by explicit path; never `git add .` or `git add -A`.
+  - Keep the branch linear and the PR base fixed; append one new commit per
+    loop and fast-forward push only.
+  - Let every git hook run on every commit.
+  - git add by explicit path — name each file being staged.
   - Preserve existing comments on lines you do not modify.
   - Type hints on every signature you touch.
 </constraints>
@@ -425,7 +426,7 @@ If `git rev-parse HEAD` did not change, exit reason = `stuck — bugfix teammate
 When the cycle exits (any reason):
 
 1. **Clean up the team as the lead.** Per the docs: *"When you're done, ask the lead to clean up: 'Clean up the team'. This removes the shared team resources. When the lead runs cleanup, it checks for active teammates and fails if any are still running, so shut them down first."* The lead is THIS session — call cleanup directly. If any teammate is still alive (e.g., from an aborted shutdown), shut it down first.
-2. Delete the per-team scoped temp directory using Python: `shutil.rmtree(team_temp_dir, ignore_errors=True)` (requires `import shutil`). This works on every platform without OS-detection branching. Pass the literal absolute path Claude resolved at Step 2 — do NOT defer to the shell, and never use shell `${TMPDIR:-/tmp}` or `%TEMP%` expansion at this step either.
+2. Delete the per-team scoped temp directory using Python: `shutil.rmtree(team_temp_dir, ignore_errors=True)` (requires `import shutil`). This works on every platform without OS-detection branching. Pass the literal absolute path Claude resolved at Step 2; Claude performs the path resolution so every shell receives the same literal value at cleanup time.
 
 ### Step 4.5: Finalize the PR description (mandatory)
 
@@ -441,7 +442,7 @@ Steps:
 2. Capture the original body: `gh pr view <number> -R <owner>/<repo> --json body --jq .body > .bugteam-original-body.md`.
 3. Invoke the `pr-description-writer` agent (or `general-purpose` fallback) with this brief:
    - **Inputs:** the diff path, the original body path, the head branch name, the base branch name.
-   - **Constraint:** describe what the PR delivers based on the cumulative diff. Do NOT mention `/bugteam`, audit loops, fix commits, finding counts, or any process metadata. Those belong in the finding comments, not the description. The description is for the merge audience.
+   - **Constraint:** describe what the PR delivers based on the cumulative diff — code behavior, user-facing effect, and merge rationale. Process metadata (audit loops, fix commit counts, finding counts) lives in the finding comments. The description speaks to the merge audience.
    - **Preservation rule:** if the original body contains sections that look manually curated (linked issues, screenshots, a populated test plan, "Risk Assessment" sections), preserve those verbatim and only rewrite the prose narrative around them.
    - **Output:** the new body markdown.
 4. Write the agent's returned body to `.bugteam-final-body.md`.
@@ -484,20 +485,20 @@ If exit = `cap reached`, name the remaining bug count and recommend `/findbugs` 
 - **Agent teams required, not parallel subagents.** The skill MUST use Claude Code's agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Spawning `code-quality-agent` and `clean-coder` as parallel subagents from the lead's context = fail; the clean-room property requires independent teammate sessions.
 - **Grant before any spawn, revoke before any return.** Step 0 grants project `.claude/**` permissions; Step 5 revokes. Both are mandatory. Revoke runs on every exit path including error, cap-reached, and stuck.
 - **Fresh teammate per loop.** Both bugfind and bugfix are spawned new each loop and shut down after their action. Reusing a teammate across loops accumulates context inside that teammate's window — defeats clean-room.
-- **One up-front confirmation = whole cycle.** No mid-loop AskUserQuestion. The `/bugteam` invocation IS the authorization.
+- **One up-front confirmation = whole cycle.** The `/bugteam` invocation authorizes the entire cycle; every subsequent decision runs on that single authorization.
 - **10-loop hard cap.** Counted as audits performed. Worst case = 10 audits + 10 fixes = 20 teammate spawns + 20 shutdowns.
-- **Clean-room audits, every loop.** Never pass conversation context, prior findings, prior commits, or prior loop history into a bugfind teammate's spawn prompt.
+- **Clean-room audits, every loop.** Each bugfind teammate's spawn prompt contains only the PR scope, audit rubric, and the current loop number. Prior loop history stays in the lead.
 - **Targeted fixes.** Each fix teammate sees ONLY the most recent audit's findings. Prior loops are invisible to the fix teammate.
 - **Sonnet for both teammates.** Predictable cost, fits-purpose for code work.
-- **No clean-room exception for fix.** The fix teammate legitimately needs the findings; that is not anchoring bias, that is the input contract.
+- **Fix teammate receives the latest audit as its input contract.** Passing the audit's findings to the fix teammate is the input contract — each loop's fix run operates on the current audit's output and only that.
 - **One commit per fix action.** Loops produce one commit per loop, not one per bug.
-- **No `--force`, no `--amend`, no rebase, no base change** at any point.
-- **Lead-only cleanup.** Per the docs: *"Always use the lead to clean up. Teammates should not run cleanup because their team context may not resolve correctly, potentially leaving resources in an inconsistent state."* This session is the lead; teammates never call cleanup.
+- **Linear branch, fixed PR base.** Every loop appends one forward-only commit; existing commits and the PR base stay intact throughout the cycle.
+- **Lead-only cleanup.** Per the docs: *"Always use the lead to clean up. Teammates should not run cleanup because their team context may not resolve correctly, potentially leaving resources in an inconsistent state."* This session is the lead, and cleanup runs here only.
 - **Cleanup the per-team scoped temp directory on exit.** The resolved `<team_temp_dir>` (absolute literal captured in Step 2) is deleted entirely so no loop patches leak between runs.
 - **Cleanup all `.bugteam-*` files on exit.** `.bugteam-loop-*.patch`, `.bugteam-loop-*.outcomes.xml`, `.bugteam-final.diff`, `.bugteam-original-body.md`, `.bugteam-final-body.md`. Working directory ends clean.
-- **Teammates own audit/fix comment posting.** Bugfind posts ONE per-loop review (parent body + child finding comments in a single batched POST, with review-fallback to a top-level issue comment). Bugfix posts the fix replies after committing. The lead never calls `gh pr comment`, `gh api repos/.../pulls/<n>/comments`, or `gh api repos/.../pulls/<n>/reviews` for these.
+- **Teammates own audit/fix comment posting.** Bugfind posts ONE per-loop review (parent body + child finding comments in a single batched POST, with review-fallback to a top-level issue comment). Bugfix posts the fix replies after committing. All comment, review, and reply POSTs belong to the teammates; the lead's single PR-write action is the final description rewrite at Step 4.5.
 - **Lead owns the final PR description rewrite only** (Step 4.5), and only via the `pr-description-writer` agent. The lead does not compose the description inline.
-- **One review per loop, findings as child comments of that review.** Each loop posts a single pull-request review whose body is the loop header and whose `comments[]` are the anchored findings. No cross-loop threading, no in-place editing of prior reviews, no thread resolution in this version. Each loop's review on the PR is self-contained.
+- **One review per loop, findings as child comments of that review.** Each loop posts a single pull-request review whose body is the loop header and whose `comments[]` are the anchored findings. Each loop's review stands alone — one review created per loop, fully self-contained on the PR conversation.
 - **PR description rewrite on every exit.** Step 4.5 runs on `converged`, `cap reached`, and `stuck`. On `error`, the rewrite is best-effort; if it fails, surface the error in the final report and continue to revoke.
 - **Outcome XML, not JSON.** Both teammates write structured outcome data (findings or fix outcomes) to `.bugteam-loop-<N>.outcomes.xml`. The lead reads these files between actions. XML chosen for parser robustness against multi-line, special-character, and quoted reason fields.
 

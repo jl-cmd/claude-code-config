@@ -134,3 +134,98 @@ def test_should_handle_syntax_error_gracefully() -> None:
     content = "def broken(\n    this is not python\n"
     issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
     assert issues == []
+
+
+def test_should_flag_tuple_unpacking_target() -> None:
+    content = "def run():\n    result, err = compute()\n    return result, err\n"
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'result'" in issue for issue in issues)
+
+
+def test_should_flag_list_unpacking_target() -> None:
+    content = "def run():\n    [data, meta] = fetch()\n    return data, meta\n"
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'data'" in issue for issue in issues)
+
+
+def test_should_flag_starred_unpacking_target() -> None:
+    content = "def run():\n    head, *data = fetch()\n    return head, data\n"
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'data'" in issue for issue in issues)
+
+
+def test_should_flag_for_loop_target() -> None:
+    content = "def run(orders):\n    for result in orders:\n        pass\n"
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'result'" in issue for issue in issues)
+
+
+def test_should_flag_async_for_loop_target() -> None:
+    content = (
+        "async def run(orders):\n"
+        "    async for data in orders:\n"
+        "        pass\n"
+    )
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'data'" in issue for issue in issues)
+
+
+def test_should_flag_list_comprehension_target() -> None:
+    content = "def run(rows):\n    seen = [x for data in rows]\n    return seen\n"
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'data'" in issue for issue in issues)
+
+
+def test_should_flag_dict_comprehension_target() -> None:
+    content = "def run(rows):\n    mapping = {k: v for value in rows}\n    return mapping\n"
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'value'" in issue for issue in issues)
+
+
+def test_should_flag_generator_expression_target() -> None:
+    content = "def run(rows):\n    stream = (x for item in rows)\n    return stream\n"
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'item'" in issue for issue in issues)
+
+
+def test_should_flag_with_as_target() -> None:
+    content = (
+        "def run():\n"
+        "    with open('a') as data:\n"
+        "        return data.read()\n"
+    )
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'data'" in issue for issue in issues)
+
+
+def test_should_flag_walrus_target() -> None:
+    content = "def run(source):\n    if (data := source()):\n        return data\n"
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert any("'data'" in issue for issue in issues)
+
+
+def test_should_return_issues_in_source_line_order() -> None:
+    content = (
+        "def outer():\n"
+        "    def inner():\n"
+        "        result = 1\n"
+        "        data = 2\n"
+        "        return result\n"
+        "    output = inner()\n"
+        "    return output\n"
+    )
+    issues = check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    assert len(issues) == 3
+    assert "Line 3" in issues[0]
+    assert "Line 4" in issues[1]
+    assert "Line 6" in issues[2]
+
+
+def test_should_emit_stderr_advisory_on_syntax_error(
+    capsys: "object",
+) -> None:
+    content = "def broken(\n    this is not python\n"
+    check_banned_identifiers(content, PRODUCTION_FILE_PATH)
+    captured = capsys.readouterr()  # type: ignore[attr-defined]
+    assert "banned-identifier check skipped" in captured.err
+    assert PRODUCTION_FILE_PATH in captured.err

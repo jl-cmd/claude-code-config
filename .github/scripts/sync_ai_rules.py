@@ -17,11 +17,13 @@ from typing import Optional, TypedDict
 
 SYNC_HEADER_START_MARKER = "<!-- SYNC-HEADER-START -->"
 SYNC_HEADER_END_MARKER = "<!-- SYNC-HEADER-END -->"
+BUGBOT_DESTINATION_PATH = ".cursor/BUGBOT.md"
+COPILOT_DESTINATION_PATH = ".github/copilot-instructions.md"
 DESTINATION_PATHS: tuple[str, ...] = (
-    ".github/copilot-instructions.md",
-    ".cursor/BUGBOT.md",
+    COPILOT_DESTINATION_PATH,
+    BUGBOT_DESTINATION_PATH,
 )
-BUGBOT_ONLY_DESTINATION_PATHS: tuple[str, ...] = (".cursor/BUGBOT.md",)
+BUGBOT_ONLY_DESTINATION_PATHS: tuple[str, ...] = (BUGBOT_DESTINATION_PATH,)
 OPT_OUT_SENTINEL_PATH = ".github/sync-ai-rules.optout"
 SOURCE_REPO = "jl-cmd/claude-code-config"
 SOURCE_FILE_PATH = ".github/copilot-instructions.md"

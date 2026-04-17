@@ -42,7 +42,7 @@ jobs:
       id-token: write
     uses: jl-cmd/claude-code-config/.github/workflows/claude-reusable.yml@main
     with:
-      allowed_bots: "cursor[bot]"
+      allowed_bots: "*"
       prompt: |
         A Cursor Bugbot review has been posted on this pull request. Perform an independent debug review of the code changes per the rules in your system prompt.
 

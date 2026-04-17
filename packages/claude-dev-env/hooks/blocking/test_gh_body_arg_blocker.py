@@ -276,3 +276,34 @@ def test_approves_recover_flag_value() -> None:
     assert not _uses_body_string_arg(
         'gh pr create --recover /tmp/state.json --body-file /tmp/b.md'
     )
+
+
+def test_approves_body_file_only_shlex_unparseable() -> None:
+    """loop1-1: shlex-unparseable command with only --body-file must NOT block.
+
+    The old \b boundary in _BARE_BODY_TOKEN_PATTERN fired between 'y' and '-'
+    in '--body-file', causing any unparseable command containing only --body-file
+    (no bare --body) to be incorrectly blocked.
+    """
+    assert not _uses_body_string_arg(
+        "gh pr create --title 'unmatched --body-file /tmp/body.md"
+    )
+
+
+def test_blocks_body_equals_spaced_value() -> None:
+    """loop1-3: --body='has space' split by shlex(posix=False) into two tokens.
+
+    shlex.split(posix=False) splits `--body='has space'` into ["--body='has", "space'"].
+    The continuation token "space'" must be skipped, not yielded as a significant
+    positional — the leading --body='has token must still trigger a block.
+    """
+    assert _uses_body_string_arg(
+        "gh pr create --title 'T' --body='has space'"
+    )
+
+
+def test_blocks_short_b_equals_spaced_value() -> None:
+    """loop1-3: -b='has space' split by shlex(posix=False) — continuation token skipped."""
+    assert _uses_body_string_arg(
+        "gh pr create --title 'T' -b='has space'"
+    )

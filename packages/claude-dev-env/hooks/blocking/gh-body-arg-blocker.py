@@ -39,7 +39,7 @@ _GH_BODY_SUBCOMMANDS = re.compile(
 )
 
 _BARE_BODY_TOKEN_PATTERN = re.compile(
-    r"(?<!\S)(?:--body|-b)(?:=|\b)",
+    r"(?<!\S)(?:--body|-b)(?:=|(?![-\w]))",
 )
 
 _BASH_TOOL_NAME = "Bash"

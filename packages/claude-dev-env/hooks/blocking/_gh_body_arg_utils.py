@@ -44,6 +44,16 @@ all_value_flag_equals_prefixes: tuple[str, ...] = tuple(
     sorted((f"{each_flag}=" for each_flag in all_value_flags), key=len, reverse=True)
 )
 
+all_body_equals_prefixes: tuple[str, ...] = ("--body=", "-b=")
+
+_all_equals_prefixes_for_skip: tuple[str, ...] = tuple(
+    sorted(
+        set(all_value_flag_equals_prefixes) | set(all_body_equals_prefixes),
+        key=len,
+        reverse=True,
+    )
+)
+
 bash_continuation_marker: str = "\\"
 powershell_continuation_marker: str = "`"
 
@@ -117,8 +127,8 @@ def count_extra_tokens_to_skip_for_split_quoted_value(
     return extra_tokens_consumed
 
 
-def _match_value_flag_equals_prefix(token: str) -> str | None:
-    for each_prefix in all_value_flag_equals_prefixes:
+def _match_equals_prefix_for_skip(token: str) -> str | None:
+    for each_prefix in _all_equals_prefixes_for_skip:
         if token.startswith(each_prefix):
             return each_prefix
     return None
@@ -148,8 +158,8 @@ def iter_significant_tokens(command: str) -> Iterator[tuple[str, list[str]]]:
     while token_index < len(all_tokens):
         current_token = all_tokens[token_index]
         remaining_tokens = all_tokens[token_index + 1:]
-        matched_equals_prefix = _match_value_flag_equals_prefix(current_token)
-        if matched_equals_prefix is not None and current_token != matched_equals_prefix.rstrip("="):
+        matched_equals_prefix = _match_equals_prefix_for_skip(current_token)
+        if matched_equals_prefix is not None:
             value_token = current_token[len(matched_equals_prefix):]
             split_value_extra_tokens = count_extra_tokens_to_skip_for_split_quoted_value(
                 remaining_tokens,

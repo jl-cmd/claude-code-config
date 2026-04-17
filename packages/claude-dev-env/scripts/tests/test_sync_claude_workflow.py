@@ -381,6 +381,22 @@ def test_should_raise_when_stderr_contains_http_404_as_non_terminal_token(
         sync_engine.fetch_remote_file_metadata("owner/repo")
 
 
+def test_should_raise_when_http_404_is_followed_by_another_status_across_newlines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_subprocess_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["gh", "api"],
+            returncode=1,
+            stdout="",
+            stderr="gh: HTTP 404\nretrying\nHTTP 422",
+        )
+
+    monkeypatch.setattr(sync_engine.subprocess, "run", fake_subprocess_run)
+    with pytest.raises(RuntimeError):
+        sync_engine.fetch_remote_file_metadata("owner/repo")
+
+
 def test_should_reject_repo_root_missing_canonical_workflow(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

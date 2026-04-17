@@ -51,7 +51,7 @@ def fetch_remote_file_metadata(repository_full_name: str) -> dict[str, str] | No
         check=False,
     )
     if completed.returncode != 0:
-        if re.search(r'\bHTTP 404\b', completed.stderr) and not re.search(r'HTTP 404.*HTTP \d{3}', completed.stderr):
+        if re.search(r'\bHTTP 404\b', completed.stderr) and not re.search(r'HTTP 404.*HTTP \d{3}', completed.stderr, re.DOTALL):
             return None
         raise RuntimeError(f"gh api {api_path} failed: {completed.stderr.strip()}")
     try:

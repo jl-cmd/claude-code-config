@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import base64
 import json
 import subprocess
@@ -197,3 +198,105 @@ def test_should_skip_subprocess_and_print_action_in_dry_run_mode(
     captured_streams = capsys.readouterr()
     assert "CREATE" in captured_streams.out
     assert "UPDATE" in captured_streams.out
+
+
+def test_should_return_clean_failure_when_gh_stdout_is_not_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fake_subprocess_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["gh", "api"],
+            returncode=0,
+            stdout="not json at all",
+            stderr="",
+        )
+
+    monkeypatch.setattr(sync_engine.subprocess, "run", fake_subprocess_run)
+
+    sync_succeeded = sync_engine.sync_single_repo(
+        repository_full_name="owner/repo",
+        canonical_bytes=b"canonical",
+        dry_run=True,
+    )
+
+    assert sync_succeeded is False
+    captured_streams = capsys.readouterr()
+    assert "FAILED (fetch):" in captured_streams.err
+
+
+def test_should_raise_runtime_error_when_gh_stdout_cannot_be_decoded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_subprocess_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["gh", "api"],
+            returncode=0,
+            stdout="<<< not json >>>",
+            stderr="",
+        )
+
+    monkeypatch.setattr(sync_engine.subprocess, "run", fake_subprocess_run)
+
+    with pytest.raises(RuntimeError):
+        sync_engine.fetch_remote_file_metadata("owner/repo")
+
+
+def test_should_raise_runtime_error_when_api_payload_lacks_sha(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    rate_limit_body = json.dumps({"message": "API rate limit exceeded"})
+
+    def fake_subprocess_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["gh", "api"],
+            returncode=0,
+            stdout=rate_limit_body,
+            stderr="",
+        )
+
+    monkeypatch.setattr(sync_engine.subprocess, "run", fake_subprocess_run)
+
+    with pytest.raises(RuntimeError) as exception_info:
+        sync_engine.fetch_remote_file_metadata("owner/repo")
+    assert "shape" in str(exception_info.value) or "unexpected" in str(exception_info.value).lower()
+
+
+def test_should_raise_runtime_error_when_api_payload_is_not_a_mapping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    directory_listing_body = json.dumps([{"name": "claude.yml", "type": "file"}])
+
+    def fake_subprocess_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["gh", "api"],
+            returncode=0,
+            stdout=directory_listing_body,
+            stderr="",
+        )
+
+    monkeypatch.setattr(sync_engine.subprocess, "run", fake_subprocess_run)
+
+    with pytest.raises(RuntimeError):
+        sync_engine.fetch_remote_file_metadata("owner/repo")
+
+
+def test_should_exit_with_config_error_when_canonical_file_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    empty_repo_root = tmp_path / "empty-repo"
+    empty_repo_root.mkdir()
+    monkeypatch.setattr(sync_engine, "resolve_repo_root", lambda: empty_repo_root)
+    monkeypatch.setattr(
+        sync_engine,
+        "parse_command_line_arguments",
+        lambda: argparse.Namespace(dry_run=True, only=[sync_config.TARGET_REPOS[0]]),
+    )
+
+    exit_code = sync_engine.main()
+
+    assert exit_code == sync_config.EXIT_CODE_CONFIG_ERROR
+    captured_streams = capsys.readouterr()
+    assert "Canonical workflow missing" in captured_streams.err

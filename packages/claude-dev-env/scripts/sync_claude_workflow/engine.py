@@ -11,9 +11,11 @@ from pathlib import Path
 
 from sync_claude_workflow.config import (
     CANONICAL_WORKFLOW_PATH_IN_THIS_REPO,
+    EXIT_CODE_CONFIG_ERROR,
     EXIT_CODE_PARTIAL_FAILURE,
     EXIT_CODE_SUCCESS,
     GH_API_NOT_FOUND_STDERR_TOKEN,
+    PAYLOAD_PREVIEW_CHARACTER_LIMIT,
     SYNC_COMMIT_MESSAGE,
     TARGET_DEFAULT_BRANCH,
     TARGET_REPOS,
@@ -48,10 +50,20 @@ def fetch_remote_file_metadata(repository_full_name: str) -> dict[str, str] | No
         if GH_API_NOT_FOUND_STDERR_TOKEN in completed.stderr:
             return None
         raise RuntimeError(f"gh api {api_path} failed: {completed.stderr.strip()}")
-    payload = json.loads(completed.stdout)
+    try:
+        decoded_payload = json.loads(completed.stdout)
+    except ValueError as decode_error:
+        raise RuntimeError(
+            f"gh api {api_path} returned non-JSON stdout: {decode_error}"
+        ) from decode_error
+    if not isinstance(decoded_payload, dict) or "sha" not in decoded_payload or "content" not in decoded_payload:
+        payload_preview = repr(decoded_payload)[:PAYLOAD_PREVIEW_CHARACTER_LIMIT]
+        raise RuntimeError(
+            f"unexpected API response shape for {repository_full_name}: {payload_preview}"
+        )
     return {
-        "sha": payload["sha"],
-        "content_base64": payload["content"].replace("\n", ""),
+        "sha": decoded_payload["sha"],
+        "content_base64": decoded_payload["content"].replace("\n", ""),
     }
 
 
@@ -151,7 +163,11 @@ def parse_command_line_arguments() -> argparse.Namespace:
 def main() -> int:
     arguments = parse_command_line_arguments()
     repo_root = resolve_repo_root()
-    canonical_bytes = read_canonical_workflow_bytes(repo_root)
+    try:
+        canonical_bytes = read_canonical_workflow_bytes(repo_root)
+    except FileNotFoundError as missing_canonical_error:
+        print(f"FAILED (config): {missing_canonical_error}", file=sys.stderr)
+        return EXIT_CODE_CONFIG_ERROR
     selected_repos = select_target_repos(arguments.only)
 
     print(

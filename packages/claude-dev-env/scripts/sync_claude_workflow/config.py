@@ -9,6 +9,8 @@ SYNC_COMMIT_MESSAGE: str = "chore(workflows): sync claude.yml from claude-code-c
 
 GH_API_NOT_FOUND_STDERR_TOKEN: str = "HTTP 404"
 
+PAYLOAD_PREVIEW_CHARACTER_LIMIT: int = 200
+
 TARGET_REPOS: tuple[str, ...] = (
     "JonEcho/babysit-pr",
     "JonEcho/theme-asset-db",
@@ -21,3 +23,4 @@ TARGET_REPOS: tuple[str, ...] = (
 
 EXIT_CODE_SUCCESS: int = 0
 EXIT_CODE_PARTIAL_FAILURE: int = 1
+EXIT_CODE_CONFIG_ERROR: int = 2

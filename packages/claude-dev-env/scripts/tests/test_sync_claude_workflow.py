@@ -6,6 +6,8 @@ import base64
 import sys
 from pathlib import Path
 
+import pytest
+
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 if str(SCRIPTS_DIR) not in sys.path:
@@ -65,7 +67,7 @@ def test_should_select_only_repos_listed_in_filter() -> None:
     assert selected == (first_target, second_target)
 
 
-def test_should_drop_unknown_repos_from_filter(capsys) -> None:
+def test_should_drop_unknown_repos_from_filter(capsys: pytest.CaptureFixture[str]) -> None:
     first_target = sync_config.TARGET_REPOS[0]
     unknown_repository = "never-heard-of/this-repo"
     selected = sync_engine.select_target_repos([first_target, unknown_repository])

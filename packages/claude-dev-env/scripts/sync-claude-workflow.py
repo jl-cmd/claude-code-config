@@ -11,9 +11,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_SCRIPTS_DIR = Path(__file__).resolve().parent
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
+_scripts_directory_path = Path(__file__).resolve().parent
+if str(_scripts_directory_path) not in sys.path:
+    sys.path.insert(0, str(_scripts_directory_path))
 
 from sync_claude_workflow.engine import main as run_sync_claude_workflow
 

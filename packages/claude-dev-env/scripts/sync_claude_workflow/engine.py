@@ -125,11 +125,11 @@ def sync_single_repo(
 def select_target_repos(only_filter: list[str]) -> tuple[str, ...]:
     if not only_filter:
         return TARGET_REPOS
-    valid_filters = [repo for repo in only_filter if repo in TARGET_REPOS]
-    unknown_filters = [repo for repo in only_filter if repo not in TARGET_REPOS]
-    for unknown in unknown_filters:
-        print(f"WARNING: {unknown} is not in TARGET_REPOS — skipping", file=sys.stderr)
-    return tuple(valid_filters)
+    all_valid_filters = [each_repo for each_repo in only_filter if each_repo in TARGET_REPOS]
+    all_unknown_filters = [each_repo for each_repo in only_filter if each_repo not in TARGET_REPOS]
+    for each_unknown in all_unknown_filters:
+        print(f"WARNING: {each_unknown} is not in TARGET_REPOS — skipping", file=sys.stderr)
+    return tuple(all_valid_filters)
 
 
 def parse_command_line_arguments() -> argparse.Namespace:
@@ -162,14 +162,14 @@ def main() -> int:
         f"({'dry run' if arguments.dry_run else 'live'}):"
     )
 
-    failed_repos: list[str] = []
+    all_failed_repos: list[str] = []
     for each_repo in selected_repos:
         if not sync_single_repo(each_repo, canonical_bytes, arguments.dry_run):
-            failed_repos.append(each_repo)
+            all_failed_repos.append(each_repo)
 
-    if failed_repos:
+    if all_failed_repos:
         print(
-            f"\n{len(failed_repos)} repo(s) failed: {', '.join(failed_repos)}",
+            f"\n{len(all_failed_repos)} repo(s) failed: {', '.join(all_failed_repos)}",
             file=sys.stderr,
         )
         return EXIT_CODE_PARTIAL_FAILURE

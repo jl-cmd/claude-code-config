@@ -1,15 +1,28 @@
 """Tests for tdd-enforcer hook (blocking behavior)."""
 
+import importlib.util
 import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 
 SCRIPT_PATH = Path(__file__).parent / "tdd-enforcer.py"
-FRESHNESS_SECONDS = 600
+
+
+def _load_production_module():
+    module_spec = importlib.util.spec_from_file_location("tdd_enforcer_under_test", SCRIPT_PATH)
+    assert module_spec is not None and module_spec.loader is not None
+    loaded_module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(loaded_module)
+    return loaded_module
+
+
+_PRODUCTION_MODULE = _load_production_module()
+FRESHNESS_SECONDS = _PRODUCTION_MODULE._freshness_seconds()
 STALE_MTIME_OFFSET_SECONDS = FRESHNESS_SECONDS + 60
 
 
@@ -39,9 +52,10 @@ def _decision_from(completed: subprocess.CompletedProcess[str]) -> str | None:
 
 
 def _sandbox(tmp_path: Path) -> Path:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    return workspace
+    del tmp_path
+    isolated_root = Path(tempfile.mkdtemp(prefix="sandbox_"))
+    (isolated_root / ".git").mkdir()
+    return isolated_root
 
 
 def test_should_allow_when_sibling_test_file_exists_and_recent(tmp_path: Path) -> None:
@@ -57,7 +71,8 @@ def test_should_allow_when_sibling_test_file_exists_and_recent(tmp_path: Path) -
 
 
 def test_should_deny_when_no_test_file_exists(tmp_path: Path) -> None:
-    production_file = tmp_path / "orders.py"
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
     production_file.write_text("def fulfill(): pass\n")
 
     completed = _run_hook_with_payload(_make_write_payload(production_file))
@@ -69,9 +84,10 @@ def test_should_deny_when_no_test_file_exists(tmp_path: Path) -> None:
 
 
 def test_should_deny_when_test_file_exists_but_is_stale(tmp_path: Path) -> None:
-    production_file = tmp_path / "orders.py"
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
     production_file.write_text("def fulfill(): pass\n")
-    sibling_test = tmp_path / "test_orders.py"
+    sibling_test = sandbox / "test_orders.py"
     sibling_test.write_text("def test_fulfill(): pass\n")
     stale_timestamp = time.time() - STALE_MTIME_OFFSET_SECONDS
     os.utime(sibling_test, (stale_timestamp, stale_timestamp))
@@ -82,7 +98,8 @@ def test_should_deny_when_test_file_exists_but_is_stale(tmp_path: Path) -> None:
 
 
 def test_should_allow_when_bypass_sentinel_present_in_content(tmp_path: Path) -> None:
-    production_file = tmp_path / "orders.py"
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
     content_with_sentinel = "# pragma: no-tdd-gate\ndef fulfill(): pass\n"
 
     completed = _run_hook_with_payload(
@@ -115,9 +132,10 @@ def test_should_skip_test_files_entirely(tmp_path: Path) -> None:
 def test_should_allow_when_tests_directory_sibling_has_fresh_test(
     tmp_path: Path,
 ) -> None:
-    package_dir = tmp_path / "source"
+    sandbox = _sandbox(tmp_path)
+    package_dir = sandbox / "source"
     package_dir.mkdir()
-    tests_dir = tmp_path / "tests"
+    tests_dir = sandbox / "tests"
     tests_dir.mkdir()
     production_file = package_dir / "orders.py"
     production_file.write_text("def fulfill(): pass\n")
@@ -130,11 +148,43 @@ def test_should_allow_when_tests_directory_sibling_has_fresh_test(
 
 
 def test_should_allow_tsx_when_dot_test_sibling_exists(tmp_path: Path) -> None:
-    production_file = tmp_path / "Button.tsx"
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "Button.tsx"
     production_file.write_text("export const Button = () => null;\n")
-    sibling_test = tmp_path / "Button.test.tsx"
+    sibling_test = sandbox / "Button.test.tsx"
     sibling_test.write_text("test('renders', () => {});\n")
 
     completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_when_test_file_has_no_test_evidence(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+    sibling_test = sandbox / "test_orders.py"
+    sibling_test.write_text("x = 1\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_allow_edit_when_bypass_sentinel_present_in_new_string(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
+    payload = {
+        "tool_name": "Edit",
+        "tool_input": {
+            "file_path": str(production_file),
+            "old_string": "pass",
+            "new_string": "# pragma: no-tdd-gate\npass",
+        },
+    }
+
+    completed = _run_hook_with_payload(payload)
 
     assert _decision_from(completed) == "allow"

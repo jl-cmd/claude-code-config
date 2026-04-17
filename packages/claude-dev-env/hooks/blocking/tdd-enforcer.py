@@ -7,6 +7,7 @@ or the matching test has not been modified within the configured
 freshness window. Enforces "TDD IS NON-NEGOTIABLE" from CLAUDE.md.
 """
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -35,12 +36,36 @@ def _parent_walk_limit() -> int:
     return 10
 
 
+def _repo_boundary_sentinels() -> frozenset[str]:
+    return frozenset({".git", "pyproject.toml", "package.json", "Cargo.toml", "go.mod"})
+
+
+def _test_function_patterns() -> tuple[re.Pattern[str], ...]:
+    return (
+        re.compile(r"\bdef\s+test_"),
+        re.compile(r"\b(?:it|test|describe)\s*\("),
+    )
+
+
+def _max_test_file_read_bytes() -> int:
+    return 200_000
+
+
+def _is_repo_boundary(candidate_directory: Path) -> bool:
+    for each_sentinel in _repo_boundary_sentinels():
+        if (candidate_directory / each_sentinel).exists():
+            return True
+    return False
+
+
 def find_nearest_tests_directory(start_directory: Path) -> Path | None:
     current_directory = start_directory
     for _ in range(_parent_walk_limit()):
         sibling_tests = current_directory / _tests_directory_name()
         if sibling_tests.is_dir():
             return sibling_tests
+        if _is_repo_boundary(current_directory):
+            return None
         if current_directory.parent == current_directory:
             return None
         current_directory = current_directory.parent
@@ -69,14 +94,53 @@ def candidate_test_paths_for(production_path: Path) -> list[Path]:
     return all_candidates
 
 
-def has_fresh_test(all_candidates: list[Path], freshness_seconds: int) -> bool:
+def _test_file_encoding() -> str:
+    return "utf-8"
+
+
+def _safe_mtime(candidate_path: Path) -> float | None:
+    try:
+        return candidate_path.stat().st_mtime
+    except (FileNotFoundError, OSError):
+        return None
+
+
+def _read_candidate_text(candidate_path: Path) -> str | None:
+    try:
+        with candidate_path.open("r", encoding=_test_file_encoding(), errors="ignore") as each_file:
+            return each_file.read(_max_test_file_read_bytes())
+    except (FileNotFoundError, OSError):
+        return None
+
+
+def _contains_test_evidence(candidate_path: Path, production_stem: str) -> bool:
+    test_file_content = _read_candidate_text(candidate_path)
+    if test_file_content is None:
+        return False
+    for each_pattern in _test_function_patterns():
+        if each_pattern.search(test_file_content):
+            return True
+    if production_stem and production_stem in test_file_content:
+        return True
+    return False
+
+
+def has_fresh_test(
+    all_candidates: list[Path],
+    freshness_seconds: int,
+    production_stem: str,
+) -> bool:
     current_time = time.time()
     for each_candidate in all_candidates:
-        if not each_candidate.exists():
+        candidate_mtime = _safe_mtime(each_candidate)
+        if candidate_mtime is None:
             continue
-        age_seconds = current_time - each_candidate.stat().st_mtime
-        if age_seconds <= freshness_seconds:
-            return True
+        age_seconds = current_time - candidate_mtime
+        if age_seconds > freshness_seconds:
+            continue
+        if not _contains_test_evidence(each_candidate, production_stem):
+            continue
+        return True
     return False
 
 
@@ -114,6 +178,7 @@ def emit_deny(reason: str) -> None:
 
 
 def _matches_any_skip_pattern(name_lower: str, path_with_forward_slashes: str) -> bool:
+    path_components_lower = [each_part for each_part in path_with_forward_slashes.split("/") if each_part]
     for each_pattern in SKIP_PATTERNS:
         if each_pattern.endswith("/"):
             if each_pattern in path_with_forward_slashes:
@@ -121,7 +186,26 @@ def _matches_any_skip_pattern(name_lower: str, path_with_forward_slashes: str) -
             continue
         if each_pattern in name_lower:
             return True
+        directory_components = path_components_lower[:-1]
+        for each_component in directory_components:
+            if each_pattern in each_component:
+                return True
     return False
+
+
+def _extract_written_content(tool_name: str, tool_input: dict) -> str:
+    if tool_name == "Write":
+        return tool_input.get("content", "") or ""
+    if tool_name == "Edit":
+        return tool_input.get("new_string", "") or ""
+    if tool_name == "MultiEdit":
+        all_edits = tool_input.get("edits", []) or []
+        joined_new_strings: list[str] = []
+        for each_edit in all_edits:
+            if isinstance(each_edit, dict):
+                joined_new_strings.append(each_edit.get("new_string", "") or "")
+        return "\n".join(joined_new_strings)
+    return ""
 
 
 def main() -> None:
@@ -130,6 +214,7 @@ def main() -> None:
     except json.JSONDecodeError:
         sys.exit(0)
 
+    tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input", {})
     file_path = tool_input.get("file_path", "")
 
@@ -154,13 +239,13 @@ def main() -> None:
         sys.exit(0)
 
     # Block production code - require confirmation
-    written_content = tool_input.get("content", "") or ""
+    written_content = _extract_written_content(tool_name, tool_input)
     if _bypass_sentinel() in written_content:
         emit_allow()
         sys.exit(0)
 
     all_candidates = candidate_test_paths_for(path)
-    if has_fresh_test(all_candidates, _freshness_seconds()):
+    if has_fresh_test(all_candidates, _freshness_seconds(), path.stem):
         emit_allow()
         sys.exit(0)
 

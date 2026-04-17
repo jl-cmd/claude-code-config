@@ -7,6 +7,8 @@ the four changes applied.
 """
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -18,10 +20,25 @@ AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "project Claude Code config tree; edits inside are routine"
 )
 JSON_INDENT_SPACES: int = 2
+TEXT_FILE_ENCODING: str = "utf-8"
+GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = ("*", "?", "[", "]", "(", ")")
+
+
+def path_contains_glob_metacharacters(candidate_path: str) -> bool:
+    return any(
+        each_character in candidate_path
+        for each_character in GLOB_METACHARACTERS_IN_PATH
+    )
 
 
 def get_current_project_path() -> str:
-    return str(Path.cwd()).replace("\\", "/")
+    normalized_project_path = str(Path.cwd()).replace("\\", "/")
+    if path_contains_glob_metacharacters(normalized_project_path):
+        raise ValueError(
+            f"Current directory path contains glob metacharacters and cannot "
+            f"be used to build permission rules safely: {normalized_project_path}"
+        )
+    return normalized_project_path
 
 
 def build_permission_rule(tool_name: str, project_path: str) -> str:
@@ -38,13 +55,29 @@ def build_permission_rules(project_path: str) -> list[str]:
 def load_settings(settings_path: Path) -> dict[str, Any]:
     if not settings_path.exists():
         return {}
-    return json.loads(settings_path.read_text(encoding="utf-8"))
+    try:
+        parsed_settings = json.loads(settings_path.read_text(encoding=TEXT_FILE_ENCODING))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed_settings, dict):
+        return {}
+    return parsed_settings
 
 
 def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
-    settings_path.write_text(
-        json.dumps(settings, indent=JSON_INDENT_SPACES), encoding="utf-8"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    serialized_settings = json.dumps(settings, indent=JSON_INDENT_SPACES)
+    temporary_file_descriptor, temporary_file_path = tempfile.mkstemp(
+        prefix=settings_path.name, dir=str(settings_path.parent)
     )
+    try:
+        with os.fdopen(temporary_file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as temporary_file:
+            temporary_file.write(serialized_settings)
+        os.replace(temporary_file_path, settings_path)
+    except BaseException:
+        if os.path.exists(temporary_file_path):
+            os.unlink(temporary_file_path)
+        raise
 
 
 def append_if_missing(target_list: list[str], new_value: str) -> bool:
@@ -54,9 +87,27 @@ def append_if_missing(target_list: list[str], new_value: str) -> bool:
     return True
 
 
+def ensure_dict_section(settings: dict[str, Any], section_name: str) -> dict[str, Any]:
+    existing_section = settings.get(section_name)
+    if not isinstance(existing_section, dict):
+        replacement_section: dict[str, Any] = {}
+        settings[section_name] = replacement_section
+        return replacement_section
+    return existing_section
+
+
+def ensure_list_entry(section: dict[str, Any], entry_name: str) -> list[Any]:
+    existing_entry = section.get(entry_name)
+    if not isinstance(existing_entry, list):
+        replacement_entry: list[Any] = []
+        section[entry_name] = replacement_entry
+        return replacement_entry
+    return existing_entry
+
+
 def add_rules_to_allow_list(settings: dict[str, Any], rules_to_add: list[str]) -> int:
-    permissions_section = settings.setdefault("permissions", {})
-    existing_allow_list = permissions_section.setdefault("allow", [])
+    permissions_section = ensure_dict_section(settings, "permissions")
+    existing_allow_list = ensure_list_entry(permissions_section, "allow")
     return sum(
         1
         for each_rule in rules_to_add
@@ -66,15 +117,17 @@ def add_rules_to_allow_list(settings: dict[str, Any], rules_to_add: list[str]) -
 
 def add_directory_to_additional_directories(
     settings: dict[str, Any], directory_path: str
-) -> bool:
-    permissions_section = settings.setdefault("permissions", {})
-    existing_directories = permissions_section.setdefault("additionalDirectories", [])
-    return append_if_missing(existing_directories, directory_path)
+) -> int:
+    permissions_section = ensure_dict_section(settings, "permissions")
+    existing_directories = ensure_list_entry(permissions_section, "additionalDirectories")
+    if append_if_missing(existing_directories, directory_path):
+        return 1
+    return 0
 
 
 def add_auto_mode_environment_entry(settings: dict[str, Any], entry_text: str) -> bool:
-    auto_mode_section = settings.setdefault("autoMode", {})
-    existing_environment = auto_mode_section.setdefault("environment", [])
+    auto_mode_section = ensure_dict_section(settings, "autoMode")
+    existing_environment = ensure_list_entry(auto_mode_section, "environment")
     return append_if_missing(existing_environment, entry_text)
 
 
@@ -86,13 +139,13 @@ def grant_permissions_for_current_directory() -> None:
     )
     settings = load_settings(CLAUDE_USER_SETTINGS_PATH)
     rules_added_count = add_rules_to_allow_list(settings, permission_rules)
-    directory_added = add_directory_to_additional_directories(settings, project_path)
+    directories_added_count = add_directory_to_additional_directories(settings, project_path)
     environment_added = add_auto_mode_environment_entry(settings, environment_entry)
     save_settings(CLAUDE_USER_SETTINGS_PATH, settings)
     print(f"Project path: {project_path}")
     print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
     print(f"Allow rules added: {rules_added_count} of {len(permission_rules)}")
-    print(f"Additional directory added: {directory_added}")
+    print(f"Additional directories added: {directories_added_count}")
     print(f"Auto-mode environment entry added: {environment_added}")
 
 

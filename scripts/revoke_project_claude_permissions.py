@@ -6,6 +6,8 @@ entry from ~/.claude/settings.json. Safe to run when no prior grant exists.
 """
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -17,10 +19,25 @@ AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "project Claude Code config tree; edits inside are routine"
 )
 JSON_INDENT_SPACES: int = 2
+TEXT_FILE_ENCODING: str = "utf-8"
+GLOB_METACHARACTERS_IN_PATH: tuple[str, ...] = ("*", "?", "[", "]", "(", ")")
+
+
+def path_contains_glob_metacharacters(candidate_path: str) -> bool:
+    return any(
+        each_character in candidate_path
+        for each_character in GLOB_METACHARACTERS_IN_PATH
+    )
 
 
 def get_current_project_path() -> str:
-    return str(Path.cwd()).replace("\\", "/")
+    normalized_project_path = str(Path.cwd()).replace("\\", "/")
+    if path_contains_glob_metacharacters(normalized_project_path):
+        raise ValueError(
+            f"Current directory path contains glob metacharacters and cannot "
+            f"be used to build permission rules safely: {normalized_project_path}"
+        )
+    return normalized_project_path
 
 
 def build_permission_rule(tool_name: str, project_path: str) -> str:
@@ -37,13 +54,29 @@ def build_permission_rules(project_path: str) -> list[str]:
 def load_settings(settings_path: Path) -> dict[str, Any]:
     if not settings_path.exists():
         return {}
-    return json.loads(settings_path.read_text(encoding="utf-8"))
+    try:
+        parsed_settings = json.loads(settings_path.read_text(encoding=TEXT_FILE_ENCODING))
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed_settings, dict):
+        return {}
+    return parsed_settings
 
 
 def save_settings(settings_path: Path, settings: dict[str, Any]) -> None:
-    settings_path.write_text(
-        json.dumps(settings, indent=JSON_INDENT_SPACES), encoding="utf-8"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    serialized_settings = json.dumps(settings, indent=JSON_INDENT_SPACES)
+    temporary_file_descriptor, temporary_file_path = tempfile.mkstemp(
+        prefix=settings_path.name, dir=str(settings_path.parent)
     )
+    try:
+        with os.fdopen(temporary_file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as temporary_file:
+            temporary_file.write(serialized_settings)
+        os.replace(temporary_file_path, settings_path)
+    except BaseException:
+        if os.path.exists(temporary_file_path):
+            os.unlink(temporary_file_path)
+        raise
 
 
 def remove_values_from_list(target_list: list[str], values_to_remove: set[str]) -> int:
@@ -96,6 +129,11 @@ def revoke_permissions_for_current_directory() -> None:
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(
         project_path=project_path
     )
+    if not CLAUDE_USER_SETTINGS_PATH.exists():
+        print(f"Project path: {project_path}")
+        print(f"Settings file: {CLAUDE_USER_SETTINGS_PATH}")
+        print("No settings file found; nothing to revoke.")
+        return
     settings = load_settings(CLAUDE_USER_SETTINGS_PATH)
     rules_removed_count = remove_rules_from_allow_list(settings, permission_rules)
     directories_removed_count = remove_directory_from_additional_directories(

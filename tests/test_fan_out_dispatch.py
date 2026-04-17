@@ -2,7 +2,11 @@
 
 import os
 import sys
-from datetime import datetime, timezone
+import urllib.error
+from datetime import datetime, timedelta, timezone
+from email.message import Message
+from email.utils import format_datetime
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -289,3 +293,111 @@ class TestSourceCommitEmptyFallback:
             )
 
         assert resolved == "abc1234deadbeef"
+
+
+RUN_CREATED_AT_FUTURE = "2099-04-17T12:30:01Z"
+
+
+def make_http_error(
+    retry_after_header_value: str,
+) -> urllib.error.HTTPError:
+    headers = Message()
+    headers["Retry-After"] = retry_after_header_value
+    return urllib.error.HTTPError(
+        url="https://api.github.com/fake",
+        code=fan_out_dispatch.HTTP_STATUS_TOO_MANY_REQUESTS,
+        msg="Too Many Requests",
+        hdrs=headers,
+        fp=BytesIO(b""),
+    )
+
+
+class TestRetryAfterHttpDateParsing:
+    """Retry-After may arrive as an integer of seconds or as an HTTP-date string."""
+
+    def should_return_integer_seconds_when_header_is_numeric(self) -> None:
+        http_error = make_http_error("30")
+
+        with patch("urllib.request.urlopen", side_effect=http_error):
+            status_code, _, retry_after_seconds = fan_out_dispatch.make_github_api_request(
+                "/fake", "token"
+            )
+
+        assert status_code == fan_out_dispatch.HTTP_STATUS_TOO_MANY_REQUESTS
+        assert retry_after_seconds == 30
+
+    def should_return_positive_delta_when_header_is_http_date(self) -> None:
+        future_moment = datetime.now(timezone.utc) + timedelta(seconds=120)
+        http_date_text = format_datetime(future_moment, usegmt=True)
+        http_error = make_http_error(http_date_text)
+
+        with patch("urllib.request.urlopen", side_effect=http_error):
+            _, _, retry_after_seconds = fan_out_dispatch.make_github_api_request(
+                "/fake", "token"
+            )
+
+        assert retry_after_seconds is not None
+        assert retry_after_seconds > 0
+        assert retry_after_seconds <= 120
+
+    def should_return_none_when_header_is_unparseable(self) -> None:
+        http_error = make_http_error("not-a-date-or-number")
+
+        with patch("urllib.request.urlopen", side_effect=http_error):
+            _, _, retry_after_seconds = fan_out_dispatch.make_github_api_request(
+                "/fake", "token"
+            )
+
+        assert retry_after_seconds is None
+
+
+class TestPollListenerRetriesUntilWorkflowRunAppears:
+    """The poll loop retries across empty workflow_runs lists up to the cap."""
+
+    def should_return_missing_after_all_attempts_when_workflow_runs_stay_empty(
+        self,
+    ) -> None:
+        with patch.object(
+            fan_out_dispatch,
+            "make_github_api_request",
+            return_value=(fan_out_dispatch.HTTP_STATUS_OK, {"workflow_runs": []}, None),
+        ) as mock_request:
+            with patch.object(fan_out_dispatch.time, "sleep"):
+                conclusion = fan_out_dispatch.poll_listener_run_conclusion(
+                    FAKE_OWNER, FAKE_REPO, FAKE_TOKEN, DISPATCHED_AT_EARLY
+                )
+
+        assert conclusion == fan_out_dispatch.LISTENER_STATUS_MISSING
+        assert mock_request.call_count == fan_out_dispatch.LISTENER_POLL_MAX_ATTEMPTS
+
+    def should_return_conclusion_when_workflow_run_appears_on_later_attempt(
+        self,
+    ) -> None:
+        empty_response = (
+            fan_out_dispatch.HTTP_STATUS_OK,
+            {"workflow_runs": []},
+            None,
+        )
+        populated_response = (
+            fan_out_dispatch.HTTP_STATUS_OK,
+            {
+                "workflow_runs": [
+                    {
+                        "created_at": RUN_CREATED_AT_FUTURE,
+                        "conclusion": "success",
+                    }
+                ]
+            },
+            None,
+        )
+        with patch.object(
+            fan_out_dispatch,
+            "make_github_api_request",
+            side_effect=[empty_response, empty_response, populated_response],
+        ):
+            with patch.object(fan_out_dispatch.time, "sleep"):
+                conclusion = fan_out_dispatch.poll_listener_run_conclusion(
+                    FAKE_OWNER, FAKE_REPO, FAKE_TOKEN, DISPATCHED_AT_EARLY
+                )
+
+        assert conclusion == "success"

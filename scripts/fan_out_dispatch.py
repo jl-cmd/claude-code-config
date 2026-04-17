@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Optional
 
 
@@ -43,10 +44,9 @@ SECONDS_PER_DAY = 86400
 DISPATCH_STATUS_SUCCEEDED = "sent"
 DISPATCH_STATUS_OPTED_OUT = "opted-out"
 DISPATCH_STATUS_FAILED = "dispatch-failed"
-DISPATCH_STATUS_SENT = DISPATCH_STATUS_SUCCEEDED
 LISTENER_STATUS_MISSING = "listener-missing"
 LISTENER_STATUS_PENDING = "pending"
-LISTENER_STATUS_POLL_ERROR = "poll_error"
+LISTENER_STATUS_POLL_ERROR = "poll-error"
 LISTENER_CONCLUSION_SUCCESS = "success"
 LISTENER_CONCLUSION_FAILURE = "failure"
 UNKNOWN_COMMIT_PLACEHOLDER = "unknown"
@@ -90,7 +90,21 @@ def make_github_api_request(
             try:
                 retry_after_seconds = int(retry_after_header)
             except (TypeError, ValueError):
-                retry_after_seconds = None
+                try:
+                    parsed_moment = parsedate_to_datetime(retry_after_header)
+                except (TypeError, ValueError):
+                    parsed_moment = None
+                if parsed_moment is not None:
+                    if parsed_moment.tzinfo is None:
+                        parsed_moment = parsed_moment.replace(tzinfo=timezone.utc)
+                    retry_after_seconds = max(
+                        0,
+                        int(
+                            (
+                                parsed_moment - datetime.now(timezone.utc)
+                            ).total_seconds()
+                        ),
+                    )
         return http_error.code, None, retry_after_seconds
     except (urllib.error.URLError, TimeoutError):
         return 0, None, None
@@ -133,8 +147,9 @@ def is_target_repo(repo: dict[str, object]) -> bool:
     if not is_included:
         full_name = repo.get("full_name", "")
         print(
-            f"::debug::Excluding {full_name}: archived={is_archived} "
-            f"push={has_push_permission}",
+            f"::debug::Excluding {full_name}: owner_match={is_owned_by_target_account} "
+            f"archived={is_archived} push={has_push_permission} "
+            f"source_repo={is_source_repo} upstream_fork={is_upstream_fork}",
             file=sys.stderr,
         )
     return is_included
@@ -338,7 +353,7 @@ def main() -> int:
 
     token_by_owner = {"JonEcho": jonecho_token, "jl-cmd": jlcmd_token}
 
-    all_candidate_repos: list[dict] = []
+    all_candidate_repos: list[dict[str, object]] = []
     for owner, token in token_by_owner.items():
         if not token:
             print(
@@ -368,7 +383,7 @@ def main() -> int:
             owner, repo_name, token, dispatch_payload
         )
         if dispatch_succeeded:
-            dispatch_status_by_repo[full_repo_name] = DISPATCH_STATUS_SENT
+            dispatch_status_by_repo[full_repo_name] = DISPATCH_STATUS_SUCCEEDED
             all_dispatched_repos.append((owner, repo_name, full_repo_name))
         else:
             dispatch_status_by_repo[full_repo_name] = DISPATCH_STATUS_FAILED
@@ -455,16 +470,16 @@ def compute_exit_summary_line(
         1 for status in dispatch_status_by_repo.values() if status == DISPATCH_STATUS_FAILED
     )
     conclusion_success_count = sum(
-        1 for c in conclusion_by_repo.values() if c == LISTENER_CONCLUSION_SUCCESS
+        1 for each_conclusion in conclusion_by_repo.values() if each_conclusion == LISTENER_CONCLUSION_SUCCESS
     )
     conclusion_failure_count = sum(
-        1 for c in conclusion_by_repo.values() if c == LISTENER_CONCLUSION_FAILURE
+        1 for each_conclusion in conclusion_by_repo.values() if each_conclusion == LISTENER_CONCLUSION_FAILURE
     )
     conclusion_pending_count = sum(
-        1 for c in conclusion_by_repo.values() if c == LISTENER_STATUS_PENDING
+        1 for each_conclusion in conclusion_by_repo.values() if each_conclusion == LISTENER_STATUS_PENDING
     )
     conclusion_poll_error_count = sum(
-        1 for c in conclusion_by_repo.values() if c == LISTENER_STATUS_POLL_ERROR
+        1 for each_conclusion in conclusion_by_repo.values() if each_conclusion == LISTENER_STATUS_POLL_ERROR
     )
     return (
         f"dispatch_success={dispatch_success_count} "
@@ -490,7 +505,7 @@ def compute_exit_code(
         LISTENER_STATUS_POLL_ERROR,
     }
     any_conclusion_failed = any(
-        c in failing_conclusions for c in conclusion_by_repo.values()
+        each_conclusion in failing_conclusions for each_conclusion in conclusion_by_repo.values()
     )
     if any_dispatch_failed or any_conclusion_failed:
         return 1

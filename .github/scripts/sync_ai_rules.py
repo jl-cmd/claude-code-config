@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TypedDict
 
 
 SYNC_HEADER_START_MARKER = "<!-- SYNC-HEADER-START -->"
@@ -45,6 +45,7 @@ UNKNOWN_COMMIT_PLACEHOLDER = "unknown"
 FETCH_CANONICAL_TIMEOUT_SECONDS = 30
 FETCH_CANONICAL_MAX_ATTEMPTS = 3
 FETCH_CANONICAL_BACKOFF_BASE_SECONDS = 2
+FETCH_CANONICAL_BACKOFF_EXPONENT_BASE = 2
 GITHUB_API_REQUEST_TIMEOUT_SECONDS = 30
 CANONICAL_BODY_MINIMUM_LENGTH_BYTES = 100
 COMMIT_PUSH_MAX_ATTEMPTS = 3
@@ -52,6 +53,11 @@ COMMIT_PUSH_RETRY_SLEEP_SECONDS = 5
 DRIFT_ISSUE_LABEL = "ai-rules-drift"
 HTTP_STATUS_OK = 200
 HTTP_STATUS_CREATED = 201
+
+
+class DriftError(TypedDict):
+    destination_path: str
+    message: str
 
 
 def normalize_line_endings(text: str) -> str:
@@ -111,12 +117,12 @@ def fetch_canonical_body(raw_url: str) -> str:
                 raw_url, timeout=FETCH_CANONICAL_TIMEOUT_SECONDS
             ) as http_response:
                 return http_response.read().decode("utf-8")
-        except (urllib.error.URLError, TimeoutError, OSError) as fetch_error:
+        except (urllib.error.URLError, TimeoutError) as fetch_error:
             last_exception = fetch_error
             if attempt_index == FETCH_CANONICAL_MAX_ATTEMPTS - 1:
                 break
             sleep_seconds = FETCH_CANONICAL_BACKOFF_BASE_SECONDS * (
-                2**attempt_index
+                FETCH_CANONICAL_BACKOFF_EXPONENT_BASE ** attempt_index
             )
             time.sleep(sleep_seconds)
     assert last_exception is not None
@@ -290,10 +296,8 @@ def find_existing_drift_issue(
     with urllib.request.urlopen(
         api_request, timeout=GITHUB_API_REQUEST_TIMEOUT_SECONDS
     ) as http_response:
-        if http_response.status != HTTP_STATUS_OK:
-            return None
         all_open_issues = json.loads(http_response.read().decode("utf-8"))
-    if not all_open_issues:
+    if not isinstance(all_open_issues, list) or not all_open_issues:
         return None
     first_issue = all_open_issues[0]
     issue_number = first_issue.get("number")
@@ -323,13 +327,7 @@ def add_issue_comment(
     with urllib.request.urlopen(
         api_request, timeout=GITHUB_API_REQUEST_TIMEOUT_SECONDS
     ) as http_response:
-        status_code = http_response.status
-    if status_code != HTTP_STATUS_CREATED:
-        print(
-            f"::error::Comment creation returned status {status_code}",
-            file=sys.stderr,
-        )
-        raise RuntimeError(f"Comment creation returned status {status_code}")
+        http_response.read()
 
 
 def write_step_summary(text: str) -> None:
@@ -369,12 +367,25 @@ def commit_and_push_sync(
         check=True,
     )
 
+    current_branch_name = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
     last_push_error: Optional[subprocess.CalledProcessError] = None
     for attempt_index in range(COMMIT_PUSH_MAX_ATTEMPTS):
+        subprocess.run(
+            ["git", "rebase", "--abort"],
+            check=False,
+            capture_output=True,
+        )
         try:
             subprocess.run(["git", "fetch", "origin"], check=True)
             subprocess.run(
-                ["git", "pull", "--rebase", "origin", "HEAD"], check=True
+                ["git", "pull", "--rebase", "origin", current_branch_name],
+                check=True,
             )
             subprocess.run(["git", "push"], check=True)
             return
@@ -388,12 +399,21 @@ def commit_and_push_sync(
 
 
 def report_drift_errors(
-    all_errors: list[dict[str, str]],
+    all_errors: list[DriftError],
     github_token: str,
     github_repository: str,
 ) -> None:
     for each_error in all_errors:
         print(f"::error::{each_error['message']}", file=sys.stderr)
+
+    affected_destination_paths: list[str] = [
+        each_destination_path
+        for each_destination_path in DESTINATION_PATHS
+        if any(
+            each_error["destination_path"] == each_destination_path
+            for each_error in all_errors
+        )
+    ]
 
     issue_body_text = (
         "## AI Rules Sync: Drift Detected\n\n"
@@ -402,45 +422,43 @@ def report_drift_errors(
         "file(s) and re-run with `force_initial_overwrite=true`."
     )
 
-    if github_token and github_repository:
-        for each_destination_path in DESTINATION_PATHS:
-            has_drift_for_path = any(
-                each_error["destination_path"] == each_destination_path
-                for each_error in all_errors
+    if github_token and github_repository and affected_destination_paths:
+        try:
+            existing_issue_number = find_existing_drift_issue(
+                github_token, github_repository, DRIFT_ISSUE_LABEL
             )
-            if has_drift_for_path:
-                try:
-                    existing_issue_number = find_existing_drift_issue(
-                        github_token, github_repository, DRIFT_ISSUE_LABEL
-                    )
-                except Exception as lookup_error:
-                    print(
-                        f"::warning::Failed to look up existing drift issue: {lookup_error}",
-                        file=sys.stderr,
-                    )
-                    existing_issue_number = None
+        except Exception as lookup_error:
+            print(
+                f"::warning::Failed to look up existing drift issue: {lookup_error}",
+                file=sys.stderr,
+            )
+            existing_issue_number = None
 
-                try:
-                    if existing_issue_number is not None:
-                        add_issue_comment(
-                            github_token,
-                            github_repository,
-                            existing_issue_number,
-                            issue_body_text,
-                        )
-                    else:
-                        open_github_issue(
-                            github_token,
-                            github_repository,
-                            f"AI rules sync: drift detected in {each_destination_path}",
-                            issue_body_text,
-                            labels=[DRIFT_ISSUE_LABEL],
-                        )
-                except Exception as issue_error:
-                    print(
-                        f"::warning::Failed to open GitHub Issue: {issue_error}",
-                        file=sys.stderr,
-                    )
+        try:
+            if existing_issue_number is not None:
+                add_issue_comment(
+                    github_token,
+                    github_repository,
+                    existing_issue_number,
+                    issue_body_text,
+                )
+            else:
+                issue_title = (
+                    "AI rules sync: drift detected in "
+                    + ", ".join(affected_destination_paths)
+                )
+                open_github_issue(
+                    github_token,
+                    github_repository,
+                    issue_title,
+                    issue_body_text,
+                    labels=[DRIFT_ISSUE_LABEL],
+                )
+        except Exception as issue_error:
+            print(
+                f"::warning::Failed to open GitHub Issue: {issue_error}",
+                file=sys.stderr,
+            )
 
     drift_summary = "## Sync failed: drift detected\n\n" + "\n".join(
         f"- {each_error['message']}" for each_error in all_errors
@@ -483,7 +501,7 @@ def main() -> int:
 
     canonical_body_sha256 = compute_sha256(canonical_body)
 
-    all_policy_errors: list[dict[str, str]] = []
+    all_policy_errors: list[DriftError] = []
     for destination_path in DESTINATION_PATHS:
         policy_error_message = check_destination_policy(
             destination_path,
@@ -491,10 +509,10 @@ def main() -> int:
         )
         if policy_error_message:
             all_policy_errors.append(
-                {
-                    "destination_path": destination_path,
-                    "message": policy_error_message,
-                }
+                DriftError(
+                    destination_path=destination_path,
+                    message=policy_error_message,
+                )
             )
 
     if all_policy_errors:

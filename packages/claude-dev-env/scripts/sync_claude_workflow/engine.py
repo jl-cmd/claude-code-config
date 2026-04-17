@@ -13,7 +13,7 @@ from sync_claude_workflow.config import (
     CANONICAL_WORKFLOW_PATH_IN_THIS_REPO,
     EXIT_CODE_PARTIAL_FAILURE,
     EXIT_CODE_SUCCESS,
-    HTTP_NOT_FOUND_STATUS_INDICATORS,
+    GH_API_NOT_FOUND_STDERR_TOKEN,
     SYNC_COMMIT_MESSAGE,
     TARGET_DEFAULT_BRANCH,
     TARGET_REPOS,
@@ -45,10 +45,7 @@ def fetch_remote_file_metadata(repository_full_name: str) -> dict[str, str] | No
         check=False,
     )
     if completed.returncode != 0:
-        if any(
-            indicator in completed.stderr
-            for indicator in HTTP_NOT_FOUND_STATUS_INDICATORS
-        ):
+        if GH_API_NOT_FOUND_STDERR_TOKEN in completed.stderr:
             return None
         raise RuntimeError(f"gh api {api_path} failed: {completed.stderr.strip()}")
     payload = json.loads(completed.stdout)
@@ -96,7 +93,7 @@ def push_canonical_to_repo(
         check=False,
     )
     if completed.returncode != 0:
-        print(f"  FAILED: {completed.stderr.strip()}", file=sys.stderr)
+        print(f"  FAILED (push): {completed.stderr.strip()}", file=sys.stderr)
         return False
     return True
 

@@ -7,7 +7,7 @@ TARGET_WORKFLOW_PATH: str = ".github/workflows/claude.yml"
 TARGET_DEFAULT_BRANCH: str = "main"
 SYNC_COMMIT_MESSAGE: str = "chore(workflows): sync claude.yml from claude-code-config"
 
-HTTP_NOT_FOUND_STATUS_INDICATORS: tuple[str, ...] = ("Not Found", "404")
+GH_API_NOT_FOUND_STDERR_TOKEN: str = "HTTP 404"
 
 TARGET_REPOS: tuple[str, ...] = (
     "JonEcho/babysit-pr",

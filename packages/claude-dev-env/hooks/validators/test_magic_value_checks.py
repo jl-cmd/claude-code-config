@@ -14,7 +14,7 @@ from validator_base import Violation
 
 
 MAGIC_NUMBER_SOURCE = "x = 42\n"
-PRODUCTION_TEMPDIR_PREFIX = "prod_"
+NON_TEST_TEMPDIR_PREFIX = "src_"
 
 
 GOOD_NAMED_CONSTANTS = '''
@@ -372,9 +372,79 @@ class TestValidateFilePathExemptions:
 
         assert validate_file(settings_path) == []
 
+    def test_validate_file_should_skip_uppercase_config_directory(
+        self, tmp_path: Path
+    ) -> None:
+        """Case-insensitive match so Config/ on case-preserving filesystems skips."""
+        uppercase_config_directory = tmp_path / "Config"
+        uppercase_config_directory.mkdir()
+        constants_path = uppercase_config_directory / "constants.py"
+        constants_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(constants_path) == []
+
+    def test_validate_file_should_skip_mixed_case_tests_directory(
+        self, tmp_path: Path
+    ) -> None:
+        """Case-insensitive match so src/Tests/ short-circuits the same way src/tests/ does."""
+        mixed_case_tests_directory = tmp_path / "Tests"
+        mixed_case_tests_directory.mkdir()
+        test_module_path = mixed_case_tests_directory / "test_foo.py"
+        test_module_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(test_module_path) == []
+
+    def test_validate_file_should_skip_conftest_helpers(
+        self, tmp_path: Path
+    ) -> None:
+        """Naked ``conftest`` substring matches conftest_helpers.py and similar."""
+        conftest_helpers_path = tmp_path / "conftest_helpers.py"
+        conftest_helpers_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(conftest_helpers_path) == []
+
+    def test_validate_file_should_skip_hook_infrastructure(
+        self, tmp_path: Path
+    ) -> None:
+        """Hook files under .claude/hooks/ are standalone infrastructure, not project code."""
+        hooks_directory = tmp_path / ".claude" / "hooks" / "blocking"
+        hooks_directory.mkdir(parents=True)
+        hook_path = hooks_directory / "my_hook.py"
+        hook_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(hook_path) == []
+
+    def test_validate_file_should_skip_migrations_directory(
+        self, tmp_path: Path
+    ) -> None:
+        """Django migrations use literal values by convention (must be self-contained)."""
+        migrations_directory = tmp_path / "migrations"
+        migrations_directory.mkdir()
+        migration_path = migrations_directory / "0001_initial.py"
+        migration_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(migration_path) == []
+
+    def test_validate_file_should_skip_workflow_tab_files(
+        self, tmp_path: Path
+    ) -> None:
+        """Workflow tab files hold StateDefinition singletons, not misplaced literals."""
+        workflow_tab_path = tmp_path / "analysis_tab.py"
+        workflow_tab_path.write_text(MAGIC_NUMBER_SOURCE, encoding="utf-8")
+
+        assert validate_file(workflow_tab_path) == []
+
     def test_validate_file_should_still_scan_production_py_files(self) -> None:
+        """Use tempfile with a non-test prefix instead of the pytest tmp_path fixture.
+
+        pytest's tmp_path produces directories like ``pytest-of-<user>/pytest-N/
+        test_validate_file_should_still_scan_production_py_files0/`` whose names
+        contain ``test_`` and ``pytest-`` -- both match TEST_PATH_PATTERNS, so
+        validate_file would short-circuit via is_test_file and make this
+        regression a false green.
+        """
         with tempfile.TemporaryDirectory(
-            prefix=PRODUCTION_TEMPDIR_PREFIX
+            prefix=NON_TEST_TEMPDIR_PREFIX
         ) as temporary_root:
             source_directory = Path(temporary_root) / "src"
             source_directory.mkdir()

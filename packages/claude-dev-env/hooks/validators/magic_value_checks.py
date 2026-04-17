@@ -12,6 +12,13 @@ import sys
 from pathlib import Path
 from typing import Dict, FrozenSet, List, Set, Tuple, Type
 
+from exempt_paths import (
+    is_config_file,
+    is_hook_infrastructure,
+    is_migration_path,
+    is_test_file,
+    is_workflow_registry_file,
+)
 from validator_base import Violation
 
 
@@ -25,40 +32,6 @@ _CONTAINER_LITERAL_TYPES: Tuple[Type[ast.AST], ...] = (
     ast.Tuple,
     ast.Set,
 )
-
-SOURCE_ENCODING: str = "utf-8"
-
-CONFIG_PATH_PATTERNS: frozenset[str] = frozenset(
-    {
-        "config/",
-        "config\\",
-        "/config.",
-        "\\config.",
-        "settings.py",
-    }
-)
-
-TEST_PATH_PATTERNS: frozenset[str] = frozenset(
-    {
-        "test_",
-        "_test.",
-        ".test.",
-        ".spec.",
-        "conftest.py",
-        "/tests/",
-        "\\tests\\",
-        "/tests.py",
-        "\\tests.py",
-    }
-)
-
-
-def is_config_file(file_path: str) -> bool:
-    return any(pattern in file_path for pattern in CONFIG_PATH_PATTERNS)
-
-
-def is_test_file(file_path: str) -> bool:
-    return any(pattern in file_path for pattern in TEST_PATH_PATTERNS)
 
 
 def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
@@ -176,12 +149,22 @@ def _is_upper_snake_name(name: str) -> bool:
     return bool(_UPPER_SNAKE_NAME_PATTERN.match(name))
 
 
+def _is_exempt_path(file_path: str) -> bool:
+    return (
+        is_test_file(file_path)
+        or is_config_file(file_path)
+        or is_hook_infrastructure(file_path)
+        or is_workflow_registry_file(file_path)
+        or is_migration_path(file_path)
+    )
+
+
 def validate_file(file_path: Path) -> List[Violation]:
     filename = str(file_path)
-    if is_test_file(filename) or is_config_file(filename):
+    if _is_exempt_path(filename):
         return []
     try:
-        source = file_path.read_text(encoding=SOURCE_ENCODING)
+        source = file_path.read_text(encoding="utf8")
         tree = ast.parse(source)
     except Exception as error:
         return [Violation(filename, 0, f"Error: {error}")]

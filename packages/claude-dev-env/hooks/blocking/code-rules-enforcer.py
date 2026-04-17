@@ -15,9 +15,11 @@ Advisory only (non-blocking):
 - File line count: stderr warning at 400 lines (soft) and 1000 lines (hard)
 """
 import ast
+import io
 import json
 import re
 import sys
+import tokenize
 from typing import Optional
 
 PYTHON_EXTENSIONS = {".py"}
@@ -419,15 +421,38 @@ def check_e2e_test_naming(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _render_annotation_source(annotation_node: ast.expr) -> str:
+    """Return a textual representation of an annotation AST node."""
+    unparse_function = getattr(ast, "unparse", None)
+    if unparse_function is not None:
+        return unparse_function(annotation_node)
+    sys.stderr.write(
+        "code-rules-enforcer: ast.unparse unavailable on this interpreter; "
+        "falling back to ast.dump for Any detection.\n"
+    )
+    return ast.dump(annotation_node)
+
+
 def _annotation_uses_any(annotation_node: Optional[ast.expr]) -> bool:
     """Return True when an annotation AST node textually references Any."""
     if annotation_node is None:
         return False
-    try:
-        annotation_source = ast.unparse(annotation_node)
-    except AttributeError:
-        return False
+    annotation_source = _render_annotation_source(annotation_node)
     return bool(re.search(r"\bAny\b", annotation_source))
+
+
+def _collect_annotated_arguments(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.arg]:
+    """Return every argument node on a function that may carry an annotation."""
+    arguments = function_node.args
+    all_annotated_arguments: list[ast.arg] = []
+    all_annotated_arguments.extend(arguments.posonlyargs)
+    all_annotated_arguments.extend(arguments.args)
+    all_annotated_arguments.extend(arguments.kwonlyargs)
+    if arguments.vararg is not None:
+        all_annotated_arguments.append(arguments.vararg)
+    if arguments.kwarg is not None:
+        all_annotated_arguments.append(arguments.kwarg)
+    return all_annotated_arguments
 
 
 def _find_any_annotation_lines(source: str) -> list[int]:
@@ -438,35 +463,53 @@ def _find_any_annotation_lines(source: str) -> list[int]:
         return []
 
     offending_line_numbers: list[int] = []
+    already_reported_lines: set[int] = set()
     for each_node in ast.walk(parsed_tree):
         if isinstance(each_node, ast.AnnAssign) and _annotation_uses_any(each_node.annotation):
-            offending_line_numbers.append(each_node.lineno)
+            if each_node.lineno not in already_reported_lines:
+                offending_line_numbers.append(each_node.lineno)
+                already_reported_lines.add(each_node.lineno)
             continue
         if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if _annotation_uses_any(each_node.returns):
+            if _annotation_uses_any(each_node.returns) and each_node.lineno not in already_reported_lines:
                 offending_line_numbers.append(each_node.lineno)
-            for each_argument in each_node.args.args + each_node.args.kwonlyargs:
-                if _annotation_uses_any(each_argument.annotation):
+                already_reported_lines.add(each_node.lineno)
+            for each_argument in _collect_annotated_arguments(each_node):
+                if _annotation_uses_any(each_argument.annotation) and each_argument.lineno not in already_reported_lines:
                     offending_line_numbers.append(each_argument.lineno)
+                    already_reported_lines.add(each_argument.lineno)
     return offending_line_numbers
 
 
+def _comment_tokens(source: str) -> list[tokenize.TokenInfo]:
+    """Return COMMENT tokens from source, or an empty list when tokenization fails."""
+    try:
+        return [
+            each_token
+            for each_token in tokenize.generate_tokens(io.StringIO(source).readline)
+            if each_token.type == tokenize.COMMENT
+        ]
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return []
+
+
 def _find_unjustified_type_ignore_lines(source: str) -> list[int]:
-    """Return line numbers of # type: ignore lines lacking a trailing reason."""
+    """Return line numbers of # type: ignore comments lacking a trailing reason."""
     ignore_pattern = re.compile(r"#\s*type:\s*ignore(?:\[[^\]]*\])?(.*)$")
     minimum_justification_characters = len("xxxxx")
     offending_line_numbers: list[int] = []
-    for line_index, line_text in enumerate(source.split("\n"), 1):
-        matched = ignore_pattern.search(line_text)
+    for each_comment_token in _comment_tokens(source):
+        matched = ignore_pattern.search(each_comment_token.string)
         if not matched:
             continue
+        line_number = each_comment_token.start[0]
         trailing_text = matched.group(1).strip()
         if not trailing_text.startswith("#"):
-            offending_line_numbers.append(line_index)
+            offending_line_numbers.append(line_number)
             continue
         justification_text = trailing_text.lstrip("#").strip()
         if len(justification_text) < minimum_justification_characters:
-            offending_line_numbers.append(line_index)
+            offending_line_numbers.append(line_number)
     return offending_line_numbers
 
 
@@ -476,19 +519,14 @@ def check_type_escape_hatches(content: str, file_path: str) -> list[str]:
         return []
 
     issues: list[str] = []
-    maximum_issues_reported = 2 + len("x")
 
     for each_any_line in _find_any_annotation_lines(content):
         issues.append(f"Line {each_any_line}: Any annotation - replace with explicit type")
-        if len(issues) >= maximum_issues_reported:
-            return issues
 
     for each_ignore_line in _find_unjustified_type_ignore_lines(content):
         issues.append(
             f"Line {each_ignore_line}: Unjustified # type: ignore - add trailing '# reason' explaining why"
         )
-        if len(issues) >= maximum_issues_reported:
-            return issues
 
     return issues
 

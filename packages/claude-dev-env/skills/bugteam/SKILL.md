@@ -179,6 +179,61 @@ If the audit returns zero findings, the teammate still posts ONE review with `ev
 
 **Review POST failure fallback.** If the review POST itself fails (rate limit, network, malformed payload), the teammate falls back to a single top-level issue comment containing the review body plus every finding inline (severity, file:line, description). Every finding in that run carries `used_fallback="true"` and the issue-comment URL as `finding_comment_url`. Use `gh pr comment <number> -R <owner>/<repo> --body-file <tmp>` for the fallback.
 
+**Underlying GitHub REST API endpoints.** The four endpoints the CLI shapes above wrap, quoted verbatim from official GitHub REST docs. `gh api <path>` hits the same endpoints directly if the gh subcommand is ever unavailable or rate-limit-retry logic needs to call the raw API.
+
+1. **Create an issue comment** — used for the Review POST failure fallback (top-level comment on the PR's conversation).
+
+   - Method + path: `POST /repos/{owner}/{repo}/issues/{issue_number}/comments`
+   - Required body field: `body` (string)
+   - For PRs, `{issue_number}` IS the pull request number — the issues endpoint handles both.
+   - Raw API shape:
+
+     ```
+     gh api repos/<owner>/<repo>/issues/<number>/comments \
+       -X POST \
+       -F body=@<tmp>
+     ```
+
+   - Docs: https://docs.github.com/en/rest/issues/comments#create-an-issue-comment
+
+2. **Create a review comment for a pull request** — standalone inline review comment (NOT used by this skill; documented for completeness and because the review-batched `comments[]` entries take the same per-entry shape).
+
+   - Method + path: `POST /repos/{owner}/{repo}/pulls/{pull_number}/comments`
+   - Required body fields: `body` (string), `commit_id` (string), `path` (string)
+   - Single-line position: `line` (integer), `side` (`"LEFT"` or `"RIGHT"`)
+   - Multi-line position: add `start_line` and `start_side`
+   - Raw API shape:
+
+     ```
+     gh api repos/<owner>/<repo>/pulls/<number>/comments \
+       -X POST \
+       -F body=@<tmp> \
+       -f commit_id=<sha> \
+       -f path=<file> \
+       -F line=<line> \
+       -f side=RIGHT
+     ```
+
+   - Docs: https://docs.github.com/en/rest/pulls/comments#create-a-review-comment-for-a-pull-request
+
+3. **Create a review for a pull request** — the primary endpoint this skill uses. Creates a parent review PLUS every child inline comment in one atomic POST.
+
+   - Method + path: `POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews`
+   - Body fields: `commit_id` (SHA of the commit under review; defaults to the most recent if omitted), `body` (required when `event` is `COMMENT` or `REQUEST_CHANGES`), `event` (one of `APPROVE`, `REQUEST_CHANGES`, or `COMMENT`; omitting it leaves the review in `PENDING` state — this skill always sets `event=COMMENT`), `comments` (array)
+   - Each `comments[]` entry: `path` (required), `body` (required), position via either `position` (legacy diff-line offset from the `@@` header) OR the modern pair `line` + `side` (and `start_line` + `start_side` for multi-line selections)
+   - Raw API shape is the per-loop review CLI shape shown above in this section.
+   - Docs: https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request
+
+4. **Create a reply for a review comment** — used by the bugfix teammate for fix replies. Works on any review comment, including children created via endpoint 3.
+
+   - Method + path: `POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies`
+   - Required body field: `body` (string)
+   - `{comment_id}` is the `id` of the finding comment captured from the Step 2.5 review POST response.
+   - Raw API shape is the fix-reply CLI shape shown above in this section.
+   - Docs: https://docs.github.com/en/rest/pulls/comments#create-a-reply-for-a-review-comment
+
+All four endpoints accept `body` as a string in the JSON payload. `gh api ... -F body=@<file>` loads the file contents as the field value, which is why `--body-file` guidance applies to `gh api` calls the same way it applies to `gh pr comment` / `gh pr review`.
+
 ### Step 3: The cycle
 
 Repeat until an exit condition fires:

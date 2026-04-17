@@ -66,7 +66,7 @@ Team specification:
 
 - **Team name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` (or `bugteam-<sanitized-head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured at team-creation time from the lead session and prevents two concurrent invocations on the same PR from colliding.
 - **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the team_name template, replace every character that is NOT in `[A-Za-z0-9._-]` with `-`. This whitelist covers safe portable filename characters and rejects all OS-reserved or shell-special chars including `/ \ : * ? < > | "` and ASCII control chars (0x00–0x1F). Example: `feat/foo*bar` → `feat-foo-bar`; team_name becomes `bugteam-feat-foo-bar-<YYYYMMDDHHMMSS>`. Apply this sanitization BEFORE the team_name is captured, not after — every downstream use of `team_name` (team creation, scoped temp dir, cleanup) sees the safe form.
-- **Per-team temp directory (resolved once, reused everywhere):** After team_name is captured, resolve a portable absolute path with a Claude-side lookup using Python's `tempfile.gettempdir()`, which honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix: `Path(tempfile.gettempdir()) / f"bugteam-{team_name}"` (requires `import tempfile`). Avoid hand-rolled env var chains. Capture the resolved absolute path as `<team_temp_dir>` and pass that literal path to every shell command that follows. Shell-side parameter expansion (`${TMPDIR:-/tmp}`) is forbidden because cmd.exe and PowerShell do not expand it.
+- **Per-team temp directory (resolved once, reused everywhere):** After team_name is captured, resolve a portable absolute path with a Claude-side lookup using Python's `tempfile.gettempdir()`, which honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix: `Path(tempfile.gettempdir()) / team_name` (requires `import tempfile`). The `team_name` value already carries the `bugteam-` prefix, so do NOT add it again here. Avoid hand-rolled env var chains. Capture the resolved absolute path as `<team_temp_dir>` and pass that literal path to every shell command that follows. Shell-side parameter expansion (`${TMPDIR:-/tmp}`) is forbidden because cmd.exe and PowerShell do not expand it.
 - **Roles defined up front (spawned per loop, not at team creation):**
   - `bugfind` — uses subagent type `code-quality-agent`, model sonnet
   - `bugfix` — uses subagent type `clean-coder`, model sonnet
@@ -83,7 +83,7 @@ last_findings = None
 audit_log = []
 starting_sha = git rev-parse HEAD
 team_name = "bugteam-pr-<number>-<YYYYMMDDHHMMSS>"  # no-PR fallback uses sanitized branch
-team_temp_dir = "<resolved-absolute-path>/bugteam-<team_name>"
+team_temp_dir = "<resolved-absolute-path>/<team_name>"
 ```
 
 ### Step 3: The cycle
@@ -111,7 +111,7 @@ mkdir -p "<team_temp_dir>"
 gh pr diff <number> -R <owner>/<repo> > "<team_temp_dir>/loop-<N>.patch"
 ```
 
-`<team_temp_dir>` is the absolute path captured in Step 2 (already includes the sanitized team_name and timestamp suffix). Claude resolves the portable temp root once via `Path(tempfile.gettempdir()) / f"bugteam-{team_name}"` (requires `import tempfile`) and passes the literal absolute path to every shell command. `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix, so this works identically on macOS, Linux, Windows cmd.exe, and PowerShell because the shell never has to interpret `${TMPDIR:-/tmp}` or `%TEMP%`.
+`<team_temp_dir>` is the absolute path captured in Step 2 (already includes the sanitized team_name and timestamp suffix, and `team_name` itself is already prefixed with `bugteam-`). Claude resolves the portable temp root once via `Path(tempfile.gettempdir()) / team_name` (requires `import tempfile`) and passes the literal absolute path to every shell command. `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, and `TMP` in the platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix, so this works identically on macOS, Linux, Windows cmd.exe, and PowerShell because the shell never has to interpret `${TMPDIR:-/tmp}` or `%TEMP%`.
 
 Spawn a NEW `bugfind` teammate for this loop using the `code-quality-agent` subagent type. The teammate is fresh: no prior loop's findings, no chat history, no inherited audit context. Per the docs: *"The lead's conversation history does not carry over."* — and we further guarantee independence by spawning a new teammate per loop rather than reusing one.
 

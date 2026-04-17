@@ -52,7 +52,10 @@ def load_settings(settings_path: Path) -> dict[str, Any]:
 def save_settings_atomically(
     settings_path: Path, settings_payload: dict[str, Any]
 ) -> None:
-    temporary_path = settings_path.with_suffix(settings_path.suffix + TEMP_FILE_SUFFIX)
+    process_specific_temp_suffix = f"{TEMP_FILE_SUFFIX}.{os.getpid()}"
+    temporary_path = settings_path.with_suffix(
+        settings_path.suffix + process_specific_temp_suffix
+    )
     try:
         with temporary_path.open("w", encoding="utf-8") as settings_file:
             json.dump(settings_payload, settings_file, indent=JSON_INDENT_SPACES)

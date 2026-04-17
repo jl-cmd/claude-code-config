@@ -66,6 +66,30 @@ def test_should_still_flag_log_info_snake_case() -> None:
     assert len(issues) == 1
 
 
+def test_should_flag_log_exception_fstring() -> None:
+    source = build_fstring_call("log_exception", "snake exception {e}")
+    issues = enforcer.check_logging_fstrings(source)
+    assert len(issues) == 1
+
+
+def test_should_flag_uppercase_fstring_prefix() -> None:
+    source = 'logger.info(F"uppercase {item}")\n'
+    issues = enforcer.check_logging_fstrings(source)
+    assert len(issues) == 1
+
+
+def test_should_flag_raw_fstring_prefix_rf() -> None:
+    source = 'logger.info(rf"raw path {path}")\n'
+    issues = enforcer.check_logging_fstrings(source)
+    assert len(issues) == 1
+
+
+def test_should_flag_raw_fstring_prefix_fr() -> None:
+    source = 'logger.info(fr"raw path {path}")\n'
+    issues = enforcer.check_logging_fstrings(source)
+    assert len(issues) == 1
+
+
 def test_should_allow_logger_info_with_format_args() -> None:
     source = 'logger.info("processing %s", item)\n'
     issues = enforcer.check_logging_fstrings(source)

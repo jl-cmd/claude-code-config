@@ -299,9 +299,9 @@ def check_imports_at_top(content: str) -> list[str]:
 
 
 LOGGING_FSTRING_PATTERN = re.compile(
-    r'\b(?:log_(?:debug|info|warning|error|critical)'
+    r'\b(?:log_(?:debug|info|warning|error|critical|exception)'
     r'|(?:logger|logging|log)\.(?:debug|info|warning|error|critical|exception))'
-    r'\s*\(\s*f["\']'
+    r'\s*\(\s*(?:[rR][fF]|[fF][rR]?)["\']'
 )
 
 

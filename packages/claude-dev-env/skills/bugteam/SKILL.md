@@ -29,7 +29,7 @@ This file is 400+ lines. The list below is for the LLM reading this skill — pa
   - Step 0 — Grant project permissions
   - Step 1 — Resolve PR scope
   - Step 2 — Create the agent team
-  - Step 2.5 — PR comment lifecycle (loop comment, finding comments, fix replies)
+  - Step 2.5 — PR comment lifecycle (per-loop review with child finding comments, fix replies)
   - Step 3 — The cycle (AUDIT ↔ FIX, decision table, exit conditions)
   - Step 4 — Tear down the team and clean working tree
   - Step 4.5 — Finalize the PR description (via pr-description-writer)
@@ -123,38 +123,61 @@ loop_comment_index=""                  # reset at every AUDIT, see scope note be
 
 Each entry: `{loop, finding_id, finding_comment_id, finding_comment_url, used_fallback, fix_status}`. Populated by AUDIT, consumed by FIX.
 
-### Step 2.5: PR comment lifecycle (start simple)
+### Step 2.5: PR comment lifecycle (one review per loop)
 
-The team narrates its work to the PR via GitHub comments so a reviewer can scan `/bugteam` activity inline with the code. **Teammates own all PR comment posting** — bugfind posts audit comments, bugfix posts fix replies. The lead never calls `gh pr comment` or `gh api repos/.../comments`. The lead's only PR-write action is the final description rewrite at Step 4.5 (via `pr-description-writer` agent).
+The team narrates its work to the PR via a **GitHub pull-request review** per loop so findings render as a tree under a single parent review (like Cursor Bugbot). **Teammates own all PR comment posting** — bugfind posts the review (parent body + child finding comments in one batched POST), bugfix posts fix replies. The lead never calls `gh pr comment`, `gh api repos/.../pulls/<n>/comments`, or `gh api repos/.../pulls/<n>/reviews`. The lead's only PR-write action is the final description rewrite at Step 4.5 (via `pr-description-writer` agent).
 
-- **Loop comment** — one top-level PR issue comment per loop. Posted by the bugfind teammate at the start of each loop. Body: short header naming the loop and the action. Example body:
+- **Per-loop review** — one `POST /pulls/<number>/reviews` per loop, posted by the bugfind teammate AFTER auditing. The review body is the loop header (with audit counts); the review's `comments[]` array holds one anchored finding per P0/P1/P2 finding. GitHub renders this as a single collapsible thread with each finding as a child comment — the tree shape Cursor Bugbot produces.
 
-  ```
-  ## /bugteam loop <N>: audit running
+- **Fix replies** — replies to each child finding comment. Posted by the bugfix teammate after the commit lands. Body: `Fixed in <commit_sha>` if addressed, or `Could not address this loop: <one-line reason>` if not. The `/pulls/<number>/comments/<id>/replies` endpoint works on any review comment, including those created as part of a review, so this shape is unchanged.
 
-  Clean-room audit on PR diff. Finding comments will appear below
-  this line.
-  ```
-
-  New loop comment per loop, not one across loops — keeps each loop's section self-contained.
-
-- **Finding comments** — inline review comments anchored to file:line in the diff. Posted by the bugfind teammate, one per P0/P1/P2 finding. Body: severity, category, description, and a `From /bugteam audit loop <N>` footer.
-
-- **Fix replies** — replies to each finding comment. Posted by the bugfix teammate after the commit lands. Body: `Fixed in <commit_sha>` if addressed, or `Could not address this loop: <one-line reason>` if not.
-
-This is the **simplest** comment shape that links findings and fixes inline. Do not add cross-loop threading, comment editing, thread resolution, batched reviews, or comment summarization in this version. Build out from observed behavior later.
+**Ordering:** bugfind audits FIRST, buffers the findings, validates anchors against the captured diff, then posts the review ONCE at the end. The review body names the finding count authoritatively. Do NOT post any issue comment before or during the audit.
 
 CLI shapes (teammate runs these):
 
-- Loop comment: `gh pr comment <number> -R <owner>/<repo> --body-file <tmp>` → returns the comment URL on stdout. (GitHub API name: issue comment.)
-- Finding comment: `gh api repos/<owner>/<repo>/pulls/<number>/comments -X POST -f body=@<tmp> -f commit_id=<head_sha_at_post_time> -f path=<file> -F line=<line> -f side=RIGHT` → returns JSON; capture `id` and `html_url`. (GitHub API name: pull-request review comment.)
-- Fix reply: `gh api repos/<owner>/<repo>/pulls/<number>/comments/<finding_comment_id>/replies -X POST -f body=@<tmp>` → returns JSON.
+- Per-loop review (one POST creates the parent review AND all child finding comments):
 
-`<head_sha_at_post_time>` = the SHA at the moment the finding comment is posted (run `git rev-parse HEAD` in the teammate's working dir immediately before the POST). Each loop's audit anchors its finding comments to the head SHA at audit time, which is the SHA before this loop's fix lands.
+  ```
+  gh api repos/<owner>/<repo>/pulls/<number>/reviews \
+    -X POST \
+    -f commit_id=<head_sha_at_post_time> \
+    -f event=COMMENT \
+    -F body=@<tmp_review_body.md> \
+    -f 'comments[][path]=<file_1>' \
+    -F 'comments[][line]=<line_1>' \
+    -f 'comments[][side]=RIGHT' \
+    -f 'comments[][body]=@<tmp_finding_1.md>' \
+    -f 'comments[][path]=<file_2>' \
+    -F 'comments[][line]=<line_2>' \
+    -f 'comments[][side]=RIGHT' \
+    -f 'comments[][body]=@<tmp_finding_2.md>' \
+    [... one quadruple per anchored finding ...]
+  ```
 
-Use `--body-file` everywhere, not `--body` — the existing `gh-body-backtick-guard` hook blocks inline bodies that contain backticks, and bug descriptions almost always contain code excerpts.
+  Response JSON carries the parent review `id` / `html_url` plus a `comments` array of child comments, each with its own `id` and `html_url`. Harvest the child entries in index order and match them to the finding list the teammate posted.
 
-**Finding-comment failure fallback (teammate handles).** If the finding-comment POST fails (rate limit, line not in the diff, malformed payload, network), the bugfind teammate falls back to a top-level issue comment with the file:line in the body text and prefixes the body with `**Inline failed for <file>:<line>** — finding follows below.` The teammate logs the fallback in its outcome XML so the lead's final report can count fallbacks. Cycle continues; no single-comment failure aborts the loop.
+- Fix reply: `gh api repos/<owner>/<repo>/pulls/<number>/comments/<finding_comment_id>/replies -X POST -f body=@<tmp>` → returns JSON. (Endpoint unchanged; works on review-created comments.)
+
+`<head_sha_at_post_time>` = the SHA at the moment the review is posted (run `git rev-parse HEAD` in the teammate's working dir immediately before the POST). The review anchors its finding comments to the head SHA at audit time, which is the SHA before this loop's fix lands.
+
+Use `--body-file` everywhere, not `--body` — the existing `gh-body-backtick-guard` hook blocks inline bodies that contain backticks, and bug descriptions almost always contain code excerpts. The review body AND every per-finding body must each live in their own temp files.
+
+**Review body shape** (content of `<tmp_review_body.md>`):
+
+```
+## /bugteam loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2
+
+<if any findings could not be anchored to a diff line, include this section:>
+### Findings without a diff anchor
+
+- **[severity] title** — <file>:<line> — <one-line description>
+```
+
+If the audit returns zero findings, the teammate still posts ONE review with `event=COMMENT`, an empty `comments[]`, and body `## /bugteam loop <N> audit: 0P0 / 0P1 / 0P2 → clean`. This keeps every loop's section self-contained on the PR.
+
+**Anchor-validation fallback (teammate handles).** GitHub rejects the entire review POST if any `comments[]` entry targets a line not in the diff. Before posting, the bugfind teammate validates every finding's `(file, line)` against the captured diff. Findings whose anchor is not in the diff are NOT added to `comments[]`; they are listed in the review body under `### Findings without a diff anchor`. The outcome XML records `used_fallback="true"` for each such finding, with `finding_comment_id=""` and `finding_comment_url=<review_url>` (the parent review URL, since no child comment exists for it). The teammate logs the fallback count in its outcome XML so the lead's final report can count fallbacks. Cycle continues; no anchor failure aborts the loop.
+
+**Review POST failure fallback.** If the review POST itself fails (rate limit, network, malformed payload), the teammate falls back to a single top-level issue comment containing the review body plus every finding inline (severity, file:line, description). Every finding in that run carries `used_fallback="true"` and the issue-comment URL as `finding_comment_url`. Use `gh pr comment <number> -R <owner>/<repo> --body-file <tmp>` for the fallback.
 
 ### Step 3: The cycle
 
@@ -225,17 +248,17 @@ The teammate's spawn prompt is the full XML below — copy it verbatim with the 
 </constraints>
 
 <comment_posting>
-  1. Post the loop comment for this loop FIRST, before auditing. Use
-     the Step 2.5 loop-comment CLI shape with this body:
-
-       ## /bugteam loop N: audit running
-
-       Clean-room audit on PR diff. Finding comments will appear below
-       this line.
-
-  2. Audit the diff against the 10 categories above.
-  3. For each finding, post a finding comment via the Step 2.5
-     finding-comment CLI shape. Body:
+  1. Audit the diff against the 10 categories above. Do NOT post anything yet;
+     buffer the findings in memory.
+  2. Assign each finding a stable finding_id of exactly the form `loopN-K`
+     where K is 1-based within this loop.
+  3. Validate every finding's (file, line) against the captured diff. Split
+     findings into two buckets: anchored (line is in the diff) and
+     unanchored (line is not in the diff — goes into the review body's
+     "Findings without a diff anchor" section per Step 2.5).
+  4. Build the review body per Step 2.5's review-body shape, filling in the
+     P0/P1/P2 counts and the unanchored-findings list (if any).
+  5. For each anchored finding, write its body to its own temp file:
 
        **[severity] one-line title**
        Category: <letter> (<category name>)
@@ -243,11 +266,14 @@ The teammate's spawn prompt is the full XML below — copy it verbatim with the 
 
        _From /bugteam audit loop N._
 
-     On POST failure (rate limit, line not in diff, malformed payload,
-     network), fall back to a top-level issue comment per Step 2.5.
-  4. Assign each finding a stable finding_id of exactly the form
-     `loopN-K` where K is 1-based within this loop.
-  5. Use --body-file (never --body) to avoid the gh-body-backtick-guard hook.
+  6. Post ONE review via Step 2.5's per-loop review CLI shape. Harvest the
+     parent review `html_url` from the response JSON and the `comments[]`
+     child entries (each with its own `id` and `html_url`). Match child
+     entries to anchored findings in index order.
+  7. If the review POST itself fails, use Step 2.5's Review POST failure
+     fallback (single issue comment with full body and all findings inline).
+  8. Use --body-file (never --body) to avoid the gh-body-backtick-guard hook,
+     for the review body, every finding body, and any fallback body.
 </comment_posting>
 
 <output_format>
@@ -259,15 +285,15 @@ The teammate's spawn prompt is the full XML below — copy it verbatim with the 
 Outcome XML schema (bugfind writes this):
 
 ```xml
-<bugteam_audit loop="<N>" loop_comment_url="<url>">
+<bugteam_audit loop="<N>" review_url="<url>">
   <finding
     finding_id="loop<N>-<index>"
     severity="P0|P1|P2"
     category="<letter>"
     file="<path>"
     line="<int>"
-    finding_comment_id="<gh comment id, or empty if fallback>"
-    finding_comment_url="<url, inline OR fallback issue comment URL>"
+    finding_comment_id="<gh child comment id, or empty if unanchored/review-fallback>"
+    finding_comment_url="<url of child comment, OR review_url if unanchored, OR fallback issue comment URL>"
     used_fallback="true|false"
   >
     <title>one-line title</title>
@@ -281,7 +307,7 @@ Outcome XML schema (bugfind writes this):
 
 After the teammate writes the XML and returns, the lead reads `.bugteam-loop-<N>.outcomes.xml`, parses it, and populates `loop_comment_index` from `<finding>` elements. Then **shut down the bugfind teammate**: `Ask the bugfind teammate to shut down`. Per the docs: *"The lead sends a shutdown request. The teammate can approve, exiting gracefully, or reject with an explanation."* If the teammate rejects shutdown, force-shut by failing the team and starting Step 5 cleanup with exit reason = `error: bugfind teammate refused shutdown`.
 
-`last_action = "audited"`. `last_findings = parsed`. Append `(loop=N, action="audit", counts={P0,P1,P2}, sha=current_HEAD, loop_comment_url=<url>, finding_count=<n>, fallback_count=<n>)` to `audit_log`.
+`last_action = "audited"`. `last_findings = parsed`. Append `(loop=N, action="audit", counts={P0,P1,P2}, sha=current_HEAD, review_url=<url>, finding_count=<n>, fallback_count=<n>)` to `audit_log`.
 
 ### FIX action (fresh teammate, only sees latest audit)
 
@@ -446,9 +472,9 @@ If exit = `cap reached`, name the remaining bug count and recommend `/findbugs` 
 - **Lead-only cleanup.** Per the docs: *"Always use the lead to clean up. Teammates should not run cleanup because their team context may not resolve correctly, potentially leaving resources in an inconsistent state."* This session is the lead; teammates never call cleanup.
 - **Cleanup the per-team scoped temp directory on exit.** The resolved `<team_temp_dir>` (absolute literal captured in Step 2) is deleted entirely so no loop patches leak between runs.
 - **Cleanup all `.bugteam-*` files on exit.** `.bugteam-loop-*.patch`, `.bugteam-loop-*.outcomes.xml`, `.bugteam-final.diff`, `.bugteam-original-body.md`, `.bugteam-final-body.md`. Working directory ends clean.
-- **Teammates own audit/fix comment posting.** Bugfind posts the loop comment and finding comments (with issue-comment fallback). Bugfix posts the fix replies after committing. The lead never calls `gh pr comment` or `gh api repos/.../comments` for these.
+- **Teammates own audit/fix comment posting.** Bugfind posts ONE per-loop review (parent body + child finding comments in a single batched POST, with review-fallback to a top-level issue comment). Bugfix posts the fix replies after committing. The lead never calls `gh pr comment`, `gh api repos/.../pulls/<n>/comments`, or `gh api repos/.../pulls/<n>/reviews` for these.
 - **Lead owns the final PR description rewrite only** (Step 4.5), and only via the `pr-description-writer` agent. The lead does not compose the description inline.
-- **Loop comment per loop, fresh finding comments per loop.** No cross-loop comment threading, no comment editing in place, no thread resolution in this version. Each loop's section on the PR is self-contained.
+- **One review per loop, findings as child comments of that review.** Each loop posts a single pull-request review whose body is the loop header and whose `comments[]` are the anchored findings. No cross-loop threading, no in-place editing of prior reviews, no thread resolution in this version. Each loop's review on the PR is self-contained.
 - **PR description rewrite on every exit.** Step 4.5 runs on `converged`, `cap reached`, and `stuck`. On `error`, the rewrite is best-effort; if it fails, surface the error in the final report and continue to revoke.
 - **Outcome XML, not JSON.** Both teammates write structured outcome data (findings or fix outcomes) to `.bugteam-loop-<N>.outcomes.xml`. The lead reads these files between actions. XML chosen for parser robustness against multi-line, special-character, and quoted reason fields.
 

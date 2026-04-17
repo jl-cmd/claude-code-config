@@ -55,6 +55,14 @@ NESTED_DICT_VALUED_CONSTANT = '''
 CONFIG = {"db": {"port": 5432}}
 '''
 
+ANNOTATED_SCALAR_CONSTANT = '''
+TIMEOUT_MS: int = 5000
+'''
+
+ANNOTATED_DICT_VALUED_CONSTANT = '''
+SETTINGS: dict[str, int] = {"timeout": 30}
+'''
+
 NON_CONSTANT_ASSIGNMENT_IN_FUNCTION = '''
 def configure():
     delay = 30
@@ -106,6 +114,16 @@ class TestMagicValues:
 
     def test_should_exempt_numbers_inside_nested_dict_valued_constant(self) -> None:
         tree = ast.parse(NESTED_DICT_VALUED_CONSTANT)
+        violations = check_magic_values(tree, "test.py")
+        assert violations == []
+
+    def test_should_exempt_numbers_inside_annotated_upper_snake_constant(self) -> None:
+        tree = ast.parse(ANNOTATED_SCALAR_CONSTANT)
+        violations = check_magic_values(tree, "test.py")
+        assert violations == []
+
+    def test_should_exempt_numbers_inside_annotated_dict_valued_constant(self) -> None:
+        tree = ast.parse(ANNOTATED_DICT_VALUED_CONSTANT)
         violations = check_magic_values(tree, "test.py")
         assert violations == []
 

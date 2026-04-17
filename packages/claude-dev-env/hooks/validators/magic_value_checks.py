@@ -9,24 +9,17 @@ Note: Only checks for magic numbers. Magic string detection is not implemented.
 import ast
 import sys
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List
 
 from validator_base import Violation
 
 
-ALLOWED_NUMBERS: Set[int] = frozenset({-1, 0, 1, 2, 100})
+ALLOWED_NUMBERS = frozenset({-1, 0, 1, 2, 100})
 
 
 def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
     violations: List[Violation] = []
     parent_by_child = _build_parent_map(tree)
-
-    constant_names: Set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id.isupper():
-                    constant_names.add(target.id)
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant):
@@ -58,16 +51,21 @@ def _is_in_constant_definition(
     current_node: ast.AST = node
     while id(current_node) in parent_by_child:
         parent = parent_by_child[id(current_node)]
-        if isinstance(parent, ast.Assign) and _has_upper_case_name_target(parent):
+        if _is_upper_snake_constant_assignment(parent):
             return True
         current_node = parent
     return False
 
 
-def _has_upper_case_name_target(assignment: ast.Assign) -> bool:
-    for target in assignment.targets:
-        if isinstance(target, ast.Name) and target.id.isupper():
-            return True
+def _is_upper_snake_constant_assignment(node: ast.AST) -> bool:
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id.isupper():
+                return True
+        return False
+    if isinstance(node, ast.AnnAssign):
+        target = node.target
+        return isinstance(target, ast.Name) and target.id.isupper()
     return False
 
 

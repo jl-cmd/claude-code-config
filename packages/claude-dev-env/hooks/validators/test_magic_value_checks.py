@@ -33,6 +33,21 @@ def process():
     return count + increment + negative
 '''
 
+ALLOWED_NEGATIVE_ONE_IN_BINARY_EXPRESSION = '''
+def process(total):
+    return total * -1
+'''
+
+ALLOWED_NEGATIVE_ONE_IN_RETURN = '''
+def process():
+    return -1
+'''
+
+BAD_NEGATIVE_LITERAL_TWO = '''
+def process():
+    return total * -2
+'''
+
 ALLOWED_EMPTY_STRING = '''
 def process():
     result = ""
@@ -68,6 +83,22 @@ class TestMagicValues:
         tree = ast.parse(ALLOWED_SMALL_NUMBERS)
         violations = check_magic_values(tree, "test.py")
         assert violations == []
+
+    def test_negative_one_allowed_in_binary_expression(self) -> None:
+        tree = ast.parse(ALLOWED_NEGATIVE_ONE_IN_BINARY_EXPRESSION)
+        violations = check_magic_values(tree, "test.py")
+        assert violations == []
+
+    def test_negative_one_allowed_in_return_expression(self) -> None:
+        tree = ast.parse(ALLOWED_NEGATIVE_ONE_IN_RETURN)
+        violations = check_magic_values(tree, "test.py")
+        assert violations == []
+
+    def test_negative_literal_two_is_flagged_with_signed_value(self) -> None:
+        tree = ast.parse(BAD_NEGATIVE_LITERAL_TWO)
+        violations = check_magic_values(tree, "test.py")
+        assert len(violations) == 1
+        assert "-2" in violations[0].message
 
     def test_empty_string_allowed(self) -> None:
         tree = ast.parse(ALLOWED_EMPTY_STRING)

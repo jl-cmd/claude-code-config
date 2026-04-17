@@ -1,0 +1,140 @@
+"""Tests for tdd-enforcer hook (blocking behavior)."""
+
+import json
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+SCRIPT_PATH = Path(__file__).parent / "tdd-enforcer.py"
+FRESHNESS_SECONDS = 600
+STALE_MTIME_OFFSET_SECONDS = FRESHNESS_SECONDS + 60
+
+
+def _run_hook_with_payload(payload: dict) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_PATH)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _make_write_payload(file_path: Path, content: str = "") -> dict:
+    return {
+        "tool_name": "Write",
+        "tool_input": {"file_path": str(file_path), "content": content},
+    }
+
+
+def _decision_from(completed: subprocess.CompletedProcess[str]) -> str | None:
+    if not completed.stdout:
+        return None
+    parsed = json.loads(completed.stdout)
+    hook_output = parsed.get("hookSpecificOutput", {})
+    return hook_output.get("permissionDecision")
+
+
+def _sandbox(tmp_path: Path) -> Path:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    return workspace
+
+
+def test_should_allow_when_sibling_test_file_exists_and_recent(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+    sibling_test = sandbox / "test_orders.py"
+    sibling_test.write_text("def test_fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_when_no_test_file_exists(tmp_path: Path) -> None:
+    production_file = tmp_path / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "deny"
+    parsed = json.loads(completed.stdout)
+    reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "test_orders.py" in reason
+
+
+def test_should_deny_when_test_file_exists_but_is_stale(tmp_path: Path) -> None:
+    production_file = tmp_path / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+    sibling_test = tmp_path / "test_orders.py"
+    sibling_test.write_text("def test_fulfill(): pass\n")
+    stale_timestamp = time.time() - STALE_MTIME_OFFSET_SECONDS
+    os.utime(sibling_test, (stale_timestamp, stale_timestamp))
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_allow_when_bypass_sentinel_present_in_content(tmp_path: Path) -> None:
+    production_file = tmp_path / "orders.py"
+    content_with_sentinel = "# pragma: no-tdd-gate\ndef fulfill(): pass\n"
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(production_file, content_with_sentinel)
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_skip_markdown_files_entirely(tmp_path: Path) -> None:
+    markdown_file = tmp_path / "notes.md"
+
+    completed = _run_hook_with_payload(_make_write_payload(markdown_file, "# Notes\n"))
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == ""
+
+
+def test_should_skip_test_files_entirely(tmp_path: Path) -> None:
+    test_file = tmp_path / "test_orders.py"
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(test_file, "def test_fulfill(): pass\n")
+    )
+
+    assert completed.returncode == 0
+    assert completed.stdout.strip() == ""
+
+
+def test_should_allow_when_tests_directory_sibling_has_fresh_test(
+    tmp_path: Path,
+) -> None:
+    package_dir = tmp_path / "source"
+    package_dir.mkdir()
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    production_file = package_dir / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+    matching_test = tests_dir / "test_orders.py"
+    matching_test.write_text("def test_fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_allow_tsx_when_dot_test_sibling_exists(tmp_path: Path) -> None:
+    production_file = tmp_path / "Button.tsx"
+    production_file.write_text("export const Button = () => null;\n")
+    sibling_test = tmp_path / "Button.test.tsx"
+    sibling_test.write_text("test('renders', () => {});\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    assert _decision_from(completed) == "allow"

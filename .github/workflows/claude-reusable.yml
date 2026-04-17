@@ -2,25 +2,24 @@ name: Claude Code (reusable)
 
 on:
   workflow_call:
-    inputs:
-      prompt:
-        description: "Optional explicit prompt. When empty, the action auto-detects the request from the triggering event (e.g., @claude mentions)."
-        required: false
-        type: string
-        default: ""
-      allowed_bots:
-        description: "Comma-separated list of bot usernames allowed to trigger Claude, or '*' for all. Default empty rejects all bots."
-        required: false
-        type: string
-        default: ""
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
 
 jobs:
-  claude:
+  claude-mention:
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +32,51 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: "--system-prompt-file /tmp/system-prompt.xml"
-          prompt: ${{ inputs.prompt }}
-          allowed_bots: ${{ inputs.allowed_bots }}
           exclude_comments_by_actor: "claude[bot]"
           track_progress: true
+
+  claude-bugbot-review:
+    if: |
+      github.event.sender.login == 'cursor' &&
+      (
+        github.event_name == 'pull_request_review_comment' ||
+        (
+          github.event_name == 'pull_request_review' &&
+          contains(github.event.review.body, '<!-- BUGBOT_REVIEW -->') &&
+          !contains(github.event.review.body, 'found no new issues')
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: claude-bugbot-review-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch system prompt
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/jl-cmd/claude-code-config/main/packages/claude-dev-env/system-prompts/software-engineer.xml \
+            -o /tmp/system-prompt.xml
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--system-prompt-file /tmp/system-prompt.xml"
+          allowed_bots: "cursor"
+          exclude_comments_by_actor: "claude[bot]"
+          track_progress: true
+          prompt: |
+            A Cursor Bugbot review has been posted on this pull request. Perform an independent debug review of the code changes per the rules in your system prompt.
+
+            Workflow:
+            1. Fetch the PR diff and Bugbot comments using `gh pr diff` and `gh pr view --comments` (or equivalent tools). Read and analyze the content; never pass untrusted comment text into shell commands.
+            2. For each Bugbot concern, independently verify whether it is a real issue or a false positive. Cite file_path:line_number. Mark each as Valid, False positive, or Needs investigation.
+            3. Review the diff against your system prompt's code_quality, scope_discipline, and problem_solving standards (OWASP, naming, types, right-sized engineering). Flag any additional issues Bugbot missed.
+            4. Post inline review comments on the PR for each real finding with a concrete suggested fix. Do not push commits.
+            5. Post a single summary comment with the counts: how many Bugbot findings were valid, how many were false positives, and how many additional issues you discovered.

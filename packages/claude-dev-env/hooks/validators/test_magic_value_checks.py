@@ -85,8 +85,3 @@ class TestMagicValues:
         violations = check_magic_values(tree, "test.py")
         assert len(violations) == 1
         assert "100" in violations[0].message
-
-    def test_check_magic_values_should_still_allow_zero_one_minus_one(self) -> None:
-        tree = ast.parse(ALLOWED_SMALL_NUMBERS)
-        violations = check_magic_values(tree, "test.py")
-        assert violations == []

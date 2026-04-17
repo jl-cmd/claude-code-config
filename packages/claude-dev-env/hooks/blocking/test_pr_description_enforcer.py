@@ -185,3 +185,24 @@ def test_main_does_not_block_when_no_body_flag_present() -> None:
             except SystemExit:
                 pass
     assert "deny" not in captured_stdout.getvalue()
+
+
+def test_extract_body_from_body_file_short_F_form(tmp_path: pathlib.Path) -> None:
+    """`gh pr create -F PATH` (short form of --body-file) must read the file."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(VALID_BODY)
+    command = f'gh pr create --title "T" -F {body_file}'
+    assert extract_body_from_command(command) == VALID_BODY
+
+
+def test_extract_body_ignores_body_inside_title_quoted_value() -> None:
+    """Migration to shared iterator: `--title "contains --body here"` must not false-match."""
+    command = 'gh pr create --title "contains --body here" --body-file /tmp/real.md'
+    extracted_body = extract_body_from_command(command)
+    assert extracted_body is None or extracted_body == ""
+
+
+def test_extract_body_reassembles_split_quoted_equals_value() -> None:
+    """`--body="has multiple spaces inside"` must reassemble across posix=False tokens."""
+    command = 'gh pr create --title "T" --body="this body has multiple words"'
+    assert extract_body_from_command(command) == "this body has multiple words"

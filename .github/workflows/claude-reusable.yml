@@ -40,7 +40,7 @@ jobs:
 
   claude-bugbot-review:
     if: |
-      github.event.sender.login == 'cursor' &&
+      github.event.sender.login == 'cursor[bot]' &&
       (
         (
           github.event_name == 'pull_request_review_comment' &&

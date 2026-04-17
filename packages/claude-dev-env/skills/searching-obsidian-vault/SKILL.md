@@ -3,12 +3,14 @@ name: searching-obsidian-vault
 description: >-
   Retrieves Obsidian vault context from %USERPROFILE%/SessionLog/ via the
   configured mcp__obsidian__* server. Searches sessions/, decisions/, and
-  Research/. Use when the user says "we decided", "last time", "previously",
-  "did we ever", "why did we", or "remember when"; when the user asks why
-  existing code was built a certain way or whether an approach was tried
-  before; when starting a session in a git repo whose name matches a
-  project folder under sessions/; or when the user names a specific
-  component, decision, gotcha, or prior research note.
+  Research/. Use when the user says "yesterday", "last night", "the other
+  day", "earlier today", "this morning", "a few days ago", "last week",
+  "this past week", "a while back", "recently", "recent session", "last
+  session", or "previous session"; when the user asks why existing code
+  was built a certain way or whether an approach was tried before; when
+  starting a session in a git repo whose name matches a project folder
+  under sessions/; or when the user names a specific component, decision,
+  gotcha, or prior research note.
 ---
 
 # Obsidian Vault
@@ -28,8 +30,10 @@ moments so the downstream flag can be set honestly.
 
 Invoke automatically when any of the following holds:
 
-- The user says "we decided", "last time", "previously", "did we ever",
-  "why did we", or "remember when".
+- The user says "yesterday", "last night", "the other day", "earlier
+  today", "this morning", "a few days ago", "last week", "this past
+  week", "a while back", "recently", "recent session", "last session",
+  or "previous session".
 - The user asks why existing code was built a certain way, or whether an
   approach was tried before.
 - A new session starts in a git repo whose name matches a project folder

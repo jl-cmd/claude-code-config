@@ -117,7 +117,7 @@ def test_should_raise_when_stderr_mentions_404_in_unrelated_context(
         ({"sha": "abc123", "content_base64": ""}, True),
     ],
 )
-def test_push_canonical_to_repo_includes_sha_only_when_updating_existing_file(
+def test_should_include_sha_only_when_updating_existing_file(
     monkeypatch: pytest.MonkeyPatch,
     remote_metadata: dict[str, str] | None,
     expect_sha_key: bool,
@@ -145,7 +145,7 @@ def test_push_canonical_to_repo_includes_sha_only_when_updating_existing_file(
     assert ("sha" in request_body) is expect_sha_key
 
 
-def test_push_canonical_to_repo_prefixes_failures_with_push_label(
+def test_should_prefix_push_failures_with_push_label(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -171,7 +171,7 @@ def test_push_canonical_to_repo_prefixes_failures_with_push_label(
     assert "FAILED (push):" in captured_streams.err
 
 
-def test_push_canonical_to_repo_in_dry_run_mode_skips_subprocess_and_prints_action(
+def test_should_skip_subprocess_and_print_action_in_dry_run_mode(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:

@@ -14,7 +14,7 @@ on:
         type: string
         default: ""
       exclude_comments_by_actor:
-        description: "Comma-separated list of actors whose comments Claude should ignore when building context. Defaults to excluding claude[bot] to prevent self-reply loops."
+        description: "Comma-separated list of actor usernames whose comments are excluded from triggering Claude. Default 'claude[bot]' prevents the action from re-processing its own prior comments. Pass an empty string to disable exclusion when you want multi-turn context."
         required: false
         type: string
         default: "claude[bot]"

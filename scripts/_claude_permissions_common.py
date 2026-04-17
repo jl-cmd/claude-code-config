@@ -78,6 +78,7 @@ def build_permission_rules(
 def load_settings(settings_path: Path) -> dict[str, Any]:
     if not settings_path.exists():
         return {}
+    parsed_settings: dict[str, Any] = {}
     try:
         parsed_settings = json.loads(
             settings_path.read_text(encoding=TEXT_FILE_ENCODING)

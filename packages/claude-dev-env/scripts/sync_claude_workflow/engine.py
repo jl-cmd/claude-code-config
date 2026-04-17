@@ -47,7 +47,7 @@ def fetch_remote_file_metadata(repository_full_name: str) -> dict[str, str] | No
         check=False,
     )
     if completed.returncode != 0:
-        if completed.returncode == 1 and GH_API_NOT_FOUND_STDERR_TOKEN in completed.stderr:
+        if GH_API_NOT_FOUND_STDERR_TOKEN in completed.stderr:
             return None
         raise RuntimeError(f"gh api {api_path} failed: {completed.stderr.strip()}")
     try:
@@ -137,7 +137,7 @@ def select_target_repos(only_filter: list[str]) -> tuple[str, ...]:
     all_valid_filters = [each_repo for each_repo in only_filter if each_repo in TARGET_REPOS]
     all_unknown_filters = [each_repo for each_repo in only_filter if each_repo not in TARGET_REPOS]
     for each_unknown in all_unknown_filters:
-        print(f"WARNING: {each_unknown} is not in TARGET_REPOS — skipping", file=sys.stderr)
+        print(f"UNKNOWN: {each_unknown} is not in TARGET_REPOS", file=sys.stderr)
     return tuple(all_valid_filters)
 
 

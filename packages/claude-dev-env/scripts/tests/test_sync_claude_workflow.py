@@ -78,6 +78,7 @@ def test_should_drop_unknown_repos_from_filter(capsys: pytest.CaptureFixture[str
     assert selected == (first_target,)
     captured_streams = capsys.readouterr()
     assert unknown_repository in captured_streams.err
+    assert captured_streams.err.startswith(f"UNKNOWN: {unknown_repository}")
 
 
 def test_should_return_none_when_gh_api_reports_http_404(
@@ -95,7 +96,7 @@ def test_should_return_none_when_gh_api_reports_http_404(
     assert sync_engine.fetch_remote_file_metadata("owner/repo") is None
 
 
-def test_should_raise_when_stderr_mentions_404_in_unrelated_context(
+def test_should_raise_when_stderr_contains_bare_404_without_http_prefix(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_subprocess_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -109,6 +110,21 @@ def test_should_raise_when_stderr_mentions_404_in_unrelated_context(
     monkeypatch.setattr(sync_engine.subprocess, "run", fake_subprocess_run)
     with pytest.raises(RuntimeError):
         sync_engine.fetch_remote_file_metadata("owner/repo")
+
+
+def test_should_return_none_when_gh_exit_is_nonstandard_but_stderr_reports_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_subprocess_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["gh", "api"],
+            returncode=2,
+            stdout="",
+            stderr="gh: HTTP 404 Not Found",
+        )
+
+    monkeypatch.setattr(sync_engine.subprocess, "run", fake_subprocess_run)
+    assert sync_engine.fetch_remote_file_metadata("owner/repo") is None
 
 
 @pytest.mark.parametrize(

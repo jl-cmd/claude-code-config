@@ -35,6 +35,10 @@ MIGRATION_PATH_PATTERNS = {"/migrations/", "\\migrations\\"}
 ADVISORY_LINE_THRESHOLD_SOFT = 400
 ADVISORY_LINE_THRESHOLD_HARD = 1000
 
+BOOLEAN_NAME_PREFIXES: tuple[str, ...] = ("is_", "has_", "should_", "can_")
+BOOLEAN_NAMING_ISSUE_CAP = 3
+UPPER_SNAKE_CONSTANT_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
 
 def get_file_extension(file_path: str) -> str:
     """Extract lowercase file extension."""
@@ -675,6 +679,68 @@ def check_banned_identifiers(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _is_boolean_assignment(node: ast.AST) -> bool:
+    if isinstance(node, ast.Assign):
+        return isinstance(node.value, ast.Constant) and isinstance(node.value.value, bool)
+    if isinstance(node, ast.AnnAssign):
+        value_is_bool = (
+            node.value is not None
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, bool)
+        )
+        annotation_is_bool = (
+            isinstance(node.annotation, ast.Name) and node.annotation.id == "bool"
+        )
+        return value_is_bool or annotation_is_bool
+    return False
+
+
+def _boolean_target_names(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.Assign):
+        return [target.id for target in node.targets if isinstance(target, ast.Name)]
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return [node.target.id]
+    return []
+
+
+def _collect_boolean_assignments(tree: ast.Module) -> list[tuple[str, int, bool]]:
+    collected: list[tuple[str, int, bool]] = []
+    module_level_nodes = set(id(statement) for statement in tree.body)
+    for node in ast.walk(tree):
+        if not _is_boolean_assignment(node):
+            continue
+        is_module_level = id(node) in module_level_nodes
+        for name in _boolean_target_names(node):
+            collected.append((name, node.lineno, is_module_level))
+    return collected
+
+
+def check_boolean_naming(content: str, file_path: str) -> list[str]:
+    """Flag boolean assignments whose target name lacks a required prefix."""
+    if is_test_file(file_path):
+        return []
+    if is_hook_infrastructure(file_path):
+        return []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    issues: list[str] = []
+    for name, line_number, is_module_level in _collect_boolean_assignments(tree):
+        if len(name) == 1:
+            continue
+        if is_module_level and UPPER_SNAKE_CONSTANT_PATTERN.match(name):
+            continue
+        if name.startswith(BOOLEAN_NAME_PREFIXES):
+            continue
+        issues.append(
+            f"Line {line_number}: Boolean {name} - prefix with is_/has_/should_/can_"
+        )
+        if len(issues) >= BOOLEAN_NAMING_ISSUE_CAP:
+            break
+    return issues
+
+
 def validate_content(content: str, file_path: str, old_content: str = "") -> list[str]:
     """Run all applicable validators on content.
 
@@ -697,6 +763,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_constants_outside_config(content, file_path))
         all_issues.extend(check_type_escape_hatches(content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))
+        all_issues.extend(check_boolean_naming(content, file_path))
 
     elif extension in JAVASCRIPT_EXTENSIONS:
         if not is_test_file(file_path):

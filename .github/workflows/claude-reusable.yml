@@ -36,7 +36,6 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: "--system-prompt-file /tmp/system-prompt.xml"
-          exclude_comments_by_actor: "claude[bot]"
           track_progress: true
 
   claude-bugbot-review:
@@ -76,8 +75,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: "--system-prompt-file /tmp/system-prompt.xml"
-          allowed_bots: "cursor"
-          exclude_comments_by_actor: "claude[bot]"
+          allowed_bots: "cursor[bot]"
           track_progress: true
           prompt: |
             A Cursor Bugbot review has been posted on this pull request. Perform an independent debug review of the code changes per the rules in your system prompt.

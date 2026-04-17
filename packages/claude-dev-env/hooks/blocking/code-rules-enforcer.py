@@ -14,6 +14,7 @@ Checks (blocking):
 Advisory only (non-blocking):
 - File line count: stderr warning at 400 lines (soft) and 1000 lines (hard)
 """
+import ast
 import json
 import re
 import sys
@@ -478,6 +479,43 @@ def check_constants_outside_config(content: str, file_path: str) -> list[str]:
     return issues
 
 
+BANNED_IDENTIFIERS: frozenset[str] = frozenset({"result", "data", "output", "response", "value", "item", "temp"})
+MAX_BANNED_IDENTIFIER_ISSUES: int = 3
+BANNED_IDENTIFIER_MESSAGE_SUFFIX: str = "use descriptive name (see CODE_RULES Naming section)"
+
+
+def check_banned_identifiers(content: str, file_path: str) -> list[str]:
+    """Flag assignments to identifiers banned by the project Naming rules."""
+    if is_test_file(file_path) or is_hook_infrastructure(file_path):
+        return []
+
+    try:
+        parsed_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    issues: list[str] = []
+    for each_node in ast.walk(parsed_tree):
+        if isinstance(each_node, ast.Assign):
+            for each_target in each_node.targets:
+                if isinstance(each_target, ast.Name) and each_target.id in BANNED_IDENTIFIERS:
+                    issues.append(
+                        f"Line {each_target.lineno}: Banned identifier '{each_target.id}' - {BANNED_IDENTIFIER_MESSAGE_SUFFIX}"
+                    )
+                    if len(issues) >= MAX_BANNED_IDENTIFIER_ISSUES:
+                        return issues
+        elif isinstance(each_node, ast.AnnAssign):
+            annotation_target = each_node.target
+            if isinstance(annotation_target, ast.Name) and annotation_target.id in BANNED_IDENTIFIERS:
+                issues.append(
+                    f"Line {annotation_target.lineno}: Banned identifier '{annotation_target.id}' - {BANNED_IDENTIFIER_MESSAGE_SUFFIX}"
+                )
+                if len(issues) >= MAX_BANNED_IDENTIFIER_ISSUES:
+                    return issues
+
+    return issues
+
+
 def validate_content(content: str, file_path: str, old_content: str = "") -> list[str]:
     """Run all applicable validators on content.
 
@@ -498,6 +536,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_windows_api_none(content))
         all_issues.extend(check_magic_values(content, file_path))
         all_issues.extend(check_constants_outside_config(content, file_path))
+        all_issues.extend(check_banned_identifiers(content, file_path))
 
     elif extension in JAVASCRIPT_EXTENSIONS:
         if not is_test_file(file_path):

@@ -194,7 +194,7 @@ def run_python_style_checks(files: List[Path]) -> ValidatorResult:
         name="Python Style",
         checks="1,2,3,4",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -215,7 +215,7 @@ def run_test_safety_checks(files: List[Path]) -> ValidatorResult:
         name="Test Safety",
         checks="11,21",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -250,7 +250,7 @@ def run_file_structure_checks(project_root: Optional[Path] = None) -> ValidatorR
         name="File Structure",
         checks="14,15",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -271,7 +271,7 @@ def run_react_checks(files: List[Path]) -> ValidatorResult:
         name="React",
         checks="17",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -283,7 +283,7 @@ def run_git_checks() -> ValidatorResult:
         name="Git/PR Workflow",
         checks="23,24",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -360,7 +360,7 @@ def run_abbreviation_checks(files: List[Path]) -> ValidatorResult:
         name="Abbreviations",
         checks="5",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -381,7 +381,7 @@ def run_pr_reference_checks(files: List[Path]) -> ValidatorResult:
         name="PR References",
         checks="6",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -402,7 +402,7 @@ def run_magic_value_checks(files: List[Path]) -> ValidatorResult:
         name="Magic Values",
         checks="7",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -423,7 +423,7 @@ def run_useless_test_checks(files: List[Path]) -> ValidatorResult:
         name="Useless Tests",
         checks="12",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -444,7 +444,7 @@ def run_security_checks(files: List[Path]) -> ValidatorResult:
         name="Security",
         checks="27,28,29",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -465,7 +465,7 @@ def run_code_quality_checks(files: List[Path]) -> ValidatorResult:
         name="Code Quality",
         checks="30,31,32",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -486,7 +486,7 @@ def run_python_antipattern_checks(files: List[Path]) -> ValidatorResult:
         name="Python Anti-patterns",
         checks="33,34,35",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -507,7 +507,7 @@ def run_todo_checks(files: List[Path]) -> ValidatorResult:
         name="TODO Tracking",
         checks="36",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 
@@ -528,7 +528,7 @@ def run_type_safety_checks(files: List[Path]) -> ValidatorResult:
         name="Type Safety",
         checks="39,40",
         passed=result.returncode == 0,
-        output=result.stdout or "All checks passed",
+        output=result.stdout or result.stderr or "All checks passed",
     )
 
 

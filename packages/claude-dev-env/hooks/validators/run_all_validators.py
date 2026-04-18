@@ -13,13 +13,30 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from health_check import get_validator_version
-from mypy_integration import check_mypy_available, run_mypy_check
-from output_formatter import OutputFormatter, OutputMode, ValidatorResultDict
-from ruff_integration import check_ruff_available, run_ruff_check
+from .health_check import get_validator_version
+from .mypy_integration import check_mypy_available, run_mypy_check
+from .output_formatter import OutputFormatter, OutputMode, ValidatorResultDict
+from .ruff_integration import check_ruff_available, run_ruff_check
 
 
 VALIDATORS_DIR = Path(__file__).parent
+HOOKS_DIR = VALIDATORS_DIR.parent
+PACKAGE_NAME = VALIDATORS_DIR.name
+
+
+def invoke_validator_module(module_stem: str, extra_arguments: List[str]) -> subprocess.CompletedProcess:
+    """Run a sibling validator as ``python -m validators.<module_stem>``.
+
+    The subprocess is launched with ``cwd`` set to the hooks directory so the
+    ``validators`` package qualifier resolves without requiring PYTHONPATH.
+    """
+    qualified_module = f"{PACKAGE_NAME}.{module_stem}"
+    return subprocess.run(
+        [sys.executable, "-m", qualified_module, *extra_arguments],
+        capture_output=True,
+        text=True,
+        cwd=str(HOOKS_DIR),
+    )
 
 
 @dataclass(frozen=True)
@@ -169,12 +186,7 @@ def run_python_style_checks(files: List[Path]) -> ValidatorResult:
             output="No Python files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "python_style_checks.py")]
-        + [str(f) for f in py_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("python_style_checks", [str(f) for f in py_files])
 
     return ValidatorResult(
         name="Python Style",
@@ -195,12 +207,7 @@ def run_test_safety_checks(files: List[Path]) -> ValidatorResult:
             output="No test files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "test_safety_checks.py")]
-        + [str(f) for f in test_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("test_safety_checks", [str(f) for f in test_files])
 
     return ValidatorResult(
         name="Test Safety",
@@ -235,11 +242,7 @@ def run_file_structure_checks(project_root: Optional[Path] = None) -> ValidatorR
             output="Not in a git repository - skipping",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "file_structure_checks.py"), str(project_root)],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("file_structure_checks", [str(project_root)])
 
     return ValidatorResult(
         name="File Structure",
@@ -260,12 +263,7 @@ def run_react_checks(files: List[Path]) -> ValidatorResult:
             output="No React files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "react_checks.py")]
-        + [str(f) for f in react_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("react_checks", [str(f) for f in react_files])
 
     return ValidatorResult(
         name="React",
@@ -277,11 +275,7 @@ def run_react_checks(files: List[Path]) -> ValidatorResult:
 
 def run_git_checks() -> ValidatorResult:
     """Run git/GitHub checks."""
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "git_checks.py")],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("git_checks", [])
 
     return ValidatorResult(
         name="Git/PR Workflow",
@@ -358,12 +352,7 @@ def run_abbreviation_checks(files: List[Path]) -> ValidatorResult:
             output="No Python files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "abbreviation_checks.py")]
-        + [str(f) for f in py_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("abbreviation_checks", [str(f) for f in py_files])
 
     return ValidatorResult(
         name="Abbreviations",
@@ -384,12 +373,7 @@ def run_pr_reference_checks(files: List[Path]) -> ValidatorResult:
             output="No code files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "pr_reference_checks.py")]
-        + [str(f) for f in code_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("pr_reference_checks", [str(f) for f in code_files])
 
     return ValidatorResult(
         name="PR References",
@@ -410,12 +394,7 @@ def run_magic_value_checks(files: List[Path]) -> ValidatorResult:
             output="No Python files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "magic_value_checks.py")]
-        + [str(f) for f in py_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("magic_value_checks", [str(f) for f in py_files])
 
     return ValidatorResult(
         name="Magic Values",
@@ -436,12 +415,7 @@ def run_useless_test_checks(files: List[Path]) -> ValidatorResult:
             output="No test files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "useless_test_checks.py")]
-        + [str(f) for f in test_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("useless_test_checks", [str(f) for f in test_files])
 
     return ValidatorResult(
         name="Useless Tests",
@@ -462,12 +436,7 @@ def run_security_checks(files: List[Path]) -> ValidatorResult:
             output="No Python files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "security_checks.py")]
-        + [str(f) for f in py_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("security_checks", [str(f) for f in py_files])
 
     return ValidatorResult(
         name="Security",
@@ -488,12 +457,7 @@ def run_code_quality_checks(files: List[Path]) -> ValidatorResult:
             output="No Python files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "code_quality_checks.py")]
-        + [str(f) for f in py_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("code_quality_checks", [str(f) for f in py_files])
 
     return ValidatorResult(
         name="Code Quality",
@@ -514,12 +478,7 @@ def run_python_antipattern_checks(files: List[Path]) -> ValidatorResult:
             output="No Python files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "python_antipattern_checks.py")]
-        + [str(f) for f in py_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("python_antipattern_checks", [str(f) for f in py_files])
 
     return ValidatorResult(
         name="Python Anti-patterns",
@@ -540,12 +499,7 @@ def run_todo_checks(files: List[Path]) -> ValidatorResult:
             output="No Python files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "todo_checks.py")]
-        + [str(f) for f in py_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("todo_checks", [str(f) for f in py_files])
 
     return ValidatorResult(
         name="TODO Tracking",
@@ -566,12 +520,7 @@ def run_type_safety_checks(files: List[Path]) -> ValidatorResult:
             output="No Python files to check",
         )
 
-    result = subprocess.run(
-        [sys.executable, str(VALIDATORS_DIR / "type_safety_checks.py")]
-        + [str(f) for f in py_files],
-        capture_output=True,
-        text=True,
-    )
+    result = invoke_validator_module("type_safety_checks", [str(f) for f in py_files])
 
     return ValidatorResult(
         name="Type Safety",
@@ -590,7 +539,7 @@ def fix_python_style(files: List[Path]) -> List[str]:
     Returns:
         List of files that were fixed
     """
-    from python_style_checks import fix_file
+    from .python_style_checks import fix_file
 
     fixed_files: List[str] = []
     py_files = [f for f in files if f.suffix == ".py"]
@@ -657,7 +606,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.health:
-        from health_check import get_system_health, print_health_report
+        from .health_check import get_system_health, print_health_report
         health = get_system_health()
         print_health_report(health)
         return 0 if health.all_healthy else 1

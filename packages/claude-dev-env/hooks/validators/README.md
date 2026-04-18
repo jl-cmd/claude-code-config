@@ -119,7 +119,11 @@ repos:
     hooks:
       - id: python-style-checks
         name: Python Style Checks
-        entry: python hooks/validators/python_style_checks.py
+        entry: python -m validators.python_style_checks
+        args: []
+        pass_filenames: true
+        # Run from the directory that contains the ``validators`` package (``hooks/``)
+        # so the ``validators`` qualifier resolves without extra PYTHONPATH setup.
         language: system
         types: [python]
 ```

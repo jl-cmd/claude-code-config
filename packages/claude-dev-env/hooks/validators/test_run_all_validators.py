@@ -12,9 +12,9 @@ class TestFixFlag:
 
     def test_fix_flag_is_accepted(self) -> None:
         """Verify --fix flag is recognized without error."""
-        with patch("run_all_validators.get_changed_files") as mock_get_files, \
-             patch("run_all_validators.run_file_structure_checks") as mock_file, \
-             patch("run_all_validators.run_git_checks") as mock_git:
+        with patch("validators.run_all_validators.get_changed_files") as mock_get_files, \
+             patch("validators.run_all_validators.run_file_structure_checks") as mock_file, \
+             patch("validators.run_all_validators.run_git_checks") as mock_git:
 
             mock_get_files.return_value = []
 
@@ -27,7 +27,7 @@ class TestFixFlag:
             mock_file.return_value = mock_result
             mock_git.return_value = mock_result
 
-            from run_all_validators import main
+            from .run_all_validators import main
 
             original_argv = sys.argv
             try:
@@ -39,14 +39,14 @@ class TestFixFlag:
 
     def test_fix_flag_calls_fix_python_style(self) -> None:
         """Verify --fix flag triggers fix_python_style when files exist."""
-        with patch("run_all_validators.get_changed_files") as mock_get_files, \
-             patch("run_all_validators.fix_python_style") as mock_fix, \
-             patch("run_all_validators.run_python_style_checks") as mock_style, \
-             patch("run_all_validators.run_test_safety_checks") as mock_test, \
-             patch("run_all_validators.run_react_checks") as mock_react, \
-             patch("run_all_validators.run_comment_checks") as mock_comment, \
-             patch("run_all_validators.run_file_structure_checks") as mock_file, \
-             patch("run_all_validators.run_git_checks") as mock_git:
+        with patch("validators.run_all_validators.get_changed_files") as mock_get_files, \
+             patch("validators.run_all_validators.fix_python_style") as mock_fix, \
+             patch("validators.run_all_validators.run_python_style_checks") as mock_style, \
+             patch("validators.run_all_validators.run_test_safety_checks") as mock_test, \
+             patch("validators.run_all_validators.run_react_checks") as mock_react, \
+             patch("validators.run_all_validators.run_comment_checks") as mock_comment, \
+             patch("validators.run_all_validators.run_file_structure_checks") as mock_file, \
+             patch("validators.run_all_validators.run_git_checks") as mock_git:
 
             mock_get_files.return_value = [Path("test.py")]
             mock_fix.return_value = ["test.py"]
@@ -64,7 +64,7 @@ class TestFixFlag:
             mock_file.return_value = mock_result
             mock_git.return_value = mock_result
 
-            from run_all_validators import main
+            from .run_all_validators import main
 
             original_argv = sys.argv
             try:
@@ -77,14 +77,14 @@ class TestFixFlag:
 
     def test_no_fix_flag_skips_fixes(self) -> None:
         """Verify fixes are skipped when --fix flag is not provided."""
-        with patch("run_all_validators.get_changed_files") as mock_get_files, \
-             patch("run_all_validators.fix_python_style") as mock_fix, \
-             patch("run_all_validators.run_python_style_checks") as mock_style, \
-             patch("run_all_validators.run_test_safety_checks") as mock_test, \
-             patch("run_all_validators.run_react_checks") as mock_react, \
-             patch("run_all_validators.run_comment_checks") as mock_comment, \
-             patch("run_all_validators.run_file_structure_checks") as mock_file, \
-             patch("run_all_validators.run_git_checks") as mock_git:
+        with patch("validators.run_all_validators.get_changed_files") as mock_get_files, \
+             patch("validators.run_all_validators.fix_python_style") as mock_fix, \
+             patch("validators.run_all_validators.run_python_style_checks") as mock_style, \
+             patch("validators.run_all_validators.run_test_safety_checks") as mock_test, \
+             patch("validators.run_all_validators.run_react_checks") as mock_react, \
+             patch("validators.run_all_validators.run_comment_checks") as mock_comment, \
+             patch("validators.run_all_validators.run_file_structure_checks") as mock_file, \
+             patch("validators.run_all_validators.run_git_checks") as mock_git:
 
             mock_get_files.return_value = [Path("test.py")]
 
@@ -101,7 +101,7 @@ class TestFixFlag:
             mock_file.return_value = mock_result
             mock_git.return_value = mock_result
 
-            from run_all_validators import main
+            from .run_all_validators import main
 
             original_argv = sys.argv
             try:
@@ -115,7 +115,7 @@ class TestFixFlag:
 
 class TestGracefulDegradation:
     def test_missing_validator_returns_skipped_result(self) -> None:
-        from run_all_validators import ValidatorResult, run_with_fallback
+        from .run_all_validators import ValidatorResult, run_with_fallback
 
         def failing_validator() -> ValidatorResult:
             raise FileNotFoundError("validator.py not found")
@@ -131,7 +131,7 @@ class TestGracefulDegradation:
         assert result.passed is False
 
     def test_validator_exception_returns_skipped_result(self) -> None:
-        from run_all_validators import ValidatorResult, run_with_fallback
+        from .run_all_validators import ValidatorResult, run_with_fallback
 
         def crashing_validator() -> ValidatorResult:
             raise RuntimeError("Unexpected crash")
@@ -146,7 +146,7 @@ class TestGracefulDegradation:
         assert "skipped" in result.output.lower()
 
     def test_successful_validator_returns_normal_result(self) -> None:
-        from run_all_validators import ValidatorResult, run_with_fallback
+        from .run_all_validators import ValidatorResult, run_with_fallback
 
         def working_validator() -> ValidatorResult:
             return ValidatorResult(
@@ -168,14 +168,14 @@ class TestGracefulDegradation:
 
 class TestTimingMetrics:
     def test_create_timing_metrics_empty(self) -> None:
-        from run_all_validators import create_timing_metrics
+        from .run_all_validators import create_timing_metrics
 
         metrics = create_timing_metrics({})
         assert metrics.total_seconds == 0.0
         assert metrics.validator_times == {}
 
     def test_create_timing_metrics_with_data(self) -> None:
-        from run_all_validators import create_timing_metrics
+        from .run_all_validators import create_timing_metrics
 
         timings = {"Validator A": 1.5, "Validator B": 2.0}
         metrics = create_timing_metrics(timings)
@@ -183,7 +183,7 @@ class TestTimingMetrics:
         assert metrics.validator_times == timings
 
     def test_add_timing_returns_new_instance(self) -> None:
-        from run_all_validators import add_timing, create_timing_metrics
+        from .run_all_validators import add_timing, create_timing_metrics
 
         metrics1 = create_timing_metrics({})
         metrics2 = add_timing(metrics1, "Test", 1.5)
@@ -194,7 +194,7 @@ class TestTimingMetrics:
         assert metrics2.validator_times["Test"] == 1.5
 
     def test_format_report_includes_all_timings(self) -> None:
-        from run_all_validators import create_timing_metrics, format_timing_report
+        from .run_all_validators import create_timing_metrics, format_timing_report
 
         metrics = create_timing_metrics({"Fast": 0.1, "Slow": 2.5})
         report = format_timing_report(metrics)
@@ -206,7 +206,7 @@ class TestTimingMetrics:
 
 class TestVersionHeader:
     def test_print_header_includes_version(self, capsys) -> None:
-        from run_all_validators import print_header
+        from .run_all_validators import print_header
 
         print_header()
         captured = capsys.readouterr()
@@ -215,7 +215,7 @@ class TestVersionHeader:
         assert "(v" in captured.out
 
     def test_build_json_output_includes_version(self) -> None:
-        from run_all_validators import build_json_output, create_timing_metrics
+        from .run_all_validators import build_json_output, create_timing_metrics
 
         json_output = build_json_output(
             results=[],

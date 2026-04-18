@@ -7,7 +7,7 @@ from typing import List
 
 import pytest
 
-from python_style_checks import (
+from .python_style_checks import (
     Violation,
     check_imports_at_top,
     check_no_empty_line_after_decorators,
@@ -383,7 +383,7 @@ def foo():
             temp_path = Path(temp_file.name)
 
         try:
-            from python_style_checks import fix_file
+            from .python_style_checks import fix_file
             fixed = fix_file(temp_path)
             assert fixed is True
             result = temp_path.read_text()
@@ -411,7 +411,7 @@ def bar():
             temp_path = Path(temp_file.name)
 
         try:
-            from python_style_checks import fix_file
+            from .python_style_checks import fix_file
             fixed = fix_file(temp_path)
             assert fixed is True
             result = temp_path.read_text()
@@ -432,7 +432,7 @@ def bar():
             temp_path = Path(temp_file.name)
 
         try:
-            from python_style_checks import fix_file
+            from .python_style_checks import fix_file
             fixed = fix_file(temp_path)
             assert fixed is False
         finally:

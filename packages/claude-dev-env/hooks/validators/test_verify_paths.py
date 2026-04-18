@@ -5,7 +5,7 @@ import pytest
 
 def test_extract_validator_paths_finds_validator_references() -> None:
     """Test that validator references are extracted from markdown content."""
-    from verify_paths import extract_validator_paths
+    from .verify_paths import extract_validator_paths
 
     content = """
     **Validator:** `validators/import_checks.py`
@@ -21,7 +21,7 @@ def test_extract_validator_paths_finds_validator_references() -> None:
 
 def test_extract_validator_paths_deduplicates() -> None:
     """Test that duplicate validator references are deduplicated."""
-    from verify_paths import extract_validator_paths
+    from .verify_paths import extract_validator_paths
 
     content = """
     **Validator:** `validators/import_checks.py`

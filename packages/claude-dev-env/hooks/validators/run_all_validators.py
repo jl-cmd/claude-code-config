@@ -25,7 +25,7 @@ HOOKS_DIR = VALIDATORS_DIR.parent
 PACKAGE_NAME = VALIDATORS_DIR.name
 
 
-def invoke_validator_module(module_stem: str, extra_arguments: List[str]) -> subprocess.CompletedProcess:
+def invoke_validator_module(module_stem: str, extra_arguments: List[str]) -> subprocess.CompletedProcess[str]:
     """Run a sibling validator as ``python -m validators.<module_stem>``.
 
     The subprocess is launched with ``cwd`` set to the hooks directory so the

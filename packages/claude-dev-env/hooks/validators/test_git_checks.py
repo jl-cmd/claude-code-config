@@ -274,8 +274,8 @@ class TestDraftPrState:
 class TestMain:
     """Test main function integration."""
 
-    @patch("git_checks.check_single_commit_when_pr_exists")
-    @patch("git_checks.check_draft_pr_state")
+    @patch("validators.git_checks.check_single_commit_when_pr_exists")
+    @patch("validators.git_checks.check_draft_pr_state")
     def test_main_no_violations_exits_zero(
         self,
         mock_draft: MagicMock,
@@ -293,8 +293,8 @@ class TestMain:
         captured = capsys.readouterr()
         assert captured.out == ""
 
-    @patch("git_checks.check_single_commit_when_pr_exists")
-    @patch("git_checks.check_draft_pr_state")
+    @patch("validators.git_checks.check_single_commit_when_pr_exists")
+    @patch("validators.git_checks.check_draft_pr_state")
     def test_main_with_violations_exits_one(
         self,
         mock_draft: MagicMock,
@@ -314,8 +314,8 @@ class TestMain:
         captured = capsys.readouterr()
         assert "Branch has 3 commits ahead" in captured.out
 
-    @patch("git_checks.check_single_commit_when_pr_exists")
-    @patch("git_checks.check_draft_pr_state")
+    @patch("validators.git_checks.check_single_commit_when_pr_exists")
+    @patch("validators.git_checks.check_draft_pr_state")
     def test_main_prints_violations_without_file_line(
         self,
         mock_draft: MagicMock,
@@ -336,8 +336,8 @@ class TestMain:
         assert captured.out == "PR must be in draft state\n"
         assert ":0:" not in captured.out
 
-    @patch("git_checks.check_single_commit_when_pr_exists")
-    @patch("git_checks.check_draft_pr_state")
+    @patch("validators.git_checks.check_single_commit_when_pr_exists")
+    @patch("validators.git_checks.check_draft_pr_state")
     def test_main_prints_all_violations(
         self,
         mock_draft: MagicMock,

@@ -6,7 +6,7 @@ import types
 from unittest.mock import patch
 
 HOOK_DIRECTORY = pathlib.Path(__file__).parent
-MODULE_PATH = HOOK_DIRECTORY / "subagent-complete-notify.py"
+MODULE_PATH = HOOK_DIRECTORY / "subagent_complete_notify.py"
 
 FIXTURE_ACTIVITY_SECRET_ID = "fixture-activity-id-0003"
 FIXTURE_TASK_DESCRIPTION = "subagent finished research task"

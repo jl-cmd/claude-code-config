@@ -6,7 +6,7 @@ import types
 from unittest.mock import patch
 
 HOOK_DIRECTORY = pathlib.Path(__file__).parent
-MODULE_PATH = HOOK_DIRECTORY / "claude-notification-handler.py"
+MODULE_PATH = HOOK_DIRECTORY / "claude_notification_handler.py"
 
 FIXTURE_ATTENTION_SECRET_ID = "fixture-attention-id-0001"
 FIXTURE_PROJECT_NAME = "fixture-project"

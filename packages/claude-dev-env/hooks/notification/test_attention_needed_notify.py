@@ -7,7 +7,7 @@ import types
 from unittest.mock import patch
 
 HOOK_DIRECTORY = pathlib.Path(__file__).parent
-MODULE_PATH = HOOK_DIRECTORY / "attention-needed-notify.py"
+MODULE_PATH = HOOK_DIRECTORY / "attention_needed_notify.py"
 
 FIXTURE_ATTENTION_SECRET_ID = "fixture-attention-id-0002"
 NON_WINDOWS_NON_WSL_PLATFORM = "Darwin"

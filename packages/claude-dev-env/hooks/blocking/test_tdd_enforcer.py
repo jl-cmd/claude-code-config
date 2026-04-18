@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 
-SCRIPT_PATH = Path(__file__).parent / "tdd-enforcer.py"
+SCRIPT_PATH = Path(__file__).parent / "tdd_enforcer.py"
 
 
 def _load_production_module():

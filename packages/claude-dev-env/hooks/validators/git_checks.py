@@ -48,9 +48,13 @@ def check_single_commit_when_pr_exists() -> List[Violation]:
     - Branch is 0 commits ahead of base
     - Branch is more than 1 commit ahead of base
     """
+    branch = get_current_branch()
+    if not branch:
+        return []
+
     try:
         pr_info = subprocess.run(
-            ["gh", "pr", "list", "--head", "HEAD", "--json", "baseRefName,number"],
+            ["gh", "pr", "list", "--head", branch, "--json", "baseRefName,number"],
             capture_output=True,
             text=True,
             check=True,

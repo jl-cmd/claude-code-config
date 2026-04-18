@@ -207,6 +207,7 @@ class TestSingleCommitWhenPrExists:
         violations = check_single_commit_when_pr_exists()
 
         assert violations == []
+        mock_run.assert_called_once()
 
 
 class TestDraftPrState:

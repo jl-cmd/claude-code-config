@@ -12,10 +12,17 @@ Task/Agent PreToolUse hook.
 
 ## agent-execution-intent-gate.py
 
-Fail-closed gate invoked before `/agent-prompt` executes any spawned work.
-Confirms the user expressed explicit execution intent. If the trigger is
-ambiguous (for example, `/prompt-generator` output without a follow-up
-"go run it" signal), the gate refuses to spawn.
+Status: pending implementation. The script `agent-execution-intent-gate.py`
+is not yet present in the repository; this section specifies the intended
+gate so the policy is captured ahead of the code. Until the script lands,
+execution-intent enforcement is advisory only and no runtime hook blocks
+ambiguous `/agent-prompt` invocations.
+
+Intended behavior once implemented: fail-closed gate invoked before
+`/agent-prompt` executes any spawned work. Confirms the user expressed
+explicit execution intent. If the trigger is ambiguous (for example,
+`/prompt-generator` output without a follow-up "go run it" signal), the
+gate refuses to spawn.
 
 ## Leakage + Checklist + Scope (Stop)
 

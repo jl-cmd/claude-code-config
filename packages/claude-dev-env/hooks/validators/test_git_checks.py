@@ -9,16 +9,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from .git_checks import (
-    DEFAULT_BASE_BRANCH_WHEN_UNKNOWN,
     Violation,
     check_single_commit_when_pr_exists,
     check_draft_pr_state,
     main,
 )
-
-
-def test_default_base_branch_when_unknown_is_main() -> None:
-    assert DEFAULT_BASE_BRANCH_WHEN_UNKNOWN == "main"
 
 
 class TestSingleCommitWhenPrExists:
@@ -108,7 +103,7 @@ class TestSingleCommitWhenPrExists:
 
     @patch("git_checks.subprocess.run")
     def test_extracts_base_branch_from_pr_info(self, mock_run: MagicMock) -> None:
-        """Should extract base branch name from gh pr list JSON output."""
+        """Should extract base branch name from gh pr list JSON output, falling back to main when absent."""
         mock_run.side_effect = [
             MagicMock(returncode=0, stdout="feature/my-branch\n", stderr=""),
             MagicMock(returncode=0, stdout='[{"baseRefName": "develop", "number": 123}]', stderr=""),
@@ -120,6 +115,23 @@ class TestSingleCommitWhenPrExists:
         assert len(violations) == 1
         mock_run.assert_any_call(
             ["git", "rev-list", "--count", "develop..HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+
+        mock_run.reset_mock()
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="feature/my-branch\n", stderr=""),
+            MagicMock(returncode=0, stdout='[{"number": 123}]', stderr=""),
+            MagicMock(returncode=0, stdout="2", stderr=""),
+        ]
+
+        check_single_commit_when_pr_exists()
+
+        mock_run.assert_any_call(
+            ["git", "rev-list", "--count", "main..HEAD"],
             capture_output=True,
             text=True,
             check=True,

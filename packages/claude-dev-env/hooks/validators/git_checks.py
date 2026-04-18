@@ -6,9 +6,10 @@ import sys
 from dataclasses import dataclass
 from typing import List
 
+from config import DEFAULT_BASE_BRANCH_WHEN_UNKNOWN
+
 
 SUBPROCESS_TIMEOUT_SECONDS = 30
-DEFAULT_BASE_BRANCH_WHEN_UNKNOWN = "main"
 
 
 @dataclass

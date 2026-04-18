@@ -2,14 +2,16 @@
 
 import importlib.util
 import pathlib
-import sys
+import types
 from unittest.mock import patch
 
 HOOK_DIRECTORY = pathlib.Path(__file__).parent
 MODULE_PATH = HOOK_DIRECTORY / "notification_utils.py"
 
 
-def load_notification_utils_with_environment(environment_overrides: dict[str, str]):
+def load_notification_utils_with_environment(
+    environment_overrides: dict[str, str],
+) -> types.ModuleType:
     module_specification = importlib.util.spec_from_file_location(
         "notification_utils_under_test",
         MODULE_PATH,
@@ -18,8 +20,6 @@ def load_notification_utils_with_environment(environment_overrides: dict[str, st
     assert module_specification.loader is not None
     module_under_test = importlib.util.module_from_spec(module_specification)
     with patch.dict("os.environ", environment_overrides, clear=False):
-        if "NTFY_TOPIC" not in environment_overrides:
-            sys.modules.pop("notification_utils_under_test", None)
         module_specification.loader.exec_module(module_under_test)
     return module_under_test
 

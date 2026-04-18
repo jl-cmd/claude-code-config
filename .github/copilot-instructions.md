@@ -30,7 +30,7 @@ Review every change against these rules. Flag each violation with its rule name.
   - Workflow registries: path contains the substring `/workflow/`, `_tab.py`, `/states.py`, or `/modules.py` (a file named literally `states.py` at repo root is not exempt; `pkg/states.py` is)
   - Test files: path or filename matches common test layout signals (`test_`, `_test.`, `.spec.`, `conftest`, `/tests/`, etc.); test files may define local constants without using `config/`
 - Require a search of existing `config/` files for reuse before adding any new production constant.
-- Require every file-global constant in **production code outside `config/`** to be referenced by at least two methods or functions in the same file; a constant used by exactly one method must be declared as a local constant inside that method instead. Constants placed in `config/` are exempt (they satisfy the constants-location rule regardless of reference count). **Test files are exempt** — test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `tests/`; filename starts with `test_`; filename contains `_test.` followed by an extension (e.g. `foo_test.py`); filename contains `.spec.` (e.g. `foo.spec.ts`); filename equals `conftest.py`.
+- Require every file-global constant in **production code outside `config/`** to be referenced by at least two methods or functions in the same file; a constant used by exactly one method must be declared as a local constant inside that method instead. Constants placed in `config/` are exempt (they satisfy the constants-location rule regardless of reference count). **Test files are exempt** — test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `tests/`; filename starts with `test_`; filename contains `_test.`; filename contains `.spec.`; filename contains `conftest`.
 
 Flag (single method references the file-global constant — move it inside the method):
 
@@ -57,6 +57,8 @@ def fetch_with_retries(url: str) -> str:
 
 Accept (constant kept at file scope when two or more methods reference it):
 
+A reference counts only when the constant is actually consumed — compared, used in a decision, or passed into code that depends on its value — not when a method merely re-exports it. A file-global constant with zero references is dead code; remove it rather than migrate it to a local.
+
 ```python
 MAXIMUM_RETRIES = 3
 
@@ -64,8 +66,8 @@ def fetch_with_retries(url: str) -> str:
     for each_attempt_index in range(MAXIMUM_RETRIES):
         ...
 
-def reset_retry_counter() -> int:
-    return MAXIMUM_RETRIES
+def is_retry_limit_reached(attempt_count: int) -> bool:
+    return attempt_count >= MAXIMUM_RETRIES
 ```
 
 ## Types

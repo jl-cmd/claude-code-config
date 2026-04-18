@@ -7,7 +7,7 @@
 
 **file_global_constants_use_count:** A file-global constant is a module-level named constant declared at the top of a file (for example, an `UPPER_SNAKE_CASE` value assigned at module scope). In production code, every file-global constant must be referenced by at least two methods or functions inside that same file. When a constant is referenced by exactly one method, declare it as a local constant inside that method instead.
 
-**Test files are exempt.** Test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `tests/`; filename starts with `test_`; filename contains `_test.` followed by an extension (e.g. `foo_test.py`); filename contains `.spec.` (e.g. `foo.spec.ts`); filename equals `conftest.py`.
+**Test files are exempt.** Test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `tests/`; filename starts with `test_`; filename contains `_test.`; filename contains `.spec.`; filename contains `conftest`.
 
 **`config/` files are exempt.** Constants placed in `config/` satisfy the constants-location rule; the use-count requirement applies only to production code outside `config/`.
 
@@ -36,6 +36,8 @@ def fetch_with_retries(url: str) -> str:
 
 Accept (constant kept at file scope when two or more methods reference it):
 
+A reference counts only when the constant is actually consumed — compared, used in a decision, or passed into code that depends on its value — not when a method merely re-exports it. A file-global constant with zero references is dead code; remove it rather than migrate it to a local.
+
 ```python
 MAXIMUM_RETRIES = 3
 
@@ -43,8 +45,8 @@ def fetch_with_retries(url: str) -> str:
     for each_attempt_index in range(MAXIMUM_RETRIES):
         ...
 
-def reset_retry_counter() -> int:
-    return MAXIMUM_RETRIES
+def is_retry_limit_reached(attempt_count: int) -> bool:
+    return attempt_count >= MAXIMUM_RETRIES
 ```
 
 ## Core Philosophy

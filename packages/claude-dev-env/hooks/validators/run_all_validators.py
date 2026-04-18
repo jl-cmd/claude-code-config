@@ -13,9 +13,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .health_check import get_validator_version
+from .health_check import get_system_health, get_validator_version, print_health_report
 from .mypy_integration import check_mypy_available, run_mypy_check
 from .output_formatter import OutputFormatter, OutputMode, ValidatorResultDict
+from .python_style_checks import fix_file
 from .ruff_integration import check_ruff_available, run_ruff_check
 
 
@@ -539,8 +540,6 @@ def fix_python_style(files: List[Path]) -> List[str]:
     Returns:
         List of files that were fixed
     """
-    from .python_style_checks import fix_file
-
     fixed_files: List[str] = []
     py_files = [f for f in files if f.suffix == ".py"]
 
@@ -606,7 +605,6 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.health:
-        from .health_check import get_system_health, print_health_report
         health = get_system_health()
         print_health_report(health)
         return 0 if health.all_healthy else 1

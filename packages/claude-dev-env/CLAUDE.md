@@ -7,7 +7,7 @@
 
 **file_global_constants_use_count:** A file-global constant is a module-level named constant declared at the top of a file (for example, an `UPPER_SNAKE_CASE` value assigned at module scope). In production code, every file-global constant must be referenced by at least two methods or functions inside that same file. When a constant is referenced by exactly one method, declare it as a local constant inside that method instead.
 
-**Test files are exempt.** A file qualifies as a test file when its name starts with `test_`, ends with `_test`, matches `*.spec.*`, is named `conftest.py`, ends with `.test.ts`, `.test.tsx`, `.test.js`, or `.test.jsx`, or sits under a `tests/`, `__tests__/`, or `/tests/` directory.
+**Test files are exempt.** Test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `tests/`; filename starts with `test_`; filename contains `_test.` followed by an extension (e.g. `foo_test.py`); filename contains `.spec.` (e.g. `foo.spec.ts`); filename equals `conftest.py`.
 
 **`config/` files are exempt.** Constants placed in `config/` satisfy the constants-location rule; the use-count requirement applies only to production code outside `config/`.
 
@@ -22,6 +22,8 @@ def fetch_with_retries(url: str) -> str:
 ```
 
 Accept (constant declared locally when only one method uses it):
+
+The local form must bind its value to something sourced from config (an import, a function argument, or another already-named constant); it must not reintroduce a numeric or string literal.
 
 ```python
 from config.timing import MAXIMUM_RETRIES

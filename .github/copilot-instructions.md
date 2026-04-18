@@ -30,7 +30,7 @@ Review every change against these rules. Flag each violation with its rule name.
   - Workflow registries: path contains the substring `/workflow/`, `_tab.py`, `/states.py`, or `/modules.py` (a file named literally `states.py` at repo root is not exempt; `pkg/states.py` is)
   - Test files: path or filename matches common test layout signals (`test_`, `_test.`, `.spec.`, `conftest`, `/tests/`, etc.); test files may define local constants without using `config/`
 - Require a search of existing `config/` files for reuse before adding any new production constant.
-- Require every file-global constant in **production code outside `config/`** to be referenced by at least two methods or functions in the same file; a constant used by exactly one method must be declared as a local constant inside that method instead. Constants placed in `config/` are exempt (they satisfy the constants-location rule regardless of reference count). **Test files are exempt** — files whose path or filename matches `test_`, `_test.`, `.spec.`, `conftest`, `/tests/`, `__tests__/`, `*.test.ts`, `*.test.tsx`, `*.test.js`, or `*.test.jsx` may keep file-global constants regardless of reference count.
+- Require every file-global constant in **production code outside `config/`** to be referenced by at least two methods or functions in the same file; a constant used by exactly one method must be declared as a local constant inside that method instead. Constants placed in `config/` are exempt (they satisfy the constants-location rule regardless of reference count). **Test files are exempt** — test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `tests/`; filename starts with `test_`; filename contains `_test.` followed by an extension (e.g. `foo_test.py`); filename contains `.spec.` (e.g. `foo.spec.ts`); filename equals `conftest.py`.
 
 Flag (single method references the file-global constant — move it inside the method):
 
@@ -43,6 +43,8 @@ def fetch_with_retries(url: str) -> str:
 ```
 
 Accept (constant declared locally when only one method uses it):
+
+The local form must bind its value to something sourced from config (an import, a function argument, or another already-named constant); it must not reintroduce a numeric or string literal.
 
 ```python
 from config.timing import MAXIMUM_RETRIES

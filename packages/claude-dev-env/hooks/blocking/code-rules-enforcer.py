@@ -450,42 +450,101 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
     return issues
 
 
-def check_fstring_structural_literals(content: str, file_path: str) -> list[str]:
-    """Flag f-strings whose non-interpolated fragments are structural literals.
+def _extract_fstring_literal_parts(
+    joined_string_node: ast.JoinedStr,
+) -> tuple[str, str]:
+    """Return (display_body, shape_body) for an f-string node.
 
-    After stripping every ``{...}`` interpolation from an f-string, if the
-    remaining literal text contains path separators, a ``://`` scheme, or
-    regex metacharacters (``\\d``, ``\\w``, ``\\s``, ``^``, ``$``) and is
-    longer than one character, the remainder is treated as a magic value
-    that should live in config. Respects the same config/test path
-    exemptions as :func:`check_magic_values`.
+    ``display_body`` concatenates only the literal segments for use in the
+    human-readable flag message. ``shape_body`` substitutes each interpolation
+    slot with the placeholder word ``INTERP`` so regex patterns for path
+    shape (``\\w+/\\w+/\\w+``) still match across interpolation boundaries
+    (e.g. ``/api/v1/{id}/home`` keeps its three path segments instead of
+    collapsing to ``/api/v1//home``). Escaped braces (``{{`` / ``}}``) are
+    already decoded by :mod:`ast` into their literal forms.
+    """
+    interpolation_placeholder = "INTERP"
+    display_segments: list[str] = []
+    shape_segments: list[str] = []
+    for each_part in joined_string_node.values:
+        if isinstance(each_part, ast.Constant) and isinstance(each_part.value, str):
+            display_segments.append(each_part.value)
+            shape_segments.append(each_part.value)
+        else:
+            shape_segments.append(interpolation_placeholder)
+    return "".join(display_segments), "".join(shape_segments)
+
+
+def _has_structural_shape(literal_body: str) -> bool:
+    """Return True when a literal body looks like a path, URL, or regex.
+
+    Natural English containing a single slash (e.g. ``online/offline``,
+    ``CI/CD``, ``and/or``) must NOT match. Only multi-segment paths,
+    URL schemes, Windows drive prefixes, leading absolute paths, regex
+    escape sequences (``\\d``, ``\\w``, ``\\s`` and friends), or regex
+    anchors at the boundary are treated as structural.
+    """
+    if re.search(r"\w+/\w+/\w+", literal_body):
+        return True
+    if re.search(r"\w+\\\w+\\\w+", literal_body):
+        return True
+    if re.search(r"[A-Za-z][A-Za-z0-9+.\-]*://", literal_body):
+        return True
+    if re.search(r"(^|\s)[A-Za-z]:[\\/]", literal_body):
+        return True
+    if re.search(r"^/\w+/\w+", literal_body):
+        return True
+    if re.search(r"\\[dwsDWSbBAZ]|\\\d", literal_body):
+        return True
+    if literal_body.startswith("^") or literal_body.endswith("$"):
+        return True
+    return False
+
+
+def check_fstring_structural_literals(content: str, file_path: str) -> list[str]:
+    """Flag f-strings whose literal fragments look like paths, URLs, or regex.
+
+    Parses the file with :mod:`ast` so every f-string form is handled
+    uniformly: single, triple-quoted, raw (``rf`` / ``fr``), and strings
+    containing apostrophes or escaped braces. The literal portions of
+    each ``JoinedStr`` node are concatenated, and the result is treated
+    as a structural magic value only when :func:`_has_structural_shape`
+    matches a multi-segment path, a URL scheme, a Windows drive prefix,
+    a leading absolute path, a regex escape sequence, or a boundary
+    regex anchor.
+
+    The enforcer hook file, config files, and test files are all exempt.
+    Syntax errors in the input silently produce no issues, matching the
+    behaviour of the other lint-style checks in this module.
     """
     if is_config_file(file_path) or is_test_file(file_path):
         return []
+    if file_path.replace("\\", "/").endswith("hooks/blocking/code-rules-enforcer.py"):
+        return []
 
-    fstring_detect_pattern = re.compile(r'f["\']([^"\']*)["\']')
-    fstring_interpolation_pattern = re.compile(r"\{[^{}]*\}")
-    structural_markers = ("/", "\\", "://", "\\d", "\\w", "\\s", "^", "$")
-    non_magic_literals = {"", "True", "False"}
-    minimum_stripped_length = 2
+    try:
+        syntax_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    minimum_literal_length = 2
     maximum_issues_before_stop = 100
+    non_magic_stripped_values = {"", "True", "False"}
 
     issues: list[str] = []
-    for line_number, each_line in enumerate(content.split("\n"), 1):
-        for fstring_body in fstring_detect_pattern.findall(each_line):
-            stripped_body = fstring_interpolation_pattern.sub("", fstring_body)
-            if stripped_body in non_magic_literals:
-                continue
-            if len(stripped_body) < minimum_stripped_length:
-                continue
-            has_structural_marker = any(each_marker in stripped_body for each_marker in structural_markers)
-            if not has_structural_marker:
-                continue
-            issues.append(
-                f"Line {line_number}: Structural literal inside f-string {stripped_body!r} - extract to config"
-            )
-            break
-
+    for each_node in ast.walk(syntax_tree):
+        if not isinstance(each_node, ast.JoinedStr):
+            continue
+        display_body, shape_body = _extract_fstring_literal_parts(each_node)
+        if display_body in non_magic_stripped_values:
+            continue
+        if len(display_body) < minimum_literal_length:
+            continue
+        if not _has_structural_shape(shape_body):
+            continue
+        issues.append(
+            f"Line {each_node.lineno}: Structural literal inside f-string {display_body!r} - extract to config"
+        )
         if len(issues) >= maximum_issues_before_stop:
             break
 

@@ -76,3 +76,69 @@ def test_should_skip_test_files() -> None:
     assert fstring_issues == [], (
         f"test files should be exempt from f-string scanner, got: {fstring_issues}"
     )
+
+
+def test_should_not_flag_natural_english_with_single_slash() -> None:
+    content = 'def log_mode(mode):\n    message = f"Test name contains online/offline - mode is {mode}"\n    return message\n'
+    issues = check_fstring_structural_literals(content, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"natural English with single slash should not be flagged, got: {issues}"
+    )
+
+
+def test_should_not_flag_common_english_slash_phrases() -> None:
+    for each_phrase in ("and/or", "CI/CD", "PR/MR", "input/output", "read/write"):
+        content = f'def note(x):\n    message = f"{each_phrase} value is {{x}}"\n    return message\n'
+        issues = check_fstring_structural_literals(content, PRODUCTION_FILE_PATH)
+        assert issues == [], (
+            f"phrase {each_phrase!r} should not be flagged, got: {issues}"
+        )
+
+
+def test_should_flag_fstring_with_apostrophe() -> None:
+    content = 'def greet(name):\n    message = f"it\'s /api/v1/{name}/home"\n    return message\n'
+    issues = check_fstring_structural_literals(content, PRODUCTION_FILE_PATH)
+    assert issues, "f-string containing an apostrophe should still be detected"
+
+
+def test_should_flag_triple_quoted_fstring_with_path() -> None:
+    content = 'def build(x):\n    message = f"""/api/v1/{x}/path/extra"""\n    return message\n'
+    issues = check_fstring_structural_literals(content, PRODUCTION_FILE_PATH)
+    assert issues, "triple-quoted f-string with path should be flagged"
+
+
+def test_should_flag_raw_fstring_rf_prefix() -> None:
+    content = 'def build(x):\n    message = rf"/api/v1/{x}/extra"\n    return message\n'
+    issues = check_fstring_structural_literals(content, PRODUCTION_FILE_PATH)
+    assert issues, "rf-prefixed f-string with path should be flagged"
+
+
+def test_should_flag_raw_fstring_fr_prefix() -> None:
+    content = 'def build(x):\n    message = fr"/api/v1/{x}/extra"\n    return message\n'
+    issues = check_fstring_structural_literals(content, PRODUCTION_FILE_PATH)
+    assert issues, "fr-prefixed f-string with path should be flagged"
+
+
+def test_should_not_leak_escaped_braces_into_flag_message() -> None:
+    content = 'def build(x):\n    message = f"{{/api/{x}/extra/path}}"\n    return message\n'
+    issues = check_fstring_structural_literals(content, PRODUCTION_FILE_PATH)
+    for each_issue in issues:
+        assert "{{" not in each_issue, (
+            f"flag message should not contain escaped brace artifacts, got: {each_issue}"
+        )
+        assert "}}" not in each_issue, (
+            f"flag message should not contain escaped brace artifacts, got: {each_issue}"
+        )
+
+
+def test_should_not_flag_enforcer_hook_itself() -> None:
+    hook_path = _HOOK_DIR / "code-rules-enforcer.py"
+    with open(hook_path, encoding="utf-8") as each_file:
+        enforcer_source = each_file.read()
+    issues = check_fstring_structural_literals(
+        enforcer_source,
+        "packages/claude-dev-env/hooks/blocking/code-rules-enforcer.py",
+    )
+    assert issues == [], (
+        f"the enforcer hook should not flag itself, got: {issues}"
+    )

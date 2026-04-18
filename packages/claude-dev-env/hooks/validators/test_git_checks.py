@@ -128,8 +128,10 @@ class TestSingleCommitWhenPrExists:
             MagicMock(returncode=0, stdout="2", stderr=""),
         ]
 
-        check_single_commit_when_pr_exists()
+        fallback_violations = check_single_commit_when_pr_exists()
 
+        assert len(fallback_violations) == 1
+        assert "main" in fallback_violations[0].message
         mock_run.assert_any_call(
             ["git", "rev-list", "--count", "main..HEAD"],
             capture_output=True,

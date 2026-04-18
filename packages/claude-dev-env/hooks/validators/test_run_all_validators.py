@@ -11,15 +11,15 @@ class TestModuleLevelImports:
     """Verify imports are hoisted to module level (CODE_RULES imports-at-top)."""
 
     def test_fix_file_is_module_level_import(self) -> None:
-        from validators import run_all_validators
+        from . import run_all_validators
         assert hasattr(run_all_validators, "fix_file")
 
     def test_get_system_health_is_module_level_import(self) -> None:
-        from validators import run_all_validators
+        from . import run_all_validators
         assert hasattr(run_all_validators, "get_system_health")
 
     def test_print_health_report_is_module_level_import(self) -> None:
-        from validators import run_all_validators
+        from . import run_all_validators
         assert hasattr(run_all_validators, "print_health_report")
 
 

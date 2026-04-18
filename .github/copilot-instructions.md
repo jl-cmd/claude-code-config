@@ -30,7 +30,19 @@ Review every change against these rules. Flag each violation with its rule name.
   - Workflow registries: path contains the substring `/workflow/`, `_tab.py`, `/states.py`, or `/modules.py` (a file named literally `states.py` at repo root is not exempt; `pkg/states.py` is)
   - Test files: path or filename matches common test layout signals (`test_`, `_test.`, `.spec.`, `conftest`, `/tests/`, etc.); test files may define local constants without using `config/`
 - Require a search of existing `config/` files for reuse before adding any new production constant.
-- This rule extends the `constants-location` rule defined in CODE_RULES.md. Require every file-global constant in **production code outside `config/`** to be referenced by at least two methods, functions, or class bodies in the same file. A default parameter value counts as one reference from the enclosing function. A constant used by exactly one method must have its value moved to `config/` and imported at module scope with a local alias inside the consuming method (as the Accept example below shows), OR inlined as a local constant inside the consuming method provided the value does not reintroduce a literal the magic-values rule would flag. Constants placed in `config/` are exempt (they satisfy the constants-location rule regardless of reference count). **Test files are exempt** — test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `/tests/`; filename starts with `test_`; filename contains `_test.`; filename contains `.spec.`; filename contains `conftest`.
+
+### File-Global Constants
+
+This rule extends the `constants-location` rule defined in `~/.claude/docs/CODE_RULES.md` — see the ⚡ HOOK-ENFORCED RULES table, Constants location row.
+
+Require every file-global constant in **production code outside `config/`** to be referenced by at least two methods, functions, or classes in the same file (one class counts as a single reference regardless of how many methods inside it use the constant). A default parameter value counts as one reference from the enclosing function. A constant used by exactly one method must have its value moved to `config/` and imported from `config/` at module scope, then bind a local alias inside the consuming method (as the Accept example below shows), OR inlined as a local constant inside the consuming method provided the value does not reintroduce a literal the magic-values rule would flag. Constants placed in `config/` are exempt (they satisfy the constants-location rule regardless of reference count).
+
+**Decision table:**
+- 0 references: dead code — remove the constant.
+- 1 reference: move value to `config/` and import with local alias inside the consuming method (or inline as a local constant).
+- 2+ references: keep at file scope.
+
+**Test files are exempt.** Test-file detection uses the following anchored patterns against the full relative path: filename matches `test_*.py`; filename matches `*_test.py`; filename matches `*.spec.*`; filename is `conftest.py`; path contains the segment `/tests/`.
 
 Flag (single method references the file-global constant — move it inside the method):
 
@@ -48,6 +60,8 @@ The local form must bind its value to something sourced from config (an import, 
 
 The numeric literal `3` here is illustrative only; production values live in `config/` per the magic-values rule.
 
+The original file-scope `MAXIMUM_RETRIES = ...` declaration is removed when the value moves to `config/`.
+
 ```python
 from config.timing import MAXIMUM_RETRIES
 
@@ -57,9 +71,15 @@ def fetch_with_retries(url: str) -> str:
         ...
 ```
 
+Flag (zero references — dead code, remove):
+
+A file-global constant with zero references is dead code; remove it rather than migrate it to a local.
+
 Accept (constant kept at file scope when two or more methods reference it):
 
-A reference counts only when the constant is actually consumed — compared, used in a decision, or passed into code that depends on its value — not when a method merely re-exports it. A file-global constant with zero references is dead code; remove it rather than migrate it to a local.
+A reference counts only when the constant is actually consumed — compared, used in a decision, or passed into code that depends on its value — not when a method merely re-exports it.
+
+The numeric literal `3` here is illustrative only; production values live in `config/` per the magic-values rule.
 
 ```python
 MAXIMUM_RETRIES = 3

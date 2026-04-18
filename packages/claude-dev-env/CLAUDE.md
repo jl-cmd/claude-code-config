@@ -3,6 +3,44 @@
 ## Code Rules
 @~/.claude/docs/CODE_RULES.md
 
+## File-Global Constants
+
+**file_global_constants_use_count:** A file-global constant is a module-level named constant declared at the top of a file (for example, an `UPPER_SNAKE_CASE` value assigned at module scope). In production code, every file-global constant must be referenced by at least two methods or functions inside that same file. When a constant is referenced by exactly one method, declare it as a local constant inside that method instead.
+
+**Test files are exempt.** A file qualifies as a test file when its name starts with `test_`, ends with `_test`, ends with `.test.ts`, `.test.tsx`, `.test.js`, or `.test.jsx`, or sits under a `tests/` or `__tests__/` directory.
+
+Flag (single method references the file-global constant — move it inside the method):
+
+```python
+MAXIMUM_RETRIES = 3
+
+def fetch_with_retries(url: str) -> str:
+    for each_attempt_index in range(MAXIMUM_RETRIES):
+        ...
+```
+
+Accept (constant declared locally when only one method uses it):
+
+```python
+def fetch_with_retries(url: str) -> str:
+    maximum_retries = 3
+    for each_attempt_index in range(maximum_retries):
+        ...
+```
+
+Accept (constant kept at file scope when two or more methods reference it):
+
+```python
+MAXIMUM_RETRIES = 3
+
+def fetch_with_retries(url: str) -> str:
+    for each_attempt_index in range(MAXIMUM_RETRIES):
+        ...
+
+def reset_retry_counter() -> int:
+    return MAXIMUM_RETRIES
+```
+
 ## Core Philosophy
 
 **TDD IS NON-NEGOTIABLE.** Build it right, build it simple. Maintainable > Clever.

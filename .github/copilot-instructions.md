@@ -30,6 +30,39 @@ Review every change against these rules. Flag each violation with its rule name.
   - Workflow registries: path contains the substring `/workflow/`, `_tab.py`, `/states.py`, or `/modules.py` (a file named literally `states.py` at repo root is not exempt; `pkg/states.py` is)
   - Test files: path or filename matches common test layout signals (`test_`, `_test.`, `.spec.`, `conftest`, `/tests/`, etc.); test files may define local constants without using `config/`
 - Require a search of existing `config/` files for reuse before adding any new production constant.
+- Require every file-global constant in **production code** to be referenced by at least two methods or functions in the same file; a constant used by exactly one method must be declared as a local constant inside that method instead. **Test files are exempt** — files whose names start with `test_`, end with `_test`, match `*.test.ts`, `*.test.tsx`, `*.test.js`, or `*.test.jsx`, or live under `tests/` or `__tests__/` directories may keep file-global constants regardless of reference count.
+
+Flag (single method references the file-global constant — move it inside the method):
+
+```python
+MAXIMUM_RETRIES = 3
+
+def fetch_with_retries(url: str) -> str:
+    for each_attempt_index in range(MAXIMUM_RETRIES):
+        ...
+```
+
+Accept (constant declared locally when only one method uses it):
+
+```python
+def fetch_with_retries(url: str) -> str:
+    maximum_retries = 3
+    for each_attempt_index in range(maximum_retries):
+        ...
+```
+
+Accept (constant kept at file scope when two or more methods reference it):
+
+```python
+MAXIMUM_RETRIES = 3
+
+def fetch_with_retries(url: str) -> str:
+    for each_attempt_index in range(MAXIMUM_RETRIES):
+        ...
+
+def reset_retry_counter() -> int:
+    return MAXIMUM_RETRIES
+```
 
 ## Types
 - Require type hints on all function parameters and return values; flag missing hints.

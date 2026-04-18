@@ -9,11 +9,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from .git_checks import (
+    DEFAULT_BASE_BRANCH_WHEN_UNKNOWN,
     Violation,
     check_single_commit_when_pr_exists,
     check_draft_pr_state,
     main,
 )
+
+
+def test_default_base_branch_when_unknown_is_main() -> None:
+    assert DEFAULT_BASE_BRANCH_WHEN_UNKNOWN == "main"
 
 
 class TestSingleCommitWhenPrExists:

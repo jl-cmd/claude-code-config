@@ -8,6 +8,7 @@ from typing import List
 
 
 SUBPROCESS_TIMEOUT_SECONDS = 30
+DEFAULT_BASE_BRANCH_WHEN_UNKNOWN = "main"
 
 
 @dataclass
@@ -75,7 +76,7 @@ def check_single_commit_when_pr_exists() -> List[Violation]:
     if not pr_data:
         return []
 
-    base_branch = pr_data[0].get("baseRefName", "main")
+    base_branch = pr_data[0].get("baseRefName", DEFAULT_BASE_BRANCH_WHEN_UNKNOWN)
 
     try:
         rev_list = subprocess.run(

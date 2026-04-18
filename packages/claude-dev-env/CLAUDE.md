@@ -5,9 +5,11 @@
 
 ## File-Global Constants
 
-**file_global_constants_use_count:** A file-global constant is a module-level named constant declared at the top of a file (for example, an `UPPER_SNAKE_CASE` value assigned at module scope). In production code, every file-global constant must be referenced by at least two methods or functions inside that same file. When a constant is referenced by exactly one method, declare it as a local constant inside that method instead.
+This rule extends the `constants-location` rule defined in CODE_RULES.md.
 
-**Test files are exempt.** Test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `tests/`; filename starts with `test_`; filename contains `_test.`; filename contains `.spec.`; filename contains `conftest`.
+**file_global_constants_use_count:** A file-global constant is a module-level named constant declared at the top of a file (for example, an `UPPER_SNAKE_CASE` value assigned at module scope). In production code, every file-global constant must be referenced by at least two methods, functions, or class bodies inside that same file. A default parameter value counts as one reference from the enclosing function. When a constant is referenced by exactly one method, move the constant's value to `config/` and import it at module scope with a local alias inside the consuming method (as the Accept example below shows), OR inline the value as a local constant inside the consuming method provided the value does not reintroduce a literal the magic-values rule would flag.
+
+**Test files are exempt.** Test-file detection uses substring match against the full relative path; a file qualifies when any of the following matches: path contains the segment `/tests/`; filename starts with `test_`; filename contains `_test.`; filename contains `.spec.`; filename contains `conftest`.
 
 **`config/` files are exempt.** Constants placed in `config/` satisfy the constants-location rule; the use-count requirement applies only to production code outside `config/`.
 
@@ -24,6 +26,8 @@ def fetch_with_retries(url: str) -> str:
 Accept (constant declared locally when only one method uses it):
 
 The local form must bind its value to something sourced from config (an import, a function argument, or another already-named constant); it must not reintroduce a numeric or string literal.
+
+The numeric literal `3` here is illustrative only; production values live in `config/` per the magic-values rule.
 
 ```python
 from config.timing import MAXIMUM_RETRIES

@@ -21,8 +21,8 @@ from .ruff_integration import check_ruff_available, run_ruff_check
 
 
 VALIDATORS_DIR = Path(__file__).parent
-HOOKS_DIR = VALIDATORS_DIR.parent
-PACKAGE_NAME = VALIDATORS_DIR.name
+hooks_dir = VALIDATORS_DIR.parent
+package_name = VALIDATORS_DIR.name
 
 
 def invoke_validator_module(module_stem: str, extra_arguments: List[str]) -> subprocess.CompletedProcess[str]:
@@ -31,12 +31,12 @@ def invoke_validator_module(module_stem: str, extra_arguments: List[str]) -> sub
     The subprocess is launched with ``cwd`` set to the hooks directory so the
     ``validators`` package qualifier resolves without requiring PYTHONPATH.
     """
-    qualified_module = f"{PACKAGE_NAME}.{module_stem}"
+    qualified_module = f"{package_name}.{module_stem}"
     return subprocess.run(
         [sys.executable, "-m", qualified_module, *extra_arguments],
         capture_output=True,
         text=True,
-        cwd=str(HOOKS_DIR),
+        cwd=str(hooks_dir),
     )
 
 

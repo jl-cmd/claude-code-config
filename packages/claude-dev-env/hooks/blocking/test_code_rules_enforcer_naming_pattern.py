@@ -18,6 +18,7 @@ assert _hook_spec.loader is not None
 _hook_module = importlib.util.module_from_spec(_hook_spec)
 _hook_spec.loader.exec_module(_hook_module)
 check_boolean_naming = _hook_module.check_boolean_naming
+validate_content = _hook_module.validate_content
 
 
 PRODUCTION_FILE_PATH = "src/app/feature.py"
@@ -164,3 +165,12 @@ def test_should_not_flag_syntax_error_as_issue() -> None:
     source = "def f(:\n    valid = True\n"
     issues = check_boolean_naming(source, PRODUCTION_FILE_PATH)
     assert issues == []
+
+
+def test_validate_content_invokes_boolean_naming_check() -> None:
+    source = "def f() -> None:\n    valid = True\n"
+    issues = validate_content(source, PRODUCTION_FILE_PATH, old_content="")
+    matching_issues = [issue for issue in issues if "Boolean valid" in issue]
+    assert matching_issues, (
+        f"expected validate_content to surface the boolean-naming issue, got {issues!r}"
+    )

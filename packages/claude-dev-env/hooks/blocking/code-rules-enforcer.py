@@ -10,6 +10,7 @@ Checks (blocking):
 5. Magic values (literals in function bodies)
 6. E2E test naming (no online/offline in test names)
 7. Constants outside config (UPPER_SNAKE = in non-config files)
+8. Boolean naming (is_/has_/should_/can_ prefix required)
 
 Advisory only (non-blocking):
 - File line count: stderr warning at 400 lines (soft) and 1000 lines (hard)
@@ -740,6 +741,12 @@ def _collect_boolean_assignments(tree: ast.Module) -> list[tuple[str, int, bool]
     `is_upper_snake_scope` is True for module-level statements and direct class body
     statements, where UPPER_SNAKE constants are acceptable (dataclass fields, class
     constants). Function/method scope is False.
+
+    Invariant: relies on `ast.walk` returning the same node instances that were
+    stored in `upper_snake_scope_ids` via their `id()`. Do not call this helper
+    on a tree that has been rebuilt through an `ast.NodeTransformer` — the
+    transformer may replace nodes with fresh instances, and the identity-based
+    scope tagging will silently fail for the replaced nodes.
     """
     upper_snake_scope_ids: set[int] = set()
     for statement in tree.body:

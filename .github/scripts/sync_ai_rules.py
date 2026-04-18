@@ -19,9 +19,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from config.sync_ai_rules_paths import (
-    BUGBOT_DESTINATION_PATH,
     BUGBOT_ONLY_DESTINATION_PATHS,
-    COPILOT_DESTINATION_PATH,
     DESTINATION_PATHS,
     SOURCE_FILE_PATH,
 )

@@ -25,16 +25,19 @@ Review every change against these rules. Flag each violation with its rule name.
 - Require named constants for numeric, string, and boolean literals in **production** function bodies; exempt `0`, `1`, `-1`, empty string, and `True`/`False` where the meaning is obvious.
 - **Test files are exempt** — inline literals in test functions and test-local constants are allowed.
 - Treat structural fragments inside f-strings (paths, URLs, query patterns, regex) as magic values in production code; require extraction to a named constant.
-- Require `UPPER_SNAKE_CASE` constants in **production code** to live in `config/` (`config/timing.py`, `config/constants.py`, `config/selectors.py`); flag definitions located elsewhere. Test files may define local constants without using `config/`.
-- Allow `UPPER_SNAKE_CASE` constants outside `config/` in: Django migration files (`/migrations/`), workflow state and module registries (`_tab.py`, `states.py`, `modules.py`, `/workflow/`), and test files (as above) — these are registry or framework-native conventions, not misplaced configuration.
+- Require `UPPER_SNAKE_CASE` constants in **production code** to live in `config/` (`config/timing.py`, `config/constants.py`, `config/selectors.py`); flag definitions located elsewhere unless the file path matches a hook exemption (same as `code-rules-enforcer.py` and `CODE_RULES.md`). Paths are normalized to forward slashes and matched as substrings:
+  - Django migrations: path contains `/migrations/`
+  - Workflow registries: path contains the substring `/workflow/`, `_tab.py`, `/states.py`, or `/modules.py` (a file named literally `states.py` at repo root is not exempt; `pkg/states.py` is)
+  - Test files: hook test patterns (`test_`, `_test.`, `.spec.`, `conftest`, `/tests/`, etc.); test files may define local constants without using `config/`
 - Require a search of existing `config/` files for reuse before adding any new production constant.
 
 ## Types
 - Require type hints on all function parameters and return values; flag missing hints.
 - Flag `Any`, `any`, and `# type: ignore` when the diff lacks a justifying note.
+- Flag bare `object` used as an escape hatch in place of a proper type.
 
 ## Structure
-- Flag files over 1000 lines; note files over 400 lines as a soft smell.
+- File line count from `code-rules-enforcer.py` is advisory only: soft advisory at 400 lines, stronger advisory at 1000 lines (stderr only; line count does not block writes). Treat files over 1000 lines as the stronger smell and files over 400 lines as a soft smell when reviewing.
 - Flag functions longer than 30 lines.
 - Require top-level function spacing to follow the language and existing file convention; for Python, require the standard 2 blank lines between top-level functions, and do not flag 1-vs-2 blank-line differences in other file types unless the surrounding file clearly establishes a convention.
 - Require all `import` statements at the top of the file; flag imports inside function bodies.

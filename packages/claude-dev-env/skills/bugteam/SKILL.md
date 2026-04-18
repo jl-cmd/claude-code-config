@@ -37,16 +37,9 @@ This file is the orchestration core. The list below is for the LLM reading this 
   - Step 4.5 — Finalize the PR description (via pr-description-writer)
   - Step 5 — Revoke project permissions
   - Step 6 — Print the final report
-- Constraints — pointer to [`CONSTRAINTS.md`](CONSTRAINTS.md)
-- Examples — pointer to [`EXAMPLES.md`](EXAMPLES.md)
-
-### Reference files (progressive disclosure, flat layout one level deep)
-
-Per Anthropic's [bundling-content pattern](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#pattern-1-high-level-guide-with-references) and [avoid deeply nested references](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#avoid-deeply-nested-references) rule — these siblings live next to `SKILL.md` and are loaded only when needed:
-
-- [`PROMPTS.md`](PROMPTS.md) — AUDIT spawn-prompt XML template, FIX spawn-prompt XML template, the 10 audit categories (A–J), and both outcome XML schemas. Load when the lead is about to spawn bugfind or bugfix, or when parsing teammate outcome XML.
+- [`PROMPTS.md`](PROMPTS.md) — AUDIT spawn-prompt XML, FIX spawn-prompt XML, the 10 audit categories (A–J), and both outcome XML schemas. Load before spawning bugfind or bugfix, or when parsing teammate outcome XML.
 - [`EXAMPLES.md`](EXAMPLES.md) — six end-to-end scenarios (converged, cap reached, stuck, partial-fix, no-PR, dirty-tree). Load when an unfamiliar exit condition appears.
-- [`CONSTRAINTS.md`](CONSTRAINTS.md) — the invariants list plus "Why this design" rationale. Load when a constraint question arises.
+- [`CONSTRAINTS.md`](CONSTRAINTS.md) — invariants plus "Why this design" rationale. Load when a constraint question arises.
 
 ## When this skill applies
 
@@ -294,7 +287,7 @@ Agent(
 
 Each loop calls `Agent` again with a fresh `Agent` invocation so the teammate starts with its own context window. The docs guarantee this: *"The lead's conversation history does not carry over."* Spawning per loop keeps every audit independent.
 
-The AUDIT spawn-prompt XML template, the 10 bug categories (A–J) the audit covers, and the bugfind outcome XML schema live in [`PROMPTS.md`](PROMPTS.md). Substitute the placeholders (repo, branch, base_branch, pr_url, loop, diff_path) and pass the result as the `prompt` argument.
+See [`PROMPTS.md`](PROMPTS.md) for the AUDIT spawn-prompt XML and bugfind outcome schema. Substitute placeholders (repo, branch, base_branch, pr_url, loop, diff_path) and pass the result as the `prompt` argument.
 
 After the teammate writes the XML and returns, the lead reads `.bugteam-loop-<N>.outcomes.xml` with the `Read` tool, parses it, and populates `loop_comment_index` from `<finding>` elements.
 
@@ -376,7 +369,7 @@ SendMessage(
 
 If the shutdown response returns `approve: false`, treat it the same as the bugfind refusal case above: exit reason = `error: bugfix teammate refused shutdown`, jump to Step 4 teardown then Step 5 revoke.
 
-The FIX spawn-prompt XML skeleton (context, `bugs_to_fix`, execution steps, constraints) and the bugfix outcome XML schema live in [`PROMPTS.md`](PROMPTS.md). Substitute the placeholders (repo, branch, base_branch, pr_url, loop, and the per-finding bug entries built from `last_findings`) and pass the result as the `prompt` argument.
+See [`PROMPTS.md`](PROMPTS.md) for the FIX spawn-prompt XML and bugfix outcome schema. Substitute placeholders (repo, branch, base_branch, pr_url, loop, and the per-finding bug entries built from `last_findings`) and pass the result as the `prompt` argument.
 
 Verify the fix actually committed and pushed:
 
@@ -491,8 +484,8 @@ If exit = `cap reached`, name the remaining bug count and recommend `/findbugs` 
 
 ## Constraints
 
-The invariants the implementer must preserve, plus the rationale for the agent-teams + clean-room + grant/revoke design, live in [`CONSTRAINTS.md`](CONSTRAINTS.md). Load when a constraint question arises.
+See [`CONSTRAINTS.md`](CONSTRAINTS.md).
 
 ## Examples
 
-Six end-to-end scenarios (converged, cap reached, stuck, partial-fix, no-PR, dirty-tree) live in [`EXAMPLES.md`](EXAMPLES.md). Load when an unfamiliar exit condition appears.
+See [`EXAMPLES.md`](EXAMPLES.md).

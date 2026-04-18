@@ -1,7 +1,5 @@
 # Bugteam — spawn-prompt XML templates and outcome XML schemas
 
-Load this file when the lead is about to spawn a bugfind or bugfix teammate, or when parsing the outcome XML either teammate writes. Referenced from `SKILL.md` → Step 3 (AUDIT action and FIX action).
-
 ## AUDIT spawn-prompt XML (bugfind teammate)
 
 Keep the spawn prompt self-contained: reference only the PR scope, audit rubric, and this loop number. Write each instruction as a standalone statement so the teammate reads the prompt as a fresh brief and every audit starts from first principles.

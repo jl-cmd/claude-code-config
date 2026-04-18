@@ -1,7 +1,5 @@
 # Bugteam — invariants and design rationale
 
-Load when a constraint question arises. Referenced from `SKILL.md` → Constraints and Why this design.
-
 ## Constraints
 
 - **Agent teams required, not parallel subagents.** The skill MUST use Claude Code's agent teams feature (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`). Spawning `code-quality-agent` and `clean-coder` as parallel subagents from the lead's context = fail; the clean-room property requires independent teammate sessions.

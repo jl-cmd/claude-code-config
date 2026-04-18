@@ -1,7 +1,5 @@
 # Bugteam — end-to-end examples
 
-Reference material for understanding edge-case behavior of `/bugteam`. Load when an unfamiliar exit condition appears. Referenced from `SKILL.md` → Examples.
-
 <example>
 User: `/bugteam`
 Claude: [resolves PR #42, runs loop]

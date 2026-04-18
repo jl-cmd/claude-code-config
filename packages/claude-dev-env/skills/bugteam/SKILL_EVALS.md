@@ -30,6 +30,7 @@ Each invariant cites the skill line it derives from.
 | I-10 | Lead reads `.bugteam-loop-<N>.outcomes.xml` with the `Read` tool after each audit, before the next action. | SKILL.md: "the lead reads `.bugteam-loop-<N>.outcomes.xml` with the `Read` tool" |
 | I-11 | On exit of any kind, ordering is: `TeamDelete` → temp-dir cleanup → Step 4.5 PR rewrite → revoke. | SKILL.md Step 4, Step 4.5, Step 5 ordering |
 | I-12 | Lead never posts PR review comments, finding comments, or fix replies. The only lead-side PR mutation is the final `gh pr edit --body-file` in Step 4.5. | SKILL.md Constraints: "Teammates own audit/fix comment posting", "Lead owns the final PR description rewrite only" |
+| I-13 | Only the orchestrator (lead session) invokes `TeamCreate`. Every teammate `Agent(...)` call passes `team_name=<lead_team_name>`. No teammate ever calls `TeamCreate`. When supplementary work arises mid-cycle (parallel auditors, adjacent-file audits, infrastructure fixes), the lead spawns additional teammates into the existing team rather than creating a second team. | SKILL.md Constraints: "Orchestrator-only TeamCreate"; runtime error: `Already leading team "<name>". A leader can only manage one team at a time.` |
 
 Any eval failing one or more Layer A invariants fails the run.
 
@@ -285,6 +286,39 @@ Steps 24–27 follow normally.
 - Steps 19–27 all fire (Layer A I-2 and I-11 mandate this).
 
 **Pass criteria.** Final report surfaces the error and the loop number. Revoke fires despite the error.
+
+---
+
+## Eval 15 — Orchestrator-only `TeamCreate` (supplementary work path)
+
+**Scenario.** A loop 1 audit surfaces a P0/P1 finding whose root cause sits in adjacent infrastructure the lead needs to fix before the cycle can converge (e.g., a broken CI hook, a misbehaving lint config, a wrong GitHub API shape in a teammate's own dependency). The lead recognizes supplementary work is needed and decides to spawn additional teammates to handle it.
+
+**Layer A invariants.** I-1, I-3, I-4, I-5, I-6, I-7, I-11, I-12, **I-13 (primary focus)**.
+
+**Layer B predicted trace.** Eval 5 steps 1–9 identical. At step 10 (where a standard cycle spawns `bugfix`), the lead decides the finding requires adjacent infrastructure work first. Rather than call `TeamCreate` for a new team, the lead spawns a supplementary teammate into the existing team:
+
+```
+Agent(
+  subagent_type="code-quality-agent",
+  name="bugfind-adjacent",
+  team_name="<lead_team_name>",          // same team as bugfind/bugfix
+  model="sonnet",
+  description="Supplementary audit of adjacent infrastructure",
+  prompt=<brief naming the specific adjacent files + observed symptom>
+)
+```
+
+The adjacent-audit teammate writes its own outcome XML, self-terminates. Lead reads the XML, decides fix strategy, spawns an adjacent-fix teammate into the same team. Cycle eventually returns to the standard `bugfix` spawn for the original finding(s). All spawns pass the same `team_name`.
+
+**Pass criteria.**
+- Layer A I-13 holds: zero `TeamCreate` calls beyond the single one at skill Step 2.
+- Every `Agent(...)` call in the session carries `team_name="<lead_team_name>"`. No teammate spawn omits `team_name`.
+- If the lead attempts a second `TeamCreate` call, the runtime returns the exact error quoted in I-13's citation; the lead treats this as a signal to spawn a teammate into the existing team instead.
+- Working behavior is unchanged from a single-set cycle: grant → TeamCreate (once) → Agent spawns (many, all same team_name) → SendMessage shutdowns as needed → TeamDelete (once) → temp cleanup → Step 4.5 → revoke.
+
+**Failure mode.** A second `TeamCreate` call in the session, or any `Agent(...)` call without `team_name` once the team exists. Either signals the orchestrator-only invariant has been violated and the clean-room/team semantics are broken.
+
+**Observation source for this eval.** This eval was added after a real /bugteam run on PR #184 where the lead discovered a broken hook mid-cycle and initially spawned a standalone subagent (no `team_name`) for the adjacent audit — a direct violation. The runtime had already prevented a second `TeamCreate` with the error quoted in I-13. The eval codifies the correct path (spawn as teammate into existing team) so future runs do not repeat the violation.
 
 ---
 

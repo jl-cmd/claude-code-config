@@ -47,18 +47,10 @@ def _test_function_patterns() -> tuple[re.Pattern[str], ...]:
     )
 
 
-def _simple_word_skip_patterns() -> frozenset[str]:
-    return frozenset(
-        each_pattern
-        for each_pattern in SKIP_PATTERNS
-        if "/" not in each_pattern and "_" not in each_pattern and "." not in each_pattern
-    )
-
-
 def _directory_skip_components() -> frozenset[str]:
-    simple_word_patterns = _simple_word_skip_patterns()
-    plural_forms = frozenset(f"{each_word}s" for each_word in simple_word_patterns)
-    return simple_word_patterns | plural_forms
+    return frozenset({
+        "conftest", "fixture", "fixtures", "mock", "mocks", "stub", "stubs",
+    })
 
 
 def _is_repo_boundary(candidate_directory: Path) -> bool:

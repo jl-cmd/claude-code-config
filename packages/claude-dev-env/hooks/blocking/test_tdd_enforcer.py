@@ -231,3 +231,19 @@ def test_should_allow_when_large_test_file_has_valid_test_function_past_first_ch
     completed = _run_hook_with_payload(_make_write_payload(production_file))
 
     assert _decision_from(completed) == "allow"
+
+
+def test_directory_skip_components_exactly_matches_pre_fc61a8b_hardcoded_set() -> None:
+    expected_directory_skip_components = frozenset({
+        "conftest", "fixture", "fixtures", "mock", "mocks", "stub", "stubs",
+    })
+
+    actual_directory_skip_components = _PRODUCTION_MODULE._directory_skip_components()
+
+    assert actual_directory_skip_components == expected_directory_skip_components
+
+
+def test_directory_skip_components_excludes_pluralized_conftest() -> None:
+    actual_directory_skip_components = _PRODUCTION_MODULE._directory_skip_components()
+
+    assert "conftests" not in actual_directory_skip_components

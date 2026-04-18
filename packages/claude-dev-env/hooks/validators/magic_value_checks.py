@@ -7,14 +7,24 @@ Note: Only checks for magic numbers. Magic string detection is not implemented.
 """
 
 import ast
+import re
 import sys
 from pathlib import Path
-from typing import Dict, FrozenSet, List, Set
+from typing import Dict, FrozenSet, List, Set, Tuple, Type
 
 from validator_base import Violation
 
 
 ALLOWED_NUMBERS: FrozenSet[int] = frozenset({-1, 0, 1})
+
+_UPPER_SNAKE_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+_CONTAINER_LITERAL_TYPES: Tuple[Type[ast.AST], ...] = (
+    ast.Dict,
+    ast.List,
+    ast.Tuple,
+    ast.Set,
+)
 
 
 def check_magic_values(tree: ast.AST, filename: str) -> List[Violation]:
@@ -99,20 +109,31 @@ def _is_in_constant_definition(
     node: ast.AST,
     parent_by_child_id: Dict[int, ast.AST],
 ) -> bool:
-    parent = parent_by_child_id.get(id(node))
-    if isinstance(parent, ast.Assign):
-        for target in parent.targets:
-            if isinstance(target, ast.Name) and target.id.isupper():
-                if parent.value is node:
-                    return True
-        return False
-    if isinstance(parent, ast.AnnAssign):
-        return (
-            isinstance(parent.target, ast.Name)
-            and parent.target.id.isupper()
-            and parent.value is node
-        )
+    current_node: ast.AST = node
+    while id(current_node) in parent_by_child_id:
+        parent = parent_by_child_id[id(current_node)]
+        if _is_upper_snake_constant_assignment(parent):
+            return True
+        if not isinstance(parent, _CONTAINER_LITERAL_TYPES):
+            return False
+        current_node = parent
     return False
+
+
+def _is_upper_snake_constant_assignment(node: ast.AST) -> bool:
+    if isinstance(node, ast.Assign):
+        for target in node.targets:
+            if isinstance(target, ast.Name) and _is_upper_snake_name(target.id):
+                return True
+        return False
+    if isinstance(node, ast.AnnAssign):
+        target = node.target
+        return isinstance(target, ast.Name) and _is_upper_snake_name(target.id)
+    return False
+
+
+def _is_upper_snake_name(name: str) -> bool:
+    return bool(_UPPER_SNAKE_NAME_PATTERN.match(name))
 
 
 def validate_file(file_path: Path) -> List[Violation]:

@@ -42,6 +42,10 @@ def has_discoverable_tests(root: Path) -> bool:
     return False
 
 
+def _pytest_exit_code_no_tests_collected() -> int:
+    return 5
+
+
 def run_pytest(repository_root: Path, verbose: bool) -> int:
     command = [sys.executable, "-m", "pytest"]
     if not verbose:
@@ -51,7 +55,7 @@ def run_pytest(repository_root: Path, verbose: bool) -> int:
         cwd=str(repository_root),
         check=False,
     )
-    if completed.returncode == 5:
+    if completed.returncode == _pytest_exit_code_no_tests_collected():
         return 0
     return completed.returncode
 

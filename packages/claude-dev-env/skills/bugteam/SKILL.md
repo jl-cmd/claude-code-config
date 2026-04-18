@@ -220,7 +220,7 @@ If the audit returns zero findings, the teammate still posts ONE review with `ev
 
 Repeat until an exit condition fires.
 
-**Ordering principle:** Mandatory **CODE_RULES** checks (`validate_content` from `hooks/blocking/code-rules-enforcer.py`) must pass on the PR-scoped file set **before** any **AUDIT** (bugfind) teammate runs. The **clean-coder** teammate clears gate failures; then the **code-quality-agent** teammate audits. This mirrors “CI green, then review,” without relying on GitHub Actions — the script is the gate.
+**Ordering principle:** Mandatory **CODE_RULES** checks (`validate_content` from `hooks/blocking/code_rules_enforcer.py`) must pass on the PR-scoped file set **before** any **AUDIT** (bugfind) teammate runs. The **clean-coder** teammate clears gate failures; then the **code-quality-agent** teammate audits. This mirrors “CI green, then review,” without relying on GitHub Actions — the script is the gate.
 
 1. Decide the next action from `last_action` and `last_findings`:
    - `last_action == "audited"` and `last_findings.total == 0` → exit reason = `converged`
@@ -524,7 +524,7 @@ If exit = `cap reached`, name the remaining bug count and recommend `/findbugs` 
 - **Fresh teammate per loop.** Both bugfind and bugfix are spawned new each loop and shut down after their action. Reusing a teammate across loops accumulates context inside that teammate's window — defeats clean-room.
 - **One up-front confirmation = whole cycle.** The `/bugteam` invocation authorizes the entire cycle; every subsequent decision runs on that single authorization.
 - **10-loop hard cap.** Counted as **AUDIT** completions (increment in Step 3). Standards-fix passes before an audit do not advance `loop_count`. Worst case includes extra clean-coder spawns for the code-rules gate.
-- **Code rules gate before every AUDIT.** Run `scripts/bugteam_code_rules_gate.py` until exit **0** before spawning **bugfind**. Same `validate_content` logic as `hooks/blocking/code-rules-enforcer.py`.
+- **Code rules gate before every AUDIT.** Run `scripts/bugteam_code_rules_gate.py` until exit **0** before spawning **bugfind**. Same `validate_content` logic as `hooks/blocking/code_rules_enforcer.py`.
 - **Clean-room audits, every loop.** Each bugfind teammate's spawn prompt contains only the PR scope, audit rubric, and the current loop number. Prior loop history stays in the lead.
 - **Targeted fixes.** Each fix teammate sees ONLY the most recent audit's findings. Prior loops are invisible to the fix teammate.
 - **Sonnet for both teammates.** Predictable cost, fits-purpose for code work.

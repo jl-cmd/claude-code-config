@@ -14,7 +14,7 @@ def resolve_claude_dev_env_root() -> Path:
 
 def load_validate_content():
     package_root = resolve_claude_dev_env_root()
-    enforcer_path = package_root / "hooks" / "blocking" / "code-rules-enforcer.py"
+    enforcer_path = package_root / "hooks" / "blocking" / "code_rules_enforcer.py"
     if not enforcer_path.is_file():
         message = f"bugteam_code_rules_gate: missing enforcer at {enforcer_path}"
         print(message, file=sys.stderr)
@@ -24,7 +24,7 @@ def load_validate_content():
         enforcer_path,
     )
     if specification is None or specification.loader is None:
-        print("bugteam_code_rules_gate: could not load code-rules-enforcer.", file=sys.stderr)
+        print("bugteam_code_rules_gate: could not load code_rules_enforcer.", file=sys.stderr)
         raise SystemExit(2)
     module = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(module)

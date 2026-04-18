@@ -385,7 +385,11 @@ Outcome XML schema (bugfind writes this):
 </bugteam_audit>
 ```
 
-After the teammate writes the XML and returns, the lead reads `.bugteam-loop-<N>.outcomes.xml` with the `Read` tool, parses it, and populates `loop_comment_index` from `<finding>` elements. Then shut down the bugfind teammate by calling `SendMessage` with these exact arguments:
+After the teammate writes the XML and returns, the lead reads `.bugteam-loop-<N>.outcomes.xml` with the `Read` tool, parses it, and populates `loop_comment_index` from `<finding>` elements.
+
+**Expected path: self-termination.** In practice, teammates self-terminate when their task is complete — the `Agent` call returns and the teammate's session ends automatically. When that happens, no `SendMessage` shutdown is needed and the cycle proceeds directly to the next action.
+
+**Fallback path: lead-initiated shutdown.** If the teammate has not self-terminated after the `Agent` call returns (observable as the teammate still appearing in the active-teammates list), send a shutdown message:
 
 ```
 SendMessage(
@@ -404,12 +408,12 @@ The teammate replies with `{type: "shutdown_response", approve: true}` and exits
 **Parallel auditors from loop 4 onward (`loop_count >= 4`).** The pre-audit code rules gate must still pass immediately before this step (Step 3). After three full audit/fix rounds without convergence, spawn three bugfind teammates concurrently by issuing three `Agent` calls in a single assistant message so they run in parallel:
 
 ```
-Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-a", team_name="<team_name>", model="sonnet", description="Bugfind audit loop <N> variant a", prompt="<audit XML; write outcome to .bugteam-loop-<N>.outcomes.xml; post the per-loop review>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-a", team_name="<team_name>", model="sonnet", description="Bugfind audit loop <N> variant a", prompt="<audit XML; write outcome to .bugteam-loop-<N>.outcomes.xml; post the per-loop review; read and merge b/c outcomes from <team_temp_dir>/loop-<N>-b.outcomes.xml and <team_temp_dir>/loop-<N>-c.outcomes.xml>")
 Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-b", team_name="<team_name>", model="sonnet", description="Bugfind audit loop <N> variant b", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-b.outcomes.xml; skip PR posting>")
 Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-c", team_name="<team_name>", model="sonnet", description="Bugfind audit loop <N> variant c", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-c.outcomes.xml; skip PR posting>")
 ```
 
-Teammate `-a` is the post-owner: it reads all three outcome XML files, merges findings by `(file, line, category_letter)` (same tuple collapses to one finding, keeping the longest description and the highest severity of the group), re-assigns merged-finding IDs as `loopN-K`, and posts the single per-loop review per the standard posting protocol above.
+Teammate `-a` is the post-owner: it reads all three outcome XML files using their explicit absolute paths — its own outcome at `.bugteam-loop-<N>.outcomes.xml` (working directory), and the sibling outcomes at `<team_temp_dir>/loop-<N>-b.outcomes.xml` and `<team_temp_dir>/loop-<N>-c.outcomes.xml` — then merges findings by `(file, line, category_letter)` (same tuple collapses to one finding, keeping the longest description and the highest severity of the group), re-assigns merged-finding IDs as `loopN-K`, and posts the single per-loop review per the standard posting protocol above. The `-a` spawn prompt must include both sibling paths as literal absolute values so `-a` can read them with the `Read` tool by path without any discovery step.
 
 Shut down `-b` and `-c` first with two parallel `SendMessage` calls, then shut down `-a` after its post completes:
 
@@ -443,7 +447,11 @@ The teammate sees only the most recent audit's findings — each `Agent` call st
 
 Pass the **finding comment URL and id for each finding** (from `loop_comment_index`) inside the XML prompt so the teammate owns reply posting. After committing fixes, the teammate posts one reply per finding: `Fixed in <commit_sha>` for addressed findings, `Could not address this loop: <one-line reason>` for skipped or failed findings. Same one-identity model as bugfind: teammate posts, lead waits.
 
-After all replies are posted, the teammate writes its own outcome XML (see schema below) and returns. Shut down the bugfix teammate by calling `SendMessage`:
+After all replies are posted, the teammate writes its own outcome XML (see schema below) and returns.
+
+**Expected path: self-termination.** In practice, teammates self-terminate when their task is complete — the `Agent` call returns and the teammate's session ends automatically. When that happens, no `SendMessage` shutdown is needed and the cycle proceeds directly to the next action.
+
+**Fallback path: lead-initiated shutdown.** If the teammate has not self-terminated after the `Agent` call returns, send a shutdown message:
 
 ```
 SendMessage(
@@ -549,6 +557,8 @@ When the cycle exits (any reason), run these steps in order from THIS session (t
    ```
 
    The docs state: *"When the lead runs cleanup, it checks for active teammates and fails if any are still running, so shut them down first."*
+
+   If any teammate returns `approve: false` during this cleanup shutdown, log the refusing teammate name (e.g., `cleanup warning: <teammate_name> refused shutdown_request`) and force-proceed to step 2 (`TeamDelete`) anyway. `TeamDelete` may fail if active teammates remain; if it does, surface the error in the final report with the refusing teammate name so the user can manually clean up. Do not abort the cleanup sequence — continue through temp-dir deletion, Step 4.5, and Step 5 regardless.
 
 2. **Clean up the team** by calling `TeamDelete` with no arguments — it reads `<team_name>` from the current session's team context:
 

@@ -116,6 +116,8 @@ def get_project_name() -> str:
 
 def notify_ntfy(title: str, message: str, priority: str = "default") -> None:
     """Send push notification via ntfy.sh with title and message."""
+    if not NTFY_TOPIC:
+        return
     try:
         subprocess.Popen(
             [

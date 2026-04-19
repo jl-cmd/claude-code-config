@@ -1,6 +1,6 @@
 # Bugteam skill — sources and citations
 
-Canonical URLs and verbatim quotes that `SKILL.md` relies on. Load this file when verifying wording against upstream documentation or when expanding citations.
+Canonical URLs and verbatim quotes that `SKILL.md` relies on. Load this file when verifying wording against upstream documentation or when expanding citations. Domain-oriented narrative (without duplicating these quotes) lives under [`reference/README.md`](reference/README.md).
 
 ---
 

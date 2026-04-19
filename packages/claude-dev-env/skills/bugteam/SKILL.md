@@ -20,7 +20,7 @@ Subagents fold back into the lead context; agent-team teammates do not — that 
 
 ## Contents
 
-Orchestration lives here; companion files hold prompts, invariants, examples, and citations. Scan this list before a partial read.
+Orchestration lives here; companion files hold prompts, invariants, examples, citations, and domain reference notes. Scan this list before a partial read.
 
 - When this skill applies — refusal cases (4) and trigger conditions
 - Utility scripts — pre-flight (`scripts/`, executed not inlined)
@@ -39,6 +39,7 @@ Orchestration lives here; companion files hold prompts, invariants, examples, an
 - [`EXAMPLES.md`](EXAMPLES.md) — exit scenarios
 - [`CONSTRAINTS.md`](CONSTRAINTS.md) — invariants and design rationale
 - [`sources.md`](sources.md) — doc URLs and verbatim quotes
+- [`reference/README.md`](reference/README.md) — expanded prose by topic (design, team setup, GitHub reviews, cycle, teardown)
 
 ## When this skill applies
 
@@ -316,6 +317,10 @@ See [`CONSTRAINTS.md`](CONSTRAINTS.md).
 ## Examples
 
 See [`EXAMPLES.md`](EXAMPLES.md).
+
+## Reference
+
+See [`reference/README.md`](reference/README.md).
 
 ## Sources
 

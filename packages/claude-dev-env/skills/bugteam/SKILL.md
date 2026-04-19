@@ -1,15 +1,15 @@
 ---
 name: bugteam
 description: >-
-  Runs an autonomous audit-and-fix loop on the current branch's PR using a
-  Claude Code agent team — bugfind teammate (code-quality-agent, clean-room
-  audit) and bugfix teammate (clean-coder, sonnet fix) — until the audit
-  returns zero bugs or a 10-loop safety cap is reached. One up-front
-  confirmation authorizes the entire cycle. Each audit teammate is spawned
-  fresh per loop to prevent anchoring bias. Wraps the cycle with project
-  permission grant/revoke. Requires CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1.
-  Triggers: '/bugteam', 'run the bug team',
-  'auto-fix the PR until clean', 'loop audit and fix'.
+  Claude Code agent team on the open pull request: run the CODE_RULES gate,
+  spawn a fresh clean-room audit (code-quality-agent, sonnet) and a fix pass
+  (clean-coder, sonnet), post per-loop GitHub review threads from teammates,
+  stop at zero findings or a 10-audit safety cap. Grants then revokes
+  `.claude/**` edit permission around the run. SKILL.md is the orchestration
+  checklist; `reference/` holds expanded prose by domain; CONSTRAINTS,
+  PROMPTS, EXAMPLES, and sources are companion files. Requires
+  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1. Triggers: '/bugteam',
+  'run the bug team', 'auto-fix the PR until clean', 'loop audit and fix'.
 ---
 
 # Bugteam

@@ -207,3 +207,29 @@ def test_added_lines_for_staged_file_returns_empty_for_modified_file_with_no_add
     )
 
     assert added_line_numbers == set()
+
+
+def test_is_file_absent_in_index_head_does_not_exist_in_module() -> None:
+    assert not hasattr(gate_module, "is_file_absent_in_index_head")
+
+
+def test_added_lines_for_staged_file_returns_parsed_result_when_diff_is_non_empty_even_if_parse_returns_empty(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_file(
+        temporary_git_repository / "sample.py",
+        "alpha = 1\nbeta = 2\n",
+    )
+    commit_all_files(temporary_git_repository, "baseline")
+    write_file(temporary_git_repository / "sample.py", "alpha = 1\nbeta = 2\ngamma = 3\n")
+    stage_file(temporary_git_repository, "sample.py")
+
+    monkeypatch.setattr(gate_module, "parse_added_line_numbers", lambda _text: set())
+
+    added_line_numbers = gate_module.added_lines_for_staged_file(
+        temporary_git_repository,
+        "sample.py",
+    )
+
+    assert added_line_numbers == set()

@@ -266,6 +266,27 @@ def test_main_exits_two_when_all_stdin_lines_are_malformed(
     assert "no parseable stdin lines" in captured.err
 
 
+def test_invoke_gate_returns_infrastructure_failure_when_strict_resolve_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gate_path = tmp_path / "gate.py"
+    gate_path.write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+
+    original_resolve = Path.resolve
+
+    def raising_resolve(self: Path, strict: bool = False) -> Path:
+        if strict and self == gate_path.resolve():
+            raise FileNotFoundError("not found")
+        return original_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", raising_resolve)
+
+    exit_code = pre_push.invoke_gate(gate_path, "origin/main")
+
+    assert exit_code == 2
+
+
 def test_invoke_gate_uses_resolved_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

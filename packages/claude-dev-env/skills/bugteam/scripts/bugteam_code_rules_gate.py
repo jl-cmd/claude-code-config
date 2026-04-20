@@ -109,22 +109,6 @@ def paths_from_git_staged(repository_root: Path) -> list[Path]:
     return [repository_root / relative_path for relative_path in relative_paths]
 
 
-def is_file_absent_in_index_head(
-    repository_root: Path,
-    relative_path_posix: str,
-) -> bool:
-    cat_result = subprocess.run(
-        ["git", "cat-file", "-e", f"HEAD:{relative_path_posix}"],
-        cwd=str(repository_root),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    return cat_result.returncode != 0
-
-
 def staged_file_line_count(
     repository_root: Path,
     relative_path_posix: str,
@@ -189,9 +173,7 @@ def added_lines_for_staged_file(
         )
         raise SystemExit(2)
     if diff_result.stdout.strip():
-        parsed_added_lines = parse_added_line_numbers(diff_result.stdout)
-        if parsed_added_lines:
-            return parsed_added_lines
+        return parse_added_line_numbers(diff_result.stdout)
     if is_staged_file_newly_added(repository_root, relative_path_posix):
         total_lines = staged_file_line_count(repository_root, relative_path_posix)
         if total_lines > 0:

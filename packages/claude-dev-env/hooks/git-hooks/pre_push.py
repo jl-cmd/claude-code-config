@@ -92,8 +92,8 @@ def invoke_gate(gate_script_path: Path, base_reference: str) -> int:
     base_reference_argument = BASE_REFERENCE_ARGUMENT
     invoke_gate_failure_message = INVOKE_GATE_FAILURE_MESSAGE
     gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
-    resolved_gate_path = gate_script_path.resolve(strict=True)
     try:
+        resolved_gate_path = gate_script_path.resolve(strict=True)
         completion = subprocess.run(
             [
                 sys.executable,

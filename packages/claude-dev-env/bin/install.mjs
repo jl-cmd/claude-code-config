@@ -430,13 +430,14 @@ function unsetGlobalGitHooksPathIfOurs() {
     try {
         currentHooksPath = execFileSync('git', ['config', '--global', '--get', 'core.hooksPath'], {
             encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'ignore'],
+            stdio: ['ignore', 'pipe', 'pipe'],
         }).trim();
     } catch (gitReadError) {
         if (gitReadError.status === 1) {
             return;
         }
-        console.warn(`  Git hooks: could not read core.hooksPath during uninstall (${gitReadError.message}) — hooks path may need manual cleanup`);
+        const stderrDetail = gitReadError.stderr ? ` stderr: ${gitReadError.stderr.trim()}` : '';
+        console.warn(`  Git hooks: could not read core.hooksPath during uninstall (${gitReadError.message}${stderrDetail}) — hooks path may need manual cleanup`);
         return;
     }
     if (!pathsAreEquivalent(currentHooksPath, installedGitHooksDirectory)) {

@@ -189,6 +189,25 @@ def test_is_safe_regular_file_uses_claude_home_env_as_trust_root(
     assert is_safe
 
 
+def test_resolve_gate_script_path_snapshot_is_consistent_with_is_safe_regular_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    custom_claude_home = tmp_path / "custom_claude"
+    gate_path = (
+        custom_claude_home / "skills" / "bugteam" / "scripts" / "bugteam_code_rules_gate.py"
+    )
+    gate_path.parent.mkdir(parents=True)
+    gate_path.write_text("", encoding="utf-8")
+    monkeypatch.delenv("CODE_RULES_GATE_PATH", raising=False)
+    monkeypatch.setenv("CLAUDE_HOME", str(custom_claude_home))
+
+    resolved_path, exact_allowed = gate_utils.resolve_gate_script_path()
+    is_safe = gate_utils.is_safe_regular_file(resolved_path, exact_allowed)
+
+    assert is_safe
+
+
 def test_is_safe_regular_file_rejects_path_outside_claude_home_env_trust_root(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -1,4 +1,4 @@
-import { writeFileSync, copyFileSync, chmodSync, mkdirSync, renameSync, lstatSync, unlinkSync } from 'node:fs';
+import { writeFileSync, copyFileSync, chmodSync, mkdirSync, renameSync, lstatSync, unlinkSync, openSync, closeSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -22,7 +22,8 @@ function renameSyncWithWindowsRetry(sourcePath, destinationPath) {
     let lastError;
     for (const delayMs of [0, ...RENAME_RETRY_DELAYS_MS]) {
         if (delayMs > 0) {
-            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
+            const deadline = Date.now() + delayMs;
+            while (Date.now() < deadline) { /* spin */ }
         }
         try {
             renameSync(sourcePath, destinationPath);
@@ -38,9 +39,12 @@ function renameSyncWithWindowsRetry(sourcePath, destinationPath) {
         renameSync(sourcePath, destinationPath);
         return;
     } catch (secondRenameError) {
+        const partialPath = destinationPath + '.partial';
         try {
-            copyFileSync(sourcePath, destinationPath);
+            copyFileSync(sourcePath, partialPath);
+            renameSync(partialPath, destinationPath);
         } catch (copyError) {
+            try { unlinkSync(partialPath); } catch { /* ENOENT-safe */ }
             throw new Error(
                 `claude-dev-env: atomic rename failed (${secondRenameError.message}) `
                 + `and copy fallback also failed (${copyError.message})`,
@@ -127,21 +131,38 @@ export function writeGitHookShim({
     const shimPath = join(gitHooksDirectory, gitNativeHookName);
     const shimTempPath = shimPath + '.tmp';
     const shimContent = buildShimContent(pythonModuleName);
-    writeFileSync(shimTempPath, shimContent, { encoding: 'utf8', mode: 0o600 });
+    writeFileSync(shimTempPath, shimContent, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    const postWriteStat = lstatSync(shimTempPath);
+    if (postWriteStat.isSymbolicLink()) {
+        throw new Error(
+            `claude-dev-env: refusing to use temp shim — path became a symlink after write: ${shimTempPath}`,
+        );
+    }
     try {
         chmodSync(shimTempPath, 0o755);
-    } catch {
+    } catch (chmodError) {
         // Windows may not support chmod semantics; git-for-windows still runs
         // the hook via its shebang, so the chmod failure is non-fatal.
+        if (process.platform !== 'win32') {
+            throw chmodError;
+        }
     }
     try {
         renameSyncWithWindowsRetry(shimTempPath, shimPath);
     } catch (renameError) {
         try {
             unlinkSync(shimTempPath);
-        } catch (cleanupError) {
-            if (cleanupError.code !== 'ENOENT') {
-                console.warn(`claude-dev-env: could not remove temp shim after rename failure: ${cleanupError.message}`);
+        } catch (firstUnlinkError) {
+            if (firstUnlinkError.code !== 'ENOENT') {
+                const retryDeadline = Date.now() + 50;
+                while (Date.now() < retryDeadline) { /* spin */ }
+                try {
+                    unlinkSync(shimTempPath);
+                } catch (retryUnlinkError) {
+                    if (retryUnlinkError.code !== 'ENOENT') {
+                        console.warn(`claude-dev-env: could not remove temp shim after rename failure: ${retryUnlinkError.message} — manual cleanup may be needed: ${shimTempPath}`);
+                    }
+                }
             }
         }
         throw renameError;

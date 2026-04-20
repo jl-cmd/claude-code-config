@@ -131,6 +131,28 @@ def test_main_emits_stderr_warning_when_gate_script_missing(
     assert "gate script not found" in captured.err
 
 
+def test_invoke_gate_returns_infrastructure_failure_when_strict_resolve_raises(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing_gate_path = tmp_path / "missing_gate.py"
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", str(missing_gate_path))
+    missing_gate_path.write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+
+    original_resolve = Path.resolve
+
+    def raising_resolve(self: Path, strict: bool = False) -> Path:
+        if strict and self == missing_gate_path.resolve():
+            raise FileNotFoundError("not found")
+        return original_resolve(self, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", raising_resolve)
+
+    exit_code = pre_commit.invoke_gate(missing_gate_path)
+
+    assert exit_code == 2
+
+
 def test_invoke_gate_uses_resolved_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

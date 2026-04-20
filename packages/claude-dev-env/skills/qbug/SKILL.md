@@ -13,10 +13,10 @@ description: >-
 
 **Core principle:** The /bugteam workflow, driven by ONE subagent. The lead spawns a single `clean-coder` via the Agent tool (no `TeamCreate`, no teammates), hands it the PR scope and audit rubric, and the subagent loops audit → fix → commit → push until convergence or stuck. The trade: no per-loop clean-room (the subagent's context carries across loops). The gain: no agent-teams feature requirement, no teammate coordination, no loop cap.
 
-Reuses /bugteam's shared pieces by path:
+Reuses /bugteam's shared pieces. All script paths resolve via `${CLAUDE_SKILL_DIR}` host-substitution — the same convention [`bugteam/SKILL.md`](../bugteam/SKILL.md) uses — with `..` to cross from qbug's skill directory to bugteam's sibling directory (both land under `~/.claude/skills/` after install).
 
-- Pre-flight: `packages/claude-dev-env/skills/bugteam/scripts/bugteam_preflight.py`
-- Code-rules gate: `packages/claude-dev-env/skills/bugteam/scripts/bugteam_code_rules_gate.py`
+- Pre-flight script: `${CLAUDE_SKILL_DIR}/../bugteam/scripts/bugteam_preflight.py`
+- Code-rules gate script: `${CLAUDE_SKILL_DIR}/../bugteam/scripts/bugteam_code_rules_gate.py`
 - Bug category rubric A–J: [`bugteam/PROMPTS.md`](../bugteam/PROMPTS.md#audit-spawn-prompt-xml-bugfind-teammate)
 - PR comment lifecycle shape: [`bugteam/SKILL.md`](../bugteam/SKILL.md#step-25-pr-comments-one-review-per-loop)
 
@@ -43,10 +43,10 @@ Refusals — first match wins; respond with the quoted line exactly and stop:
 ## Step 0: Pre-flight
 
 ```bash
-python packages/claude-dev-env/skills/bugteam/scripts/bugteam_preflight.py
+python "${CLAUDE_SKILL_DIR}/../bugteam/scripts/bugteam_preflight.py"
 ```
 
-Non-zero → fix before continuing. `BUGTEAM_PREFLIGHT_SKIP=1` is emergency only. `--pre-commit` when `.pre-commit-config.yaml` exists.
+`${CLAUDE_SKILL_DIR}` is host-substituted before the shell runs. Non-zero → fix before continuing. `BUGTEAM_PREFLIGHT_SKIP=1` is emergency only. Add `--pre-commit` when `.pre-commit-config.yaml` exists.
 
 ## Step 1: Resolve PR scope (lead)
 
@@ -56,115 +56,191 @@ Non-zero → fix before continuing. `BUGTEAM_PREFLIGHT_SKIP=1` is emergency only
 
 Capture: `owner/repo`, `baseRefName`, `headRefName`, PR `number`, `url`, `starting_sha = git rev-parse HEAD`.
 
+Resolve the scoped temp directory once, lead-side, before spawning the subagent. Use Python's `tempfile.gettempdir()` so the path is correct on macOS, Linux, Windows cmd.exe, and PowerShell — do not hardcode `/tmp/` because Windows runners do not honor it. Capture the resolved absolute path as `<qbug_temp_dir>` and pass that literal path to the subagent:
+
+```python
+import tempfile
+from pathlib import Path
+qbug_temp_dir = Path(tempfile.gettempdir()) / f"qbug-pr-{pr_number}"
+qbug_temp_dir.mkdir(parents=True, exist_ok=True)
+```
+
 ## Step 2: Spawn the single subagent
 
-Lead calls `Agent`:
+Before calling `Agent`, the lead resolves the three absolute paths the subagent needs and substitutes them into the prompt template (the `<gate_script>`, `<categories_file>`, and `<qbug_temp_dir>` placeholders in § Subagent cycle prompt):
+
+```python
+import os
+from pathlib import Path
+
+skill_dir = Path(os.environ["CLAUDE_SKILL_DIR"])
+gate_script_path = (skill_dir / ".." / "bugteam" / "scripts" / "bugteam_code_rules_gate.py").resolve()
+categories_file_path = (skill_dir / ".." / "bugteam" / "PROMPTS.md").resolve()
+```
+
+Then call `Agent`:
 
 ```
 Agent(
   subagent_type="clean-coder",
   description="qbug audit/fix cycle for PR <number>",
-  prompt="<cycle XML; see § Subagent cycle prompt>",
+  prompt="<filled cycle XML; see § Subagent cycle prompt>",
   run_in_background=false
 )
 ```
 
-One subagent, not a team. No `TeamCreate`, no `team_name`, no teammate shutdown protocol. The subagent returns when it has exited the cycle (converged, stuck, or error).
+One subagent, not a team. No `TeamCreate`, no `team_name`, no teammate shutdown protocol. The subagent returns when it has exited the cycle (`converged`, `stuck`, or `error`).
 
 ## Subagent cycle prompt
 
-The subagent receives the PR scope plus the instructions below. It loops internally — the lead does not re-invoke between loops.
+The subagent receives this prompt and loops internally — the lead does not re-invoke between loops. The prompt is self-contained: it restates the bug-category rubric by path rather than assuming prior context, and it states its full scope upfront (Claude Opus 4.7 interprets prompts literally, so scope stays narrow).
 
 ```xml
+<role>
+  You are the lone audit-fix worker for this pull request. Run the full
+  audit → fix → commit → push cycle in this one subagent session. The
+  lead has already resolved scope and pre-flight; your job is to take
+  the cycle to an exit state and report back.
+</role>
+
 <context>
   <repo>owner/repo</repo>
   <branch>head ref</branch>
   <base_branch>base ref</base_branch>
   <pr_url>url</pr_url>
   <starting_sha>starting_sha</starting_sha>
+  <qbug_temp_dir>absolute literal path the lead resolved via tempfile.gettempdir()</qbug_temp_dir>
+  <gate_script>absolute path to bugteam_code_rules_gate.py the lead resolved via ${CLAUDE_SKILL_DIR}/../bugteam/scripts/</gate_script>
+  <categories_file>absolute path to bugteam/PROMPTS.md for the A–J rubric</categories_file>
 </context>
 
+<exit_conditions>
+  The cycle stops when ONE of these is true. Check on every iteration:
+    - converged: most recent AUDIT returned zero findings.
+    - stuck: most recent FIX left `git rev-parse HEAD` unchanged.
+    - error: three consecutive pre-audit gate rounds failed (three is
+      chosen because two is within normal clean-coder variance; four
+      rounds typically indicates a gate defect rather than fixable
+      violations).
+  There is no loop-count cap. A pathological diff with ever-changing
+  findings will still exit via `stuck` once a FIX produces no commit.
+</exit_conditions>
+
 <cycle>
-  Maintain inline:
+  Maintain inline across iterations:
     loop_count = 0
     last_action = "fresh"           # fresh | audited | fixed
     last_findings = {p0, p1, p2, total}
     loop_comment_index = {}
     audit_log = []
 
-  Loop until exit (no cap):
-    1. Dispatch:
-       - last_action == "audited" and last_findings.total == 0 → exit "converged"
-       - last_action == "fixed" and `git rev-parse HEAD` unchanged since pre-FIX → exit "stuck"
-       - last_action in {"fresh", "fixed"} → pre-audit, then AUDIT
-       - last_action == "audited" and last_findings.total > 0 → FIX
+  Iteration:
+    1. Dispatch on last_action:
+       - "audited" and last_findings.total == 0 → exit "converged"
+       - "fixed" and `git rev-parse HEAD` equals the sha captured
+         immediately before FIX → exit "stuck"
+       - "fresh" or "fixed" → run pre-audit, then AUDIT
+       - "audited" and last_findings.total > 0 → run FIX
 
     2. Pre-audit (before every AUDIT):
-       `python packages/claude-dev-env/skills/bugteam/scripts/bugteam_code_rules_gate.py --base origin/<baseRefName>`
-       Non-zero → fix the reported violations inline, re-run the same command.
-       After 3 failed rounds → exit "error: code rules gate failed pre-audit".
-       After exit 0: loop_count += 1.
+       Run the gate script at <gate_script> with `--base origin/<base_branch>`.
+       Non-zero exit → fix the reported violations inline and re-run the
+       same command. Count consecutive failures. Three failed rounds →
+       exit "error: code rules gate failed pre-audit".
+       On exit 0: increment loop_count, proceed to AUDIT.
 
     3. AUDIT:
-       mkdir -p /tmp/qbug-<number>
-       gh pr diff <number> -R <owner>/<repo> > /tmp/qbug-<number>/loop-<N>.patch
+       Run: `gh pr diff <pr_number> -R <owner>/<repo> > <qbug_temp_dir>/loop-<loop_count>.patch`
 
-       - Read the patch.
-       - Audit only added/modified lines against categories A–J from
-         packages/claude-dev-env/skills/bugteam/PROMPTS.md.
-       - Assign each finding loop<N>-<K> (1-based). Partition into
-         anchored (line in diff) and unanchored.
-       - Use the Step 2.5 payload shape from bugteam/SKILL.md:
-         write review body + per-finding bodies to temp files,
-         jq --rawfile / -Rs, pipe to
-         `gh api repos/<owner>/<repo>/pulls/<number>/reviews -X POST --input -`.
-         Review body: `## /qbug loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2`.
-       - Review POST fails → issue-comment fallback on
-         `/issues/<number>/comments` with full body; mark all findings
-         used_fallback=true.
-       - Harvest html_url for parent review and each child comment;
-         populate loop_comment_index.
-       - last_action = "audited"; last_findings = counts.
-       - Append `<N> audit: <P0>P0 / <P1>P1 / <P2>P2` to audit_log.
+       - Read the patch file.
+       - Audit only added/modified lines. Read <categories_file> for the
+         A–J category definitions; investigate each category explicitly
+         and return either at least one finding or a verified-clean
+         entry with cleared evidence.
+       - Assign each finding a stable id of the form `loop<N>-<K>`
+         (N=loop_count, K=1-based within this loop).
+       - Partition into anchored (line appears in the diff) vs
+         unanchored (line does not).
+
+       Post ONE review per loop. Use the payload shape from
+       <categories_file>'s sibling SKILL.md § "PR comments" — build
+       the JSON with jq `--rawfile` / `-Rs` reading per-finding body
+       files, pipe to
+       `gh api repos/<owner>/<repo>/pulls/<pr_number>/reviews -X POST --input -`.
+       Review body first line: `## /qbug loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2`.
+       If the review POST fails, fall back to one issue comment on
+       `/issues/<pr_number>/comments` carrying the full body; mark every
+       finding `used_fallback=true`.
+
+       Harvest `html_url` for the parent review and each child comment
+       into loop_comment_index[finding_id].
+
+       Update state: last_action="audited", last_findings=counts.
+       Append `<N> audit: <P0>P0 / <P1>P1 / <P2>P2` to audit_log.
 
     4. FIX:
-       - Apply each fix: read the file before editing; preserve existing
-         comments on untouched lines; add type hints on touched signatures.
-       - `python -m py_compile` (or language-equivalent) on each modified file.
-       - `git add <path>` by explicit path for every modified file.
-       - Single commit summarizing the fixed findings. Let hooks run.
-         Hook-blocked → capture stderr, mark every finding hook_blocked,
-         do NOT retry this loop.
-       - `git push` (plain fast-forward).
-       - For each finding, post one reply to
-         loop_comment_index[finding_id].finding_comment_id using the
-         Step 2.5 reply shape: `Fixed in <short_sha>` /
-         `Could not address this loop: <reason>` /
-         `Hook blocked the fix commit: <summary>`.
-       - last_action = "fixed". Append
-         `<N> fix: <sha> — <fixed>/<could_not_address>/<hook_blocked>`
-         to audit_log.
+       Capture the pre-FIX sha: `pre_fix_sha = git rev-parse HEAD`.
 
-    5. Loop to step 1.
+       Apply each fix. Read every file before editing. Preserve existing
+       comments on lines you do not modify. Add type hints on every
+       signature you touch.
+
+       Validate each modified Python file with `python -m py_compile`
+       (or the language-equivalent compile check).
+
+       Stage each modified path explicitly (`git add <path>` by name —
+       never `-A` or `.`). Create one commit summarizing the fixed
+       findings. Let every git hook run. If a hook blocks the commit,
+       capture its stderr, mark every finding in this loop
+       `status=hook_blocked`, and do not retry this loop.
+
+       Push with a plain fast-forward: `git push`.
+
+       Reply to each finding at loop_comment_index[finding_id].finding_comment_id
+       using the reply CLI shape (jq `-Rs` → `gh api .../comments/<id>/replies --input -`).
+       Reply body is one of:
+         - `Fixed in <short_sha>`
+         - `Could not address this loop: <one-line reason>`
+         - `Hook blocked the fix commit: <one-line summary>`
+
+       Update state: last_action="fixed". Append
+       `<N> fix: <short_sha> — <fixed>/<could_not_address>/<hook_blocked>`
+       to audit_log.
+
+    5. Return to step 1.
 </cycle>
 
+<example_finding_body>
+**[P1] race condition on shared cache write**
+Category: I (concurrency hazards)
+Two writers can both pass the existence check at line 88 before either
+commits the write at line 91 — whichever writes second overwrites the
+first under contention. Either hold the cache lock across the check
+and the write, or use a compare-and-swap primitive.
+
+_From /qbug audit loop 2._
+</example_finding_body>
+
 <constraints>
-  - Modify only files in the PR diff's scope.
-  - Linear branch, fast-forward push only; one commit per FIX action.
+  - Edit only files reachable from the PR diff's scope.
+  - Keep the branch linear: append one new commit per FIX loop and
+    fast-forward push only. Do not amend, rebase, or force-push.
   - Preserve existing comments on lines you do not modify.
-  - Type hints on every signature you touch.
-  - Read each file before editing.
-  - No TeamCreate, no Agent calls, no spawning other subagents from within
-    this subagent — this is the lone worker for the whole cycle.
+  - Every signature you touch has complete type hints.
+  - Every file is read before you edit it (investigate before answering).
+  - Complete the entire cycle in this one subagent session. You have
+    access to Bash, Read, Write, Edit, and Grep — use them directly
+    rather than delegating to further subagents.
 </constraints>
 
 <output_format>
-  Return to the lead with:
-    - exit_reason: converged | stuck | error: <detail>
-    - loop_count
-    - final_commit_sha (git rev-parse HEAD)
-    - audit_log (ordered list of per-loop lines)
-    - unresolved (only when stuck): [{file, line, severity, title, reason}]
+  Return to the lead with exactly these fields:
+    - exit_reason: "converged" | "stuck" | "error: <detail>"
+    - loop_count: integer
+    - final_commit_sha: `git rev-parse HEAD` at exit
+    - audit_log: ordered list of per-loop lines
+    - unresolved: array of {file, line, severity, title, reason}
+      (present only when exit_reason == "stuck")
 </output_format>
 ```
 
@@ -192,7 +268,7 @@ Loop log:
 - `stuck` → list the unresolved findings with `file:line` and reason.
 - `error` → error detail + loop number where it occurred.
 
-Delete `/tmp/qbug-<number>/` and any `.qbug-*.md` temp files.
+Delete the resolved `<qbug_temp_dir>` tree and any `.qbug-*.md` temp files in the working directory. The lead captured the dir as an absolute path via `tempfile.gettempdir()` in Step 1; reuse that literal for cleanup.
 
 ## Constraints
 

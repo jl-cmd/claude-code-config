@@ -11,6 +11,8 @@ import os
 import re
 import sys
 
+from _hook_messages import USER_FACING_NOTICE
+
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 RESEARCH_MODE_SKILL_SEARCH_PATHS = [
@@ -50,15 +52,9 @@ ALL_HEDGING_PATTERNS = [
     re.compile(pattern, re.IGNORECASE) for pattern in HEDGING_WORDS + HEDGING_PHRASES
 ]
 
-USER_FACING_NOTICE = "Agent was found guessing - sourcing opinions..."
-
 CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```", re.MULTILINE)
 INLINE_CODE_PATTERN = re.compile(r"`[^`]+`")
 QUOTED_BLOCK_PATTERN = re.compile(r"^>.*$", re.MULTILINE)
-
-
-def get_user_facing_notice() -> str:
-    return USER_FACING_NOTICE
 
 
 def strip_code_and_quotes(text: str) -> str:
@@ -130,7 +126,7 @@ def main() -> None:
             f"Either VERIFY it with a source or replace it with 'I don't know'.\n\n"
             f"You MUST re-output the complete, revised response with the corrections applied."
         ),
-        "systemMessage": get_user_facing_notice(),
+        "systemMessage": USER_FACING_NOTICE,
         "suppressOutput": True,
     }
 

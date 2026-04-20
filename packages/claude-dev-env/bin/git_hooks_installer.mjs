@@ -4,7 +4,6 @@ import { join } from 'node:path';
 
 
 export const SHIM_CONTENT_HEADER = '#!/usr/bin/env python3\n';
-export const SHIM_MODULE_FILENAME_SUFFIX = '.py';
 export const EXECUTABLE_FILE_MODE = 0o755;
 
 export const KNOWN_GIT_HOOK_NAMES = Object.freeze([

@@ -165,3 +165,108 @@ def test_rm_rf_still_asks_when_redirect_env_var_is_unset() -> None:
 
     response = json.loads(result.stdout)
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def _run_hook_with_fake_home(
+    payload: dict,
+    fake_home: Path,
+    working_directory: Path,
+) -> subprocess.CompletedProcess[str]:
+    child_environment = os.environ.copy()
+    child_environment.pop(GH_REDIRECT_ACTIVE_ENV_VAR, None)
+    child_environment["HOME"] = str(fake_home)
+    child_environment["USERPROFILE"] = str(fake_home)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_PATH)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=child_environment,
+        cwd=str(working_directory),
+    )
+
+
+def _write_settings_with_allow_list(fake_home: Path, allow_list: list[str]) -> None:
+    claude_directory = fake_home / ".claude"
+    claude_directory.mkdir(parents=True, exist_ok=True)
+    settings_payload = {"hooks": {"allowGitResetHardProjects": allow_list}}
+    (claude_directory / "settings.json").write_text(
+        json.dumps(settings_payload), encoding="utf-8"
+    )
+
+
+def test_git_reset_hard_allowed_when_cwd_matches_settings_allow_list(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    project_directory = tmp_path / "approved_project"
+    project_directory.mkdir()
+    project_path_forward = str(project_directory).replace("\\", "/")
+    _write_settings_with_allow_list(fake_home, [project_path_forward])
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, project_directory)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_git_reset_hard_asks_when_cwd_not_in_settings_allow_list(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    approved_directory = tmp_path / "approved_project"
+    approved_directory.mkdir()
+    unapproved_directory = tmp_path / "unapproved_project"
+    unapproved_directory.mkdir()
+    approved_path_forward = str(approved_directory).replace("\\", "/")
+    _write_settings_with_allow_list(fake_home, [approved_path_forward])
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, unapproved_directory)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "git reset --hard" in response["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_git_reset_hard_asks_when_settings_missing(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    project_directory = tmp_path / "unapproved_project"
+    project_directory.mkdir()
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, project_directory)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_git_reset_hard_asks_when_allow_list_is_empty(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    project_directory = tmp_path / "some_project"
+    project_directory.mkdir()
+    _write_settings_with_allow_list(fake_home, [])
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, project_directory)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_git_reset_hard_asks_when_settings_file_is_invalid_json(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    (fake_home / ".claude").mkdir(parents=True)
+    (fake_home / ".claude" / "settings.json").write_text(
+        "{not valid json", encoding="utf-8"
+    )
+    project_directory = tmp_path / "unapproved_project"
+    project_directory.mkdir()
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, project_directory)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"

@@ -15,10 +15,30 @@ def gh_redirect_is_active() -> bool:
     env_var_value = os.environ.get(GH_REDIRECT_ACTIVE_ENV_VAR, "").strip().lower()
     return env_var_value in GH_REDIRECT_ACTIVE_TRUTHY_VALUES
 
-# Projects where git reset --hard is explicitly allowed by the user.
-# Add your own project paths here, e.g.:
-# os.path.normpath("C:/Users/you/your-project"),
-ALLOW_GIT_RESET_HARD_PROJECTS: list[str] = []
+def load_allow_git_reset_hard_projects() -> list[str]:
+    allow_git_reset_hard_settings_key = "allowGitResetHardProjects"
+    settings_path = Path.home() / ".claude" / "settings.json"
+    try:
+        raw_settings_text = settings_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    try:
+        parsed_settings = json.loads(raw_settings_text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(parsed_settings, dict):
+        return []
+    hooks_section = parsed_settings.get("hooks")
+    if not isinstance(hooks_section, dict):
+        return []
+    raw_allow_list = hooks_section.get(allow_git_reset_hard_settings_key)
+    if not isinstance(raw_allow_list, list):
+        return []
+    return [
+        each_project_path
+        for each_project_path in raw_allow_list
+        if isinstance(each_project_path, str)
+    ]
 
 DESTRUCTIVE_BASH_PATTERNS = [
     (re.compile(r'\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r', re.IGNORECASE), "rm -rf (destructive recursive forced delete)"),
@@ -137,9 +157,8 @@ def main() -> None:
     # Allow git reset --hard in explicitly approved projects (case-insensitive for Windows drive letters)
     if matched_description is not None and "git reset --hard" in matched_description:
         cwd = os.path.normpath(os.getcwd()).lower()
-        command_lower = command.lower()
-        for allowed_project in ALLOW_GIT_RESET_HARD_PROJECTS:
-            allowed_lower = allowed_project.lower()
+        for allowed_project in load_allow_git_reset_hard_projects():
+            allowed_lower = os.path.normpath(allowed_project).lower()
             if cwd.startswith(allowed_lower):
                 sys.exit(0)
             # Also check the cd target in the command itself

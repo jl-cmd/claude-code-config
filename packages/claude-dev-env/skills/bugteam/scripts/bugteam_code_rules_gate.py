@@ -89,6 +89,115 @@ def filter_paths_under_prefixes(
     return filtered
 
 
+def paths_from_git_staged(repository_root: Path) -> list[Path]:
+    name_result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if name_result.returncode != 0:
+        print(
+            f"bugteam_code_rules_gate: git diff --cached --name-only failed:\n{name_result.stderr}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    relative_paths = [line.strip() for line in name_result.stdout.splitlines() if line.strip()]
+    return [repository_root / relative_path for relative_path in relative_paths]
+
+
+def is_file_absent_in_index_head(
+    repository_root: Path,
+    relative_path_posix: str,
+) -> bool:
+    cat_result = subprocess.run(
+        ["git", "cat-file", "-e", f"HEAD:{relative_path_posix}"],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    return cat_result.returncode != 0
+
+
+def staged_file_line_count(
+    repository_root: Path,
+    relative_path_posix: str,
+) -> int:
+    show_result = subprocess.run(
+        ["git", "show", f":{relative_path_posix}"],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if show_result.returncode != 0:
+        return 0
+    staged_content = show_result.stdout
+    if not staged_content:
+        return 0
+    return len(staged_content.splitlines())
+
+
+def added_lines_for_staged_file(
+    repository_root: Path,
+    relative_path_posix: str,
+) -> set[int]:
+    diff_result = subprocess.run(
+        ["git", "diff", "--cached", "--unified=0", "--", relative_path_posix],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if diff_result.returncode != 0:
+        print(
+            f"bugteam_code_rules_gate: git diff --cached --unified=0 failed for {relative_path_posix}:\n"
+            f"{diff_result.stderr}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    if diff_result.stdout.strip():
+        parsed_added_lines = parse_added_line_numbers(diff_result.stdout)
+        if parsed_added_lines:
+            return parsed_added_lines
+    if is_file_absent_in_index_head(repository_root, relative_path_posix):
+        total_lines = staged_file_line_count(repository_root, relative_path_posix)
+        if total_lines > 0:
+            return set(range(1, total_lines + 1))
+    return set()
+
+
+def added_lines_by_file_staged(
+    repository_root: Path,
+    file_paths: list[Path],
+) -> dict[Path, set[int]]:
+    resolved_root = repository_root.resolve()
+    added_by_path: dict[Path, set[int]] = {}
+    for each_path in file_paths:
+        try:
+            resolved = each_path.resolve()
+        except OSError:
+            continue
+        try:
+            relative = resolved.relative_to(resolved_root)
+        except ValueError:
+            continue
+        relative_posix = str(relative).replace("\\", "/")
+        added_numbers = added_lines_for_staged_file(resolved_root, relative_posix)
+        added_by_path[resolved] = added_numbers
+    return added_by_path
+
+
 def paths_from_git_diff(repository_root: Path, base_reference: str) -> list[Path]:
     merge_base = resolve_merge_base(repository_root, base_reference)
     name_result = subprocess.run(
@@ -338,6 +447,16 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         help="Merge-base ref for git diff (default: origin/main).",
     )
     parser.add_argument(
+        "--staged",
+        action="store_true",
+        default=False,
+        help=(
+            "Scope to staged changes only (git diff --cached). "
+            "Blocks on violations introduced on staged-added lines; "
+            "reports pre-existing violations in touched files as advisory."
+        ),
+    )
+    parser.add_argument(
         "--only-under",
         action="append",
         default=[],
@@ -368,6 +487,22 @@ def main(argv: list[str] | None = None) -> int:
     if arguments.paths:
         file_paths = [repository_root / path for path in arguments.paths]
         return run_gate(validate_content, file_paths, repository_root, added_lines_map=None)
+    if arguments.staged:
+        staged_file_paths = paths_from_git_staged(repository_root)
+        staged_file_paths = filter_paths_under_prefixes(
+            staged_file_paths,
+            repository_root,
+            arguments.only_under,
+        )
+        if not staged_file_paths:
+            return 0
+        staged_added_lines = added_lines_by_file_staged(repository_root, staged_file_paths)
+        return run_gate(
+            validate_content,
+            staged_file_paths,
+            repository_root,
+            added_lines_map=staged_added_lines,
+        )
     file_paths = paths_from_git_diff(repository_root, arguments.base)
     file_paths = filter_paths_under_prefixes(
         file_paths,

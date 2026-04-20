@@ -50,9 +50,15 @@ ALL_HEDGING_PATTERNS = [
     re.compile(pattern, re.IGNORECASE) for pattern in HEDGING_WORDS + HEDGING_PHRASES
 ]
 
+USER_FACING_NOTICE = "Agent was found guessing - sourcing opinions..."
+
 CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```", re.MULTILINE)
 INLINE_CODE_PATTERN = re.compile(r"`[^`]+`")
 QUOTED_BLOCK_PATTERN = re.compile(r"^>.*$", re.MULTILINE)
+
+
+def get_user_facing_notice() -> str:
+    return USER_FACING_NOTICE
 
 
 def strip_code_and_quotes(text: str) -> str:
@@ -124,7 +130,7 @@ def main() -> None:
             f"Either VERIFY it with a source or replace it with 'I don't know'.\n\n"
             f"You MUST re-output the complete, revised response with the corrections applied."
         ),
-        "systemMessage": "Agent was found guessing - sourcing opinions...",
+        "systemMessage": get_user_facing_notice(),
         "suppressOutput": True,
     }
 

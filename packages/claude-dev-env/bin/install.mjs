@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, copyFileSync, unlinkSync, rmSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { installAllGitHooks } from './git_hooks_installer.mjs';
@@ -409,7 +409,7 @@ function unsetGlobalGitHooksPathIfOurs() {
     const normalizedInstalledDirectory = installedGitHooksDirectory.replaceAll('\\', '/');
     let currentHooksPath = '';
     try {
-        currentHooksPath = execSync('git config --global --get core.hooksPath', {
+        currentHooksPath = execFileSync('git', ['config', '--global', '--get', 'core.hooksPath'], {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
         }).trim();
@@ -420,7 +420,7 @@ function unsetGlobalGitHooksPathIfOurs() {
         return;
     }
     try {
-        execSync('git config --global --unset core.hooksPath', { stdio: 'ignore' });
+        execFileSync('git', ['config', '--global', '--unset', 'core.hooksPath'], { stdio: 'ignore' });
         console.log('  Git hooks: unset global core.hooksPath');
     } catch (gitUnsetError) {
         console.warn(`  Git hooks: could not unset core.hooksPath (${gitUnsetError.message})`);

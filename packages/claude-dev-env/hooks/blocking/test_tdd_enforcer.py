@@ -96,7 +96,7 @@ def test_should_deny_when_test_file_exists_but_is_stale(tmp_path: Path) -> None:
     assert _decision_from(completed) == "deny"
 
 
-def test_should_allow_when_bypass_sentinel_present_in_content(tmp_path: Path) -> None:
+def test_should_deny_when_pragma_no_tdd_gate_sentinel_is_present_without_test(tmp_path: Path) -> None:
     sandbox = _sandbox(tmp_path)
     production_file = sandbox / "orders.py"
     content_with_sentinel = "# pragma: no-tdd-gate\ndef fulfill(): pass\n"
@@ -105,7 +105,7 @@ def test_should_allow_when_bypass_sentinel_present_in_content(tmp_path: Path) ->
         _make_write_payload(production_file, content_with_sentinel)
     )
 
-    assert _decision_from(completed) == "allow"
+    assert _decision_from(completed) == "deny"
 
 
 def test_should_skip_markdown_files_entirely(tmp_path: Path) -> None:
@@ -170,11 +170,12 @@ def test_should_deny_when_test_file_has_no_test_evidence(tmp_path: Path) -> None
     assert _decision_from(completed) == "deny"
 
 
-def test_should_allow_edit_when_bypass_sentinel_present_in_new_string(
+def test_should_deny_edit_when_pragma_sentinel_present_in_new_string_without_test(
     tmp_path: Path,
 ) -> None:
     sandbox = _sandbox(tmp_path)
     production_file = sandbox / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
     payload = {
         "tool_name": "Edit",
         "tool_input": {
@@ -186,7 +187,78 @@ def test_should_allow_edit_when_bypass_sentinel_present_in_new_string(
 
     completed = _run_hook_with_payload(payload)
 
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_allow_python_file_with_only_module_level_constants(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    constants_file = sandbox / "constants.py"
+    constants_only_content = (
+        '"""Module-level constants for the widget subsystem."""\n'
+        "import re\n"
+        "MAXIMUM_RETRIES: int = 3\n"
+        "DEFAULT_TIMEOUT_SECONDS: float = 30.0\n"
+        'BANNED_WORDS: tuple[str, ...] = ("foo", "bar")\n'
+    )
+    constants_file.write_text(constants_only_content)
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(constants_file, constants_only_content)
+    )
+
     assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_python_file_when_any_function_definition_is_present(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    mixed_file = sandbox / "mixed.py"
+    mixed_content = (
+        "MAXIMUM_RETRIES: int = 3\n"
+        "def do_something() -> None:\n"
+        "    return None\n"
+    )
+    mixed_file.write_text(mixed_content)
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(mixed_file, mixed_content)
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_python_file_when_any_class_definition_is_present(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    class_file = sandbox / "klass.py"
+    class_content = (
+        "class Widget:\n"
+        "    size: int = 3\n"
+    )
+    class_file.write_text(class_content)
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(class_file, class_content)
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_deny_response_includes_system_message_for_user_and_suppresses_verbose_reason(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_file = sandbox / "orders.py"
+    production_file.write_text("def fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_file))
+
+    parsed_response = json.loads(completed.stdout)
+    hook_output = parsed_response["hookSpecificOutput"]
+    assert hook_output["permissionDecision"] == "deny"
+    assert hook_output.get("suppressOutput") is True
+    assert isinstance(hook_output.get("systemMessage"), str)
+    assert hook_output["systemMessage"]
+    verbose_reason = hook_output["permissionDecisionReason"]
+    assert "propose" in verbose_reason.lower() or "enhancement" in verbose_reason.lower()
 
 
 def test_should_deny_production_file_inside_directory_containing_skip_substring(

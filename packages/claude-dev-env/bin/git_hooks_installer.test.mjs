@@ -8,7 +8,6 @@ import {
     writeGitHookShim,
     writeAllGitHookShims,
     configureGlobalGitHooksPath,
-    SHIM_CONTENT_HEADER,
     KNOWN_GIT_HOOK_NAMES,
 } from './git_hooks_installer.mjs';
 
@@ -32,7 +31,7 @@ test('writeGitHookShim creates a file with the git-native name and imports the m
         assert.equal(shimPath, join(gitHooksDirectory, 'pre-commit'));
         assert.ok(existsSync(shimPath));
         const shimContent = readFileSync(shimPath, 'utf8');
-        assert.ok(shimContent.startsWith(SHIM_CONTENT_HEADER));
+        assert.ok(shimContent.startsWith('#!/usr/bin/env python3\n'));
         assert.match(shimContent, /import\s+pre_commit/);
         assert.match(shimContent, /pre_commit\.main\(\)/);
     } finally {

@@ -3,8 +3,6 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 
-export const SHIM_CONTENT_HEADER = '#!/usr/bin/env python3\n';
-
 export const KNOWN_GIT_HOOK_NAMES = Object.freeze([
     'pre-commit',
     'pre-push',
@@ -23,8 +21,9 @@ function deriveModuleNameFromGitNativeHookName(gitNativeHookName) {
 
 
 function buildShimContent(pythonModuleName) {
+    const shimContentHeader = '#!/usr/bin/env python3\n';
     return (
-        SHIM_CONTENT_HEADER
+        shimContentHeader
         + `"""${SHIM_DOCSTRING}"""\n`
         + 'import sys\n'
         + 'from pathlib import Path\n'

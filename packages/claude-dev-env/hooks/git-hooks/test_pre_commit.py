@@ -11,7 +11,6 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
 import pre_commit
-import gate_utils
 
 
 def make_gate_script_returning(exit_code: int, target_path: Path) -> Path:

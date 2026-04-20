@@ -29,6 +29,9 @@ GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE: int = 2
 GATE_SCRIPT_NOT_FOUND_MESSAGE: str = (
     "claude-dev-env pre-commit: gate script not found at {path}, skipping enforcement"
 )
+PRE_PUSH_GATE_SCRIPT_NOT_FOUND_MESSAGE: str = (
+    "claude-dev-env pre-push: gate script not found at {path}, skipping enforcement"
+)
 STDIN_READ_FAILURE_MESSAGE: str = (
     "claude-dev-env pre-push: could not read stdin ({error}), aborting"
 )

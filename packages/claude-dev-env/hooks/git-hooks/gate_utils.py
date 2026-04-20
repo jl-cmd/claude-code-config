@@ -15,43 +15,44 @@ from config import (
 
 
 def resolve_gate_script_path() -> Path:
-    override_path = os.environ.get(GATE_PATH_OVERRIDE_ENV_VAR, "").strip()
-    if override_path:
-        return Path(override_path).resolve()
-    claude_home_override = os.environ.get(CLAUDE_HOME_ENV_VAR, "").strip()
-    if claude_home_override:
-        claude_home_directory = Path(claude_home_override).resolve()
-    else:
-        claude_home_directory = Path.home() / CLAUDE_HOME_DEFAULT_SUBDIRECTORY
+    exact_override = _exact_override_gate_path()
+    if exact_override is not None:
+        return exact_override
+    claude_home_directory = _resolved_claude_home_directory()
     return claude_home_directory.joinpath(*GATE_SCRIPT_RELATIVE_PATH)
 
 
 def is_safe_regular_file(candidate_path: Path) -> bool:
-    allowed_roots = _allowed_gate_script_roots()
-    if not any(
-        _is_within_directory(candidate_path, each_root)
-        for each_root in allowed_roots
-    ):
+    resolved_candidate = candidate_path.resolve()
+    if not _is_candidate_path_allowed(resolved_candidate):
         return False
     try:
-        path_stat = os.stat(candidate_path)
+        path_stat = os.stat(resolved_candidate)
     except OSError:
         return False
     return stat.S_ISREG(path_stat.st_mode)
 
 
-def _allowed_gate_script_roots() -> list[Path]:
+def _is_candidate_path_allowed(resolved_candidate: Path) -> bool:
+    exact_override = _exact_override_gate_path()
+    if exact_override is not None:
+        return resolved_candidate == exact_override
+    claude_home_directory = _resolved_claude_home_directory()
+    return _is_within_directory(resolved_candidate, claude_home_directory)
+
+
+def _exact_override_gate_path() -> Path | None:
+    override_path_raw = os.environ.get(GATE_PATH_OVERRIDE_ENV_VAR, "").strip()
+    if not override_path_raw:
+        return None
+    return Path(override_path_raw).resolve()
+
+
+def _resolved_claude_home_directory() -> Path:
     claude_home_override = os.environ.get(CLAUDE_HOME_ENV_VAR, "").strip()
     if claude_home_override:
-        claude_home_directory = Path(claude_home_override).resolve()
-    else:
-        claude_home_directory = (Path.home() / CLAUDE_HOME_DEFAULT_SUBDIRECTORY).resolve()
-    override_path_raw = os.environ.get(GATE_PATH_OVERRIDE_ENV_VAR, "").strip()
-    allowed = [claude_home_directory]
-    if override_path_raw:
-        override_resolved = Path(override_path_raw).resolve()
-        allowed.append(override_resolved.parent)
-    return allowed
+        return Path(claude_home_override).resolve()
+    return (Path.home() / CLAUDE_HOME_DEFAULT_SUBDIRECTORY).resolve()
 
 
 def _is_within_directory(candidate_path: Path, directory: Path) -> bool:

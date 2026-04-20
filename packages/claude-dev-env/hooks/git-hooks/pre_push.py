@@ -32,6 +32,7 @@ from config import (
     INVOKE_GATE_FAILURE_MESSAGE,
     LOCAL_SHA_FIELD_INDEX,
     MALFORMED_STDIN_LINE_MESSAGE,
+    PRE_PUSH_GATE_SCRIPT_NOT_FOUND_MESSAGE,
     STDIN_LINE_FIELD_COUNT,
     STDIN_READ_FAILURE_MESSAGE,
     STDIN_REMOTE_OBJECT_FIELD_INDEX,
@@ -50,7 +51,7 @@ def is_all_zeros_object_name(object_name: str) -> bool:
     )
 
 
-def resolve_base_reference_from_stdin(stdin_text: str) -> str:
+def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
     stdin_line_field_count = STDIN_LINE_FIELD_COUNT
     stdin_remote_object_field_index = STDIN_REMOTE_OBJECT_FIELD_INDEX
     local_sha_field_index = LOCAL_SHA_FIELD_INDEX
@@ -68,7 +69,7 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str:
             )
             continue
         if is_all_zeros_object_name(fields[local_sha_field_index]):
-            return "HEAD"
+            return None
         remote_object_name = fields[stdin_remote_object_field_index]
         if not is_all_zeros_object_name(remote_object_name):
             return remote_object_name
@@ -101,18 +102,25 @@ def invoke_gate(gate_script_path: Path, base_reference: str) -> int:
 def main() -> int:
     stdin_read_failure_message = STDIN_READ_FAILURE_MESSAGE
     gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
+    pre_push_gate_script_not_found_message = PRE_PUSH_GATE_SCRIPT_NOT_FOUND_MESSAGE
     gate_script_path = resolve_gate_script_path()
     if not is_safe_regular_file(gate_script_path):
+        print(
+            pre_push_gate_script_not_found_message.format(path=gate_script_path),
+            file=sys.stderr,
+        )
         return 0
     try:
         stdin_text = sys.stdin.read()
-    except (IOError, KeyboardInterrupt) as read_error:
+    except OSError as read_error:
         print(
             stdin_read_failure_message.format(error=read_error),
             file=sys.stderr,
         )
         return gate_infrastructure_failure_exit_code
     base_reference = resolve_base_reference_from_stdin(stdin_text)
+    if base_reference is None:
+        return 0
     return invoke_gate(gate_script_path, base_reference)
 
 

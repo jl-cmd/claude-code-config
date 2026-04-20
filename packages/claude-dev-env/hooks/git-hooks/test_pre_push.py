@@ -183,3 +183,43 @@ def test_resolve_base_reference_emits_warning_for_malformed_line(
 
     captured = capsys.readouterr()
     assert "malformed" in captured.err
+
+
+def test_resolve_base_reference_returns_none_when_local_sha_is_all_zeros() -> None:
+    stdin_text = f"refs/heads/feature {ALL_ZEROS_OBJECT_NAME} refs/heads/feature {ALL_ZEROS_OBJECT_NAME}\n"
+
+    base_reference = pre_push.resolve_base_reference_from_stdin(stdin_text)
+
+    assert base_reference is None
+
+
+def test_main_exits_zero_immediately_when_push_is_deletion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gate_path = tmp_path / "gate.py"
+    gate_path.write_text("import sys\nsys.exit(1)\n", encoding="utf-8")
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", str(gate_path))
+    deletion_stdin = f"refs/heads/feature {ALL_ZEROS_OBJECT_NAME} refs/heads/feature {ALL_ZEROS_OBJECT_NAME}\n"
+    monkeypatch.setattr(sys, "stdin", io.StringIO(deletion_stdin))
+
+    exit_code = pre_push.main()
+
+    assert exit_code == 0
+
+
+def test_main_prints_stderr_when_gate_script_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv(
+        "CODE_RULES_GATE_PATH",
+        str(tmp_path / "does_not_exist.py"),
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+
+    pre_push.main()
+
+    captured = capsys.readouterr()
+    assert captured.err != ""

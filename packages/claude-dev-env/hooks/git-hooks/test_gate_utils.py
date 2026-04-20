@@ -70,3 +70,44 @@ def test_resolve_gate_script_path_resolves_relative_override_to_absolute(
     resolved_path = gate_utils.resolve_gate_script_path()
 
     assert resolved_path.is_absolute()
+
+
+def test_is_safe_regular_file_rejects_sibling_of_override_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Override allow-list must not permit sibling files in the same directory."""
+    override_gate = tmp_path / "gate.py"
+    override_gate.write_text("", encoding="utf-8")
+    sibling_script = tmp_path / "attacker_script.py"
+    sibling_script.write_text("", encoding="utf-8")
+    monkeypatch.delenv("CLAUDE_HOME", raising=False)
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", str(override_gate))
+    monkeypatch.setattr(
+        Path,
+        "home",
+        staticmethod(lambda: tmp_path / "unrelated_home"),
+    )
+
+    is_safe = gate_utils.is_safe_regular_file(sibling_script)
+
+    assert not is_safe
+
+
+def test_is_safe_regular_file_accepts_exact_override_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    override_gate = tmp_path / "gate.py"
+    override_gate.write_text("", encoding="utf-8")
+    monkeypatch.delenv("CLAUDE_HOME", raising=False)
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", str(override_gate))
+    monkeypatch.setattr(
+        Path,
+        "home",
+        staticmethod(lambda: tmp_path / "unrelated_home"),
+    )
+
+    is_safe = gate_utils.is_safe_regular_file(override_gate)
+
+    assert is_safe

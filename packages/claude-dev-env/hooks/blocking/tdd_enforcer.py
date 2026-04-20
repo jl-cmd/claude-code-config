@@ -50,9 +50,16 @@ def _constants_only_allowed_node_types() -> tuple[type, ...]:
         ast.ImportFrom,
         ast.Assign,
         ast.AnnAssign,
-        ast.AugAssign,
-        ast.Expr,
     )
+
+
+def _is_module_docstring_expression(module_level_node: ast.stmt) -> bool:
+    if not isinstance(module_level_node, ast.Expr):
+        return False
+    expression_value = module_level_node.value
+    if not isinstance(expression_value, ast.Constant):
+        return False
+    return isinstance(expression_value.value, str)
 
 
 def _is_constants_only_python_content(content: str) -> bool:
@@ -66,8 +73,11 @@ def _is_constants_only_python_content(content: str) -> bool:
         return False
     allowed_node_types = _constants_only_allowed_node_types()
     for each_top_level_node in parsed_tree.body:
-        if not isinstance(each_top_level_node, allowed_node_types):
-            return False
+        if isinstance(each_top_level_node, allowed_node_types):
+            continue
+        if _is_module_docstring_expression(each_top_level_node):
+            continue
+        return False
     return True
 
 
@@ -218,9 +228,9 @@ def emit_deny(reason: str) -> None:
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
-            "suppressOutput": True,
-            "systemMessage": USER_FACING_TDD_NOTICE,
-        }
+        },
+        "suppressOutput": True,
+        "systemMessage": USER_FACING_TDD_NOTICE,
     }
     print(json.dumps(deny_payload))
 

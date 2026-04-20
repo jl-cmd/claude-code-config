@@ -242,7 +242,7 @@ def test_should_deny_python_file_when_any_class_definition_is_present(tmp_path: 
     assert _decision_from(completed) == "deny"
 
 
-def test_deny_response_includes_system_message_for_user_and_suppresses_verbose_reason(
+def test_deny_response_places_system_message_and_suppress_output_at_top_level(
     tmp_path: Path,
 ) -> None:
     sandbox = _sandbox(tmp_path)
@@ -251,14 +251,65 @@ def test_deny_response_includes_system_message_for_user_and_suppresses_verbose_r
 
     completed = _run_hook_with_payload(_make_write_payload(production_file))
 
-    parsed_response = json.loads(completed.stdout)
-    hook_output = parsed_response["hookSpecificOutput"]
+    parsed = json.loads(completed.stdout)
+    hook_output = parsed["hookSpecificOutput"]
     assert hook_output["permissionDecision"] == "deny"
-    assert hook_output.get("suppressOutput") is True
-    assert isinstance(hook_output.get("systemMessage"), str)
-    assert hook_output["systemMessage"]
+    assert parsed.get("suppressOutput") is True
+    assert isinstance(parsed.get("systemMessage"), str)
+    assert parsed["systemMessage"]
+    assert "suppressOutput" not in hook_output
+    assert "systemMessage" not in hook_output
     verbose_reason = hook_output["permissionDecisionReason"]
     assert "propose" in verbose_reason.lower() or "enhancement" in verbose_reason.lower()
+
+
+def test_should_deny_python_file_that_calls_function_at_module_level(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    side_effect_file = sandbox / "side_effects.py"
+    side_effect_content = (
+        "import sys\n"
+        "sys.exit(1)\n"
+    )
+    side_effect_file.write_text(side_effect_content)
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(side_effect_file, side_effect_content)
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_allow_python_file_with_module_docstring_plus_constants(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    constants_file = sandbox / "constants.py"
+    constants_content = (
+        '"""Module-level constants for the widget subsystem."""\n'
+        "import re\n"
+        "MAXIMUM_RETRIES: int = 3\n"
+    )
+    constants_file.write_text(constants_content)
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(constants_file, constants_content)
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_python_file_that_mutates_module_state_via_aug_assign(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    mutation_file = sandbox / "mutation.py"
+    mutation_content = (
+        "COUNTER: int = 0\n"
+        "COUNTER += 1\n"
+    )
+    mutation_file.write_text(mutation_content)
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(mutation_file, mutation_content)
+    )
+
+    assert _decision_from(completed) == "deny"
 
 
 def test_should_deny_production_file_inside_directory_containing_skip_substring(

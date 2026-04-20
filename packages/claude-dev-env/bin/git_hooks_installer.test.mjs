@@ -128,6 +128,41 @@ test('configureGlobalGitHooksPath normalizes trailing whitespace before comparin
 });
 
 
+test('configureGlobalGitHooksPath detects already-set when target has Windows backslashes and stored value has forward slashes', () => {
+    const commandsRun = [];
+    const gitConfigReaderReturningForwardSlashPath = () => 'C:/Users/example/.claude/hooks/git-hooks';
+    const gitConfigWriter = (value) => {
+        commandsRun.push(value);
+    };
+
+    const result = configureGlobalGitHooksPath({
+        targetGitHooksDirectory: 'C:\\Users\\example\\.claude\\hooks\\git-hooks',
+        readCurrentHooksPath: gitConfigReaderReturningForwardSlashPath,
+        writeHooksPath: gitConfigWriter,
+    });
+
+    assert.equal(result.action, 'already-set');
+    assert.deepEqual(commandsRun, []);
+});
+
+
+test('configureGlobalGitHooksPath writes forward-slash path when setting on Windows', () => {
+    const writtenPaths = [];
+    const gitConfigReaderReturningEmpty = () => '';
+    const gitConfigWriter = (value) => {
+        writtenPaths.push(value);
+    };
+
+    configureGlobalGitHooksPath({
+        targetGitHooksDirectory: 'C:\\Users\\example\\.claude\\hooks\\git-hooks',
+        readCurrentHooksPath: gitConfigReaderReturningEmpty,
+        writeHooksPath: gitConfigWriter,
+    });
+
+    assert.deepEqual(writtenPaths, ['C:/Users/example/.claude/hooks/git-hooks']);
+});
+
+
 test('writeGitHookShim output is executable on POSIX (mode includes user-execute bit)', () => {
     if (process.platform === 'win32') {
         return;

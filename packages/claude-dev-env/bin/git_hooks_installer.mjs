@@ -148,8 +148,6 @@ export function writeGitHookShim({
         try {
             chmodSync(shimTempPath, 0o755);
         } catch (chmodError) {
-            // Windows may not support chmod semantics; git-for-windows still runs
-            // the hook via its shebang, so the chmod failure is non-fatal.
             if (process.platform !== 'win32') {
                 throw chmodError;
             }

@@ -13,13 +13,9 @@ import sys
 import time
 from pathlib import Path
 
-def _ensure_hooks_root_on_sys_path() -> None:
-    hooks_root_path_string = str(Path(__file__).resolve().parent.parent)
-    if hooks_root_path_string not in sys.path:
-        sys.path.insert(0, hooks_root_path_string)
-
-
-_ensure_hooks_root_on_sys_path()
+_hooks_root_path_string = str(Path(__file__).resolve().parent.parent)
+if _hooks_root_path_string not in sys.path:
+    sys.path.insert(0, _hooks_root_path_string)
 
 from config.messages import USER_FACING_TDD_NOTICE
 

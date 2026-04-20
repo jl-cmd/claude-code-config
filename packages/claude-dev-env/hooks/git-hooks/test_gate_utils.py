@@ -134,6 +134,22 @@ def test_is_safe_regular_file_accepts_gate_inside_home_dot_claude(
     assert is_safe
 
 
+def test_is_safe_regular_file_rejects_nonexistent_path_under_trusted_prefix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home_dir = tmp_path / "real_home"
+    (home_dir / ".claude").mkdir(parents=True)
+    missing_gate_path = (
+        home_dir / ".claude" / "skills" / "bugteam" / "scripts" / "missing_gate.py"
+    )
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home_dir))
+
+    is_safe = gate_utils.is_safe_regular_file(missing_gate_path, None)
+
+    assert not is_safe
+
+
 def test_is_safe_regular_file_resolves_symlink_before_prefix_check(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

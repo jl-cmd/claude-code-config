@@ -57,8 +57,8 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
     local_sha_field_index = LOCAL_SHA_FIELD_INDEX
     default_remote_base_reference = DEFAULT_REMOTE_BASE_REFERENCE
     malformed_stdin_line_message = MALFORMED_STDIN_LINE_MESSAGE
-    saw_any_valid_line = False
-    all_valid_lines_are_deletions = True
+    has_seen_any_valid_line = False
+    is_all_valid_lines_deletions = True
     for each_line in stdin_text.splitlines():
         stripped_line = each_line.strip()
         if not stripped_line:
@@ -70,14 +70,14 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
                 file=sys.stderr,
             )
             continue
-        saw_any_valid_line = True
+        has_seen_any_valid_line = True
         if is_all_zeros_object_name(fields[local_sha_field_index]):
             continue
-        all_valid_lines_are_deletions = False
+        is_all_valid_lines_deletions = False
         remote_object_name = fields[stdin_remote_object_field_index]
         if not is_all_zeros_object_name(remote_object_name):
             return remote_object_name
-    if saw_any_valid_line and all_valid_lines_are_deletions:
+    if has_seen_any_valid_line and is_all_valid_lines_deletions:
         return None
     return default_remote_base_reference
 

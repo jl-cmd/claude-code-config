@@ -212,6 +212,16 @@ def test_main_exits_zero_immediately_when_push_is_deletion(
     assert exit_code == 0
 
 
+def test_resolve_base_reference_returns_default_when_only_malformed_lines_present(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    malformed_only_stdin = "one_field_only\nalso_malformed\n"
+
+    base_reference = pre_push.resolve_base_reference_from_stdin(malformed_only_stdin)
+
+    assert base_reference == pre_push.DEFAULT_REMOTE_BASE_REFERENCE
+
+
 def test_main_prints_stderr_when_gate_script_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

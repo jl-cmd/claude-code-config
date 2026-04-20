@@ -23,7 +23,7 @@ def resolve_gate_script_path() -> tuple[Path, Path | None]:
     signalling that the trusted prefix (Path.home() / '.claude') applies.
 
     Capturing both values here eliminates the TOCTOU window that would arise
-    from re-reading the same env vars inside is_safe_regular_file.
+    when the same env vars are read again inside is_safe_regular_file.
     """
     override_path_raw = os.environ.get(GATE_PATH_OVERRIDE_ENV_VAR, "").strip()
     if override_path_raw:
@@ -49,7 +49,7 @@ def is_safe_regular_file(candidate_path: Path, exact_allowed_path: Path | None) 
 
     The candidate is resolved to its real path before any containment check,
     preventing symlinks inside the trusted tree from redirecting execution
-    outside it (loopP5b-3 / loopP5c-1).
+    outside it.
     """
     resolved_candidate = candidate_path.resolve()
     if not _is_resolved_candidate_allowed(resolved_candidate, exact_allowed_path):

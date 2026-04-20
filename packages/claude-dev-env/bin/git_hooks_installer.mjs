@@ -1,4 +1,4 @@
-import { writeFileSync, chmodSync, mkdirSync, renameSync, lstatSync, unlinkSync } from 'node:fs';
+import { writeFileSync, copyFileSync, chmodSync, mkdirSync, renameSync, lstatSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -36,9 +36,15 @@ function renameSyncWithWindowsRetry(sourcePath, destinationPath) {
     }
     try {
         unlinkSync(destinationPath);
+    } catch (unlinkError) {
+        if (unlinkError.code !== 'ENOENT') {
+            throw unlinkError;
+        }
+    }
+    try {
         renameSync(sourcePath, destinationPath);
-    } catch (finalError) {
-        throw finalError;
+    } catch {
+        copyFileSync(sourcePath, destinationPath);
     }
 }
 

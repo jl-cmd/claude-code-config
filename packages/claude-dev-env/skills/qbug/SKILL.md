@@ -1,12 +1,12 @@
 ---
 name: qbug
 description: >-
-  Minimized alternate to /bugteam: the lead spawns ONE subagent (not a team)
-  that runs the audit → fix → commit → push cycle on the open PR until
-  convergence or stuck. Same CODE_RULES gate and A–J category rubric as
-  /bugteam, same per-loop PR review shape, but no TeamCreate, no teammates,
-  no per-loop clean-room, and no loop cap. Triggers: '/qbug', 'quick bug
-  audit', 'solo bug audit', 'bugteam without a team'.
+  Runs the /bugteam audit → fix → commit → push cycle on the open PR via one
+  clean-coder subagent (not a full team), looping until convergence or stuck.
+  Uses the same CODE_RULES gate, A–J category rubric, and per-loop PR review
+  shape as /bugteam — without TeamCreate, teammates, per-loop clean-room, or
+  a loop cap. Triggers: '/qbug', 'quick bug audit', 'solo bug audit',
+  'bugteam without a team'.
 ---
 
 # qbug
@@ -59,8 +59,13 @@ Capture: `owner/repo`, `baseRefName`, `headRefName`, PR `number`, `url`, `starti
 Resolve the scoped temp directory once, lead-side, before spawning the subagent. Use Python's `tempfile.gettempdir()` so the path is correct on macOS, Linux, Windows cmd.exe, and PowerShell — do not hardcode `/tmp/` because Windows runners do not honor it. Capture the resolved absolute path as `<qbug_temp_dir>` and pass that literal path to the subagent:
 
 ```python
-import tempfile
+import json, subprocess, tempfile
 from pathlib import Path
+
+pr_view = json.loads(subprocess.check_output(
+    ["gh", "pr", "view", "--json", "number,baseRefName,headRefName,url"]
+))
+pr_number = pr_view["number"]
 qbug_temp_dir = Path(tempfile.gettempdir()) / f"qbug-pr-{pr_number}"
 qbug_temp_dir.mkdir(parents=True, exist_ok=True)
 ```
@@ -85,7 +90,7 @@ Agent(
   subagent_type="clean-coder",
   description="qbug audit/fix cycle for PR <number>",
   prompt="<filled cycle XML; see § Subagent cycle prompt>",
-  run_in_background=false
+  run_in_background=False
 )
 ```
 
@@ -93,7 +98,7 @@ One subagent, not a team. No `TeamCreate`, no `team_name`, no teammate shutdown 
 
 ## Subagent cycle prompt
 
-The subagent receives this prompt and loops internally — the lead does not re-invoke between loops. The prompt is self-contained: it restates the bug-category rubric by path rather than assuming prior context, and it states its full scope upfront (Claude Opus 4.7 interprets prompts literally, so scope stays narrow).
+The subagent receives this prompt and loops internally — the lead does not re-invoke between loops. The prompt is self-contained: it restates the bug-category rubric by path rather than assuming prior context, and it states its full scope upfront. Before passing the prompt to `Agent()`, the lead substitutes `{{QBUG_TEMP_DIR}}`, `{{GATE_SCRIPT}}`, and `{{CATEGORIES_FILE}}` with the absolute paths resolved in Step 2.
 
 ```xml
 <role>
@@ -109,9 +114,9 @@ The subagent receives this prompt and loops internally — the lead does not re-
   <base_branch>base ref</base_branch>
   <pr_url>url</pr_url>
   <starting_sha>starting_sha</starting_sha>
-  <qbug_temp_dir>absolute literal path the lead resolved via tempfile.gettempdir()</qbug_temp_dir>
-  <gate_script>absolute path to bugteam_code_rules_gate.py the lead resolved via ${CLAUDE_SKILL_DIR}/../bugteam/scripts/</gate_script>
-  <categories_file>absolute path to bugteam/PROMPTS.md for the A–J rubric</categories_file>
+  <qbug_temp_dir>{{QBUG_TEMP_DIR}}</qbug_temp_dir>
+  <gate_script>{{GATE_SCRIPT}}</gate_script>
+  <categories_file>{{CATEGORIES_FILE}}</categories_file>
 </context>
 
 <exit_conditions>
@@ -228,9 +233,9 @@ _From /qbug audit loop 2._
   - Preserve existing comments on lines you do not modify.
   - Every signature you touch has complete type hints.
   - Every file is read before you edit it (investigate before answering).
-  - Complete the entire cycle in this one subagent session. You have
-    access to Bash, Read, Write, Edit, and Grep — use them directly
-    rather than delegating to further subagents.
+  - Complete the entire cycle in this one subagent session using your
+    available tools directly; keep all audit and fix work inside this
+    session.
 </constraints>
 
 <output_format>
@@ -316,8 +321,3 @@ User: `/qbug` (no PR or upstream diff)
 Lead: `No PR or upstream diff. /qbug needs a target.`
 </example>
 
-## Why this design
-
-`/bugteam` solves the anchoring-bias problem by spawning a fresh auditor every loop. The cost is complexity: the agent-teams feature, team creation, outcome XML handoffs, teammate shutdown protocols, a 10-loop safety cap.
-
-`/qbug` collapses that into one subagent. The lead spawns a single `clean-coder` that runs the full audit-fix-loop to completion. No team machinery, no cap — the cycle converges naturally, gets stuck on unfixable findings, or errors on the gate. When convergence matters more than bias isolation, or when agent teams aren't available, `/qbug` is the cheaper path.

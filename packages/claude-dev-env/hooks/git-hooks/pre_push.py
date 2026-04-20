@@ -61,12 +61,12 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
     malformed_stdin_line_message = MALFORMED_STDIN_LINE_MESSAGE
     has_seen_any_valid_line = False
     is_all_valid_lines_deletions = True
-    stdin_had_content = False
+    has_stdin_content = False
     for each_line in stdin_text.splitlines():
         stripped_line = each_line.strip()
         if not stripped_line:
             continue
-        stdin_had_content = True
+        has_stdin_content = True
         fields = stripped_line.split()
         if len(fields) < stdin_line_field_count:
             print(
@@ -81,7 +81,7 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
         remote_object_name = fields[stdin_remote_object_field_index]
         if not is_all_zeros_object_name(remote_object_name):
             return remote_object_name
-    if stdin_had_content and not has_seen_any_valid_line:
+    if has_stdin_content and not has_seen_any_valid_line:
         return NO_PARSEABLE_STDIN_LINES_SENTINEL
     if has_seen_any_valid_line and is_all_valid_lines_deletions:
         return None

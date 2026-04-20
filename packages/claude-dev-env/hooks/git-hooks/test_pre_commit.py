@@ -10,6 +10,7 @@ SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
+import gate_utils
 import pre_commit
 
 
@@ -117,3 +118,7 @@ def test_main_invokes_gate_with_staged_flag(
         encoding="utf-8"
     ).splitlines()
     assert recorded_arguments == ["--staged"]
+
+
+def test_pre_commit_resolve_gate_script_path_delegates_to_gate_utils() -> None:
+    assert pre_commit.resolve_gate_script_path is gate_utils.resolve_gate_script_path

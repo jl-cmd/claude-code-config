@@ -13,34 +13,12 @@ Exit codes:
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
-from config import (
-    CLAUDE_HOME_DEFAULT_SUBDIRECTORY,
-    CLAUDE_HOME_ENV_VAR,
-    GATE_PATH_OVERRIDE_ENV_VAR,
-    GATE_SCRIPT_RELATIVE_PATH,
-    STAGED_SCOPE_ARGUMENT,
-)
-
-
-def resolve_gate_script_path() -> Path:
-    gate_path_override_env_var = GATE_PATH_OVERRIDE_ENV_VAR
-    claude_home_env_var = CLAUDE_HOME_ENV_VAR
-    claude_home_default_subdirectory = CLAUDE_HOME_DEFAULT_SUBDIRECTORY
-    gate_script_relative_path = GATE_SCRIPT_RELATIVE_PATH
-    override_path = os.environ.get(gate_path_override_env_var, "").strip()
-    if override_path:
-        return Path(override_path)
-    claude_home_override = os.environ.get(claude_home_env_var, "").strip()
-    if claude_home_override:
-        claude_home_directory = Path(claude_home_override)
-    else:
-        claude_home_directory = Path.home() / claude_home_default_subdirectory
-    return claude_home_directory.joinpath(*gate_script_relative_path)
+from config import STAGED_SCOPE_ARGUMENT
+from gate_utils import resolve_gate_script_path
 
 
 def invoke_gate(gate_script_path: Path) -> int:

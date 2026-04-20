@@ -20,7 +20,6 @@ Exit codes:
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -28,31 +27,11 @@ from pathlib import Path
 from config import (
     ALL_ZEROS_OBJECT_NAME_CHARACTER,
     BASE_REFERENCE_ARGUMENT,
-    CLAUDE_HOME_DEFAULT_SUBDIRECTORY,
-    CLAUDE_HOME_ENV_VAR,
     DEFAULT_REMOTE_BASE_REFERENCE,
-    GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE,
-    GATE_PATH_OVERRIDE_ENV_VAR,
-    GATE_SCRIPT_RELATIVE_PATH,
     STDIN_LINE_FIELD_COUNT,
     STDIN_REMOTE_OBJECT_FIELD_INDEX,
 )
-
-
-def resolve_gate_script_path() -> Path:
-    gate_path_override_env_var = GATE_PATH_OVERRIDE_ENV_VAR
-    claude_home_env_var = CLAUDE_HOME_ENV_VAR
-    claude_home_default_subdirectory = CLAUDE_HOME_DEFAULT_SUBDIRECTORY
-    gate_script_relative_path = GATE_SCRIPT_RELATIVE_PATH
-    override_path = os.environ.get(gate_path_override_env_var, "").strip()
-    if override_path:
-        return Path(override_path)
-    claude_home_override = os.environ.get(claude_home_env_var, "").strip()
-    if claude_home_override:
-        claude_home_directory = Path(claude_home_override)
-    else:
-        claude_home_directory = Path.home() / claude_home_default_subdirectory
-    return claude_home_directory.joinpath(*gate_script_relative_path)
+from gate_utils import resolve_gate_script_path
 
 
 def is_all_zeros_object_name(object_name: str) -> bool:
@@ -98,15 +77,11 @@ def invoke_gate(gate_script_path: Path, base_reference: str) -> int:
 
 
 def main() -> int:
-    gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
     gate_script_path = resolve_gate_script_path()
     if not gate_script_path.is_file():
         return 0
     base_reference = resolve_base_reference_from_stdin(sys.stdin.read())
-    gate_exit_code = invoke_gate(gate_script_path, base_reference)
-    if gate_exit_code == gate_infrastructure_failure_exit_code:
-        return 0
-    return gate_exit_code
+    return invoke_gate(gate_script_path, base_reference)
 
 
 if __name__ == "__main__":

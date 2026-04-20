@@ -11,6 +11,7 @@ SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
+import gate_utils
 import pre_push
 
 
@@ -115,7 +116,7 @@ def test_main_propagates_blocking_exit_code_from_gate(
     assert exit_code == 1
 
 
-def test_main_exits_zero_when_gate_reports_infrastructure_failure(
+def test_main_propagates_infrastructure_failure_exit_code_from_gate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -129,4 +130,8 @@ def test_main_exits_zero_when_gate_reports_infrastructure_failure(
 
     exit_code = pre_push.main()
 
-    assert exit_code == 0
+    assert exit_code == 2
+
+
+def test_pre_push_resolve_gate_script_path_delegates_to_gate_utils() -> None:
+    assert pre_push.resolve_gate_script_path is gate_utils.resolve_gate_script_path

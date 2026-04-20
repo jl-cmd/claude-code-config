@@ -1,5 +1,5 @@
 import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 
@@ -88,10 +88,7 @@ function readCurrentGlobalHooksPathViaExecSync() {
 
 
 function writeGlobalHooksPathViaExecSync(targetHooksPath) {
-    execSync(
-        `git config --global core.hooksPath ${JSON.stringify(targetHooksPath)}`,
-        { stdio: 'ignore' },
-    );
+    execFileSync('git', ['config', '--global', 'core.hooksPath', targetHooksPath], { stdio: 'ignore' });
 }
 
 

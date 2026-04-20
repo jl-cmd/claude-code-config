@@ -1,5 +1,5 @@
 import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
-import { execSync, execFileSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 
@@ -77,7 +77,7 @@ export function writeAllGitHookShims({ gitHooksDirectory }) {
 
 function readCurrentGlobalHooksPathViaExecSync() {
     try {
-        return execSync('git config --global --get core.hooksPath', {
+        return execFileSync('git', ['config', '--global', '--get', 'core.hooksPath'], {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
         });

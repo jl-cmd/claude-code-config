@@ -11,7 +11,8 @@ import os
 import re
 import sys
 
-from _hook_messages import USER_FACING_NOTICE
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "config"))
+from messages import USER_FACING_NOTICE
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

@@ -1,5 +1,6 @@
 """Tests for hedging_language_blocker hook response shape."""
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -10,8 +11,11 @@ import pytest
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "hedging_language_blocker.py")
 _HOOKS_DIR = os.path.dirname(HOOK_SCRIPT_PATH)
+_CONFIG_DIR = os.path.join(_HOOKS_DIR, "..", "config")
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
+if _CONFIG_DIR not in sys.path:
+    sys.path.insert(0, _CONFIG_DIR)
 import hedging_language_blocker
 
 EXPECTED_USER_FACING_MESSAGE = "Agent was found guessing - sourcing opinions..."
@@ -30,6 +34,15 @@ def run_hook_with_message(assistant_message: str) -> subprocess.CompletedProcess
         text=True,
         check=False,
     )
+
+
+def test_user_facing_notice_importable_from_config_messages():
+    config_messages_path = os.path.join(_CONFIG_DIR, "messages.py")
+    specification = importlib.util.spec_from_file_location("messages", config_messages_path)
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+
+    assert module.USER_FACING_NOTICE == EXPECTED_USER_FACING_MESSAGE
 
 
 def test_hedging_message_emits_block_with_short_user_notice():

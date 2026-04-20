@@ -46,8 +46,8 @@ def invoke_gate(gate_script_path: Path) -> int:
 
 def main() -> int:
     gate_script_not_found_message = GATE_SCRIPT_NOT_FOUND_MESSAGE
-    gate_script_path = resolve_gate_script_path()
-    if not is_safe_regular_file(gate_script_path):
+    gate_script_path, exact_allowed_path = resolve_gate_script_path()
+    if not is_safe_regular_file(gate_script_path, exact_allowed_path):
         print(
             gate_script_not_found_message.format(path=gate_script_path),
             file=sys.stderr,

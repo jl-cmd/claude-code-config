@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, statSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -176,6 +176,30 @@ test('writeGitHookShim output is executable on POSIX (mode includes user-execute
         const stats = statSync(shimPath);
         const userExecuteBit = 0o100;
         assert.ok((stats.mode & userExecuteBit) !== 0, 'shim missing user-execute bit');
+    } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+});
+
+
+test('writeGitHookShim rejects hooks directory that is a symlink (loopP5c-5)', () => {
+    if (process.platform === 'win32') {
+        return;
+    }
+    const temporaryRoot = mkdtempSync(join(tmpdir(), 'cdev-git-hooks-test-'));
+    try {
+        const realDirectory = join(temporaryRoot, 'real-hooks');
+        const symlinkPath = join(temporaryRoot, 'symlink-hooks');
+        mkdirSync(realDirectory, { recursive: true });
+        symlinkSync(realDirectory, symlinkPath);
+        assert.throws(
+            () => writeGitHookShim({
+                gitHooksDirectory: symlinkPath,
+                gitNativeHookName: 'pre-commit',
+                pythonModuleName: 'pre_commit',
+            }),
+            (err) => err.message.includes('symlink'),
+        );
     } finally {
         rmSync(temporaryRoot, { recursive: true, force: true });
     }

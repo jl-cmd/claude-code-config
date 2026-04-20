@@ -57,6 +57,8 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
     local_sha_field_index = LOCAL_SHA_FIELD_INDEX
     default_remote_base_reference = DEFAULT_REMOTE_BASE_REFERENCE
     malformed_stdin_line_message = MALFORMED_STDIN_LINE_MESSAGE
+    saw_any_valid_line = False
+    all_valid_lines_are_deletions = True
     for each_line in stdin_text.splitlines():
         stripped_line = each_line.strip()
         if not stripped_line:
@@ -68,11 +70,15 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
                 file=sys.stderr,
             )
             continue
+        saw_any_valid_line = True
         if is_all_zeros_object_name(fields[local_sha_field_index]):
-            return None
+            continue
+        all_valid_lines_are_deletions = False
         remote_object_name = fields[stdin_remote_object_field_index]
         if not is_all_zeros_object_name(remote_object_name):
             return remote_object_name
+    if saw_any_valid_line and all_valid_lines_are_deletions:
+        return None
     return default_remote_base_reference
 
 
@@ -103,8 +109,8 @@ def main() -> int:
     stdin_read_failure_message = STDIN_READ_FAILURE_MESSAGE
     gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
     pre_push_gate_script_not_found_message = PRE_PUSH_GATE_SCRIPT_NOT_FOUND_MESSAGE
-    gate_script_path = resolve_gate_script_path()
-    if not is_safe_regular_file(gate_script_path):
+    gate_script_path, exact_allowed_path = resolve_gate_script_path()
+    if not is_safe_regular_file(gate_script_path, exact_allowed_path):
         print(
             pre_push_gate_script_not_found_message.format(path=gate_script_path),
             file=sys.stderr,

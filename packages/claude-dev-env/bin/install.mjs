@@ -409,9 +409,18 @@ function install(selectedGroups) {
 }
 
 function normalizePathForComparison(rawPath) {
-    const isCaseInsensitiveFilesystem = process.platform === 'win32' || process.platform === 'darwin';
-    const resolved = resolve(rawPath).replaceAll('\\', '/');
-    return isCaseInsensitiveFilesystem ? resolved.toLowerCase() : resolved;
+    return rawPath.trim().replaceAll('\\', '/');
+}
+
+
+function pathsAreEquivalent(storedPath, installedPath) {
+    const normalizedStored = normalizePathForComparison(storedPath);
+    const normalizedInstalled = normalizePathForComparison(installedPath);
+    if (normalizedStored === normalizedInstalled) {
+        return true;
+    }
+    const isMaybeCaseInsensitive = process.platform === 'win32' || process.platform === 'darwin';
+    return isMaybeCaseInsensitive && normalizedStored.toLowerCase() === normalizedInstalled.toLowerCase();
 }
 
 
@@ -423,10 +432,14 @@ function unsetGlobalGitHooksPathIfOurs() {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
         }).trim();
-    } catch {
+    } catch (gitReadError) {
+        if (gitReadError.status === 1) {
+            return;
+        }
+        console.warn(`  Git hooks: could not read core.hooksPath during uninstall (${gitReadError.message}) — hooks path may need manual cleanup`);
         return;
     }
-    if (normalizePathForComparison(currentHooksPath) !== normalizePathForComparison(installedGitHooksDirectory)) {
+    if (!pathsAreEquivalent(currentHooksPath, installedGitHooksDirectory)) {
         return;
     }
     try {

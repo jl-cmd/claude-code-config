@@ -16,20 +16,23 @@ import config
 
 
 ALL_ZEROS_OBJECT_NAME: str = "0" * 40
+NON_ZERO_LOCAL_SHA: str = "a" * 40
+NON_ZERO_REMOTE_SHA_ONE: str = "1" * 40
+NON_ZERO_REMOTE_SHA_TWO: str = "2" * 40
 
 
 def test_resolve_base_reference_uses_remote_object_when_non_zero() -> None:
     stdin_text = (
-        f"refs/heads/feature abcdef1234567890 refs/heads/feature 1111222233334444\n"
+        f"refs/heads/feature {NON_ZERO_LOCAL_SHA} refs/heads/feature {NON_ZERO_REMOTE_SHA_ONE}\n"
     )
 
     base_reference = pre_push.resolve_base_reference_from_stdin(stdin_text)
 
-    assert base_reference == "1111222233334444"
+    assert base_reference == NON_ZERO_REMOTE_SHA_ONE
 
 
 def test_resolve_base_reference_falls_back_when_remote_is_all_zeros() -> None:
-    stdin_text = f"refs/heads/feature abcdef1234567890 refs/heads/feature {ALL_ZEROS_OBJECT_NAME}\n"
+    stdin_text = f"refs/heads/feature {NON_ZERO_LOCAL_SHA} refs/heads/feature {ALL_ZEROS_OBJECT_NAME}\n"
 
     base_reference = pre_push.resolve_base_reference_from_stdin(stdin_text)
 
@@ -46,13 +49,13 @@ def test_resolve_base_reference_prefers_first_non_zero_remote_object_among_many(
     None
 ):
     stdin_text = (
-        f"refs/heads/new_branch abcdef refs/heads/new_branch {ALL_ZEROS_OBJECT_NAME}\n"
-        f"refs/heads/existing 111111 refs/heads/existing 2222222222\n"
+        f"refs/heads/new_branch {ALL_ZEROS_OBJECT_NAME} refs/heads/new_branch {ALL_ZEROS_OBJECT_NAME}\n"
+        f"refs/heads/existing {NON_ZERO_LOCAL_SHA} refs/heads/existing {NON_ZERO_REMOTE_SHA_TWO}\n"
     )
 
     base_reference = pre_push.resolve_base_reference_from_stdin(stdin_text)
 
-    assert base_reference == "2222222222"
+    assert base_reference == NON_ZERO_REMOTE_SHA_TWO
 
 
 def test_main_exits_zero_when_gate_script_missing(
@@ -84,10 +87,11 @@ def test_main_invokes_gate_with_resolved_base_reference(
         encoding="utf-8",
     )
     monkeypatch.setenv("CODE_RULES_GATE_PATH", str(recording_gate_script_path))
+    remote_sha = "9" * 40
     monkeypatch.setattr(
         sys,
         "stdin",
-        io.StringIO("refs/heads/feature abcdef refs/heads/feature 9999888877776666\n"),
+        io.StringIO(f"refs/heads/feature {NON_ZERO_LOCAL_SHA} refs/heads/feature {remote_sha}\n"),
     )
 
     exit_code = pre_push.main()
@@ -99,7 +103,7 @@ def test_main_invokes_gate_with_resolved_base_reference(
     recorded_arguments = recorded_arguments_path.read_text(
         encoding="utf-8"
     ).splitlines()
-    assert recorded_arguments == ["--base", "9999888877776666"]
+    assert recorded_arguments == ["--base", remote_sha]
 
 
 def test_main_propagates_blocking_exit_code_from_gate(

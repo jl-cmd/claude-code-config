@@ -15,6 +15,37 @@ def gh_redirect_is_active() -> bool:
     env_var_value = os.environ.get(GH_REDIRECT_ACTIVE_ENV_VAR, "").strip().lower()
     return env_var_value in GH_REDIRECT_ACTIVE_TRUTHY_VALUES
 
+def directory_is_ephemeral(directory_path: str) -> bool:
+    import subprocess as _subprocess
+    import tempfile as _tempfile
+    ephemeral_auto_allow_disabled_env_var = "CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW"
+    if os.environ.get(ephemeral_auto_allow_disabled_env_var, "").strip().lower() in {"1", "true", "yes", "on"}:
+        return False
+    normalized_forward = os.path.normpath(directory_path).replace("\\", "/").lower()
+    ephemeral_path_segments = ("/worktrees/", "/worktree/", "/tmp/", "/temp/")
+    for each_segment in ephemeral_path_segments:
+        if each_segment in normalized_forward + "/":
+            return True
+    system_temp_root = os.path.normpath(_tempfile.gettempdir()).replace("\\", "/").lower()
+    if normalized_forward.startswith(system_temp_root + "/") or normalized_forward == system_temp_root:
+        return True
+    try:
+        git_dir_output = _subprocess.run(
+            ["git", "rev-parse", "--git-dir"],
+            cwd=directory_path,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, _subprocess.SubprocessError):
+        return False
+    if git_dir_output.returncode != 0:
+        return False
+    git_dir_normalized = git_dir_output.stdout.strip().replace("\\", "/").lower()
+    return "/.git/worktrees/" in git_dir_normalized or "/worktrees/" in git_dir_normalized
+
+
 def load_allow_git_reset_hard_projects() -> list[str]:
     allow_git_reset_hard_settings_key = "allowGitResetHardProjects"
     settings_path = Path.home() / ".claude" / "settings.json"
@@ -156,7 +187,10 @@ def main() -> None:
 
     # Allow git reset --hard in explicitly approved projects (case-insensitive for Windows drive letters)
     if matched_description is not None and "git reset --hard" in matched_description:
-        cwd = os.path.normpath(os.getcwd()).lower()
+        current_working_directory = os.getcwd()
+        if directory_is_ephemeral(current_working_directory):
+            sys.exit(0)
+        cwd = os.path.normpath(current_working_directory).lower()
         for allowed_project in load_allow_git_reset_hard_projects():
             allowed_lower = os.path.normpath(allowed_project).lower()
             if cwd.startswith(allowed_lower):

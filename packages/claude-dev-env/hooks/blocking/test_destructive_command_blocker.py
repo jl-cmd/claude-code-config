@@ -171,11 +171,16 @@ def _run_hook_with_fake_home(
     payload: dict,
     fake_home: Path,
     working_directory: Path,
+    disable_ephemeral_auto_allow: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     child_environment = os.environ.copy()
     child_environment.pop(GH_REDIRECT_ACTIVE_ENV_VAR, None)
     child_environment["HOME"] = str(fake_home)
     child_environment["USERPROFILE"] = str(fake_home)
+    if disable_ephemeral_auto_allow:
+        child_environment["CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW"] = "1"
+    else:
+        child_environment.pop("CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW", None)
     return subprocess.run(
         [sys.executable, str(SCRIPT_PATH)],
         input=json.dumps(payload),
@@ -251,6 +256,65 @@ def test_git_reset_hard_asks_when_allow_list_is_empty(tmp_path: Path) -> None:
     payload = _make_bash_payload("git reset --hard origin/main")
 
     result = _run_hook_with_fake_home(payload, fake_home, project_directory)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_git_reset_hard_allowed_in_linked_git_worktree(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    main_repo = tmp_path / "main_repo"
+    main_repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=main_repo, check=True)
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "init"], cwd=main_repo, check=True)
+    worktree_directory = tmp_path / "worktree_copy"
+    subprocess.run(
+        ["git", "worktree", "add", "-q", "-b", "feature", str(worktree_directory)],
+        cwd=main_repo,
+        check=True,
+    )
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, worktree_directory, disable_ephemeral_auto_allow=False)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_git_reset_hard_allowed_when_path_contains_worktrees_segment(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    worktree_directory = tmp_path / "worktrees" / "some_feature"
+    worktree_directory.mkdir(parents=True)
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, worktree_directory, disable_ephemeral_auto_allow=False)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_git_reset_hard_allowed_under_os_temp_directory() -> None:
+    import tempfile
+    fake_home = Path(tempfile.mkdtemp(prefix="home_"))
+    working_directory = Path(tempfile.mkdtemp(prefix="ephemeral_work_"))
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, working_directory, disable_ephemeral_auto_allow=False)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_git_reset_hard_asks_in_plain_directory_with_no_settings(tmp_path: Path) -> None:
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    plain_directory = tmp_path / "regular_project"
+    plain_directory.mkdir()
+    payload = _make_bash_payload("git reset --hard origin/main")
+
+    result = _run_hook_with_fake_home(payload, fake_home, plain_directory)
 
     response = json.loads(result.stdout)
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"

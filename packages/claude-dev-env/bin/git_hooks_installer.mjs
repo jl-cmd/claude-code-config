@@ -45,21 +45,13 @@ function renameSyncWithWindowsRetry(sourcePath, destinationPath) {
         renameSync(sourcePath, destinationPath);
     } catch {
         copyFileSync(sourcePath, destinationPath);
-    }
-}
-
-
-function assertIsRealDirectory(directoryPath) {
-    let pathStat;
-    try {
-        pathStat = lstatSync(directoryPath);
-    } catch {
-        return;
-    }
-    if (pathStat.isSymbolicLink()) {
-        throw new Error(
-            `claude-dev-env: refusing to write hook shims — hooks directory is a symlink: ${directoryPath}`,
-        );
+        try {
+            unlinkSync(sourcePath);
+        } catch (cleanupError) {
+            if (cleanupError.code !== 'ENOENT') {
+                throw cleanupError;
+            }
+        }
     }
 }
 
@@ -93,7 +85,6 @@ export function writeGitHookShim({
     gitNativeHookName,
     pythonModuleName,
 }) {
-    assertIsRealDirectory(gitHooksDirectory);
     mkdirSync(gitHooksDirectory, { recursive: true });
     const postMkdirStat = lstatSync(gitHooksDirectory);
     if (postMkdirStat.isSymbolicLink()) {

@@ -290,6 +290,7 @@ def main() -> None:
     if _matches_any_skip_pattern(name_lower, path_str):
         sys.exit(0)
 
+    # Block production code - require confirmation
     written_content = _extract_written_content(tool_name, tool_input)
     if tool_name == "Write" and ext == ".py" and _is_constants_only_python_content(written_content):
         emit_allow()

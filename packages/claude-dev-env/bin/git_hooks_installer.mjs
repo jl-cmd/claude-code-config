@@ -37,8 +37,8 @@ function renameSyncWithWindowsRetry(sourcePath, destinationPath) {
     try {
         unlinkSync(destinationPath);
         renameSync(sourcePath, destinationPath);
-    } catch {
-        throw lastError;
+    } catch (finalError) {
+        throw finalError;
     }
 }
 
@@ -89,6 +89,17 @@ export function writeGitHookShim({
 }) {
     assertIsRealDirectory(gitHooksDirectory);
     mkdirSync(gitHooksDirectory, { recursive: true });
+    const postMkdirStat = lstatSync(gitHooksDirectory);
+    if (postMkdirStat.isSymbolicLink()) {
+        throw new Error(
+            `claude-dev-env: refusing to write hook shims — hooks directory is a symlink: ${gitHooksDirectory}`,
+        );
+    }
+    if (!postMkdirStat.isDirectory()) {
+        throw new Error(
+            `claude-dev-env: refusing to write hook shims — hooks path is not a directory: ${gitHooksDirectory}`,
+        );
+    }
     const shimPath = join(gitHooksDirectory, gitNativeHookName);
     const shimTempPath = shimPath + '.tmp';
     const shimContent = buildShimContent(pythonModuleName);
@@ -155,11 +166,12 @@ export function configureGlobalGitHooksPath({
     const normalizedTargetDirectory = targetGitHooksDirectory.replaceAll('\\', '/');
     const currentRawValue = readCurrentHooksPath();
     const currentTrimmedValue = (currentRawValue || '').trim();
+    const normalizedCurrentValue = currentTrimmedValue.replaceAll('\\', '/');
     if (currentTrimmedValue === '') {
         writeHooksPath(normalizedTargetDirectory);
         return { action: 'set' };
     }
-    if (currentTrimmedValue === normalizedTargetDirectory) {
+    if (normalizedCurrentValue === normalizedTargetDirectory) {
         return { action: 'already-set' };
     }
     return {

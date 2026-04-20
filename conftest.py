@@ -28,8 +28,10 @@ import importlib
 import os
 import sys
 
+import pytest
 
-def pytest_collectstart(collector) -> None:
+
+def pytest_collectstart(collector: pytest.Collector) -> None:
     collected_file_path = getattr(collector, "fspath", None)
     if collected_file_path is None:
         return

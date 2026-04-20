@@ -18,34 +18,35 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-STAGED_SCOPE_ARGUMENT: str = "--staged"
-GATE_PATH_OVERRIDE_ENV_VAR: str = "CODE_RULES_GATE_PATH"
-CLAUDE_HOME_ENV_VAR: str = "CLAUDE_HOME"
-CLAUDE_HOME_DEFAULT_SUBDIRECTORY: str = ".claude"
-GATE_SCRIPT_RELATIVE_PATH: tuple[str, ...] = (
-    "skills",
-    "bugteam",
-    "scripts",
-    "bugteam_code_rules_gate.py",
+from config import (
+    CLAUDE_HOME_DEFAULT_SUBDIRECTORY,
+    CLAUDE_HOME_ENV_VAR,
+    GATE_PATH_OVERRIDE_ENV_VAR,
+    GATE_SCRIPT_RELATIVE_PATH,
+    STAGED_SCOPE_ARGUMENT,
 )
 
 
 def resolve_gate_script_path() -> Path:
-    override_path = os.environ.get(GATE_PATH_OVERRIDE_ENV_VAR, "").strip()
+    gate_path_override_env_var = GATE_PATH_OVERRIDE_ENV_VAR
+    claude_home_env_var = CLAUDE_HOME_ENV_VAR
+    claude_home_default_subdirectory = CLAUDE_HOME_DEFAULT_SUBDIRECTORY
+    gate_script_relative_path = GATE_SCRIPT_RELATIVE_PATH
+    override_path = os.environ.get(gate_path_override_env_var, "").strip()
     if override_path:
         return Path(override_path)
-    claude_home_override = os.environ.get(CLAUDE_HOME_ENV_VAR, "").strip()
+    claude_home_override = os.environ.get(claude_home_env_var, "").strip()
     if claude_home_override:
         claude_home_directory = Path(claude_home_override)
     else:
-        claude_home_directory = Path.home() / CLAUDE_HOME_DEFAULT_SUBDIRECTORY
-    return claude_home_directory.joinpath(*GATE_SCRIPT_RELATIVE_PATH)
+        claude_home_directory = Path.home() / claude_home_default_subdirectory
+    return claude_home_directory.joinpath(*gate_script_relative_path)
 
 
 def invoke_gate(gate_script_path: Path) -> int:
+    staged_scope_argument = STAGED_SCOPE_ARGUMENT
     completion = subprocess.run(
-        [sys.executable, str(gate_script_path), STAGED_SCOPE_ARGUMENT],
+        [sys.executable, str(gate_script_path), staged_scope_argument],
         check=False,
     )
     return completion.returncode

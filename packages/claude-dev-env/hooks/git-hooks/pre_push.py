@@ -25,65 +25,70 @@ import subprocess
 import sys
 from pathlib import Path
 
-
-BASE_REFERENCE_ARGUMENT: str = "--base"
-DEFAULT_REMOTE_BASE_REFERENCE: str = "origin/HEAD"
-ALL_ZEROS_OBJECT_NAME_CHARACTER: str = "0"
-STDIN_LINE_FIELD_COUNT: int = 4
-STDIN_REMOTE_OBJECT_FIELD_INDEX: int = 3
-GATE_PATH_OVERRIDE_ENV_VAR: str = "CODE_RULES_GATE_PATH"
-CLAUDE_HOME_ENV_VAR: str = "CLAUDE_HOME"
-CLAUDE_HOME_DEFAULT_SUBDIRECTORY: str = ".claude"
-GATE_SCRIPT_RELATIVE_PATH: tuple[str, ...] = (
-    "skills",
-    "bugteam",
-    "scripts",
-    "bugteam_code_rules_gate.py",
+from config import (
+    ALL_ZEROS_OBJECT_NAME_CHARACTER,
+    BASE_REFERENCE_ARGUMENT,
+    CLAUDE_HOME_DEFAULT_SUBDIRECTORY,
+    CLAUDE_HOME_ENV_VAR,
+    DEFAULT_REMOTE_BASE_REFERENCE,
+    GATE_PATH_OVERRIDE_ENV_VAR,
+    GATE_SCRIPT_RELATIVE_PATH,
+    STDIN_LINE_FIELD_COUNT,
+    STDIN_REMOTE_OBJECT_FIELD_INDEX,
 )
 
 
 def resolve_gate_script_path() -> Path:
-    override_path = os.environ.get(GATE_PATH_OVERRIDE_ENV_VAR, "").strip()
+    gate_path_override_env_var = GATE_PATH_OVERRIDE_ENV_VAR
+    claude_home_env_var = CLAUDE_HOME_ENV_VAR
+    claude_home_default_subdirectory = CLAUDE_HOME_DEFAULT_SUBDIRECTORY
+    gate_script_relative_path = GATE_SCRIPT_RELATIVE_PATH
+    override_path = os.environ.get(gate_path_override_env_var, "").strip()
     if override_path:
         return Path(override_path)
-    claude_home_override = os.environ.get(CLAUDE_HOME_ENV_VAR, "").strip()
+    claude_home_override = os.environ.get(claude_home_env_var, "").strip()
     if claude_home_override:
         claude_home_directory = Path(claude_home_override)
     else:
-        claude_home_directory = Path.home() / CLAUDE_HOME_DEFAULT_SUBDIRECTORY
-    return claude_home_directory.joinpath(*GATE_SCRIPT_RELATIVE_PATH)
+        claude_home_directory = Path.home() / claude_home_default_subdirectory
+    return claude_home_directory.joinpath(*gate_script_relative_path)
 
 
 def is_all_zeros_object_name(object_name: str) -> bool:
+    all_zeros_object_name_character = ALL_ZEROS_OBJECT_NAME_CHARACTER
     stripped_object_name = object_name.strip()
     if not stripped_object_name:
         return True
     return all(
-        each_character == ALL_ZEROS_OBJECT_NAME_CHARACTER
+        each_character == all_zeros_object_name_character
         for each_character in stripped_object_name
     )
 
 
 def resolve_base_reference_from_stdin(stdin_text: str) -> str:
+    stdin_line_field_count = STDIN_LINE_FIELD_COUNT
+    stdin_remote_object_field_index = STDIN_REMOTE_OBJECT_FIELD_INDEX
+    default_remote_base_reference = DEFAULT_REMOTE_BASE_REFERENCE
     for each_line in stdin_text.splitlines():
         stripped_line = each_line.strip()
         if not stripped_line:
             continue
         fields = stripped_line.split()
-        if len(fields) < STDIN_LINE_FIELD_COUNT:
+        if len(fields) < stdin_line_field_count:
             continue
-        remote_object_name = fields[STDIN_REMOTE_OBJECT_FIELD_INDEX]
+        remote_object_name = fields[stdin_remote_object_field_index]
         if not is_all_zeros_object_name(remote_object_name):
             return remote_object_name
-    return DEFAULT_REMOTE_BASE_REFERENCE
+    return default_remote_base_reference
 
 
 def invoke_gate(gate_script_path: Path, base_reference: str) -> int:
+    base_reference_argument = BASE_REFERENCE_ARGUMENT
     completion = subprocess.run(
         [
             sys.executable,
             str(gate_script_path),
-            BASE_REFERENCE_ARGUMENT,
+            base_reference_argument,
             base_reference,
         ],
         check=False,

@@ -5,9 +5,15 @@ import os
 import subprocess
 import sys
 import importlib
+import tempfile
 import types
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "hedging_language_blocker.py")
+_HOOKS_DIR = os.path.dirname(HOOK_SCRIPT_PATH)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+import hedging_language_blocker
+
 EXPECTED_USER_FACING_MESSAGE = "Agent was found guessing - sourcing opinions..."
 RESEARCH_MODE_SKILL_BODY_MARKER = "Three anti-hallucination constraints are ALWAYS active."
 HEDGING_MESSAGE = "This is likely correct."
@@ -62,16 +68,9 @@ def test_empty_message_passes_through_with_no_output():
 
 
 def test_hedging_message_reason_contains_skill_path_when_installed():
-    import sys
-    import importlib
-    hooks_dir = os.path.dirname(HOOK_SCRIPT_PATH)
-    if hooks_dir not in sys.path:
-        sys.path.insert(0, hooks_dir)
-    import hedging_language_blocker as blocker
-
     any_path_exists = any(
         os.path.exists(each_path)
-        for each_path in blocker.RESEARCH_MODE_SKILL_SEARCH_PATHS
+        for each_path in hedging_language_blocker.RESEARCH_MODE_SKILL_SEARCH_PATHS
     )
     if not any_path_exists:
         return
@@ -88,7 +87,6 @@ def run_hook_with_patched_search_paths(
     search_paths: list[str],
 ) -> subprocess.CompletedProcess:
     """Run the hook with RESEARCH_MODE_SKILL_SEARCH_PATHS overridden via a wrapper script."""
-    import tempfile
     wrapper_script = (
         "import sys, json, os\n"
         f"sys.path.insert(0, {repr(os.path.dirname(HOOK_SCRIPT_PATH))})\n"

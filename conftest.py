@@ -35,10 +35,10 @@ _SYNC_AI_RULES_TEST_FILENAME = "test_sync_ai_rules.py"
 
 
 def pytest_collectstart(collector: pytest.Collector) -> None:
-    collected_file_path = getattr(collector, "fspath", None)
-    if collected_file_path is None:
+    collected_path = getattr(collector, "path", None)
+    if collected_path is None:
         return
-    if os.path.basename(str(collected_file_path)) != _SYNC_AI_RULES_TEST_FILENAME:
+    if collected_path.name != _SYNC_AI_RULES_TEST_FILENAME:
         return
     sys.modules.pop("config", None)
     sys.modules.pop("config.sync_ai_rules_paths", None)

@@ -28,7 +28,6 @@ function buildShimContent(pythonModuleName) {
     return (
         SHIM_CONTENT_HEADER
         + `"""${SHIM_DOCSTRING}"""\n`
-        + 'import os\n'
         + 'import sys\n'
         + 'from pathlib import Path\n'
         + '\n'

@@ -15,10 +15,6 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 import pre_commit
 
 
-def test_pre_commit_reexports_staged_scope_argument_from_config() -> None:
-    assert pre_commit.STAGED_SCOPE_ARGUMENT == "--staged"
-
-
 def make_gate_script_returning(exit_code: int, target_path: Path) -> Path:
     target_path.write_text(
         f"import sys\nsys.exit({exit_code})\n",

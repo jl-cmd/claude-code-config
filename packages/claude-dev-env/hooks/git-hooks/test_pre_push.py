@@ -14,10 +14,6 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 import pre_push
 
 
-def test_pre_push_reexports_default_remote_base_reference_from_config() -> None:
-    assert pre_push.DEFAULT_REMOTE_BASE_REFERENCE == "origin/HEAD"
-
-
 ALL_ZEROS_OBJECT_NAME: str = "0" * 40
 
 

@@ -3,8 +3,6 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from typing import Iterable
-
 import pytest
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent

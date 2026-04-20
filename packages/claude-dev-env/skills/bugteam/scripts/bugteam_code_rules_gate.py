@@ -146,6 +146,28 @@ def staged_file_line_count(
     return len(staged_content.splitlines())
 
 
+def is_staged_file_newly_added(
+    repository_root: Path,
+    relative_path_posix: str,
+) -> bool:
+    status_result = subprocess.run(
+        ["git", "diff", "--cached", "--name-status", "--", relative_path_posix],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if status_result.returncode != 0:
+        return False
+    for each_line in status_result.stdout.splitlines():
+        stripped_line = each_line.strip()
+        if stripped_line:
+            return stripped_line.startswith("A")
+    return False
+
+
 def added_lines_for_staged_file(
     repository_root: Path,
     relative_path_posix: str,
@@ -170,7 +192,7 @@ def added_lines_for_staged_file(
         parsed_added_lines = parse_added_line_numbers(diff_result.stdout)
         if parsed_added_lines:
             return parsed_added_lines
-    if is_file_absent_in_index_head(repository_root, relative_path_posix):
+    if is_staged_file_newly_added(repository_root, relative_path_posix):
         total_lines = staged_file_line_count(repository_root, relative_path_posix)
         if total_lines > 0:
             return set(range(1, total_lines + 1))

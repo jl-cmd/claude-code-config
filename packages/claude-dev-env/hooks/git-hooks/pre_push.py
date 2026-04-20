@@ -32,6 +32,8 @@ from config import (
     INVOKE_GATE_FAILURE_MESSAGE,
     LOCAL_SHA_FIELD_INDEX,
     MALFORMED_STDIN_LINE_MESSAGE,
+    NO_PARSEABLE_STDIN_LINES_MESSAGE,
+    NO_PARSEABLE_STDIN_LINES_SENTINEL,
     PRE_PUSH_GATE_SCRIPT_NOT_FOUND_MESSAGE,
     STDIN_LINE_FIELD_COUNT,
     STDIN_READ_FAILURE_MESSAGE,
@@ -59,10 +61,12 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
     malformed_stdin_line_message = MALFORMED_STDIN_LINE_MESSAGE
     has_seen_any_valid_line = False
     is_all_valid_lines_deletions = True
+    stdin_had_content = False
     for each_line in stdin_text.splitlines():
         stripped_line = each_line.strip()
         if not stripped_line:
             continue
+        stdin_had_content = True
         fields = stripped_line.split()
         if len(fields) < stdin_line_field_count:
             print(
@@ -77,6 +81,8 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str | None:
         remote_object_name = fields[stdin_remote_object_field_index]
         if not is_all_zeros_object_name(remote_object_name):
             return remote_object_name
+    if stdin_had_content and not has_seen_any_valid_line:
+        return NO_PARSEABLE_STDIN_LINES_SENTINEL
     if has_seen_any_valid_line and is_all_valid_lines_deletions:
         return None
     return default_remote_base_reference
@@ -86,11 +92,12 @@ def invoke_gate(gate_script_path: Path, base_reference: str) -> int:
     base_reference_argument = BASE_REFERENCE_ARGUMENT
     invoke_gate_failure_message = INVOKE_GATE_FAILURE_MESSAGE
     gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
+    resolved_gate_path = gate_script_path.resolve(strict=True)
     try:
         completion = subprocess.run(
             [
                 sys.executable,
-                str(gate_script_path),
+                str(resolved_gate_path),
                 base_reference_argument,
                 base_reference,
             ],
@@ -109,6 +116,8 @@ def main() -> int:
     stdin_read_failure_message = STDIN_READ_FAILURE_MESSAGE
     gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
     pre_push_gate_script_not_found_message = PRE_PUSH_GATE_SCRIPT_NOT_FOUND_MESSAGE
+    no_parseable_stdin_lines_message = NO_PARSEABLE_STDIN_LINES_MESSAGE
+    no_parseable_stdin_lines_sentinel = NO_PARSEABLE_STDIN_LINES_SENTINEL
     gate_script_path, exact_allowed_path = resolve_gate_script_path()
     if not is_safe_regular_file(gate_script_path, exact_allowed_path):
         print(
@@ -127,6 +136,9 @@ def main() -> int:
     base_reference = resolve_base_reference_from_stdin(stdin_text)
     if base_reference is None:
         return 0
+    if base_reference == no_parseable_stdin_lines_sentinel:
+        print(no_parseable_stdin_lines_message, file=sys.stderr)
+        return gate_infrastructure_failure_exit_code
     return invoke_gate(gate_script_path, base_reference)
 
 

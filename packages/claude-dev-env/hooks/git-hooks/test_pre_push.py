@@ -212,14 +212,14 @@ def test_main_exits_zero_immediately_when_push_is_deletion(
     assert exit_code == 0
 
 
-def test_resolve_base_reference_returns_default_when_only_malformed_lines_present(
+def test_resolve_base_reference_returns_sentinel_when_only_malformed_lines_present(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     malformed_only_stdin = "one_field_only\nalso_malformed\n"
 
     base_reference = pre_push.resolve_base_reference_from_stdin(malformed_only_stdin)
 
-    assert base_reference == pre_push.DEFAULT_REMOTE_BASE_REFERENCE
+    assert base_reference == config.NO_PARSEABLE_STDIN_LINES_SENTINEL
 
 
 def test_main_prints_stderr_when_gate_script_missing(
@@ -237,3 +237,59 @@ def test_main_prints_stderr_when_gate_script_missing(
 
     captured = capsys.readouterr()
     assert captured.err != ""
+
+
+def test_resolve_base_reference_exits_two_when_only_malformed_lines_and_no_valid_lines(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    malformed_only_stdin = "one_field_only\nalso_malformed\n"
+
+    result = pre_push.resolve_base_reference_from_stdin(malformed_only_stdin)
+
+    assert result == config.NO_PARSEABLE_STDIN_LINES_SENTINEL
+
+
+def test_main_exits_two_when_all_stdin_lines_are_malformed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    gate_path = tmp_path / "gate.py"
+    gate_path.write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", str(gate_path))
+    monkeypatch.setattr(sys, "stdin", io.StringIO("one_field_only\nalso_malformed\n"))
+
+    exit_code = pre_push.main()
+
+    assert exit_code == config.GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
+    captured = capsys.readouterr()
+    assert "no parseable stdin lines" in captured.err
+
+
+def test_invoke_gate_uses_resolved_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_gate_dir = tmp_path / "real"
+    real_gate_dir.mkdir()
+    real_gate_path = real_gate_dir / "gate.py"
+    recorded_path_file = tmp_path / "recorded_path.txt"
+    real_gate_path.write_text(
+        "import sys, pathlib\n"
+        f'pathlib.Path(r"{recorded_path_file}").write_text(sys.argv[0], encoding="utf-8")\n'
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    symlink_gate_path = tmp_path / "link_gate.py"
+    symlink_gate_path.symlink_to(real_gate_path)
+    resolved_path = symlink_gate_path.resolve()
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", str(symlink_gate_path))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(
+        f"refs/heads/feature {NON_ZERO_LOCAL_SHA} refs/heads/feature {NON_ZERO_REMOTE_SHA_ONE}\n"
+    ))
+
+    exit_code = pre_push.main()
+
+    assert exit_code == 0
+    executed_path = recorded_path_file.read_text(encoding="utf-8")
+    assert executed_path == str(resolved_path)

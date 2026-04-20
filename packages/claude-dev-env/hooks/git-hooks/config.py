@@ -42,3 +42,7 @@ MALFORMED_STDIN_LINE_MESSAGE: str = (
     "claude-dev-env pre-push: ignoring malformed stdin line: {line!r}"
 )
 LOCAL_SHA_FIELD_INDEX: int = 1
+NO_PARSEABLE_STDIN_LINES_MESSAGE: str = (
+    "claude-dev-env pre-push: no parseable stdin lines; aborting"
+)
+NO_PARSEABLE_STDIN_LINES_SENTINEL: str = "__no_parseable_stdin_lines__"

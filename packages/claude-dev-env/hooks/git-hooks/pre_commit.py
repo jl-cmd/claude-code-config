@@ -30,9 +30,10 @@ def invoke_gate(gate_script_path: Path) -> int:
     staged_scope_argument = STAGED_SCOPE_ARGUMENT
     invoke_gate_failure_message = INVOKE_GATE_FAILURE_MESSAGE
     gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
+    resolved_gate_path = gate_script_path.resolve(strict=True)
     try:
         completion = subprocess.run(
-            [sys.executable, str(gate_script_path), staged_scope_argument],
+            [sys.executable, str(resolved_gate_path), staged_scope_argument],
             check=False,
         )
     except OSError as launch_error:

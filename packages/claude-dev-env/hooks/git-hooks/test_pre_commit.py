@@ -129,3 +129,29 @@ def test_main_emits_stderr_warning_when_gate_script_missing(
     assert exit_code == 0
     captured = capsys.readouterr()
     assert "gate script not found" in captured.err
+
+
+def test_invoke_gate_uses_resolved_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_gate_dir = tmp_path / "real"
+    real_gate_dir.mkdir()
+    real_gate_path = real_gate_dir / "gate.py"
+    recorded_path_file = tmp_path / "recorded_path.txt"
+    real_gate_path.write_text(
+        "import sys, pathlib\n"
+        f'pathlib.Path(r"{recorded_path_file}").write_text(sys.argv[0], encoding="utf-8")\n'
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    symlink_gate_path = tmp_path / "link_gate.py"
+    symlink_gate_path.symlink_to(real_gate_path)
+    resolved_path = symlink_gate_path.resolve()
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", str(symlink_gate_path))
+
+    exit_code = pre_commit.main()
+
+    assert exit_code == 0
+    executed_path = recorded_path_file.read_text(encoding="utf-8")
+    assert executed_path == str(resolved_path)

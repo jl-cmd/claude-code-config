@@ -167,3 +167,40 @@ def test_is_safe_regular_file_resolves_symlink_before_prefix_check(
     is_safe = gate_utils.is_safe_regular_file(symlink_inside_claude, None)
 
     assert not is_safe
+
+
+def test_is_safe_regular_file_uses_claude_home_env_as_trust_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    custom_claude_home = tmp_path / "custom_claude"
+    gate_path = (
+        custom_claude_home / "skills" / "bugteam" / "scripts" / "bugteam_code_rules_gate.py"
+    )
+    gate_path.parent.mkdir(parents=True)
+    gate_path.write_text("", encoding="utf-8")
+    monkeypatch.delenv("CODE_RULES_GATE_PATH", raising=False)
+    monkeypatch.setenv("CLAUDE_HOME", str(custom_claude_home))
+
+    gate_script_path, exact_allowed = gate_utils.resolve_gate_script_path()
+
+    is_safe = gate_utils.is_safe_regular_file(gate_script_path, exact_allowed)
+
+    assert is_safe
+
+
+def test_is_safe_regular_file_rejects_path_outside_claude_home_env_trust_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    custom_claude_home = tmp_path / "custom_claude"
+    custom_claude_home.mkdir(parents=True)
+    outside_path = tmp_path / "outside" / "gate.py"
+    outside_path.parent.mkdir(parents=True)
+    outside_path.write_text("", encoding="utf-8")
+    monkeypatch.delenv("CODE_RULES_GATE_PATH", raising=False)
+    monkeypatch.setenv("CLAUDE_HOME", str(custom_claude_home))
+
+    is_safe = gate_utils.is_safe_regular_file(outside_path, None)
+
+    assert not is_safe

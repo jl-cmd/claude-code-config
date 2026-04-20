@@ -188,3 +188,22 @@ def test_main_staged_mode_exits_zero_when_nothing_staged(
     exit_code = gate_module.main(["--staged"])
 
     assert exit_code == 0
+
+
+def test_added_lines_for_staged_file_returns_empty_for_modified_file_with_no_additions(
+    temporary_git_repository: Path,
+) -> None:
+    write_file(
+        temporary_git_repository / "existing.py",
+        "alpha = 1\nbeta = 2\ngamma = 3\n",
+    )
+    commit_all_files(temporary_git_repository, "baseline")
+    write_file(temporary_git_repository / "existing.py", "alpha = 1\nbeta = 2\n")
+    stage_file(temporary_git_repository, "existing.py")
+
+    added_line_numbers = gate_module.added_lines_for_staged_file(
+        temporary_git_repository,
+        "existing.py",
+    )
+
+    assert added_line_numbers == set()

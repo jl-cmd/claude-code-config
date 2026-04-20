@@ -61,13 +61,20 @@ def is_safe_regular_file(candidate_path: Path, exact_allowed_path: Path | None) 
     return stat.S_ISREG(path_stat.st_mode)
 
 
+def _resolve_trust_root() -> Path:
+    claude_home_override = os.environ.get(CLAUDE_HOME_ENV_VAR, "").strip()
+    if claude_home_override:
+        return Path(claude_home_override).resolve()
+    return (Path.home() / CLAUDE_HOME_DEFAULT_SUBDIRECTORY).resolve()
+
+
 def _is_resolved_candidate_allowed(
     resolved_candidate: Path,
     exact_allowed_path: Path | None,
 ) -> bool:
     if exact_allowed_path is not None:
         return resolved_candidate == exact_allowed_path
-    trusted_prefix = (Path.home() / CLAUDE_HOME_DEFAULT_SUBDIRECTORY).resolve()
+    trusted_prefix = _resolve_trust_root()
     return _is_within_directory(resolved_candidate, trusted_prefix)
 
 

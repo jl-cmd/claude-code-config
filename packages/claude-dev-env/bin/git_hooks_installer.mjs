@@ -35,21 +35,22 @@ function renameSyncWithWindowsRetry(sourcePath, destinationPath) {
         }
     }
     try {
-        unlinkSync(destinationPath);
-    } catch (unlinkError) {
-        if (unlinkError.code !== 'ENOENT') {
-            throw unlinkError;
-        }
-    }
-    try {
         renameSync(sourcePath, destinationPath);
-    } catch {
-        copyFileSync(sourcePath, destinationPath);
+        return;
+    } catch (secondRenameError) {
+        try {
+            copyFileSync(sourcePath, destinationPath);
+        } catch (copyError) {
+            throw new Error(
+                `claude-dev-env: atomic rename failed (${secondRenameError.message}) `
+                + `and copy fallback also failed (${copyError.message})`,
+            );
+        }
         try {
             unlinkSync(sourcePath);
         } catch (cleanupError) {
             if (cleanupError.code !== 'ENOENT') {
-                throw cleanupError;
+                console.warn(`claude-dev-env: could not remove temp source after copy: ${cleanupError.message}`);
             }
         }
     }
@@ -80,12 +81,29 @@ function buildShimContent(pythonModuleName) {
 }
 
 
-export function writeGitHookShim({
-    gitHooksDirectory,
-    gitNativeHookName,
-    pythonModuleName,
-}) {
-    mkdirSync(gitHooksDirectory, { recursive: true });
+function ensureHooksDirectoryExists(gitHooksDirectory) {
+    let preExistingStat = null;
+    try {
+        preExistingStat = lstatSync(gitHooksDirectory);
+    } catch (statError) {
+        if (statError.code !== 'ENOENT') {
+            throw statError;
+        }
+    }
+    if (preExistingStat !== null) {
+        if (preExistingStat.isSymbolicLink()) {
+            throw new Error(
+                `claude-dev-env: refusing to write hook shims — hooks directory is a symlink: ${gitHooksDirectory}`,
+            );
+        }
+        if (!preExistingStat.isDirectory()) {
+            throw new Error(
+                `claude-dev-env: refusing to write hook shims — hooks path is not a directory: ${gitHooksDirectory}`,
+            );
+        }
+        return;
+    }
+    mkdirSync(gitHooksDirectory, { recursive: false });
     const postMkdirStat = lstatSync(gitHooksDirectory);
     if (postMkdirStat.isSymbolicLink()) {
         throw new Error(
@@ -97,6 +115,15 @@ export function writeGitHookShim({
             `claude-dev-env: refusing to write hook shims — hooks path is not a directory: ${gitHooksDirectory}`,
         );
     }
+}
+
+
+export function writeGitHookShim({
+    gitHooksDirectory,
+    gitNativeHookName,
+    pythonModuleName,
+}) {
+    ensureHooksDirectoryExists(gitHooksDirectory);
     const shimPath = join(gitHooksDirectory, gitNativeHookName);
     const shimTempPath = shimPath + '.tmp';
     const shimContent = buildShimContent(pythonModuleName);
@@ -112,7 +139,10 @@ export function writeGitHookShim({
     } catch (renameError) {
         try {
             unlinkSync(shimTempPath);
-        } catch {
+        } catch (cleanupError) {
+            if (cleanupError.code !== 'ENOENT') {
+                console.warn(`claude-dev-env: could not remove temp shim after rename failure: ${cleanupError.message}`);
+            }
         }
         throw renameError;
     }

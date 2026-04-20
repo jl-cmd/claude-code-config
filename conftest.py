@@ -36,9 +36,9 @@ import pytest
 
 
 _SYNC_AI_RULES_TEST_FILENAME = "test_sync_ai_rules.py"
-_REPOSITORY_ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
 _HOOK_LOCAL_DIRECTORY_PATH = os.path.join(
-    _REPOSITORY_ROOT_PATH, "packages", "claude-dev-env", "hooks", "git-hooks",
+    os.path.dirname(os.path.abspath(__file__)),
+    "packages", "claude-dev-env", "hooks", "git-hooks",
 )
 
 
@@ -53,5 +53,3 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
     importlib.invalidate_caches()
     while _HOOK_LOCAL_DIRECTORY_PATH in sys.path:
         sys.path.remove(_HOOK_LOCAL_DIRECTORY_PATH)
-    if _REPOSITORY_ROOT_PATH not in sys.path:
-        sys.path.insert(0, _REPOSITORY_ROOT_PATH)

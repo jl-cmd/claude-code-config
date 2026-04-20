@@ -19,15 +19,16 @@ def gh_redirect_is_active() -> bool:
 
 def directory_is_ephemeral(directory_path: str) -> bool:
     ephemeral_auto_allow_disabled_env_var = "CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW"
-    if os.environ.get(ephemeral_auto_allow_disabled_env_var, "").strip().lower() in {"1", "true", "yes", "on"}:
+    truthy_string_values = frozenset({"1", "true", "yes", "on"})
+    if os.environ.get(ephemeral_auto_allow_disabled_env_var, "").strip().lower() in truthy_string_values:
         return False
-    normalized_forward = os.path.normpath(directory_path).replace("\\", "/").lower()
+    forward_slash_normalized_directory_path = os.path.normpath(directory_path).replace("\\", "/").lower()
     all_ephemeral_path_segments = ("/worktrees/", "/worktree/", "/tmp/", "/temp/")
     for each_segment in all_ephemeral_path_segments:
-        if each_segment in normalized_forward + "/":
+        if each_segment in forward_slash_normalized_directory_path + "/":
             return True
     system_temporary_root = os.path.normpath(tempfile.gettempdir()).replace("\\", "/").lower()
-    if normalized_forward.startswith(system_temporary_root + "/") or normalized_forward == system_temporary_root:
+    if forward_slash_normalized_directory_path.startswith(system_temporary_root + "/") or forward_slash_normalized_directory_path == system_temporary_root:
         return True
     try:
         git_rev_parse_completion = subprocess.run(
@@ -47,7 +48,7 @@ def directory_is_ephemeral(directory_path: str) -> bool:
 
 def load_allow_git_reset_hard_projects() -> list[str]:
     allow_git_reset_hard_settings_key = "allowGitResetHardProjects"
-    settings_path = Path.home() / ".claude" / "settings.json"
+    settings_path = Path(CLAUDE_DIRECTORY_PATH) / "settings.json"
     try:
         raw_settings_text = settings_path.read_text(encoding="utf-8")
     except OSError:

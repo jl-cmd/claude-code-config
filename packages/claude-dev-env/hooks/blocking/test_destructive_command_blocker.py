@@ -265,14 +265,14 @@ def test_git_reset_hard_asks_when_allow_list_is_empty(tmp_path: Path) -> None:
 def test_git_reset_hard_allowed_in_linked_git_worktree(tmp_path: Path) -> None:
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    main_repo = tmp_path / "main_repo"
-    main_repo.mkdir()
-    subprocess.run(["git", "init", "-q"], cwd=main_repo, check=True)
-    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "init"], cwd=main_repo, check=True)
+    main_repository = tmp_path / "main_repository"
+    main_repository.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=main_repository, check=True)
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "init"], cwd=main_repository, check=True)
     worktree_directory = tmp_path / "worktree_copy"
     subprocess.run(
         ["git", "worktree", "add", "-q", "-b", "feature", str(worktree_directory)],
-        cwd=main_repo,
+        cwd=main_repository,
         check=True,
     )
     payload = _make_bash_payload("git reset --hard origin/main")

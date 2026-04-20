@@ -1,4 +1,4 @@
-import { writeFileSync, copyFileSync, chmodSync, mkdirSync, renameSync, lstatSync, unlinkSync, openSync, closeSync } from 'node:fs';
+import { writeFileSync, copyFileSync, chmodSync, mkdirSync, renameSync, lstatSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -42,12 +42,17 @@ function renameSyncWithWindowsRetry(sourcePath, destinationPath) {
         const partialPath = destinationPath + '.partial';
         try {
             copyFileSync(sourcePath, partialPath);
+            if (process.platform !== 'win32') {
+                chmodSync(partialPath, 0o755);
+            }
             renameSync(partialPath, destinationPath);
         } catch (copyError) {
             try { unlinkSync(partialPath); } catch { /* ENOENT-safe */ }
+            try { unlinkSync(sourcePath); } catch { /* ENOENT-safe */ }
             throw new Error(
                 `claude-dev-env: atomic rename failed (${secondRenameError.message}) `
                 + `and copy fallback also failed (${copyError.message})`,
+                { cause: copyError },
             );
         }
         try {
@@ -131,41 +136,28 @@ export function writeGitHookShim({
     const shimPath = join(gitHooksDirectory, gitNativeHookName);
     const shimTempPath = shimPath + '.tmp';
     const shimContent = buildShimContent(pythonModuleName);
-    writeFileSync(shimTempPath, shimContent, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
-    const postWriteStat = lstatSync(shimTempPath);
-    if (postWriteStat.isSymbolicLink()) {
-        throw new Error(
-            `claude-dev-env: refusing to use temp shim — path became a symlink after write: ${shimTempPath}`,
-        );
-    }
+    try { unlinkSync(shimTempPath); } catch { /* ENOENT-safe */ }
+    writeFileSync(shimTempPath, shimContent, { encoding: 'utf8', mode: 0o600 });
     try {
-        chmodSync(shimTempPath, 0o755);
-    } catch (chmodError) {
-        // Windows may not support chmod semantics; git-for-windows still runs
-        // the hook via its shebang, so the chmod failure is non-fatal.
-        if (process.platform !== 'win32') {
-            throw chmodError;
+        const postWriteStat = lstatSync(shimTempPath);
+        if (postWriteStat.isSymbolicLink()) {
+            throw new Error(
+                `claude-dev-env: refusing to use temp shim — path became a symlink after write: ${shimTempPath}`,
+            );
         }
-    }
-    try {
-        renameSyncWithWindowsRetry(shimTempPath, shimPath);
-    } catch (renameError) {
         try {
-            unlinkSync(shimTempPath);
-        } catch (firstUnlinkError) {
-            if (firstUnlinkError.code !== 'ENOENT') {
-                const retryDeadline = Date.now() + 50;
-                while (Date.now() < retryDeadline) { /* spin */ }
-                try {
-                    unlinkSync(shimTempPath);
-                } catch (retryUnlinkError) {
-                    if (retryUnlinkError.code !== 'ENOENT') {
-                        console.warn(`claude-dev-env: could not remove temp shim after rename failure: ${retryUnlinkError.message} — manual cleanup may be needed: ${shimTempPath}`);
-                    }
-                }
+            chmodSync(shimTempPath, 0o755);
+        } catch (chmodError) {
+            // Windows may not support chmod semantics; git-for-windows still runs
+            // the hook via its shebang, so the chmod failure is non-fatal.
+            if (process.platform !== 'win32') {
+                throw chmodError;
             }
         }
-        throw renameError;
+        renameSyncWithWindowsRetry(shimTempPath, shimPath);
+    } catch (postWriteError) {
+        try { unlinkSync(shimTempPath); } catch { /* ENOENT-safe */ }
+        throw postWriteError;
     }
     return shimPath;
 }

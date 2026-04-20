@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import unittest.mock
 from pathlib import Path
 import pytest
 
@@ -110,6 +111,41 @@ def test_added_lines_for_staged_file_treats_new_file_as_fully_added(
     )
 
     assert added_line_numbers == {1, 2, 3}
+
+
+def test_paths_from_git_staged_uses_null_delimiter(
+    temporary_git_repository: Path,
+) -> None:
+    write_file(temporary_git_repository / "first.py", "a = 1\n")
+    write_file(temporary_git_repository / "second.py", "b = 2\n")
+    commit_all_files(temporary_git_repository, "baseline")
+    write_file(temporary_git_repository / "first.py", "a = 10\n")
+    write_file(temporary_git_repository / "second.py", "b = 20\n")
+    stage_file(temporary_git_repository, "first.py")
+    stage_file(temporary_git_repository, "second.py")
+
+    staged_paths = gate_module.paths_from_git_staged(temporary_git_repository)
+
+    staged_names = {path.name for path in staged_paths}
+    assert staged_names == {"first.py", "second.py"}
+
+
+def test_paths_from_git_staged_warns_and_skips_non_utf8_filename(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    non_utf8_raw = b"valid.py\x00\xff\xfe_bad.py\x00"
+    mock_completed = unittest.mock.MagicMock()
+    mock_completed.returncode = 0
+    mock_completed.stdout = non_utf8_raw
+
+    with unittest.mock.patch("subprocess.run", return_value=mock_completed):
+        result_paths = gate_module.paths_from_git_staged(tmp_path)
+
+    captured = capsys.readouterr()
+    assert "non-UTF-8" in captured.err
+    assert len(result_paths) == 1
+    assert result_paths[0].name == "valid.py"
 
 
 def test_staged_added_lines_by_file_maps_every_staged_code_file(

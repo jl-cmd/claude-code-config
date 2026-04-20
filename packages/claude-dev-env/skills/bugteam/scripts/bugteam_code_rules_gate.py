@@ -91,22 +91,33 @@ def filter_paths_under_prefixes(
 
 def paths_from_git_staged(repository_root: Path) -> list[Path]:
     name_result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only"],
+        ["git", "diff", "--cached", "--name-only", "-z"],
         cwd=str(repository_root),
         capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         check=False,
     )
     if name_result.returncode != 0:
+        stderr_text = name_result.stderr.decode("utf-8", errors="replace")
         print(
-            f"bugteam_code_rules_gate: git diff --cached --name-only failed:\n{name_result.stderr}",
+            f"bugteam_code_rules_gate: git diff --cached --name-only -z failed:\n{stderr_text}",
             file=sys.stderr,
         )
         raise SystemExit(2)
-    relative_paths = [line.strip() for line in name_result.stdout.splitlines() if line.strip()]
-    return [repository_root / relative_path for relative_path in relative_paths]
+    raw_paths = name_result.stdout.split(b"\x00")
+    resolved_paths = []
+    for each_raw_path in raw_paths:
+        if not each_raw_path:
+            continue
+        try:
+            relative_path = each_raw_path.decode("utf-8")
+        except UnicodeDecodeError:
+            print(
+                f"bugteam_code_rules_gate: skipping staged path with non-UTF-8 filename: {each_raw_path!r}",
+                file=sys.stderr,
+            )
+            continue
+        resolved_paths.append(repository_root / relative_path)
+    return resolved_paths
 
 
 def staged_file_line_count(

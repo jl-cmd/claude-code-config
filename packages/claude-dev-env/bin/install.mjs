@@ -362,15 +362,16 @@ function install(selectedGroups) {
             + 'the hook will run in every git repo on this machine.',
         );
         const gitHookInstallationResult = installAllGitHooks({ claudeHomeDirectory: CLAUDE_HOME });
-        allInstalledFiles.push(...gitHookInstallationResult.createdShimPaths);
         summary.gitHooks = {
             shimPaths: gitHookInstallationResult.createdShimPaths,
             hooksPathConfiguration: gitHookInstallationResult.hooksPathConfigurationResult,
         };
         const hooksPathConfigurationAction = gitHookInstallationResult.hooksPathConfigurationResult.action;
         if (hooksPathConfigurationAction === 'set') {
+            allInstalledFiles.push(...gitHookInstallationResult.createdShimPaths);
             console.log(`  Git hooks: configured core.hooksPath -> ${gitHookInstallationResult.gitHooksDirectory}`);
         } else if (hooksPathConfigurationAction === 'already-set') {
+            allInstalledFiles.push(...gitHookInstallationResult.createdShimPaths);
             console.log('  Git hooks: core.hooksPath already points to claude-dev-env, no change');
         } else {
             console.warn(`  Git hooks: ${gitHookInstallationResult.hooksPathConfigurationResult.reason}`);

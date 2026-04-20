@@ -113,3 +113,20 @@ def test_main_propagates_blocking_exit_code_from_gate(
     exit_code = pre_push.main()
 
     assert exit_code == 1
+
+
+def test_main_exits_zero_when_gate_reports_infrastructure_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    infrastructure_failure_gate_path = tmp_path / "infrastructure_failure_gate.py"
+    infrastructure_failure_gate_path.write_text(
+        "import sys\nsys.exit(2)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", str(infrastructure_failure_gate_path))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+
+    exit_code = pre_push.main()
+
+    assert exit_code == 0

@@ -25,3 +25,4 @@ GATE_SCRIPT_RELATIVE_PATH: tuple[str, ...] = (
     "scripts",
     "bugteam_code_rules_gate.py",
 )
+GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE: int = 2

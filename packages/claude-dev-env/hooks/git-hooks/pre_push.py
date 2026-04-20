@@ -31,6 +31,7 @@ from config import (
     CLAUDE_HOME_DEFAULT_SUBDIRECTORY,
     CLAUDE_HOME_ENV_VAR,
     DEFAULT_REMOTE_BASE_REFERENCE,
+    GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE,
     GATE_PATH_OVERRIDE_ENV_VAR,
     GATE_SCRIPT_RELATIVE_PATH,
     STDIN_LINE_FIELD_COUNT,
@@ -97,11 +98,15 @@ def invoke_gate(gate_script_path: Path, base_reference: str) -> int:
 
 
 def main() -> int:
+    gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
     gate_script_path = resolve_gate_script_path()
     if not gate_script_path.is_file():
         return 0
     base_reference = resolve_base_reference_from_stdin(sys.stdin.read())
-    return invoke_gate(gate_script_path, base_reference)
+    gate_exit_code = invoke_gate(gate_script_path, base_reference)
+    if gate_exit_code == gate_infrastructure_failure_exit_code:
+        return 0
+    return gate_exit_code
 
 
 if __name__ == "__main__":

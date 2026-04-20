@@ -3,7 +3,9 @@ import datetime
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 CLAUDE_DIRECTORY_PATH = os.path.normpath(os.path.expanduser("~/.claude"))
@@ -16,8 +18,6 @@ def gh_redirect_is_active() -> bool:
     return env_var_value in GH_REDIRECT_ACTIVE_TRUTHY_VALUES
 
 def directory_is_ephemeral(directory_path: str) -> bool:
-    import subprocess as _subprocess
-    import tempfile as _tempfile
     ephemeral_auto_allow_disabled_env_var = "CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW"
     if os.environ.get(ephemeral_auto_allow_disabled_env_var, "").strip().lower() in {"1", "true", "yes", "on"}:
         return False
@@ -26,19 +26,18 @@ def directory_is_ephemeral(directory_path: str) -> bool:
     for each_segment in ephemeral_path_segments:
         if each_segment in normalized_forward + "/":
             return True
-    system_temp_root = os.path.normpath(_tempfile.gettempdir()).replace("\\", "/").lower()
+    system_temp_root = os.path.normpath(tempfile.gettempdir()).replace("\\", "/").lower()
     if normalized_forward.startswith(system_temp_root + "/") or normalized_forward == system_temp_root:
         return True
     try:
-        git_dir_output = _subprocess.run(
+        git_dir_output = subprocess.run(
             ["git", "rev-parse", "--git-dir"],
             cwd=directory_path,
             capture_output=True,
             text=True,
             check=False,
-            timeout=5,
         )
-    except (OSError, _subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError):
         return False
     if git_dir_output.returncode != 0:
         return False

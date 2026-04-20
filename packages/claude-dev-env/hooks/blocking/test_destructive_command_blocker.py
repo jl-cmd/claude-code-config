@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -296,7 +297,6 @@ def test_git_reset_hard_allowed_when_path_contains_worktrees_segment(tmp_path: P
 
 
 def test_git_reset_hard_allowed_under_os_temp_directory() -> None:
-    import tempfile
     fake_home = Path(tempfile.mkdtemp(prefix="home_"))
     working_directory = Path(tempfile.mkdtemp(prefix="ephemeral_work_"))
     payload = _make_bash_payload("git reset --hard origin/main")

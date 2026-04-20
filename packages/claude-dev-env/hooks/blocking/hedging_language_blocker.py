@@ -99,11 +99,19 @@ def main() -> None:
 
     formatted_term_list = ", ".join(f'"{term}"' for term in found_hedging_terms)
 
-    resolved_skill_path = RESEARCH_MODE_SKILL_SEARCH_PATHS[0]
+    resolved_skill_path: str | None = None
     for each_skill_path in RESEARCH_MODE_SKILL_SEARCH_PATHS:
         if os.path.exists(each_skill_path):
             resolved_skill_path = each_skill_path
             break
+
+    if resolved_skill_path is not None:
+        skill_reference = f"under the research-mode constraints defined in:\n\n{resolved_skill_path}"
+    else:
+        skill_reference = (
+            "under research-mode constraints "
+            "(no research-mode skill installed; verify with sources or reply 'I don't know')"
+        )
 
     block_response = {
         "decision": "block",
@@ -111,8 +119,7 @@ def main() -> None:
             f"ANTI-HALLUCINATION GUARDRAIL: Your response contains hedging language: "
             f"{formatted_term_list}. "
             f"These words signal unverified claims. You MUST rewrite your response "
-            f"under the research-mode constraints defined in:\n\n"
-            f"{resolved_skill_path}\n\n"
+            f"{skill_reference}\n\n"
             f"Do NOT simply remove the hedging word and keep the unverified claim. "
             f"Either VERIFY it with a source or replace it with 'I don't know'.\n\n"
             f"You MUST re-output the complete, revised response with the corrections applied."

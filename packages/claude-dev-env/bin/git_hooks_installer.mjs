@@ -101,13 +101,14 @@ export function configureGlobalGitHooksPath({
     readCurrentHooksPath = readCurrentGlobalHooksPathViaExecSync,
     writeHooksPath = writeGlobalHooksPathViaExecSync,
 }) {
+    const normalizedTargetDirectory = targetGitHooksDirectory.replaceAll('\\', '/');
     const currentRawValue = readCurrentHooksPath();
     const currentTrimmedValue = (currentRawValue || '').trim();
     if (currentTrimmedValue === '') {
-        writeHooksPath(targetGitHooksDirectory);
+        writeHooksPath(normalizedTargetDirectory);
         return { action: 'set' };
     }
-    if (currentTrimmedValue === targetGitHooksDirectory) {
+    if (currentTrimmedValue === normalizedTargetDirectory) {
         return { action: 'already-set' };
     }
     return {
@@ -116,7 +117,7 @@ export function configureGlobalGitHooksPath({
             `core.hooksPath is already set to "${currentTrimmedValue}". `
             + 'Skipping to avoid overriding an existing setup (e.g. husky, lefthook). '
             + `To adopt claude-dev-env hooks, manually run: `
-            + `git config --global core.hooksPath ${JSON.stringify(targetGitHooksDirectory)}`
+            + `git config --global core.hooksPath ${JSON.stringify(normalizedTargetDirectory)}`
         ),
     };
 }

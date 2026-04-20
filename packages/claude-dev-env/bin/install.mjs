@@ -406,6 +406,7 @@ function install(selectedGroups) {
 
 function unsetGlobalGitHooksPathIfOurs() {
     const installedGitHooksDirectory = join(CLAUDE_HOME, 'hooks', 'git-hooks');
+    const normalizedInstalledDirectory = installedGitHooksDirectory.replaceAll('\\', '/');
     let currentHooksPath = '';
     try {
         currentHooksPath = execSync('git config --global --get core.hooksPath', {
@@ -415,7 +416,7 @@ function unsetGlobalGitHooksPathIfOurs() {
     } catch {
         return;
     }
-    if (currentHooksPath !== installedGitHooksDirectory) {
+    if (currentHooksPath !== normalizedInstalledDirectory) {
         return;
     }
     try {

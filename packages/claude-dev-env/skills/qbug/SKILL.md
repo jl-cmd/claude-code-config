@@ -1,19 +1,23 @@
 ---
 name: qbug
 description: >-
-  Runs the /bugteam audit → fix → commit → push cycle on the open PR via one
-  clean-coder subagent (not a full team), looping until convergence or stuck.
-  Uses the same CODE_RULES gate, A–J category rubric, and per-loop PR review
-  shape as /bugteam — without TeamCreate, teammates, per-loop clean-room, or
-  a loop cap. Triggers: '/qbug', 'quick bug audit', 'solo bug audit',
+  Required baseline review for every new PR. Runs the /bugteam audit → fix →
+  commit → push cycle via one clean-coder subagent (not a full team), looping
+  until convergence or stuck. Uses the same CODE_RULES gate, A–J category
+  rubric, and per-loop PR review shape as /bugteam — without TeamCreate,
+  teammates, per-loop clean-room, or a loop cap. Invoke /bugteam instead for
+  larger PRs that need per-loop bias isolation or a hard loop cap. Triggers:
+  '/qbug', 'quick bug audit', 'solo bug audit', 'baseline PR review',
   'bugteam without a team'.
 ---
 
 # qbug
 
-**Core principle:** The /bugteam workflow, driven by ONE subagent. The lead spawns a single `clean-coder` via the Agent tool (no `TeamCreate`, no teammates), hands it the PR scope and audit rubric, and the subagent loops audit → fix → commit → push until convergence or stuck. The trade: no per-loop clean-room (the subagent's context carries across loops). The gain: no agent-teams feature requirement, no teammate coordination, no loop cap.
+**Core principle:** One `clean-coder` subagent loops audit → fix → commit → push until converged or stuck. The subagent's context persists across loops (no per-loop clean-room) — that is the explicit trade vs /bugteam.
 
-Reuses /bugteam's shared pieces. All script paths resolve via `${CLAUDE_SKILL_DIR}` host-substitution — the same convention [`bugteam/SKILL.md`](../bugteam/SKILL.md) uses — with `..` to cross from qbug's skill directory to bugteam's sibling directory (both land under `~/.claude/skills/` after install).
+**When to reach for /qbug vs /bugteam:** `/qbug` is the required baseline review for every new PR (fastest path from "ready" to "merged-safe"). Escalate to `/bugteam` when the PR is large enough that anchoring-bias across loops becomes a convergence risk, or when a hard loop cap is required for cost control.
+
+Shared artifacts with /bugteam are referenced below by path, using the `${CLAUDE_SKILL_DIR}` host-substitution convention (both skills land under `~/.claude/skills/` after install):
 
 - Pre-flight script: `${CLAUDE_SKILL_DIR}/../bugteam/scripts/bugteam_preflight.py`
 - Code-rules gate script: `${CLAUDE_SKILL_DIR}/../bugteam/scripts/bugteam_code_rules_gate.py`
@@ -59,14 +63,16 @@ Capture: `owner/repo`, `baseRefName`, `headRefName`, PR `number`, `url`, `starti
 Resolve the scoped temp directory once, lead-side, before spawning the subagent. Use Python's `tempfile.gettempdir()` so the path is correct on macOS, Linux, Windows cmd.exe, and PowerShell — do not hardcode `/tmp/` because Windows runners do not honor it. Capture the resolved absolute path as `<qbug_temp_dir>` and pass that literal path to the subagent:
 
 ```python
-import json, subprocess, tempfile
+import json
+import subprocess
+import tempfile
 from pathlib import Path
 
-pr_view = json.loads(subprocess.check_output(
+pr_view: dict = json.loads(subprocess.check_output(
     ["gh", "pr", "view", "--json", "number,baseRefName,headRefName,url"]
 ))
-pr_number = pr_view["number"]
-qbug_temp_dir = Path(tempfile.gettempdir()) / f"qbug-pr-{pr_number}"
+pr_number: int = pr_view["number"]
+qbug_temp_dir: Path = Path(tempfile.gettempdir()) / f"qbug-pr-{pr_number}"
 qbug_temp_dir.mkdir(parents=True, exist_ok=True)
 ```
 
@@ -98,7 +104,7 @@ One subagent, not a team. No `TeamCreate`, no `team_name`, no teammate shutdown 
 
 ## Subagent cycle prompt
 
-The subagent receives this prompt and loops internally — the lead does not re-invoke between loops. The prompt is self-contained: it restates the bug-category rubric by path rather than assuming prior context, and it states its full scope upfront. Before passing the prompt to `Agent()`, the lead substitutes `{{QBUG_TEMP_DIR}}`, `{{GATE_SCRIPT}}`, and `{{CATEGORIES_FILE}}` with the absolute paths resolved in Step 2.
+The subagent receives this prompt and loops internally — the lead does not re-invoke between loops. The prompt is self-contained: it restates the bug-category rubric by path rather than assuming prior context, and it states its full scope upfront. Before passing the prompt to `Agent()`, the lead substitutes every `{{UPPER_SNAKE}}` slot: `{{OWNER_REPO}}`, `{{HEAD_REF}}`, `{{BASE_REF}}`, `{{PR_URL}}`, `{{STARTING_SHA}}` (from Step 1) and `{{QBUG_TEMP_DIR}}`, `{{GATE_SCRIPT}}`, `{{CATEGORIES_FILE}}` (resolved in Step 2).
 
 ```xml
 <role>
@@ -109,11 +115,11 @@ The subagent receives this prompt and loops internally — the lead does not re-
 </role>
 
 <context>
-  <repo>owner/repo</repo>
-  <branch>head ref</branch>
-  <base_branch>base ref</base_branch>
-  <pr_url>url</pr_url>
-  <starting_sha>starting_sha</starting_sha>
+  <repo>{{OWNER_REPO}}</repo>
+  <branch>{{HEAD_REF}}</branch>
+  <base_branch>{{BASE_REF}}</base_branch>
+  <pr_url>{{PR_URL}}</pr_url>
+  <starting_sha>{{STARTING_SHA}}</starting_sha>
   <qbug_temp_dir>{{QBUG_TEMP_DIR}}</qbug_temp_dir>
   <gate_script>{{GATE_SCRIPT}}</gate_script>
   <categories_file>{{CATEGORIES_FILE}}</categories_file>
@@ -193,11 +199,11 @@ The subagent receives this prompt and loops internally — the lead does not re-
        Validate each modified Python file with `python -m py_compile`
        (or the language-equivalent compile check).
 
-       Stage each modified path explicitly (`git add <path>` by name —
-       never `-A` or `.`). Create one commit summarizing the fixed
-       findings. Let every git hook run. If a hook blocks the commit,
-       capture its stderr, mark every finding in this loop
-       `status=hook_blocked`, and do not retry this loop.
+       Stage each modified path by explicit name: `git add <path>`.
+       Create one commit summarizing the fixed findings. Let every git
+       hook run. If a hook blocks the commit, capture its stderr, mark
+       every finding in this loop `status=hook_blocked`, and move on to
+       the next iteration without retrying this loop.
 
        Push with a plain fast-forward: `git push`.
 
@@ -228,8 +234,8 @@ _From /qbug audit loop 2._
 
 <constraints>
   - Edit only files reachable from the PR diff's scope.
-  - Keep the branch linear: append one new commit per FIX loop and
-    fast-forward push only. Do not amend, rebase, or force-push.
+  - Keep the branch linear: append one new commit per FIX loop and push
+    fast-forward only.
   - Preserve existing comments on lines you do not modify.
   - Every signature you touch has complete type hints.
   - Every file is read before you edit it (investigate before answering).
@@ -257,21 +263,10 @@ On error exit paths: best-effort; log the failure in the final report and contin
 
 ## Step 4: Final report (lead)
 
-```
-/qbug exit: <converged | stuck | error>
-Loops: <loop_count>
-Starting commit: <starting_sha7>
-Final commit: <current_HEAD_sha7>
-Net change: <files> files, +<add>/-<del>
+Use the same shape as [`bugteam/SKILL.md` Step 6](../bugteam/SKILL.md#step-6-final-report) with two deltas:
 
-Loop log:
-  1 audit: 2P0 / 1P1 / 0P2
-  1 fix: a1b2c3d — 3 fixed, 0 skipped
-  2 audit: 0P0 / 0P1 / 0P2 → converged
-```
-
-- `stuck` → list the unresolved findings with `file:line` and reason.
-- `error` → error detail + loop number where it occurred.
+- Header substitutes `/qbug` for `/bugteam`.
+- Exit states are `converged | stuck | error` (no `cap reached` state, since `/qbug` has no loop cap).
 
 Delete the resolved `<qbug_temp_dir>` tree and any `.qbug-*.md` temp files in the working directory. The lead captured the dir as an absolute path via `tempfile.gettempdir()` in Step 1; reuse that literal for cleanup.
 

@@ -99,14 +99,11 @@ def main() -> None:
 
     formatted_term_list = ", ".join(f'"{term}"' for term in found_hedging_terms)
 
-    research_mode_content = "(Could not load research-mode skill file)"
+    resolved_skill_path = RESEARCH_MODE_SKILL_SEARCH_PATHS[0]
     for each_skill_path in RESEARCH_MODE_SKILL_SEARCH_PATHS:
-        try:
-            with open(each_skill_path, encoding="utf-8") as skill_file:
-                research_mode_content = skill_file.read()
-                break
-        except OSError:
-            continue
+        if os.path.exists(each_skill_path):
+            resolved_skill_path = each_skill_path
+            break
 
     block_response = {
         "decision": "block",
@@ -114,12 +111,14 @@ def main() -> None:
             f"ANTI-HALLUCINATION GUARDRAIL: Your response contains hedging language: "
             f"{formatted_term_list}. "
             f"These words signal unverified claims. You MUST rewrite your response "
-            f"with these constraints active:\n\n"
-            f"{research_mode_content}\n\n"
+            f"under the research-mode constraints defined in:\n\n"
+            f"{resolved_skill_path}\n\n"
             f"Do NOT simply remove the hedging word and keep the unverified claim. "
             f"Either VERIFY it with a source or replace it with 'I don't know'.\n\n"
             f"You MUST re-output the complete, revised response with the corrections applied."
         ),
+        "systemMessage": "Agent was found guessing - sourcing opinions...",
+        "suppressOutput": True,
     }
 
     print(json.dumps(block_response))

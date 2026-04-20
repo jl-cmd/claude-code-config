@@ -28,10 +28,15 @@ from config import (
     ALL_ZEROS_OBJECT_NAME_CHARACTER,
     BASE_REFERENCE_ARGUMENT,
     DEFAULT_REMOTE_BASE_REFERENCE,
+    GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE,
+    INVOKE_GATE_FAILURE_MESSAGE,
+    LOCAL_SHA_FIELD_INDEX,
+    MALFORMED_STDIN_LINE_MESSAGE,
     STDIN_LINE_FIELD_COUNT,
+    STDIN_READ_FAILURE_MESSAGE,
     STDIN_REMOTE_OBJECT_FIELD_INDEX,
 )
-from gate_utils import resolve_gate_script_path
+from gate_utils import is_safe_regular_file, resolve_gate_script_path
 
 
 def is_all_zeros_object_name(object_name: str) -> bool:
@@ -48,14 +53,22 @@ def is_all_zeros_object_name(object_name: str) -> bool:
 def resolve_base_reference_from_stdin(stdin_text: str) -> str:
     stdin_line_field_count = STDIN_LINE_FIELD_COUNT
     stdin_remote_object_field_index = STDIN_REMOTE_OBJECT_FIELD_INDEX
+    local_sha_field_index = LOCAL_SHA_FIELD_INDEX
     default_remote_base_reference = DEFAULT_REMOTE_BASE_REFERENCE
+    malformed_stdin_line_message = MALFORMED_STDIN_LINE_MESSAGE
     for each_line in stdin_text.splitlines():
         stripped_line = each_line.strip()
         if not stripped_line:
             continue
         fields = stripped_line.split()
         if len(fields) < stdin_line_field_count:
+            print(
+                malformed_stdin_line_message.format(line=stripped_line),
+                file=sys.stderr,
+            )
             continue
+        if is_all_zeros_object_name(fields[local_sha_field_index]):
+            return "HEAD"
         remote_object_name = fields[stdin_remote_object_field_index]
         if not is_all_zeros_object_name(remote_object_name):
             return remote_object_name
@@ -64,23 +77,42 @@ def resolve_base_reference_from_stdin(stdin_text: str) -> str:
 
 def invoke_gate(gate_script_path: Path, base_reference: str) -> int:
     base_reference_argument = BASE_REFERENCE_ARGUMENT
-    completion = subprocess.run(
-        [
-            sys.executable,
-            str(gate_script_path),
-            base_reference_argument,
-            base_reference,
-        ],
-        check=False,
-    )
+    invoke_gate_failure_message = INVOKE_GATE_FAILURE_MESSAGE
+    gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
+    try:
+        completion = subprocess.run(
+            [
+                sys.executable,
+                str(gate_script_path),
+                base_reference_argument,
+                base_reference,
+            ],
+            check=False,
+        )
+    except OSError as launch_error:
+        print(
+            invoke_gate_failure_message.format(error=launch_error),
+            file=sys.stderr,
+        )
+        return gate_infrastructure_failure_exit_code
     return completion.returncode
 
 
 def main() -> int:
+    stdin_read_failure_message = STDIN_READ_FAILURE_MESSAGE
+    gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
     gate_script_path = resolve_gate_script_path()
-    if not gate_script_path.is_file():
+    if not is_safe_regular_file(gate_script_path):
         return 0
-    base_reference = resolve_base_reference_from_stdin(sys.stdin.read())
+    try:
+        stdin_text = sys.stdin.read()
+    except (IOError, KeyboardInterrupt) as read_error:
+        print(
+            stdin_read_failure_message.format(error=read_error),
+            file=sys.stderr,
+        )
+        return gate_infrastructure_failure_exit_code
+    base_reference = resolve_base_reference_from_stdin(stdin_text)
     return invoke_gate(gate_script_path, base_reference)
 
 

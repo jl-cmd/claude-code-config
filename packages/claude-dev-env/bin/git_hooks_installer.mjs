@@ -1,10 +1,9 @@
-import { writeFileSync, chmodSync, mkdirSync } from 'node:fs';
+import { writeFileSync, chmodSync, mkdirSync, renameSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 
 
 export const SHIM_CONTENT_HEADER = '#!/usr/bin/env python3\n';
-export const EXECUTABLE_FILE_MODE = 0o755;
 
 export const KNOWN_GIT_HOOK_NAMES = Object.freeze([
     'pre-commit',
@@ -48,14 +47,16 @@ export function writeGitHookShim({
 }) {
     mkdirSync(gitHooksDirectory, { recursive: true });
     const shimPath = join(gitHooksDirectory, gitNativeHookName);
+    const shimTempPath = shimPath + '.tmp';
     const shimContent = buildShimContent(pythonModuleName);
-    writeFileSync(shimPath, shimContent, { encoding: 'utf8' });
+    writeFileSync(shimTempPath, shimContent, { encoding: 'utf8', mode: 0o600 });
     try {
-        chmodSync(shimPath, EXECUTABLE_FILE_MODE);
+        chmodSync(shimTempPath, 0o755);
     } catch {
         // Windows may not support chmod semantics; git-for-windows still runs
         // the hook via its shebang, so the chmod failure is non-fatal.
     }
+    renameSync(shimTempPath, shimPath);
     return shimPath;
 }
 
@@ -81,8 +82,11 @@ function readCurrentGlobalHooksPathViaExecSync() {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
         });
-    } catch {
-        return '';
+    } catch (gitReadError) {
+        if (gitReadError.status === 1) {
+            return '';
+        }
+        throw gitReadError;
     }
 }
 
@@ -122,9 +126,16 @@ export function configureGlobalGitHooksPath({
 export function installAllGitHooks({ claudeHomeDirectory }) {
     const gitHooksDirectory = join(claudeHomeDirectory, 'hooks', 'git-hooks');
     const createdShimPaths = writeAllGitHookShims({ gitHooksDirectory });
-    const hooksPathConfigurationResult = configureGlobalGitHooksPath({
-        targetGitHooksDirectory: gitHooksDirectory,
-    });
+    let hooksPathConfigurationResult;
+    try {
+        hooksPathConfigurationResult = configureGlobalGitHooksPath({
+            targetGitHooksDirectory: gitHooksDirectory,
+        });
+    } catch (gitConfigError) {
+        throw new Error(
+            `claude-dev-env: shims written but git config --global core.hooksPath failed: ${gitConfigError.message}`,
+        );
+    }
     return {
         gitHooksDirectory,
         createdShimPaths,

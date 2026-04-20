@@ -357,6 +357,10 @@ function install(selectedGroups) {
         summary.hookGroups = totalHookGroups;
         console.log(`  Hook groups: ${totalHookGroups} merged into settings.json`);
 
+        console.warn(
+            '  Warning: git hook installation sets core.hooksPath globally — '
+            + 'the hook will run in every git repo on this machine.',
+        );
         const gitHookInstallationResult = installAllGitHooks({ claudeHomeDirectory: CLAUDE_HOME });
         allInstalledFiles.push(...gitHookInstallationResult.createdShimPaths);
         summary.gitHooks = {
@@ -404,9 +408,15 @@ function install(selectedGroups) {
     console.log(`  python: ${pythonCommand}\n`);
 }
 
+function normalizePathForComparison(rawPath) {
+    const isCaseInsensitiveFilesystem = process.platform === 'win32' || process.platform === 'darwin';
+    const resolved = resolve(rawPath).replaceAll('\\', '/');
+    return isCaseInsensitiveFilesystem ? resolved.toLowerCase() : resolved;
+}
+
+
 function unsetGlobalGitHooksPathIfOurs() {
     const installedGitHooksDirectory = join(CLAUDE_HOME, 'hooks', 'git-hooks');
-    const normalizedInstalledDirectory = installedGitHooksDirectory.replaceAll('\\', '/');
     let currentHooksPath = '';
     try {
         currentHooksPath = execFileSync('git', ['config', '--global', '--get', 'core.hooksPath'], {
@@ -416,7 +426,7 @@ function unsetGlobalGitHooksPathIfOurs() {
     } catch {
         return;
     }
-    if (currentHooksPath !== normalizedInstalledDirectory) {
+    if (normalizePathForComparison(currentHooksPath) !== normalizePathForComparison(installedGitHooksDirectory)) {
         return;
     }
     try {

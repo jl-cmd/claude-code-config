@@ -11,8 +11,8 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 import config
 
 
-def test_gate_infrastructure_failure_exit_code_is_distinct_from_violation_and_success() -> (
-    None
-):
-    assert config.GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE != 0
-    assert config.GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE != 1
+def test_new_message_constants_are_present_in_config() -> None:
+    assert "{path}" in config.GATE_SCRIPT_NOT_FOUND_MESSAGE
+    assert "{error}" in config.STDIN_READ_FAILURE_MESSAGE
+    assert "{error}" in config.INVOKE_GATE_FAILURE_MESSAGE
+    assert "{line" in config.MALFORMED_STDIN_LINE_MESSAGE

@@ -60,3 +60,13 @@ def test_resolve_gate_script_path_falls_back_to_home_dot_claude_when_no_env_vars
         / "bugteam_code_rules_gate.py"
     )
     assert resolved_path == expected_path
+
+
+def test_resolve_gate_script_path_resolves_relative_override_to_absolute(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CODE_RULES_GATE_PATH", "relative/gate.py")
+
+    resolved_path = gate_utils.resolve_gate_script_path()
+
+    assert resolved_path.is_absolute()

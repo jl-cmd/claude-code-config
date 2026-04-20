@@ -17,22 +17,41 @@ import subprocess
 import sys
 from pathlib import Path
 
-from config import STAGED_SCOPE_ARGUMENT
-from gate_utils import resolve_gate_script_path
+from config import (
+    GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE,
+    GATE_SCRIPT_NOT_FOUND_MESSAGE,
+    INVOKE_GATE_FAILURE_MESSAGE,
+    STAGED_SCOPE_ARGUMENT,
+)
+from gate_utils import is_safe_regular_file, resolve_gate_script_path
 
 
 def invoke_gate(gate_script_path: Path) -> int:
     staged_scope_argument = STAGED_SCOPE_ARGUMENT
-    completion = subprocess.run(
-        [sys.executable, str(gate_script_path), staged_scope_argument],
-        check=False,
-    )
+    invoke_gate_failure_message = INVOKE_GATE_FAILURE_MESSAGE
+    gate_infrastructure_failure_exit_code = GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE
+    try:
+        completion = subprocess.run(
+            [sys.executable, str(gate_script_path), staged_scope_argument],
+            check=False,
+        )
+    except OSError as launch_error:
+        print(
+            invoke_gate_failure_message.format(error=launch_error),
+            file=sys.stderr,
+        )
+        return gate_infrastructure_failure_exit_code
     return completion.returncode
 
 
 def main() -> int:
+    gate_script_not_found_message = GATE_SCRIPT_NOT_FOUND_MESSAGE
     gate_script_path = resolve_gate_script_path()
-    if not gate_script_path.is_file():
+    if not is_safe_regular_file(gate_script_path):
+        print(
+            gate_script_not_found_message.format(path=gate_script_path),
+            file=sys.stderr,
+        )
         return 0
     return invoke_gate(gate_script_path)
 

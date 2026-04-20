@@ -26,3 +26,16 @@ GATE_SCRIPT_RELATIVE_PATH: tuple[str, ...] = (
     "bugteam_code_rules_gate.py",
 )
 GATE_INFRASTRUCTURE_FAILURE_EXIT_CODE: int = 2
+GATE_SCRIPT_NOT_FOUND_MESSAGE: str = (
+    "claude-dev-env pre-commit: gate script not found at {path}, skipping enforcement"
+)
+STDIN_READ_FAILURE_MESSAGE: str = (
+    "claude-dev-env pre-push: could not read stdin ({error}), aborting"
+)
+INVOKE_GATE_FAILURE_MESSAGE: str = (
+    "claude-dev-env: could not launch gate script ({error}), aborting"
+)
+MALFORMED_STDIN_LINE_MESSAGE: str = (
+    "claude-dev-env pre-push: ignoring malformed stdin line: {line!r}"
+)
+LOCAL_SHA_FIELD_INDEX: int = 1

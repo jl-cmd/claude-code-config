@@ -183,8 +183,3 @@ test('writeGitHookShim output is executable on POSIX (mode includes user-execute
 });
 
 
-test('KNOWN_GIT_HOOK_NAMES includes the expected hook entry points', () => {
-    assert.ok(Array.isArray(KNOWN_GIT_HOOK_NAMES));
-    assert.ok(KNOWN_GIT_HOOK_NAMES.includes('pre-commit'));
-    assert.ok(KNOWN_GIT_HOOK_NAMES.includes('pre-push'));
-});

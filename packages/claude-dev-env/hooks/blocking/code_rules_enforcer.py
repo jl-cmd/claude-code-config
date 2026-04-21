@@ -1422,10 +1422,10 @@ def _collect_scoped_mock_definitions(
     or the module node for module-level assignments.
     """
     scope_definitions: list[tuple[int, str, set[str], int, ast.AST]] = []
-    for each_scope in [module_tree, *ast.walk(module_tree)]:
+    for each_scope in ast.walk(module_tree):
         if not isinstance(each_scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
             continue
-        scope_body = each_scope.body if isinstance(each_scope, ast.Module) else each_scope.body
+        scope_body = each_scope.body
         for each_stmt in scope_body:
             if not isinstance(each_stmt, ast.Assign):
                 continue

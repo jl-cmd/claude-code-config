@@ -495,3 +495,32 @@ def test_should_not_flag_optional_param_when_only_call_site_uses_kwargs_expansio
     assert not any("timeout" in issue for issue in issues), (
         f"Expected 'timeout' NOT flagged when call uses **kwargs expansion, got: {issues}"
     )
+
+
+MODULE_LEVEL_MOCK_TEST_FILE_PATH = "packages/app/tests/test_module_level.py"
+
+
+def test_should_emit_exactly_one_advisory_for_module_level_mock_with_missing_field(
+    capsys: object,
+) -> None:
+    """Module-level mock_user with one missing field access should produce ONE advisory.
+
+    Finding 4: ast.walk() already yields the root Module node, so
+    [module_tree, *ast.walk(module_tree)] iterates the module twice and
+    previously produced two identical advisories for module-level mocks.
+    """
+    source = (
+        "mock_user = {'name': 'Alice'}\n"
+        "\n"
+        "def test_email_present() -> None:\n"
+        "    email = mock_user['email']\n"
+        "    assert email\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, MODULE_LEVEL_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    advisory_lines = [
+        line for line in captured.err.splitlines() if "mock_user" in line and "email" in line
+    ]
+    assert len(advisory_lines) == 1, (
+        f"Expected exactly 1 advisory for module-level mock missing 'email', got: {captured.err!r}"
+    )

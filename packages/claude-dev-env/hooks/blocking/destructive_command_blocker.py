@@ -3,6 +3,7 @@ import datetime
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -139,6 +140,43 @@ def _build_silent_gh_deny_response(matched_description: str) -> dict:
     }
 
 
+def _path_is_bare_ephemeral_root(resolved_path: str) -> bool:
+    forward_slash_normalized_path = resolved_path.replace("\\", "/").lower().rstrip("/")
+    system_temporary_root = os.path.normpath(tempfile.gettempdir()).replace("\\", "/").lower().rstrip("/")
+    forbidden_bare_ephemeral_roots = {"/tmp", "/temp", "/worktrees", "/worktree", system_temporary_root}
+    return forward_slash_normalized_path in forbidden_bare_ephemeral_roots
+
+
+def rm_targets_only_ephemeral_paths(command: str) -> bool:
+    """Return True when command is a single rm invocation whose every target is inside an ephemeral directory.
+
+    Refuses compound commands so operators like && / || / ; / | / backticks /
+    $(...) cannot piggy-back non-rm work on the ephemeral auto-allow. Rejects
+    bare ephemeral roots (/tmp, system temp dir) so we never auto-approve
+    wiping an entire scratch root.
+    """
+    compound_shell_operator_pattern = re.compile(r'(?:&&|\|\||;|\||`|\$\()')
+    if compound_shell_operator_pattern.search(command):
+        return False
+    try:
+        all_command_tokens = shlex.split(command, posix=False)
+    except ValueError:
+        return False
+    if len(all_command_tokens) < 2 or all_command_tokens[0] != "rm":
+        return False
+    all_target_tokens = [each_token for each_token in all_command_tokens[1:] if not each_token.startswith("-")]
+    if not all_target_tokens:
+        return False
+    for each_target_token in all_target_tokens:
+        each_unquoted_token = each_target_token.strip("\"'")
+        each_resolved_path = os.path.normpath(os.path.expanduser(each_unquoted_token))
+        if _path_is_bare_ephemeral_root(each_resolved_path):
+            return False
+        if not directory_is_ephemeral(each_resolved_path):
+            return False
+    return True
+
+
 def targets_only_claude_directory(command: str) -> bool:
     """Check if rm command targets only paths under ~/.claude/."""
     all_rm_target_paths = re.findall(
@@ -184,6 +222,12 @@ def main() -> None:
 
     if matched_description is not None and targets_only_claude_directory(command):
         sys.exit(0)
+
+    # Allow rm -rf / rm --recursive --force when every target path resolves
+    # into an ephemeral directory (system temp root, /tmp/*, /temp/*, worktree).
+    if matched_description is not None and matched_description.startswith(("rm -rf", "rm --recursive")):
+        if rm_targets_only_ephemeral_paths(command):
+            sys.exit(0)
 
     # Allow git reset --hard in explicitly approved projects (case-insensitive for Windows drive letters)
     if matched_description is not None and "git reset --hard" in matched_description:

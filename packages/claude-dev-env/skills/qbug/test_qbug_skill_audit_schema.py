@@ -112,6 +112,30 @@ def test_contract_should_require_files_opened_in_proof_of_absence() -> None:
     )
 
 
+def test_step2_spawn_should_include_model_sonnet_parameter() -> None:
+    skill_text = _load_skill_text()
+    assert 'model="sonnet"' in skill_text, (
+        "Step 2 Agent() spawn template must include model=\"sonnet\" for the primary subagent"
+    )
+
+
+def test_step2_spawn_should_reference_clean_coder_and_haiku_secondary() -> None:
+    skill_text = _load_skill_text()
+    step2_marker = "## Step 2:"
+    step3_marker = "## Step 3:"
+    step2_start = skill_text.find(step2_marker)
+    step3_start = skill_text.find(step3_marker)
+    assert step2_start != -1, "SKILL.md must have a Step 2 section"
+    assert step3_start != -1, "SKILL.md must have a Step 3 section"
+    step2_region = skill_text[step2_start:step3_start]
+    assert "clean-coder" in step2_region, (
+        "Step 2 must reference the clean-coder primary subagent spawn"
+    )
+    assert "haiku" in step2_region.lower(), (
+        "Step 2 must reference the Haiku secondary auditor spawn"
+    )
+
+
 def test_prompts_md_should_contain_expanded_category_e_dead_code_variants() -> None:
     prompts_text = _load_prompts_text()
     assert (

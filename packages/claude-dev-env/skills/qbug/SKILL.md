@@ -101,18 +101,27 @@ gate_script_path = (skill_dir / ".." / "bugteam" / "scripts" / "bugteam_code_rul
 categories_file_path = (skill_dir / ".." / "bugteam" / "PROMPTS.md").resolve()
 ```
 
-Then call `Agent`:
+Then call `Agent` twice in the same message — the primary clean-coder and the Haiku secondary run in parallel per the audit contract. The lead merges their findings before the FIX step:
 
 ```
 Agent(
   subagent_type="clean-coder",
-  description="qbug audit/fix cycle for PR <number>",
+  model="sonnet",
+  description="qbug primary audit/fix cycle for PR <number>",
+  prompt="<filled cycle XML; see § Subagent cycle prompt>",
+  run_in_background=False
+)
+
+Agent(
+  subagent_type="code-quality-agent",
+  model="haiku",
+  description="qbug Haiku secondary audit for PR <number>",
   prompt="<filled cycle XML; see § Subagent cycle prompt>",
   run_in_background=False
 )
 ```
 
-One subagent, not a team. No `TeamCreate`, no `team_name`, no teammate shutdown protocol. The subagent returns when it has exited the cycle (`converged`, `stuck`, or `error`).
+The lead merges primary and Haiku secondary findings per the de-dup rules in the audit contract before proceeding. No `TeamCreate`, no `team_name`, no teammate shutdown protocol. The primary subagent returns when it has exited the cycle (`converged`, `stuck`, or `error`).
 
 ## Subagent cycle prompt
 

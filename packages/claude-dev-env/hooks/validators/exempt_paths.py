@@ -13,13 +13,13 @@ filesystems (macOS default, Windows NTFS) as on case-sensitive ones.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 
 CONFIG_PATH_PATTERNS: frozenset[str] = frozenset(
     {
         "config/",
         "config\\",
-        "/config.",
-        "\\config.",
         "settings.py",
     }
 )
@@ -66,8 +66,11 @@ MIGRATION_PATH_PATTERNS: frozenset[str] = frozenset(
 
 
 def is_config_file(file_path: str) -> bool:
-    path_lower = file_path.lower()
-    return any(pattern in path_lower for pattern in CONFIG_PATH_PATTERNS)
+    normalized = file_path.replace("\\", "/").lower()
+    if normalized.endswith("settings.py"):
+        return True
+    path_parts = Path(normalized).parts
+    return "config" in path_parts[:-1]
 
 
 def is_test_file(file_path: str) -> bool:

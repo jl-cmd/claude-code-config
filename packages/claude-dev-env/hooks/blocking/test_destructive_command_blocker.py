@@ -193,7 +193,8 @@ def test_rm_rf_allowed_when_target_is_under_tmp_segment() -> None:
 
 def test_rm_rf_allowed_when_target_is_under_os_temp_directory() -> None:
     system_temp_subdirectory = Path(tempfile.mkdtemp(prefix="rm_target_"))
-    payload = _make_bash_payload(f"rm -rf {system_temp_subdirectory}")
+    forward_slash_temp_path = str(system_temp_subdirectory).replace("\\", "/")
+    payload = _make_bash_payload(f"rm -rf {forward_slash_temp_path}")
 
     result = _run_rm_hook(payload)
 
@@ -308,6 +309,33 @@ def test_rm_recursive_force_long_flags_allowed_under_tmp() -> None:
 
     assert result.stdout.strip() == ""
     assert result.returncode == 0
+
+
+def test_rm_rf_asks_when_quoted_dotdot_traverses_out_of_ephemeral_root() -> None:
+    payload = _make_bash_payload('rm -rf /tmp/".."/etc')
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_allowed_when_quoted_path_is_legitimate_ephemeral() -> None:
+    payload = _make_bash_payload('rm -rf "/tmp/some scratch dir"')
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_asks_when_single_quoted_dotdot_traverses_out_of_ephemeral() -> None:
+    payload = _make_bash_payload("rm -rf /tmp/'..'/etc")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
 def _run_hook_with_fake_home(

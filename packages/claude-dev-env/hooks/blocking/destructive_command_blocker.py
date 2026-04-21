@@ -203,7 +203,7 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
     if compound_shell_operator_pattern.search(command):
         return False
     try:
-        all_command_tokens = shlex.split(command, posix=False)
+        all_command_tokens = shlex.split(command)
     except ValueError:
         return False
     if len(all_command_tokens) < 2 or all_command_tokens[0] != "rm":
@@ -215,8 +215,7 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
     if not all_target_tokens:
         return False
     for each_target_token in all_target_tokens:
-        each_unquoted_token = each_target_token.strip("\"'")
-        each_resolved_path = os.path.normpath(os.path.expanduser(each_unquoted_token))
+        each_resolved_path = os.path.normpath(os.path.expanduser(each_target_token))
         if _path_is_bare_ephemeral_root(each_resolved_path):
             return False
         if _path_is_bare_named_worktrees_container(each_resolved_path):

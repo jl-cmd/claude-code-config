@@ -22,7 +22,7 @@ Plan a feature with full validation workflow.
 
 ### Phase 5: Commit & Review
 9. **Invoke `/commit`** - Create atomic commits
-10. **Invoke `pre-push-review` skill** - MANDATORY pre-push review
+10. **Run `/qbug` gate** - MANDATORY pre-push gate (supplants pre-push-review)
 11. **Push branch** - Push to GitHub (NO PR yet)
 12. **Wait for commit review** - User reviews on GitHub
 13. **Create PR** - Only after user approves commit
@@ -32,7 +32,7 @@ Plan a feature with full validation workflow.
 - NEVER offer execution until review-plan passes with ZERO violations
 - For NEW PRs: wait for reviewer approval on checkpoint before implementing
 - For PR REVIEW FIXES: skip checkpoint, proceed directly to execution
-- NEVER push until pre-push-review passes
+- NEVER push until the `/qbug` gate passes
 - NEVER create PR until user explicitly approves pushed commit
 
 ## Skills & Agents Reference

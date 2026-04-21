@@ -11,3 +11,15 @@ Expanded material that used to live inline in `SKILL.md`. Load a file when the o
 | [`teardown-publish-permissions.md`](teardown-publish-permissions.md) | Utility scripts note, teardown, PR description rewrite, revoke, final report |
 
 Canonical documentation quotes: [`../sources.md`](../sources.md).
+
+## Retired: pre-push-review skill
+
+The `pre-push-review` skill was retired in favor of the expanded code-rules enforcer gate and the `/qbug` skill.
+
+The enforcer (`packages/claude-dev-env/hooks/blocking/code_rules_enforcer.py`) now runs blocking and advisory checks covering all patterns the pre-push-review skill previously surfaced manually. Running `/qbug` before pushing replaces the old `Skill(pre-push-review)` invocation in every workflow that referenced it.
+
+References updated:
+- `skills/pr-review-responder/SKILL.md` — Rule 6 and checklist item updated to `/qbug`
+- `commands/plan.md` — Phase 5 step 10 updated to `/qbug` gate
+- `hooks/github-action/pre-push-review.yml` — deleted (workflow no longer needed)
+- `hooks/github-action/test_workflow.py` — deleted alongside the workflow

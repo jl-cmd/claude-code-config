@@ -23,7 +23,7 @@ Before doing ANYTHING:
 3. [ ] Fix comments ONE AT A TIME, marking complete as you go
 4. [ ] Draft reply for EVERY comment (DO NOT post directly)
 5. [ ] Create ONE review fix commit (DO NOT squash with original)
-6. [ ] Run pre-push-review skill before pushing
+6. [ ] Run `/qbug` gate before pushing
 7. [ ] Verify ALL draft replies are prepared
 
 **Responding WITHOUT completing this checklist = automatic failure.**
@@ -112,15 +112,15 @@ git commit -m "fix: address code review feedback
 Addresses review comments from PR #{number}"
 ```
 
-### Rule 6: Run Pre-Push Review
+### Rule 6: Run Gate Before Pushing
 
-**NEVER push without running pre-push-review skill.**
+**NEVER push without running the `/qbug` gate.**
 
-- [ ] FORBIDDEN: Pushing without pre-push-review
+- [ ] FORBIDDEN: Pushing without gate passing
 - [ ] FORBIDDEN: Manually handling draft conversion
-- [x] REQUIRED: Invoke pre-push-review skill which handles all 24 checks + draft conversion
+- [x] REQUIRED: Invoke `/qbug` which runs the code-rules enforcer and all advisory checks
 
-**WHY:** Pre-push-review catches ALL patterns reviewers flag: code style, draft status, commit structure. Delegating to it ensures nothing is missed.
+**WHY:** The enforcer gate catches ALL patterns reviewers flag: code style, draft status, commit structure. Delegating to it ensures nothing is missed.
 
 ### Rule 7: Verify All Drafts Complete
 

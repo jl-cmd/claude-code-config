@@ -28,13 +28,14 @@ import json
 import re
 import sys
 import tokenize
+from pathlib import Path
 from typing import Optional
 
 PYTHON_EXTENSIONS = {".py"}
 JAVASCRIPT_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx"}
 ALL_CODE_EXTENSIONS = PYTHON_EXTENSIONS | JAVASCRIPT_EXTENSIONS
 
-CONFIG_PATH_PATTERNS = {"config/", "config\\", "/config.", "\\config.", "settings.py"}
+CONFIG_PATH_PATTERNS = {"config/", "config\\", "settings.py"}
 TEST_PATH_PATTERNS = {"test_", "_test.", ".test.", ".spec.", "/tests/", "\\tests\\", "/tests.py", "\\tests.py"}
 HOOK_INFRASTRUCTURE_PATTERNS = {"/.claude/hooks/", "\\.claude\\hooks\\", "\\.claude/hooks/", "/packages/claude-dev-env/hooks/", "\\packages\\claude-dev-env\\hooks\\"}
 WORKFLOW_REGISTRY_PATTERNS = {"/workflow/", "\\workflow\\", "_tab.py", "/states.py", "\\states.py", "/modules.py", "\\modules.py"}
@@ -70,9 +71,16 @@ def is_hook_infrastructure(file_path: str) -> bool:
 
 
 def is_config_file(file_path: str) -> bool:
-    """Check if file is in a config directory or is a config file."""
-    path_lower = file_path.lower()
-    return any(pattern in path_lower for pattern in CONFIG_PATH_PATTERNS)
+    """Check if file is in a config directory or is a settings file.
+
+    Uses pathlib parts so a filename of 'config.py' does not match — only
+    files whose parent directory segment is literally 'config' match.
+    """
+    normalized = file_path.replace("\\", "/").lower()
+    if normalized.endswith("/settings.py") or normalized == "settings.py":
+        return True
+    path_parts = Path(normalized).parts
+    return "config" in path_parts[:-1]
 
 
 def is_test_file(file_path: str) -> bool:
@@ -780,6 +788,64 @@ def check_constants_outside_config(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def check_constants_outside_config_advisory(content: str, file_path: str) -> list[str]:
+    """Return advisory entries for UPPER_SNAKE assignments inside function bodies.
+
+    Module-level UPPER_SNAKE outside config/ is blocking (see
+    check_constants_outside_config). Function-local UPPER_SNAKE is a softer
+    smell — it belongs in config/ but does not block the write. This function
+    surfaces those as advisory so callers can route them to stderr rather than
+    to the blocking deny payload.
+    """
+    if is_config_file(file_path):
+        return []
+
+    if is_test_file(file_path):
+        return []
+
+    if is_workflow_registry_file(file_path):
+        return []
+
+    if is_migration_file(file_path):
+        return []
+
+    advisory_issues: list[str] = []
+    lines = content.split("\n")
+    inside_function = False
+    constant_pattern = re.compile(r"^([A-Z][A-Z0-9_]{2,})\s*=\s*[^=]")
+
+    for line_number, line in enumerate(lines, 1):
+        stripped = line.strip()
+
+        if not stripped:
+            continue
+
+        if re.match(r"^(async\s+)?def\s+\w+", stripped):
+            inside_function = True
+            continue
+
+        if re.match(r"^class\s+\w+", stripped):
+            inside_function = False
+            continue
+
+        indent = len(line) - len(line.lstrip())
+        if indent == 0 and stripped and not stripped.startswith(("#", "@", ")")):
+            inside_function = False
+
+        if inside_function:
+            match = constant_pattern.match(stripped)
+            if match:
+                constant_name = match.group(1)
+                advisory_issues.append(
+                    f"Line {line_number}: Function-local constant {constant_name} - consider moving to config/"
+                )
+
+        if len(advisory_issues) >= 3:
+            break
+
+    return advisory_issues
+
+
 BANNED_IDENTIFIERS: frozenset[str] = frozenset({"result", "data", "output", "response", "value", "item", "temp"})
 MAX_BANNED_IDENTIFIER_ISSUES: int = 3
 BANNED_IDENTIFIER_MESSAGE_SUFFIX: str = "use descriptive name (see CODE_RULES Naming section)"
@@ -1118,6 +1184,8 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_magic_values(content, file_path))
         all_issues.extend(check_fstring_structural_literals(content, file_path))
         all_issues.extend(check_constants_outside_config(content, file_path))
+        for each_advisory in check_constants_outside_config_advisory(content, file_path):
+            print(f"[CODE_RULES advisory] {each_advisory}", file=sys.stderr)
         all_issues.extend(check_file_global_constants_use_count(content, file_path))
         all_issues.extend(check_type_escape_hatches(content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))

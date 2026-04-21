@@ -10,7 +10,6 @@ the Bash call runs. Never blocks or denies — on any error exits 0 with empty o
 import json
 import logging
 import re
-import shlex
 import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
 

@@ -1,5 +1,7 @@
 """Tests for output formatting."""
 
+import json
+
 import pytest
 
 from .output_formatter import (
@@ -91,11 +93,9 @@ class TestOutputFormatter:
 
 class TestJsonFlag:
     def test_json_flag_produces_valid_json(self) -> None:
-        import json
+        completed_validation_run = run_validators_entrypoint_subprocess(["--json"])
 
-        result = run_validators_entrypoint_subprocess(["--json"])
-
-        output = result.stdout.strip()
+        output = completed_validation_run.stdout.strip()
         parsed = json.loads(output)
         assert "results" in parsed
         assert isinstance(parsed["results"], list)

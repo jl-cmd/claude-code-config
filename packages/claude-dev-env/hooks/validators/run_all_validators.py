@@ -30,9 +30,10 @@ package_name = VALIDATORS_DIR.name
 def _hooks_subprocess_working_directory_and_environment() -> tuple[str, dict[str, str]]:
     """Return cwd and env for validator subprocesses.
 
-    Windows ``CreateProcess`` rejects some UNC working directories (WinError
-    267). When the hooks tree resolves to UNC, use a local temp cwd and put the
-    hooks directory on ``PYTHONPATH`` so ``python -m validators.*`` still resolves.
+    On Windows, ``CreateProcess`` rejects some UNC working directories (invalid
+    directory name). When the hooks tree resolves to UNC, use a local temp cwd
+    and put the hooks directory on ``PYTHONPATH`` so ``python -m validators.*``
+    still resolves.
     """
     hooks_directory_string = str(hooks_dir.resolve())
     environment = os.environ.copy()
@@ -42,11 +43,7 @@ def _hooks_subprocess_working_directory_and_environment() -> tuple[str, dict[str
         + (os.pathsep + previous_pythonpath if previous_pythonpath else "")
     )
     working_directory_string = hooks_directory_string
-    if (
-        sys.platform == "win32"
-        and len(working_directory_string) >= 2
-        and working_directory_string.startswith("\\\\")
-    ):
+    if sys.platform == "win32" and working_directory_string.startswith("\\\\"):
         working_directory_string = (
             os.environ.get("TEMP") or os.environ.get("TMP") or "."
         )

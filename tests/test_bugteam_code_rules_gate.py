@@ -40,6 +40,9 @@ def run_git(working_directory: Path, *git_arguments: str) -> subprocess.Complete
 
 def init_repo_with_main(repository_root: Path) -> None:
     run_git(repository_root, "init", "--initial-branch=main")
+    empty_hooks_directory = repository_root / ".pytest_git_hooks"
+    empty_hooks_directory.mkdir(exist_ok=True)
+    run_git(repository_root, "config", "core.hooksPath", str(empty_hooks_directory))
     run_git(repository_root, "config", "user.email", "test@example.com")
     run_git(repository_root, "config", "user.name", "Test User")
 

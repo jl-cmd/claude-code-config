@@ -6,6 +6,7 @@ Exit code 0 = all checks pass, 1 = violations found.
 # pragma: no-tdd-gate
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -26,18 +27,66 @@ hooks_dir = VALIDATORS_DIR.parent
 package_name = VALIDATORS_DIR.name
 
 
+def _hooks_subprocess_working_directory_and_environment() -> tuple[str, dict[str, str]]:
+    """Return cwd and env for validator subprocesses.
+
+    Windows ``CreateProcess`` rejects some UNC working directories (WinError
+    267). When the hooks tree resolves to UNC, use a local temp cwd and put the
+    hooks directory on ``PYTHONPATH`` so ``python -m validators.*`` still resolves.
+    """
+    hooks_directory_string = str(hooks_dir.resolve())
+    environment = os.environ.copy()
+    previous_pythonpath = environment.get("PYTHONPATH", "")
+    environment["PYTHONPATH"] = (
+        hooks_directory_string
+        + (os.pathsep + previous_pythonpath if previous_pythonpath else "")
+    )
+    working_directory_string = hooks_directory_string
+    if (
+        sys.platform == "win32"
+        and len(working_directory_string) >= 2
+        and working_directory_string.startswith("\\\\")
+    ):
+        working_directory_string = (
+            os.environ.get("TEMP") or os.environ.get("TMP") or "."
+        )
+    return working_directory_string, environment
+
+
 def invoke_validator_module(module_stem: str, forwarded_file_paths: List[str]) -> subprocess.CompletedProcess[str]:  # pragma: no-tdd-gate
     """Run a sibling validator as ``python -m validators.<module_stem>``.
 
-    The subprocess is launched with ``cwd`` set to the hooks directory so the
-    ``validators`` package qualifier resolves without requiring PYTHONPATH.
+    The subprocess uses the hooks tree on ``PYTHONPATH`` (and normally ``cwd``
+    there). On Windows, if that path is UNC, ``cwd`` falls back to a local temp
+    directory so ``CreateProcess`` succeeds.
     """
     qualified_module = ".".join([package_name, module_stem])
+    working_directory_string, environment = (
+        _hooks_subprocess_working_directory_and_environment()
+    )
     return subprocess.run(
         [sys.executable, "-m", qualified_module, *forwarded_file_paths],
         capture_output=True,
         text=True,
-        cwd=str(hooks_dir),
+        cwd=working_directory_string,
+        env=environment,
+    )
+
+
+def run_validators_entrypoint_subprocess(
+    extra_arguments: List[str],
+) -> subprocess.CompletedProcess[str]:
+    """Run ``python -m validators.run_all_validators`` with a Windows-safe cwd."""
+    working_directory_string, environment = (
+        _hooks_subprocess_working_directory_and_environment()
+    )
+    entry_module = f"{package_name}.run_all_validators"
+    return subprocess.run(
+        [sys.executable, "-m", entry_module, *extra_arguments],
+        capture_output=True,
+        text=True,
+        cwd=working_directory_string,
+        env=environment,
     )
 
 

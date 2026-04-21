@@ -81,6 +81,14 @@ def git_repo(
         capture_output=True,
     )
     subprocess.run(["git", "init", str(work_dir)], check=True, capture_output=True)
+    empty_hooks_directory = work_dir / ".pytest_git_hooks"
+    empty_hooks_directory.mkdir(exist_ok=True)
+    subprocess.run(
+        ["git", "config", "core.hooksPath", str(empty_hooks_directory)],
+        cwd=str(work_dir),
+        check=True,
+        capture_output=True,
+    )
     subprocess.run(
         ["git", "config", "user.name", "Test User"],
         cwd=str(work_dir),

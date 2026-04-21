@@ -1,8 +1,5 @@
 """Tests for output formatting."""
 
-import os
-import sys
-
 import pytest
 
 from .output_formatter import (
@@ -15,6 +12,7 @@ from .output_formatter import (
     ViolationDict,
     ValidatorResultDict,
 )
+from .run_all_validators import run_validators_entrypoint_subprocess
 
 
 class TestColorize:
@@ -94,18 +92,8 @@ class TestOutputFormatter:
 class TestJsonFlag:
     def test_json_flag_produces_valid_json(self) -> None:
         import json
-        import subprocess
 
-        validators_directory = os.path.dirname(os.path.abspath(__file__))
-        hooks_directory = os.path.normpath(
-            os.path.join(validators_directory, os.pardir)
-        )
-        result = subprocess.run(
-            [sys.executable, "-m", "validators.run_all_validators", "--json"],
-            capture_output=True,
-            text=True,
-            cwd=hooks_directory,
-        )
+        result = run_validators_entrypoint_subprocess(["--json"])
 
         output = result.stdout.strip()
         parsed = json.loads(output)

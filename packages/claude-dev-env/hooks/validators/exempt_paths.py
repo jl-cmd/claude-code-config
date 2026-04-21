@@ -20,9 +20,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_BLOCKING_DIR = str(Path(__file__).resolve().parent.parent / "blocking")
-if _BLOCKING_DIR not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIR)
+
+def _ensure_blocking_package_on_path() -> None:
+    blocking_directory = str(Path(__file__).resolve().parent.parent / "blocking")
+    if blocking_directory not in sys.path:
+        sys.path.insert(0, blocking_directory)
+
+
+_ensure_blocking_package_on_path()
 
 from code_rules_path_utils import is_config_file  # type: ignore[import-not-found] # noqa: E402  # runtime sys.path set above
 

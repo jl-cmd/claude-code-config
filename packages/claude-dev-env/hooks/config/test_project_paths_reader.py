@@ -1,0 +1,87 @@
+"""Tests for project_paths_reader — config reader for ~/.claude/project-paths.json."""
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+_HOOKS_ROOT = Path(__file__).resolve().parent.parent
+if str(_HOOKS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_ROOT))
+
+from config.project_paths_reader import load_registry, registry_contains_path
+
+
+def test_load_registry_returns_empty_dict_when_file_missing(tmp_path: Path) -> None:
+    missing_path = tmp_path / "nonexistent.json"
+    loaded_registry = load_registry(config_path=missing_path)
+    assert loaded_registry == {}
+
+
+def test_load_registry_returns_empty_dict_when_json_is_malformed(
+    tmp_path: Path,
+) -> None:
+    malformed_file = tmp_path / "project-paths.json"
+    malformed_file.write_text("{ not valid json", encoding="utf-8")
+    loaded_registry = load_registry(config_path=malformed_file)
+    assert loaded_registry == {}
+
+
+def test_load_registry_strips_meta_key(tmp_path: Path) -> None:
+    registry_file = tmp_path / "project-paths.json"
+    registry_file.write_text(
+        json.dumps(
+            {
+                "_meta": {"schema_version": 1, "last_scan": "2026-01-01T00:00:00Z"},
+                "my-repo": "Y:\\Projects\\my-repo",
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded_registry = load_registry(config_path=registry_file)
+    assert "_meta" not in loaded_registry
+    assert loaded_registry["my-repo"] == "Y:\\Projects\\my-repo"
+
+
+def test_load_registry_returns_name_to_path_mapping(tmp_path: Path) -> None:
+    registry_file = tmp_path / "project-paths.json"
+    registry_file.write_text(
+        json.dumps(
+            {
+                "repo-alpha": "Y:\\Projects\\repo-alpha",
+                "repo-beta": "C:\\Dev\\repo-beta",
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded_registry = load_registry(config_path=registry_file)
+    assert loaded_registry == {
+        "repo-alpha": "Y:\\Projects\\repo-alpha",
+        "repo-beta": "C:\\Dev\\repo-beta",
+    }
+
+
+def test_load_registry_returns_empty_dict_when_top_level_is_not_object(
+    tmp_path: Path,
+) -> None:
+    registry_file = tmp_path / "project-paths.json"
+    registry_file.write_text(json.dumps(["a", "b"]), encoding="utf-8")
+    loaded_registry = load_registry(config_path=registry_file)
+    assert loaded_registry == {}
+
+
+def test_registry_contains_path_returns_true_when_path_present(tmp_path: Path) -> None:
+    known_registry = {"my-repo": str(tmp_path)}
+    assert registry_contains_path(known_registry, str(tmp_path)) is True
+
+
+def test_registry_contains_path_returns_false_when_path_absent(tmp_path: Path) -> None:
+    known_registry = {"other-repo": "C:\\Other\\Path"}
+    assert registry_contains_path(known_registry, str(tmp_path)) is False
+
+
+def test_registry_contains_path_normalizes_separators(tmp_path: Path) -> None:
+    forward_slash_path = str(tmp_path).replace("\\", "/")
+    known_registry = {"my-repo": str(tmp_path)}
+    assert registry_contains_path(known_registry, forward_slash_path) is True

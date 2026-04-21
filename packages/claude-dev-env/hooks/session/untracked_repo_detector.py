@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""SessionStart hook: detect git repos not present in ~/.claude/project-paths.json.
+
+When Claude Code opens inside a git repo that is not registered, emits an
+additionalContext instruction asking Claude to confirm the mapping with the
+user via AskUserQuestion before persisting anything. The hook itself never
+writes to the config file.
+"""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+_HOOKS_ROOT = Path(__file__).resolve().parent.parent
+if str(_HOOKS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_ROOT))
+
+from config.project_paths_reader import load_registry, registry_contains_path
+
+_CONFIG_FILE_NAME = "project-paths.json"
+_CONFIG_FILE_PATH = str(Path.home() / ".claude" / _CONFIG_FILE_NAME)
+
+
+def current_working_directory() -> str:
+    """Return the process working directory as a string."""
+    return os.getcwd()
+
+
+def find_git_root(start_path: str) -> str | None:
+    """Walk upward from start_path looking for a .git directory.
+
+    Returns the absolute path of the repo root, or None if not found.
+    """
+    candidate = Path(start_path).resolve()
+    while True:
+        if (candidate / ".git").exists():
+            return str(candidate)
+        parent = candidate.parent
+        if parent == candidate:
+            return None
+        candidate = parent
+
+
+def _build_confirm_instruction(repo_root: str) -> str:
+    return (
+        f"UNTRACKED REPO DETECTED: The current session is running inside a git "
+        f"repository at '{repo_root}' that is not present in {_CONFIG_FILE_PATH}. "
+        f"Use AskUserQuestion with two options — 'Save mapping' (recommended) and "
+        f"'Skip for this session' — to confirm whether to persist this repo path. "
+        f"On approval, append a new entry to {_CONFIG_FILE_PATH} mapping the "
+        f"repository leaf name to '{repo_root}'. This hook has written nothing."
+    )
+
+
+def main() -> None:
+    session_cwd = current_working_directory()
+    git_root = find_git_root(session_cwd)
+    if git_root is None:
+        sys.exit(0)
+    known_registry = load_registry()
+    if registry_contains_path(known_registry, git_root):
+        sys.exit(0)
+    instruction = _build_confirm_instruction(git_root)
+    print(json.dumps({"additionalContext": instruction}))
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

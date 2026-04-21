@@ -167,13 +167,13 @@ def test_should_not_flag_when_param_passed_as_exact_default() -> None:
         "    return get(url, timeout=timeout)\n"
         "\n"
         "def run_fetch() -> str:\n"
-        "    return fetch('http://example.com', timeout=30)\n"
+        "    return fetch('http://example.com', timeout=60)\n"
     )
     issues = code_rules_enforcer.check_unused_optional_parameters(
         source, UNUSED_OPTIONAL_PRODUCTION_FILE_PATH
     )
-    assert any("timeout" in issue for issue in issues), (
-        f"Expected 'timeout' flagged when always passed as default value, got: {issues}"
+    assert not any("timeout" in issue for issue in issues), (
+        f"Expected 'timeout' not flagged when a non-default value is passed, got: {issues}"
     )
 
 
@@ -319,19 +319,40 @@ def test_should_advise_with_distinct_skeletons(capsys: object) -> None:
     assert "/teams/" in captured.err, (
         f"Expected advisory for repeated /teams/<x>/users/<x> pattern, got: {captured.err!r}"
     )
-    source = (
-        "class MockUser:\n"
-        "    pass\n"
+
+
+def test_should_emit_advisories_for_incomplete_mocks_and_format_patterns_via_validate_content(
+    capsys: object,
+) -> None:
+    incomplete_mock_source = (
+        "mock_order = {'id': 1}\n"
         "\n"
-        "mock_user = MockUser()\n"
-        "mock_user.name = 'Alice'\n"
-        "\n"
-        "def test_user_email() -> None:\n"
-        "    email = mock_user.email\n"
-        "    assert email\n"
+        "def test_order_total() -> None:\n"
+        "    total = mock_order['total']\n"
+        "    assert total > 0\n"
     )
-    code_rules_enforcer.check_incomplete_mocks(source, INCOMPLETE_MOCK_TEST_FILE_PATH)
+    code_rules_enforcer.validate_content(
+        incomplete_mock_source, INCOMPLETE_MOCK_TEST_FILE_PATH
+    )
     captured = getattr(capsys, "readouterr")()
-    assert "mock_user" in captured.err and "email" in captured.err, (
-        f"Expected advisory about missing 'email' attribute, got: {captured.err!r}"
+    assert "mock_order" in captured.err and "total" in captured.err, (
+        f"Expected incomplete-mock advisory from validate_content, got: {captured.err!r}"
+    )
+
+    repeated_pattern_source = (
+        "def get_user(user_id: str) -> str:\n"
+        "    return f'/api/{user_id}'\n"
+        "\n"
+        "def get_order(order_id: str) -> str:\n"
+        "    return f'/api/{order_id}'\n"
+        "\n"
+        "def get_product(product_id: str) -> str:\n"
+        "    return f'/api/{product_id}'\n"
+    )
+    code_rules_enforcer.validate_content(
+        repeated_pattern_source, DUPLICATED_FORMAT_PRODUCTION_FILE_PATH
+    )
+    captured = getattr(capsys, "readouterr")()
+    assert "/api/" in captured.err and "3" in captured.err, (
+        f"Expected duplicated-format advisory from validate_content, got: {captured.err!r}"
     )

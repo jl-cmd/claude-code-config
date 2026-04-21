@@ -1029,7 +1029,7 @@ def check_skip_decorators_in_tests(content: str, file_path: str) -> list[str]:
 
 
 def _is_existence_only_assertion(call_node: ast.Call) -> bool:
-    """Return True when a Call node is callable(), hasattr(), or 'x is not None' pattern."""
+    """Return True when a Call node is callable() or hasattr()."""
     if not isinstance(call_node.func, ast.Name):
         return False
     return call_node.func.id in ("callable", "hasattr")
@@ -1329,11 +1329,15 @@ def _call_passes_positional_argument_for_param(
 
 
 def _function_name_from_call(call_node: ast.Call) -> str | None:
-    """Return the simple function name referenced by a Call node, or None."""
+    """Return the function name for direct calls only, or None.
+
+    Only direct calls (ast.Name) are matched as same-file call sites.
+    Attribute calls like obj.foo() are not counted because the receiver
+    object may not be the same file's definition — returning the attr name
+    would cause false positives against any local function sharing that name.
+    """
     if isinstance(call_node.func, ast.Name):
         return call_node.func.id
-    if isinstance(call_node.func, ast.Attribute):
-        return call_node.func.attr
     return None
 
 
@@ -1502,6 +1506,12 @@ def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
     Skips test files, config files, workflow registry files, migration files,
     and hook infrastructure files.  Only checks functions that have at least
     one same-file call site.
+
+    Scope limit (v1): only module-level functions are analyzed. Methods defined
+    inside a ClassDef are skipped because the positional-index calculation would
+    need to account for the implicit self/cls parameter, which is absent at
+    call sites using attribute access (obj.method(...)). Method analysis is out
+    of scope for this version.
     """
     if is_test_file(file_path):
         return []
@@ -1519,10 +1529,18 @@ def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
 
+    method_node_ids: set[int] = set()
+    for each_node in ast.walk(module_tree):
+        if isinstance(each_node, ast.ClassDef):
+            for each_class_member in each_node.body:
+                if isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    method_node_ids.add(id(each_class_member))
+
     all_function_nodes: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
     for each_node in ast.walk(module_tree):
         if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            all_function_nodes[each_node.name] = each_node
+            if id(each_node) not in method_node_ids:
+                all_function_nodes[each_node.name] = each_node
 
     all_call_nodes: list[ast.Call] = [
         each_node
@@ -1593,6 +1611,8 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_existence_check_tests(content, file_path))
         all_issues.extend(check_constant_equality_tests(content, file_path))
         all_issues.extend(check_unused_optional_parameters(content, file_path))
+        check_incomplete_mocks(content, file_path)
+        check_duplicated_format_patterns(content, file_path)
 
     elif extension in JAVASCRIPT_EXTENSIONS:
         if not is_test_file(file_path):

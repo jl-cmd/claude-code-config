@@ -2,8 +2,8 @@
 """One-time bootstrap: discover git repos via es.exe and write ~/.claude/project-paths.json.
 
 Invokes Everything's command-line binary (es.exe) with a folders-only query to
-locate every ``.git`` directory on fixed drives, applies final-segment and
-exclusion filters, presents the discovered mapping to the user, and writes the
+locate ``.git`` directories across all indexed locations, applies final-segment
+and exclusion filters, presents the discovered mapping to the user, and writes the
 approved entries to the per-user config file. Never hardcodes scan roots —
 discovery runs against whatever es.exe returns on the local machine.
 """
@@ -30,13 +30,10 @@ from hook_config.setup_project_paths_constants import (
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
     EXCLUDED_PATH_SEGMENTS,
     GIT_DIRECTORY_SEGMENT_NAME,
-    ISO_TIMESTAMP_SUFFIX_UTC,
     JSON_INDENT_SPACES,
     META_KEY,
     STDERR_TRUNCATION_LENGTH,
     SUPPORTED_SCHEMA_VERSION,
-    TEMP_FILE_SUFFIX,
-    USER_RESPONSE_AFFIRMATIVE_VALUES,
     UTF8_ENCODING,
     WROTE_ENTRIES_STATUS_TEMPLATE,
 )
@@ -119,7 +116,8 @@ def apply_exclusion_filter(all_candidate_paths: list[str]) -> list[str]:
 def _current_iso_timestamp_utc() -> str:
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     formatted = now_utc.strftime("%Y-%m-%dT%H:%M:%S")
-    return formatted + ISO_TIMESTAMP_SUFFIX_UTC
+    iso_utc_suffix = "Z"
+    return formatted + iso_utc_suffix
 
 
 def merge_registries(
@@ -190,7 +188,8 @@ def write_registry_atomically(registry_to_write: dict, target_file: Path) -> Non
     performs no file reads and no schema checks.
     """
     target_file.parent.mkdir(parents=True, exist_ok=True)
-    temp_sibling_path = target_file.with_suffix(target_file.suffix + TEMP_FILE_SUFFIX)
+    temp_suffix = ".tmp"
+    temp_sibling_path = target_file.with_suffix(target_file.suffix + temp_suffix)
     serialized_text = json.dumps(registry_to_write, indent=JSON_INDENT_SPACES, sort_keys=True)
     try:
         temp_sibling_path.write_text(serialized_text, encoding=UTF8_ENCODING)
@@ -235,8 +234,9 @@ def _default_user_config_path() -> Path:
 
 
 def _prompt_for_affirmative(prompt_text: str) -> bool:
+    affirmative_values = frozenset({"yes", "y"})
     user_response = input(prompt_text).strip().lower()
-    return user_response in USER_RESPONSE_AFFIRMATIVE_VALUES
+    return user_response in affirmative_values
 
 
 def _leaf_name_of(repo_root_path: str) -> str:
@@ -244,17 +244,8 @@ def _leaf_name_of(repo_root_path: str) -> str:
     return leaf if leaf else repo_root_path
 
 
-def prompt_and_write(
-    path_by_name: dict[str, str],
-    save_path: Path,
-) -> None:
-    """Present the mapping to the user and write it only on explicit approval.
-
-    The mapping's keys are repo names and the values are absolute paths. The
-    function reads and validates the existing registry BEFORE asking the user
-    to confirm, so the user learns of any schema or read error before being
-    prompted. Declining the confirmation writes nothing.
-    """
+def _load_and_validate_registry(save_path: Path) -> dict:
+    """Read and validate the existing registry, exiting on fatal errors."""
     try:
         existing_registry = _read_existing_registry(save_path)
     except RegistryReadError as registry_error:
@@ -273,10 +264,30 @@ def prompt_and_write(
             file=sys.stderr,
         )
         raise SystemExit(1) from schema_error
+    return existing_registry
+
+
+def _display_proposed_mapping(
+    path_by_name: dict[str, str], save_path: Path
+) -> None:
+    """Print the proposed name-to-path mapping for user review."""
     print(f"Proposed mapping (save target: {save_path}):")
     for each_name, each_path in sorted(path_by_name.items()):
         print(f"  {each_name} -> {each_path}")
     print()
+
+
+def prompt_and_write(
+    path_by_name: dict[str, str],
+    save_path: Path,
+) -> None:
+    """Present the mapping to the user and write it only on explicit approval.
+
+    Reads and validates the existing registry BEFORE prompting so the user
+    learns of any schema or read error early. Declining writes nothing.
+    """
+    existing_registry = _load_and_validate_registry(save_path)
+    _display_proposed_mapping(path_by_name, save_path)
     if not _prompt_for_affirmative(CONFIRMATION_PROMPT_TEXT):
         print(ABORTED_NOTHING_WRITTEN_MESSAGE)
         return
@@ -293,7 +304,7 @@ def _build_path_by_name_from_roots(all_repo_roots: list[str]) -> dict[str, str]:
             kept_path = path_by_name[each_leaf_name]
             print(
                 f"Duplicate leaf name '{each_leaf_name}' — keeping {kept_path}, "
-                f"skipping {each_repo_root}. Edit ~/.claude/project-paths.json "
+                f"skipping {each_repo_root}. Edit {registry_file_path()} "
                 "after generation to disambiguate."
             )
             continue

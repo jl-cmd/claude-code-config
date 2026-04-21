@@ -17,6 +17,7 @@ from hook_config.project_paths_reader import (
     registry_contains_path,
     registry_file_path,
 )
+from hook_config.setup_project_paths_constants import META_KEY
 
 
 def test_reader_does_not_redefine_dynamic_stderr_handler_locally() -> None:
@@ -122,6 +123,18 @@ def test_registry_file_path_returns_dot_claude_project_paths_json() -> None:
 def test_registry_file_path_is_absolute() -> None:
     resolved_path = registry_file_path()
     assert resolved_path.is_absolute()
+
+
+def test_load_registry_uses_shared_meta_key_constant() -> None:
+    """Pin: load_registry must import META_KEY from setup_project_paths_constants.
+
+    The bare string literal "_meta" must not appear in load_registry;
+    it must use the shared META_KEY constant as the single source of truth.
+    """
+    source = inspect.getsource(project_paths_reader.load_registry)
+    assert '"_meta"' not in source, (
+        'load_registry must use META_KEY constant, not the bare literal "_meta"'
+    )
 
 
 def test_load_registry_uses_shared_utf8_encoding_constant() -> None:

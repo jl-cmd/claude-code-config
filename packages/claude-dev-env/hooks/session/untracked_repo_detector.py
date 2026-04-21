@@ -7,6 +7,8 @@ user via AskUserQuestion before persisting anything. The hook itself never
 writes to the config file.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import sys
@@ -27,6 +29,7 @@ from hook_config.project_paths_reader import (
     registry_contains_path,
     registry_file_path,
 )
+from hook_config.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME
 
 
 def current_working_directory() -> str:
@@ -41,7 +44,7 @@ def find_git_root(start_path: str) -> str | None:
     """
     candidate = Path(start_path).resolve()
     while True:
-        if (candidate / ".git").exists():
+        if (candidate / GIT_DIRECTORY_SEGMENT_NAME).exists():
             return str(candidate)
         parent = candidate.parent
         if parent == candidate:

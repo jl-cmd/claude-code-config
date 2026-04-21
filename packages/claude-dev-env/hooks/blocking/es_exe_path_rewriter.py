@@ -7,6 +7,8 @@ tokens with their quoted absolute paths from ~/.claude/project-paths.json before
 the Bash call runs. Never blocks or denies — on any error exits 0 with empty output.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -83,6 +85,16 @@ def _split_on_es_exe(command: str) -> tuple[str, str]:
     return command[: match.end()], command[match.end() :]
 
 
+def _strip_matching_outer_quotes(token: str) -> tuple[str, bool]:
+    """Return (inner_text, was_quoted) after removing matched outer quotes."""
+    if len(token) >= 2:
+        if (token[0] == '"' and token[-1] == '"') or (
+            token[0] == "'" and token[-1] == "'"
+        ):
+            return token[1:-1], True
+    return token, False
+
+
 def _rewrite_bare_tokens(command_suffix: str, registry: dict[str, str]) -> str:
     all_raw_parts = re.split(r"(\s+)", command_suffix)
     all_rewritten_parts: list[str] = []
@@ -90,12 +102,12 @@ def _rewrite_bare_tokens(command_suffix: str, registry: dict[str, str]) -> str:
         if not each_raw_part or each_raw_part.isspace():
             all_rewritten_parts.append(each_raw_part)
             continue
-        is_quoted = each_raw_part.startswith('"') or each_raw_part.startswith("'")
-        if is_quoted:
+        unquoted_text, was_quoted = _strip_matching_outer_quotes(each_raw_part)
+        if was_quoted and " " in unquoted_text:
             all_rewritten_parts.append(each_raw_part)
             continue
-        if each_raw_part in registry and not _token_is_absolute_path(each_raw_part):
-            all_rewritten_parts.append(_quote_path(registry[each_raw_part]))
+        if unquoted_text in registry and not _token_is_absolute_path(unquoted_text):
+            all_rewritten_parts.append(_quote_path(registry[unquoted_text]))
         else:
             all_rewritten_parts.append(each_raw_part)
     return "".join(all_rewritten_parts)

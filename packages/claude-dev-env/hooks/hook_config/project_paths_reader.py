@@ -1,12 +1,14 @@
 """Load the per-user project-path registry from ~/.claude/project-paths.json."""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
 from pathlib import Path
 
 from hook_config.dynamic_stderr_handler import DynamicStderrHandler
-from hook_config.setup_project_paths_constants import UTF8_ENCODING
+from hook_config.setup_project_paths_constants import META_KEY, UTF8_ENCODING
 
 
 _logger = logging.getLogger("project_paths_reader")
@@ -54,11 +56,10 @@ def load_registry(config_path: Path | None = None) -> dict[str, str]:
         return {}
     if not isinstance(parsed, dict):
         return {}
-    meta_key = "_meta"
     return {
         each_key: each_value
         for each_key, each_value in parsed.items()
-        if each_key != meta_key
+        if each_key != META_KEY
         and isinstance(each_key, str)
         and isinstance(each_value, str)
     }

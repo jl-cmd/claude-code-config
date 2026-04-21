@@ -47,3 +47,11 @@ def test_placeholder_token_pattern_matches_single_quoted_form() -> None:
 
 def test_placeholder_token_pattern_does_not_match_shell_parameter_expansion() -> None:
     assert PLACEHOLDER_TOKEN_PATTERN.search("${myrepo}") is None
+
+
+def test_placeholder_token_pattern_does_not_match_embedded_in_flag() -> None:
+    assert PLACEHOLDER_TOKEN_PATTERN.search("--flag={my-repo}") is None
+
+
+def test_placeholder_token_pattern_does_not_match_embedded_in_token() -> None:
+    assert PLACEHOLDER_TOKEN_PATTERN.search("foo{my-repo}bar") is None

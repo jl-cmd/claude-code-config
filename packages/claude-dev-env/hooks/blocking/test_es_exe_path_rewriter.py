@@ -313,6 +313,40 @@ class TestQuoteAwareTokenizer:
         assert rewritten == f'es.exe "Y:\\Projects\\my-repo"\tconfig.py'
 
 
+class TestQuotedSingleWordRewrite:
+    def test_double_quoted_single_word_registry_key_is_rewritten(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = 'es.exe "my-repo" config.py'
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == f'es.exe "Y:\\Projects\\my-repo" config.py'
+
+    def test_single_quoted_single_word_registry_key_is_rewritten(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = "es.exe 'my-repo' config.py"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == f'es.exe "Y:\\Projects\\my-repo" config.py'
+
+
+class TestPlaceholderBoundaryEnforcement:
+    def test_placeholder_inside_flag_argument_is_not_rewritten(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = "es.exe --regex=^{my-repo}$"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == command
+
+    def test_placeholder_embedded_in_token_is_not_rewritten(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = "es.exe foo{my-repo}bar"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == command
+
+    def test_standalone_placeholder_is_still_rewritten(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = "es.exe {my-repo} config.py"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == f'es.exe "Y:\\Projects\\my-repo" config.py'
+
+
 class TestAbsolutePathDetection:
     def test_windows_drive_letter_path_detected_as_absolute(self) -> None:
         assert rewriter._token_is_absolute_path("C:\\Users\\x")

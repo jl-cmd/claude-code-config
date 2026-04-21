@@ -1,4 +1,9 @@
-"""Configuration constants for the setup_project_paths bootstrap script."""
+"""Configuration constants for the setup_project_paths bootstrap script.
+
+Shared constants consumed by two or more modules across the hook subsystem.
+Single-use values are inlined into their consuming functions per the
+file-global-constants use-count rule.
+"""
 
 from __future__ import annotations
 
@@ -14,12 +19,6 @@ EXCLUDED_PATH_SEGMENTS = frozenset(
         "$recycle.bin",
     }
 )
-
-TEMP_FILE_SUFFIX = ".tmp"
-
-ISO_TIMESTAMP_SUFFIX_UTC = "Z"
-
-USER_RESPONSE_AFFIRMATIVE_VALUES = frozenset({"yes", "y"})
 
 JSON_INDENT_SPACES = 2
 

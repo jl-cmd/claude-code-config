@@ -1,96 +1,125 @@
 ---
 name: copilot-review
 description: >-
-  Babysits the GitHub Copilot reviewer on the current PR with a 5-minute
-  self-wake loop. On each tick: fetches the latest copilot-pull-request-reviewer[bot]
-  review, fixes unaddressed inline findings against the current HEAD (new commit,
-  push, inline replies), then re-requests review via the documented
-  requested_reviewers API. Triggers: '/copilot-review', 'watch copilot',
-  'babysit copilot review', 'loop copilot reviews', 're-request copilot',
-  'keep re-requesting copilot'.
+  Spawns a background subagent that babysits the GitHub Copilot reviewer on the
+  current PR. The subagent self-paces at ~5 minutes per tick, fetches the
+  latest copilot-pull-request-reviewer[bot] review, fixes unaddressed inline
+  findings against current HEAD (new commit, push, inline replies), and
+  re-requests review via the documented requested_reviewers API. The subagent
+  terminates on convergence (clean review against HEAD) and reports back.
+  Triggers: '/copilot-review', 'watch copilot', 'babysit copilot review',
+  'loop copilot reviews', 're-request copilot', 'keep re-requesting copilot'.
 ---
 
 # Copilot Review
 
-Loops Copilot reviews on the current PR until it returns a clean review against the current HEAD.
+Delegates Copilot babysitting to a background subagent so the main session stays free. The subagent loops internally and closes itself on convergence.
 
 ## When this skill applies
 
-The user is on a PR branch, wants Copilot (the GitHub Copilot reviewer bot) to keep re-reviewing after each push, and wants findings auto-addressed between ticks.
+The user is on a PR branch, wants Copilot (the GitHub Copilot reviewer bot) to keep re-reviewing after each push, and wants findings auto-addressed between ticks — but does not want the main conversation consumed by polling.
 
 ## The Process
 
-### Step 1: Start the 5-minute loop
+### Step 1: Gather PR context
 
-Invoke the `loop` skill with a 5-minute cadence. The looped prompt is the per-tick work in Step 2.
-
-```
-/loop 5m <per-tick instructions from Step 2>
-```
-
-Record the returned `job_id` so the user can stop the loop.
-
-### Step 2: Per-tick work
-
-On each tick, against the current PR (`gh pr view --json number,url,headRefOid,baseRefName`):
-
-1. **Resolve HEAD.** Capture `headRefOid` — the current HEAD SHA.
-2. **Fetch latest Copilot review.**
-
-   ```bash
-   gh api repos/OWNER/REPO/pulls/PR_NUMBER/reviews \
-     --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]")] | sort_by(.submitted_at) | last'
-   ```
-
-   Capture `commit_id`, `state`, `submitted_at`, and `id`.
-3. **Decide the branch:**
-   - **No review exists yet:** re-request (Step 3) and return. Copilot has not looked at the PR.
-   - **Latest review's `commit_id` != current HEAD:** re-request (Step 3) and return. Copilot reviewed an older commit; prompt it to look at HEAD.
-   - **Latest review's `commit_id` == current HEAD, state is `COMMENTED` or `CHANGES_REQUESTED` with unresolved inline comments:** fix the findings (Step 4), push, reply inline on each thread, then re-request (Step 3).
-   - **Latest review's `commit_id` == current HEAD, clean (no unresolved inline findings, or state is `APPROVED`):** report clean and return. Do not re-request a clean HEAD review.
-4. **Stop condition.** If the loop has produced a clean review against HEAD, tell the user and stop (`CronDelete <job_id>`). Otherwise the loop continues on its own.
-
-### Step 3: Re-request Copilot
-
-Use this exact command. The reviewer ID **must** be `copilot-pull-request-reviewer[bot]` with the `[bot]` suffix — empirically verified: `Copilot`, `copilot`, and `github-copilot` all return `requested_reviewers: []` with no error, so the API silently no-ops.
+From the current repo:
 
 ```bash
-gh api -X POST repos/OWNER/REPO/pulls/PR_NUMBER/requested_reviewers \
-  -f 'reviewers[]=copilot-pull-request-reviewer[bot]'
+gh pr view --json number,url,headRefOid,baseRefName,headRefName,isDraft
 ```
 
-### Step 4: Fix findings
+Capture `number`, `headRefOid`, owner/repo (from `url`), and branch name. Pass these to the subagent so it does not rediscover them.
 
-For each unaddressed inline comment on the latest review:
+### Step 2: Spawn the background subagent
 
-1. Read the referenced file:line.
-2. Write a failing test that reproduces the concern (TDD — skip only when the finding is a doc/comment nit with no behavior to test).
-3. Implement the fix.
-4. Commit on the existing branch (no amend, no force).
-5. Push.
-6. Reply inline on each comment thread via `gh api -X POST repos/OWNER/REPO/pulls/PR_NUMBER/comments` with `in_reply_to` set to the comment id, describing what changed and the new commit SHA.
+Invoke the `Agent` tool with:
 
-Then proceed to Step 3 to re-request review against the new HEAD.
+- `subagent_type: "general-purpose"`
+- `run_in_background: true`
+- `description: "Copilot review loop for PR #<N>"`
+- `prompt`: the full instructions in **Step 3 (Subagent prompt template)**, with placeholders filled in from Step 1.
 
-## Stopping the loop
+Record the returned agent ID. Tell the user:
 
-- Clean review received → skill stops itself (`CronDelete <job_id>`).
-- User says stop → run `CronDelete <job_id>` immediately.
-- User lists active loops → `CronList`.
+- The subagent is running in the background.
+- It will self-terminate on convergence.
+- To stop early: user says "stop the copilot loop" and you call `TaskStop <agent_id>`.
+- The main session is free; completion arrives as a notification.
 
-## Constraints
+Do **not** use `/loop` or `CronCreate` in the main session. The subagent owns its own cadence.
+
+### Step 3: Subagent prompt template
+
+Pass this verbatim to the subagent (substituting the bracketed values):
+
+> You are babysitting the GitHub Copilot reviewer on PR **#[NUMBER]** at **[OWNER]/[REPO]** (branch `[BRANCH]`, current HEAD `[HEAD_SHA]`). Your job: keep the loop running until Copilot returns a clean review against the current HEAD, then stop.
+>
+> **Per-tick work** (do this now, then on each wakeup):
+>
+> 1. Resolve current HEAD: `gh api repos/[OWNER]/[REPO]/pulls/[NUMBER] --jq '.head.sha'`.
+> 2. Fetch latest Copilot review:
+>    ```bash
+>    gh api repos/[OWNER]/[REPO]/pulls/[NUMBER]/reviews \
+>      --jq '[.[] | select(.user.login=="copilot-pull-request-reviewer[bot]")] | sort_by(.submitted_at) | last'
+>    ```
+>    Capture `commit_id`, `state`, `submitted_at`, `id`.
+> 3. Decide the branch:
+>    - **No review exists:** re-request (step 4), schedule next wakeup, return.
+>    - **Latest review's `commit_id` != current HEAD:** re-request (step 4), schedule next wakeup, return.
+>    - **Latest review's `commit_id` == current HEAD with unresolved inline findings:** TDD-fix them, push, reply inline on each thread, re-request (step 4), schedule next wakeup, return.
+>    - **Latest review's `commit_id` == current HEAD and clean:** report convergence to parent (one-sentence summary), **do not** schedule another wakeup. You are done.
+> 4. Re-request Copilot. The reviewer ID **must** be `copilot-pull-request-reviewer[bot]` with the `[bot]` suffix — empirically verified: `Copilot`, `copilot`, and `github-copilot` all return `requested_reviewers: []` with no error, silently no-op.
+>    ```bash
+>    gh api -X POST repos/[OWNER]/[REPO]/pulls/[NUMBER]/requested_reviewers \
+>      -f 'reviewers[]=copilot-pull-request-reviewer[bot]'
+>    ```
+> 5. Schedule the next wakeup with `ScheduleWakeup`:
+>    - `delaySeconds: 300`
+>    - `reason`: one short sentence on what you are waiting for.
+>    - `prompt`: the literal sentinel `<<autonomous-loop-dynamic>>` so the next firing re-enters these instructions.
+>
+> **Fix protocol** (step 3, third branch):
+>
+> - Read each referenced file:line.
+> - Write a failing test first when the finding has behavior to test; skip only for pure doc/comment nits.
+> - Implement the fix.
+> - Commit on the existing branch. Never `--amend`, `--force`, `--no-verify`, or rebase.
+> - Push.
+> - Reply inline on each comment thread: `gh api -X POST repos/[OWNER]/[REPO]/pulls/[NUMBER]/comments` with `in_reply_to` set to the comment id, referencing the new commit SHA.
+>
+> **Stop conditions:**
+>
+> - Convergence (clean review against HEAD): report and terminate.
+> - Unrecoverable error (push blocked by hook you cannot resolve, API auth failure, CI broken and you cannot fix it in one commit): report the blocker to the parent and terminate without scheduling another wakeup.
+> - Parent sends `TaskStop`: terminate immediately.
+>
+> **Safety cap:** if you have run 20 ticks without convergence, stop and report — something is wrong with the loop.
+
+### Step 4: Report back to the user
+
+After spawning, tell the user in one or two lines: subagent ID, PR URL, that it will notify on convergence or blocker. Nothing else.
+
+## Stopping the subagent
+
+- Convergence → subagent stops itself.
+- Blocker → subagent reports and stops.
+- User says stop → `TaskStop <agent_id>`.
+- User asks what loops are running → `TaskList`.
+
+## Constraints (for the subagent)
 
 - **Never `--force`, `--amend`, or rebase.** Each tick appends commits.
 - **Never `--no-verify`.** If a pre-push hook fails, diagnose and fix.
-- **Draft PR state.** If the PR is ready-for-review, leave it alone. If the user wants it drafted before the loop, they must say so.
-- **One tick = at most one fix commit.** Don't batch multiple review rounds into a single tick.
+- **Draft PR state.** If the PR is ready-for-review, leave it alone. If the user wants it drafted before the loop, they say so.
+- **One tick = at most one fix commit.** Do not batch multiple review rounds into a single tick.
 - **The `[bot]` suffix is load-bearing.** Every other spelling of the Copilot reviewer silently fails.
 
 ## Examples
 
 <example>
 User: `/copilot-review`
-Claude: [reads PR, starts /loop 5m, returns job_id, reports "watching PR #123; tick every 5m"]
+Claude: [reads PR context, spawns background subagent with the Step 3 template, reports "subagent X watching PR #123; will notify on convergence"]
 </example>
 
 <example>
@@ -99,16 +128,16 @@ Claude: [same as above]
 </example>
 
 <example>
-Tick fires, latest Copilot review is against an older commit.
-Claude: [re-requests review, returns]
+Subagent tick fires, latest Copilot review is against an older commit.
+Subagent: [re-requests review, schedules next wakeup, returns]
 </example>
 
 <example>
-Tick fires, Copilot has 2 unaddressed inline findings on HEAD.
-Claude: [TDD-fixes both, one commit, pushes, replies inline on both threads, re-requests review]
+Subagent tick fires, Copilot has 2 unaddressed inline findings on HEAD.
+Subagent: [TDD-fixes both, one commit, pushes, replies inline on both threads, re-requests review, schedules next wakeup]
 </example>
 
 <example>
-Tick fires, latest review is clean against HEAD.
-Claude: [stops the loop via CronDelete, reports done]
+Subagent tick fires, latest review is clean against HEAD.
+Subagent: [reports convergence to parent, terminates — no further wakeups]
 </example>

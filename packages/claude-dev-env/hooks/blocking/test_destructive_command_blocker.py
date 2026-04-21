@@ -210,6 +210,24 @@ def test_rm_rf_allowed_when_target_is_under_worktrees_segment() -> None:
     assert result.returncode == 0
 
 
+def test_rm_rf_asks_when_target_is_bare_worktrees_directory() -> None:
+    payload = _make_bash_payload("rm -rf /Users/me/repo/worktrees")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_rm_includes_option_with_equals_sign() -> None:
+    payload = _make_bash_payload("rm -rf --files0-from=/tmp/list /tmp/scratch")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
 def test_rm_rf_allowed_when_both_targets_are_ephemeral() -> None:
     payload = _make_bash_payload("rm -rf /tmp/first_dir /tmp/second_dir")
 

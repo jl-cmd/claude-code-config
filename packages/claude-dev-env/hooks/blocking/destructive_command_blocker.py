@@ -147,6 +147,35 @@ def _path_is_bare_ephemeral_root(resolved_path: str) -> bool:
     return forward_slash_normalized_path in forbidden_bare_ephemeral_roots
 
 
+def _path_is_bare_named_worktrees_container(resolved_path: str) -> bool:
+    return Path(resolved_path).name.lower() in ("worktrees", "worktree")
+
+
+def _rm_flags_before_double_dash_are_unsafe(tokens_after_rm: list[str]) -> bool:
+    safe_long_options = frozenset({
+        "--recursive",
+        "--force",
+        "--verbose",
+        "--interactive",
+        "--dir",
+    })
+    for each_token in tokens_after_rm:
+        if each_token == "--":
+            return False
+        if not each_token.startswith("-"):
+            continue
+        if "=" in each_token:
+            return True
+        if each_token.startswith("--"):
+            if each_token not in safe_long_options:
+                return True
+            continue
+        short_rest = each_token[1:]
+        if not short_rest or not all(c in "rfRvidI" for c in short_rest):
+            return True
+    return False
+
+
 def _collect_rm_target_tokens(tokens_after_rm: list[str]) -> list[str]:
     targets: list[str] = []
     seen_end_of_options = False
@@ -165,8 +194,10 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
 
     Refuses compound commands so operators like && / || / ; / | / backticks /
     $(...) cannot piggy-back non-rm work on the ephemeral auto-allow. Rejects
-    bare ephemeral roots (/tmp, system temp dir) so we never auto-approve
-    wiping an entire scratch root.
+    bare ephemeral roots (/tmp, system temp dir) and bare directories named
+    worktrees/worktree so we never auto-approve wiping those roots. Only
+    allows common short flags and a small set of long options before ``--``;
+    tokens with ``=`` or unknown long options disable auto-allow.
     """
     compound_shell_operator_pattern = re.compile(r'(?:&&|\|\||;|\||`|\$\()')
     if compound_shell_operator_pattern.search(command):
@@ -177,13 +208,18 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
         return False
     if len(all_command_tokens) < 2 or all_command_tokens[0] != "rm":
         return False
-    all_target_tokens = _collect_rm_target_tokens(all_command_tokens[1:])
+    tokens_after_rm = all_command_tokens[1:]
+    if _rm_flags_before_double_dash_are_unsafe(tokens_after_rm):
+        return False
+    all_target_tokens = _collect_rm_target_tokens(tokens_after_rm)
     if not all_target_tokens:
         return False
     for each_target_token in all_target_tokens:
         each_unquoted_token = each_target_token.strip("\"'")
         each_resolved_path = os.path.normpath(os.path.expanduser(each_unquoted_token))
         if _path_is_bare_ephemeral_root(each_resolved_path):
+            return False
+        if _path_is_bare_named_worktrees_container(each_resolved_path):
             return False
         if not directory_is_ephemeral(each_resolved_path):
             return False
@@ -211,6 +247,24 @@ def targets_only_claude_directory(command: str) -> bool:
     return True
 
 
+def _ephemeral_recursive_rm_auto_allow_granted(command: str, matched_description: str) -> bool:
+    return matched_description.startswith(("rm -rf", "rm --recursive")) and rm_targets_only_ephemeral_paths(command)
+
+
+def _git_reset_hard_allowed_for_command(command: str, current_working_directory: str) -> bool:
+    if directory_is_ephemeral(current_working_directory):
+        return True
+    current_working_directory_lowercased = os.path.normpath(current_working_directory).lower()
+    for allowed_project in load_allow_git_reset_hard_projects():
+        allowed_project_lowercased = os.path.normpath(allowed_project).lower()
+        if current_working_directory_lowercased.startswith(allowed_project_lowercased):
+            return True
+        for path_match in re.findall(r'cd\s+"([^"]+)"', command):
+            if os.path.normpath(path_match).lower().startswith(allowed_project_lowercased):
+                return True
+    return False
+
+
 def main() -> None:
     try:
         hook_input = json.load(sys.stdin)
@@ -236,26 +290,12 @@ def main() -> None:
     if matched_description is not None and targets_only_claude_directory(command):
         sys.exit(0)
 
-    # Allow rm -rf / rm --recursive --force when every target path resolves
-    # into an ephemeral directory (system temp root, /tmp/*, /temp/*, worktree).
-    if matched_description is not None and matched_description.startswith(("rm -rf", "rm --recursive")):
-        if rm_targets_only_ephemeral_paths(command):
-            sys.exit(0)
+    if matched_description is not None and _ephemeral_recursive_rm_auto_allow_granted(command, matched_description):
+        sys.exit(0)
 
-    # Allow git reset --hard in explicitly approved projects (case-insensitive for Windows drive letters)
     if matched_description is not None and "git reset --hard" in matched_description:
-        current_working_directory = os.getcwd()
-        if directory_is_ephemeral(current_working_directory):
+        if _git_reset_hard_allowed_for_command(command, os.getcwd()):
             sys.exit(0)
-        current_working_directory_lowercased = os.path.normpath(current_working_directory).lower()
-        for allowed_project in load_allow_git_reset_hard_projects():
-            allowed_project_lowercased = os.path.normpath(allowed_project).lower()
-            if current_working_directory_lowercased.startswith(allowed_project_lowercased):
-                sys.exit(0)
-            # Also check the cd target in the command itself
-            for path_match in re.findall(r'cd\s+"([^"]+)"', command):
-                if os.path.normpath(path_match).lower().startswith(allowed_project_lowercased):
-                    sys.exit(0)
 
     if matched_description is not None:
         ask_response = {

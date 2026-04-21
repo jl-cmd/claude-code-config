@@ -9,11 +9,22 @@ the two produced the "inconsistent verdicts" bug this module prevents.
 Matching is case-insensitive so paths like ``Config/foo.py`` or
 ``src/Tests/test_x.py`` are treated the same on case-preserving
 filesystems (macOS default, Windows NTFS) as on case-sensitive ones.
+
+``is_config_file`` canonical implementation lives in
+``hooks/blocking/code_rules_path_utils.py`` and is re-exported here so
+both the pre-write gate and the pre-push validator share identical logic.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+_BLOCKING_DIR = str(Path(__file__).resolve().parent.parent / "blocking")
+if _BLOCKING_DIR not in sys.path:
+    sys.path.insert(0, _BLOCKING_DIR)
+
+from code_rules_path_utils import is_config_file  # type: ignore[import-not-found] # noqa: E402  # runtime sys.path set above
 
 
 TEST_PATH_PATTERNS: frozenset[str] = frozenset(
@@ -55,14 +66,6 @@ MIGRATION_PATH_PATTERNS: frozenset[str] = frozenset(
         "\\migrations\\",
     }
 )
-
-
-def is_config_file(file_path: str) -> bool:
-    normalized = file_path.replace("\\", "/").lower()
-    if normalized.endswith("/settings.py") or normalized == "settings.py":
-        return True
-    path_parts = Path(normalized).parts
-    return "config" in path_parts[:-1]
 
 
 def is_test_file(file_path: str) -> bool:

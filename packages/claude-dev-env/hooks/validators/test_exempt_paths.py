@@ -7,7 +7,15 @@ outside a config/ directory must NOT match.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+_BLOCKING_DIR = str(Path(__file__).resolve().parent.parent / "blocking")
+if _BLOCKING_DIR not in sys.path:
+    sys.path.insert(0, _BLOCKING_DIR)
+
 from .exempt_paths import is_config_file
+from code_rules_path_utils import is_config_file as path_utils_is_config_file  # noqa: E402
 
 
 def test_should_exempt_file_inside_config_directory() -> None:
@@ -48,3 +56,10 @@ def test_should_exempt_bare_settings_py_filename() -> None:
 
 def test_should_exempt_settings_py_in_nested_path() -> None:
     assert is_config_file("path/to/settings.py") is True
+
+
+def test_is_config_file_is_identical_function_object_from_path_utils() -> None:
+    """After refactor, exempt_paths.is_config_file must be the same object as path_utils."""
+    assert is_config_file is path_utils_is_config_file, (
+        "exempt_paths.is_config_file must be imported from code_rules_path_utils, not re-defined"
+    )

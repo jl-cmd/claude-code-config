@@ -31,6 +31,12 @@ import tokenize
 from pathlib import Path
 from typing import Optional
 
+_BLOCKING_DIR = str(Path(__file__).resolve().parent)
+if _BLOCKING_DIR not in sys.path:
+    sys.path.insert(0, _BLOCKING_DIR)
+
+from code_rules_path_utils import is_config_file  # noqa: E402  # runtime sys.path set above
+
 PYTHON_EXTENSIONS = {".py"}
 JAVASCRIPT_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx"}
 ALL_CODE_EXTENSIONS = PYTHON_EXTENSIONS | JAVASCRIPT_EXTENSIONS
@@ -67,19 +73,6 @@ def is_hook_infrastructure(file_path: str) -> bool:
     """Check if file is a Claude Code hook (standalone infrastructure, not project code)."""
     path_lower = file_path.lower().replace("\\", "/")
     return any(pattern.replace("\\", "/") in path_lower for pattern in HOOK_INFRASTRUCTURE_PATTERNS)
-
-
-def is_config_file(file_path: str) -> bool:
-    """Check if file is in a config directory or is a settings file.
-
-    Uses pathlib parts so a filename of 'config.py' does not match — only
-    files whose parent directory segment is literally 'config' match.
-    """
-    normalized = file_path.replace("\\", "/").lower()
-    if normalized.endswith("/settings.py") or normalized == "settings.py":
-        return True
-    path_parts = Path(normalized).parts
-    return "config" in path_parts[:-1]
 
 
 def is_test_file(file_path: str) -> bool:
@@ -787,27 +780,26 @@ def check_constants_outside_config(content: str, file_path: str) -> list[str]:
     return issues
 
 
-def check_constants_outside_config_advisory(content: str, file_path: str) -> list[str]:
-    """Return advisory entries for UPPER_SNAKE assignments inside function bodies.
-
-    Module-level UPPER_SNAKE outside config/ is blocking (see
-    check_constants_outside_config). Function-local UPPER_SNAKE is a softer
-    smell — it belongs in config/ but does not block the write. This function
-    surfaces those as advisory so callers can route them to stderr rather than
-    to the blocking deny payload.
-    """
+def _is_exempt_for_advisory_scan(file_path: str) -> bool:
+    """Return True when the file is exempt from the function-local UPPER_SNAKE advisory."""
     if is_config_file(file_path):
-        return []
-
+        return True
     if is_test_file(file_path):
-        return []
-
+        return True
     if is_workflow_registry_file(file_path):
-        return []
-
+        return True
     if is_migration_file(file_path):
-        return []
+        return True
+    return False
 
+
+def _scan_function_body_constants(content: str) -> list[str]:
+    """Return advisory messages for UPPER_SNAKE assignments inside function bodies.
+
+    Only lines inside a function body (tracked via an indent stack) are
+    flagged. Module-level assignments and class-body assignments are ignored.
+    Returns at most MAX_ISSUES_PER_CHECK entries.
+    """
     advisory_issues: list[str] = []
     lines = content.split("\n")
     function_indent_stack: list[int] = []
@@ -844,6 +836,20 @@ def check_constants_outside_config_advisory(content: str, file_path: str) -> lis
             break
 
     return advisory_issues
+
+
+def check_constants_outside_config_advisory(content: str, file_path: str) -> list[str]:
+    """Return advisory entries for UPPER_SNAKE assignments inside function bodies.
+
+    Module-level UPPER_SNAKE outside config/ is blocking (see
+    check_constants_outside_config). Function-local UPPER_SNAKE is a softer
+    smell — it belongs in config/ but does not block the write. This function
+    surfaces those as advisory so callers can route them to stderr rather than
+    to the blocking deny payload.
+    """
+    if _is_exempt_for_advisory_scan(file_path):
+        return []
+    return _scan_function_body_constants(content)
 
 
 BANNED_IDENTIFIERS: frozenset[str] = frozenset({"result", "data", "output", "response", "value", "item", "temp"})

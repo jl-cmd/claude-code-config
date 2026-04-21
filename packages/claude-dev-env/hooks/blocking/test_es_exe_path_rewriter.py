@@ -87,6 +87,12 @@ class TestRewriteCommand:
         )
         assert rewritten == f'es.exe "{KNOWN_REPO_PATH}" config.py'
 
+    def test_single_quoted_placeholder_rewrite_substitutes_registry_path(self) -> None:
+        rewritten = rewriter.rewrite_command(
+            "es.exe '{my-repo}' config.py", REGISTRY_WITH_ONE_REPO
+        )
+        assert rewritten == f'es.exe "{KNOWN_REPO_PATH}" config.py'
+
     def test_placeholder_without_quotes_rewrite_substitutes_registry_path(self) -> None:
         rewritten = rewriter.rewrite_command(
             "es.exe {my-repo} config.py", REGISTRY_WITH_ONE_REPO

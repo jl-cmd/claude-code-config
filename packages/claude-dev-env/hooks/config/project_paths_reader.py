@@ -1,13 +1,37 @@
 """Load the per-user project-path registry from ~/.claude/project-paths.json."""
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
 
 _META_KEY = "_meta"
 _DEFAULT_CONFIG_RELATIVE_PARTS = (".claude", "project-paths.json")
-_SCHEMA_VERSION = 1
+
+class _DynamicStderrHandler(logging.Handler):
+    """Logging handler that resolves sys.stderr at emit time, not at init time.
+
+    This allows tests that patch sys.stderr to capture log output emitted
+    from this handler without needing to re-import the module.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            formatted_line = self.format(record)
+            sys.stderr.write(formatted_line + "\n")
+            sys.stderr.flush()
+        except Exception:
+            self.handleError(record)
+
+
+_logger = logging.getLogger("project_paths_reader")
+if not _logger.handlers:
+    _stderr_handler = _DynamicStderrHandler()
+    _stderr_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+    _logger.addHandler(_stderr_handler)
+    _logger.setLevel(logging.INFO)
+    _logger.propagate = False
 
 
 def _default_config_path() -> Path:
@@ -16,14 +40,16 @@ def _default_config_path() -> Path:
 
 
 def _normalize_path_separators(raw_path: str) -> str:
-    return os.path.normpath(raw_path)
+    forward_slash_form = raw_path.replace("\\", "/")
+    return os.path.normcase(os.path.normpath(forward_slash_form)).replace("\\", "/")
 
 
 def load_registry(config_path: Path | None = None) -> dict[str, str]:
     """Return the name-to-absolute-path mapping with the _meta key stripped.
 
-    Returns an empty dict when the file is missing, unreadable, or malformed.
-    Logs one line to stderr on any unexpected error.
+    Returns an empty dict when the file is missing, unreadable, malformed,
+    or otherwise invalid. Logs one line to stderr when the file cannot be
+    read or contains malformed JSON.
     """
     resolved_path = config_path if config_path is not None else _default_config_path()
     if not resolved_path.is_file():
@@ -31,24 +57,21 @@ def load_registry(config_path: Path | None = None) -> dict[str, str]:
     try:
         raw_text = resolved_path.read_text(encoding="utf-8")
     except OSError as e:
-        print(
-            f"project_paths_reader: cannot read {resolved_path}: {e}", file=sys.stderr
-        )
+        _logger.error("cannot read %s: %s", resolved_path, e)
         return {}
     try:
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as e:
-        print(
-            f"project_paths_reader: malformed JSON in {resolved_path}: {e}",
-            file=sys.stderr,
-        )
+        _logger.error("malformed JSON in %s: %s", resolved_path, e)
         return {}
     if not isinstance(parsed, dict):
         return {}
     return {
-        key: value
-        for key, value in parsed.items()
-        if key != _META_KEY and isinstance(key, str) and isinstance(value, str)
+        each_key: each_value
+        for each_key, each_value in parsed.items()
+        if each_key != _META_KEY
+        and isinstance(each_key, str)
+        and isinstance(each_value, str)
     }
 
 

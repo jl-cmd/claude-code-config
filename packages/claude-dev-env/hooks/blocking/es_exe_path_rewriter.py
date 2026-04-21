@@ -8,6 +8,7 @@ the Bash call runs. Never blocks or denies — on any error exits 0 with empty o
 """
 
 import json
+import logging
 import re
 import sys
 from pathlib import Path
@@ -22,14 +23,37 @@ _ES_EXE_TRIGGER_PATTERN = re.compile(
     r"(?i)(?<![\w.])(?:Everything[/\\])?es\.exe(?![\w.])",
 )
 
-_PLACEHOLDER_TOKEN_PATTERN = re.compile(r'"?\{([^}]+)\}"?')
+_PLACEHOLDER_TOKEN_PATTERN = re.compile(r"""['"]?\{([^}]+)\}['"]?""")
 
 _ABSOLUTE_PATH_PATTERN = re.compile(r"^[A-Za-z]:[/\\]")
 
 _BASH_TOOL_NAME = "Bash"
 _HOOK_EVENT_NAME = "PreToolUse"
 _PERMISSION_ALLOW = "allow"
-_STDERR_PREFIX = "es_exe_path_rewriter:"
+
+class _DynamicStderrHandler(logging.Handler):
+    """Logging handler that resolves sys.stderr at emit time, not at init time.
+
+    This allows tests that patch sys.stderr to capture log output emitted
+    from this handler without needing to re-import the module.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            formatted_line = self.format(record)
+            sys.stderr.write(formatted_line + "\n")
+            sys.stderr.flush()
+        except Exception:
+            self.handleError(record)
+
+
+_logger = logging.getLogger("es_exe_path_rewriter")
+if not _logger.handlers:
+    _stderr_handler = _DynamicStderrHandler()
+    _stderr_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
+    _logger.addHandler(_stderr_handler)
+    _logger.setLevel(logging.INFO)
+    _logger.propagate = False
 
 
 def command_invokes_es_exe(command: str) -> bool:
@@ -119,7 +143,7 @@ def main() -> None:
             sys.exit(0)
         print(json.dumps(_build_allow_response(rewritten_command, tool_input)))
     except Exception as e:
-        print(f"{_STDERR_PREFIX} {e}", file=sys.stderr)
+        _logger.error("%s", e)
     sys.exit(0)
 
 

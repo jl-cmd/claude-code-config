@@ -85,3 +85,12 @@ def test_registry_contains_path_normalizes_separators(tmp_path: Path) -> None:
     forward_slash_path = str(tmp_path).replace("\\", "/")
     known_registry = {"my-repo": str(tmp_path)}
     assert registry_contains_path(known_registry, forward_slash_path) is True
+
+
+def test_registry_contains_path_treats_backslash_and_forward_slash_as_equal() -> None:
+    backslash_path = "C:\\foo\\bar"
+    forward_slash_path = "C:/foo/bar"
+    known_registry = {"my-repo": backslash_path}
+    assert registry_contains_path(known_registry, forward_slash_path) is True
+    known_registry_forward = {"my-repo": forward_slash_path}
+    assert registry_contains_path(known_registry_forward, backslash_path) is True

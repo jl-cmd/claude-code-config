@@ -18,26 +18,24 @@ import subprocess
 import sys
 from pathlib import Path
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from setup_project_paths_config import (
+    ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
+    EXCLUDED_PATH_SEGMENTS,
+    ISO_TIMESTAMP_SUFFIX_UTC,
+    TEMP_FILE_SUFFIX,
+    USER_CONFIG_FILE_RELATIVE_PARTS,
+    USER_RESPONSE_AFFIRMATIVE_VALUES,
+)
+
 GIT_DIRECTORY_SEGMENT_NAME = ".git"
 ES_EXE_BINARY_NAME = "es.exe"
-ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS = ["-name", "/ad", "folder:.git"]
-EXCLUDED_PATH_SEGMENTS = frozenset(
-    {
-        "temp",
-        "tmp",
-        "worktree",
-        "node_modules",
-        ".cache",
-        "$recycle.bin",
-    }
-)
-USER_CONFIG_FILE_RELATIVE_PARTS = (".claude", "project-paths.json")
 SUPPORTED_SCHEMA_VERSION = 1
 META_KEY = "_meta"
-TEMP_FILE_SUFFIX = ".tmp"
 UTF8_ENCODING = "utf-8"
-ISO_TIMESTAMP_SUFFIX_UTC = "Z"
-USER_RESPONSE_AFFIRMATIVE_VALUES = frozenset({"yes", "y"})
 
 
 class SchemaMismatchError(Exception):

@@ -33,7 +33,7 @@ def verify_git_hooks_path() -> int:
             file=sys.stderr,
         )
         return 1
-    configured_path = query_result.stdout.strip().replace("\\", "/")
+    configured_path = query_result.stdout.strip().replace("\\", "/").rstrip("/")
     if not configured_path.endswith(expected_hooks_path_suffix):
         print(
             f"bugteam_preflight: core.hooksPath is '{configured_path}' — "

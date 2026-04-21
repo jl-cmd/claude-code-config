@@ -28,8 +28,6 @@ def _load_preflight_module() -> ModuleType:
 
 bugteam_preflight = _load_preflight_module()
 
-EXPECTED_HOOKS_SUFFIX = "hooks/git-hooks"
-
 
 def _make_completed_process(
     stdout: str, returncode: int

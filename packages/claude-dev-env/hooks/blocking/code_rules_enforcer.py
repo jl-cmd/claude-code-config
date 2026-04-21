@@ -35,7 +35,6 @@ PYTHON_EXTENSIONS = {".py"}
 JAVASCRIPT_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx"}
 ALL_CODE_EXTENSIONS = PYTHON_EXTENSIONS | JAVASCRIPT_EXTENSIONS
 
-CONFIG_PATH_PATTERNS = {"config/", "config\\", "settings.py"}
 TEST_PATH_PATTERNS = {"test_", "_test.", ".test.", ".spec.", "/tests/", "\\tests\\", "/tests.py", "\\tests.py"}
 HOOK_INFRASTRUCTURE_PATTERNS = {"/.claude/hooks/", "\\.claude\\hooks\\", "\\.claude/hooks/", "/packages/claude-dev-env/hooks/", "\\packages\\claude-dev-env\\hooks\\"}
 WORKFLOW_REGISTRY_PATTERNS = {"/workflow/", "\\workflow\\", "_tab.py", "/states.py", "\\states.py", "/modules.py", "\\modules.py"}
@@ -812,6 +811,7 @@ def check_constants_outside_config_advisory(content: str, file_path: str) -> lis
     advisory_issues: list[str] = []
     lines = content.split("\n")
     inside_function = False
+    function_body_indent_threshold = 0
     constant_pattern = re.compile(r"^([A-Z][A-Z0-9_]{2,})\s*=\s*[^=]")
 
     for line_number, line in enumerate(lines, 1):
@@ -820,17 +820,19 @@ def check_constants_outside_config_advisory(content: str, file_path: str) -> lis
         if not stripped:
             continue
 
+        indent = len(line) - len(line.lstrip())
+
+        if inside_function and indent <= function_body_indent_threshold and not stripped.startswith(("#", "@", ")")):
+            inside_function = False
+
         if re.match(r"^(async\s+)?def\s+\w+", stripped):
             inside_function = True
+            function_body_indent_threshold = indent
             continue
 
         if re.match(r"^class\s+\w+", stripped):
             inside_function = False
             continue
-
-        indent = len(line) - len(line.lstrip())
-        if indent == 0 and stripped and not stripped.startswith(("#", "@", ")")):
-            inside_function = False
 
         if inside_function:
             match = constant_pattern.match(stripped)

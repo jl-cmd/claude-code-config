@@ -73,6 +73,7 @@ def test_should_require_loop_n_diagnostics_json() -> None:
 def test_should_require_all_eight_source_keys_in_diagnostics() -> None:
     skill_text = _load_skill_text()
     required_keys = [
+        "loop",
         "gate_findings",
         "primary_findings",
         "adversarial_findings",

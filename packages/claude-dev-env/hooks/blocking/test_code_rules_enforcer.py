@@ -59,3 +59,44 @@ def test_should_flag_constant_used_once_at_module_scope_and_once_in_function() -
     assert issues == [], (
         f"Expected module-scope + function usage to count as 2 distinct callers, got: {issues}"
     )
+
+
+def test_should_not_export_config_path_patterns_constant() -> None:
+    assert not hasattr(code_rules_enforcer, "CONFIG_PATH_PATTERNS"), (
+        "CONFIG_PATH_PATTERNS is dead code after is_config_file() was rewritten"
+        " with pathlib parts matching; it must be removed"
+    )
+
+
+def test_advisory_should_not_flag_class_attribute_after_method_def() -> None:
+    source_with_class_attribute_after_method = (
+        "class ExampleModel:\n"
+        "    def method_a(self) -> None:\n"
+        "        pass\n"
+        "\n"
+        "    TABLE_NAME = \"example\"\n"
+    )
+    advisory_issues = code_rules_enforcer.check_constants_outside_config_advisory(
+        source_with_class_attribute_after_method,
+        "example_module.py",
+    )
+    assert advisory_issues == [], (
+        "Class-level TABLE_NAME attribute must not be flagged as function-local"
+    )
+
+
+def test_advisory_should_still_flag_actual_method_body_constant() -> None:
+    source_with_method_body_constant = (
+        "class ExampleModel:\n"
+        "    def method_a(self) -> None:\n"
+        "        MAXIMUM_RETRIES = 3\n"
+        "        return None\n"
+    )
+    advisory_issues = code_rules_enforcer.check_constants_outside_config_advisory(
+        source_with_method_body_constant,
+        "example_module.py",
+    )
+    assert len(advisory_issues) == 1, (
+        "Method-body UPPER_SNAKE constant must still surface as advisory"
+    )
+    assert "MAXIMUM_RETRIES" in advisory_issues[0]

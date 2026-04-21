@@ -294,6 +294,55 @@ class TestDiscoverRepoRootsDedup:
         assert len(all_roots) == len(set(all_roots))
 
 
+class TestPromptAndWriteUsesConstants:
+    def test_confirmation_prompt_text_comes_from_constants(self) -> None:
+        from hook_config.setup_project_paths_constants import CONFIRMATION_PROMPT_TEXT
+
+        captured_prompts: list[str] = []
+
+        def capturing_input(prompt_text: str) -> str:
+            captured_prompts.append(prompt_text)
+            return "no"
+
+        with patch("builtins.input", side_effect=capturing_input):
+            setup.prompt_and_write(
+                path_by_name={"my-repo": "C:\\my-repo"},
+                save_path=Path("/nonexistent/path.json"),
+            )
+        assert len(captured_prompts) == 1
+        assert captured_prompts[0] == CONFIRMATION_PROMPT_TEXT
+
+    def test_abort_message_comes_from_constants(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        from hook_config.setup_project_paths_constants import ABORTED_NOTHING_WRITTEN_MESSAGE
+
+        with patch("builtins.input", return_value="no"):
+            setup.prompt_and_write(
+                path_by_name={"my-repo": "C:\\my-repo"},
+                save_path=Path("/nonexistent/path.json"),
+            )
+        captured = capsys.readouterr()
+        assert ABORTED_NOTHING_WRITTEN_MESSAGE in captured.out
+
+    def test_wrote_entries_status_uses_constants_template(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        from hook_config.setup_project_paths_constants import WROTE_ENTRIES_STATUS_TEMPLATE
+
+        target_file = tmp_path / "project-paths.json"
+        with patch("builtins.input", return_value="yes"):
+            setup.prompt_and_write(
+                path_by_name={"my-repo": "C:\\my-repo"},
+                save_path=target_file,
+            )
+        captured = capsys.readouterr()
+        expected_message = WROTE_ENTRIES_STATUS_TEMPLATE.format(
+            entry_count=1, save_path=target_file
+        )
+        assert expected_message in captured.out
+
+
 class TestSharedConfigPath:
     def test_default_user_config_path_matches_project_paths_reader(self) -> None:
         from hook_config.project_paths_reader import registry_file_path

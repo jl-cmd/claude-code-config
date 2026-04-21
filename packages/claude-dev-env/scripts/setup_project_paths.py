@@ -24,6 +24,8 @@ if str(_hooks_dir) not in sys.path:
 
 from hook_config.project_paths_reader import registry_file_path
 from hook_config.setup_project_paths_constants import (
+    ABORTED_NOTHING_WRITTEN_MESSAGE,
+    CONFIRMATION_PROMPT_TEXT,
     ES_EXE_BINARY_NAME,
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
     EXCLUDED_PATH_SEGMENTS,
@@ -35,6 +37,7 @@ from hook_config.setup_project_paths_constants import (
     TEMP_FILE_SUFFIX,
     USER_RESPONSE_AFFIRMATIVE_VALUES,
     UTF8_ENCODING,
+    WROTE_ENTRIES_STATUS_TEMPLATE,
 )
 
 
@@ -248,8 +251,8 @@ def prompt_and_write(
     for each_name, each_path in sorted(path_by_name.items()):
         print(f"  {each_name} -> {each_path}")
     print()
-    if not _prompt_for_affirmative("Write this mapping to the config file? (yes/no): "):
-        print("Aborted. Nothing written.")
+    if not _prompt_for_affirmative(CONFIRMATION_PROMPT_TEXT):
+        print(ABORTED_NOTHING_WRITTEN_MESSAGE)
         return
     try:
         existing_registry = _read_existing_registry(save_path)
@@ -262,7 +265,7 @@ def prompt_and_write(
         raise SystemExit(1) from registry_error
     merged = merge_registries(existing_registry, path_by_name)
     write_registry_atomically(merged, save_path)
-    print(f"Wrote {len(path_by_name)} entries to {save_path}.")
+    print(WROTE_ENTRIES_STATUS_TEMPLATE.format(entry_count=len(path_by_name), save_path=save_path))
 
 
 def _build_path_by_name_from_roots(all_repo_roots: list[str]) -> dict[str, str]:

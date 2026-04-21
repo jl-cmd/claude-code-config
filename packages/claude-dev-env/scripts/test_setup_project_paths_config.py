@@ -1,4 +1,4 @@
-"""Regression-guard tests for setup_project_paths_config module constants.
+"""Regression-guard tests for hook_config.setup_project_paths_constants module constants.
 
 These tests pin values that downstream code depends on. Each test documents
 the specific contract the constant carries so future edits that accidentally

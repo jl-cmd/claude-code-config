@@ -22,9 +22,6 @@ from hook_config.project_paths_reader import (
     registry_file_path,
 )
 
-_CONFIG_FILE_PATH = str(registry_file_path())
-
-
 def current_working_directory() -> str:
     """Return the process working directory as a string."""
     return os.getcwd()
@@ -46,12 +43,13 @@ def find_git_root(start_path: str) -> str | None:
 
 
 def _build_confirm_instruction(repo_root: str) -> str:
+    config_file_path = str(registry_file_path())
     return (
         f"UNTRACKED REPO DETECTED: The current session is running inside a git "
-        f"repository at '{repo_root}' that is not present in {_CONFIG_FILE_PATH}. "
+        f"repository at '{repo_root}' that is not present in {config_file_path}. "
         f"Use AskUserQuestion with two options — 'Save mapping' (recommended) and "
         f"'Skip for this session' — to confirm whether to persist this repo path. "
-        f"On approval, append a new entry to {_CONFIG_FILE_PATH} mapping the "
+        f"On approval, append a new entry to {config_file_path} mapping the "
         f"repository leaf name to '{repo_root}'. This hook has written nothing."
     )
 

@@ -15,8 +15,6 @@ EXCLUDED_PATH_SEGMENTS = frozenset(
     }
 )
 
-USER_CONFIG_FILE_RELATIVE_PARTS = (".claude", "project-paths.json")
-
 TEMP_FILE_SUFFIX = ".tmp"
 
 ISO_TIMESTAMP_SUFFIX_UTC = "Z"
@@ -34,3 +32,9 @@ SUPPORTED_SCHEMA_VERSION = 1
 META_KEY = "_meta"
 
 UTF8_ENCODING = "utf-8"
+
+CONFIRMATION_PROMPT_TEXT = "Write this mapping to the config file? (yes/no): "
+
+ABORTED_NOTHING_WRITTEN_MESSAGE = "Aborted. Nothing written."
+
+WROTE_ENTRIES_STATUS_TEMPLATE = "Wrote {entry_count} entries to {save_path}."

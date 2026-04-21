@@ -144,13 +144,28 @@ class TestUntrackedRepoDetection:
 
 
 class TestSharedRegistryPath:
-    def test_config_file_path_matches_registry_file_path_helper(self) -> None:
+    def test_config_file_path_not_a_module_level_attribute(self) -> None:
+        """Pin PR #230 round 7: _CONFIG_FILE_PATH inlined into _build_confirm_instruction.
+
+        Single-consumer module-level constant moved to local per file-global-constants rule.
+        """
+        assert not hasattr(detector, "_CONFIG_FILE_PATH")
+
+    def test_confirm_instruction_contains_registry_file_path(
+        self, tmp_path: Path
+    ) -> None:
         from hook_config.project_paths_reader import registry_file_path
 
-        assert detector._CONFIG_FILE_PATH == str(registry_file_path())
+        repo_root = str(tmp_path / "some-repo")
+        instruction_text = detector._build_confirm_instruction(repo_root)
+        assert str(registry_file_path()) in instruction_text
 
-    def test_config_file_path_points_to_project_paths_json(self) -> None:
-        assert detector._CONFIG_FILE_PATH.endswith("project-paths.json")
+    def test_confirm_instruction_contains_project_paths_json(
+        self, tmp_path: Path
+    ) -> None:
+        repo_root = str(tmp_path / "some-repo")
+        instruction_text = detector._build_confirm_instruction(repo_root)
+        assert "project-paths.json" in instruction_text
 
 
 class TestPathNormalization:

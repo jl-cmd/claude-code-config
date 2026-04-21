@@ -127,7 +127,8 @@ The subagent receives this prompt and loops internally — the lead does not re-
 
 <exit_conditions>
   The cycle stops when ONE of these is true. Check on every iteration:
-    - converged: most recent AUDIT returned zero findings.
+    - converged: most recent AUDIT returned zero findings AND
+      post_fix_audit_clean is true for the committing loop.
     - stuck: most recent FIX left `git rev-parse HEAD` unchanged.
     - error: three consecutive pre-audit gate rounds failed (three is
       chosen because two is within normal clean-coder variance; four
@@ -214,6 +215,7 @@ The subagent receives this prompt and loops internally — the lead does not re-
 
     4. FIX:
        Capture the pre-FIX sha: `pre_fix_sha = git rev-parse HEAD`.
+       Capture pre-fix file contents for every file this FIX will touch.
 
        Apply each fix. Read every file before editing. Preserve existing
        comments on lines you do not modify. Add type hints on every
@@ -222,6 +224,23 @@ The subagent receives this prompt and loops internally — the lead does not re-
        Validate each modified Python file with `python -m py_compile`
        (or the language-equivalent compile check).
 
+       Compute fix_diff: the diff between pre-fix and post-fix file contents
+       for every modified file.
+
+       Post-fix self-audit (paranoid mode — internal iteration cap = 3):
+         1. Run bugteam_code_rules_gate.py with explicit paths for every
+            file touched in this FIX.
+         2. Spawn a scoped audit of fix_diff with full A-J rigor,
+            proof-of-absence requirement, adversarial pass, AND Haiku
+            secondary in parallel (paranoid mode on post-fix).
+         3. If new post_fix_findings exist: treat as same-loop fix-targets
+            and iterate within this FIX block. Internal iteration count
+            increments by one.
+         4. After 3 internal iterations with fresh findings each time,
+            exit "stuck: post-fix audit not converging".
+         5. Only when post-fix audit is clean (gate_findings empty AND
+            post_fix_findings empty): proceed to git add.
+
        Stage each modified path by explicit name: `git add <path>`.
        Create one commit summarizing the fixed findings. Let every git
        hook run. If a hook blocks the commit, capture its stderr, mark
@@ -229,6 +248,10 @@ The subagent receives this prompt and loops internally — the lead does not re-
        the next iteration without retrying this loop.
 
        Push with a plain fast-forward: `git push`.
+
+       Write <qbug_temp_dir>/loop-<loop_count>-diagnostics.json with keys:
+         {loop, gate_findings, primary_findings, adversarial_findings,
+          haiku_findings, post_fix_findings, merged, deduped}
 
        Reply to each finding at loop_comment_index[finding_id].finding_comment_id
        using the reply CLI shape (jq `-Rs` → `gh api .../comments/<id>/replies --input -`).

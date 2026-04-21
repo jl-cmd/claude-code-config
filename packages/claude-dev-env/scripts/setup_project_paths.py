@@ -180,11 +180,10 @@ def _verify_schema_version_is_supported(existing_registry: dict) -> None:
 def write_registry_atomically(registry_to_write: dict, target_file: Path) -> None:
     """Serialize registry to a temp sibling and rename into place atomically.
 
-    Refuses to overwrite a file whose on-disk ``schema_version`` is newer than
-    the version this script understands.
+    Caller is responsible for reading the existing registry, verifying the
+    schema version, and merging before calling this function. This function
+    performs no file reads and no schema checks.
     """
-    existing_registry = _read_existing_registry(target_file)
-    _verify_schema_version_is_supported(existing_registry)
     target_file.parent.mkdir(parents=True, exist_ok=True)
     temp_sibling_path = target_file.with_suffix(target_file.suffix + TEMP_FILE_SUFFIX)
     serialized_text = json.dumps(registry_to_write, indent=JSON_INDENT_SPACES, sort_keys=True)
@@ -244,16 +243,10 @@ def prompt_and_write(
     """Present the mapping to the user and write it only on explicit approval.
 
     The mapping's keys are repo names and the values are absolute paths. The
-    function prints a preview and asks for confirmation; declining writes
-    nothing.
+    function reads and validates the existing registry BEFORE asking the user
+    to confirm, so the user learns of any schema or read error before being
+    prompted. Declining the confirmation writes nothing.
     """
-    print(f"Proposed mapping (save target: {save_path}):")
-    for each_name, each_path in sorted(path_by_name.items()):
-        print(f"  {each_name} -> {each_path}")
-    print()
-    if not _prompt_for_affirmative(CONFIRMATION_PROMPT_TEXT):
-        print(ABORTED_NOTHING_WRITTEN_MESSAGE)
-        return
     try:
         existing_registry = _read_existing_registry(save_path)
     except RegistryReadError as registry_error:
@@ -263,6 +256,22 @@ def prompt_and_write(
             file=sys.stderr,
         )
         raise SystemExit(1) from registry_error
+    try:
+        _verify_schema_version_is_supported(existing_registry)
+    except SchemaMismatchError as schema_error:
+        print(
+            f"Existing registry at {save_path} cannot be overwritten: {schema_error}. "
+            "Upgrade this script before re-running.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from schema_error
+    print(f"Proposed mapping (save target: {save_path}):")
+    for each_name, each_path in sorted(path_by_name.items()):
+        print(f"  {each_name} -> {each_path}")
+    print()
+    if not _prompt_for_affirmative(CONFIRMATION_PROMPT_TEXT):
+        print(ABORTED_NOTHING_WRITTEN_MESSAGE)
+        return
     merged = merge_registries(existing_registry, path_by_name)
     write_registry_atomically(merged, save_path)
     print(WROTE_ENTRIES_STATUS_TEMPLATE.format(entry_count=len(path_by_name), save_path=save_path))

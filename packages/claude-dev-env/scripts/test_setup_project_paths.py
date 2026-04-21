@@ -140,15 +140,15 @@ class TestAtomicWrite:
         all_files = list(tmp_path.iterdir())
         assert all_files == [target_file]
 
-    def test_write_refuses_higher_schema_version(self, tmp_path: Path) -> None:
+    def test_write_overwrites_without_schema_check(self, tmp_path: Path) -> None:
         target_file = tmp_path / "project-paths.json"
         target_file.write_text(
             json.dumps({"_meta": {"schema_version": 99}}), encoding="utf-8"
         )
-        with pytest.raises(setup.SchemaMismatchError):
-            setup.write_registry_atomically(
-                {"_meta": {"schema_version": 1}}, target_file
-            )
+        registry_to_write = {"_meta": {"schema_version": 1}, "repo": "C:\\repo"}
+        setup.write_registry_atomically(registry_to_write, target_file)
+        written_content = json.loads(target_file.read_text(encoding="utf-8"))
+        assert written_content["repo"] == "C:\\repo"
 
 
 class TestEsExeQueryArguments:
@@ -279,6 +279,97 @@ class TestRegistryReadError:
                     save_path=corrupt_file,
                 )
         assert corrupt_file.read_text(encoding="utf-8") == original_content
+
+
+class TestEarlyRegistryValidation:
+    def test_malformed_registry_exits_before_prompting(self, tmp_path: Path) -> None:
+        corrupt_file = tmp_path / "project-paths.json"
+        corrupt_file.write_text("{ not valid json", encoding="utf-8")
+        prompt_call_count = 0
+
+        def counting_input(prompt_text: str) -> str:
+            nonlocal prompt_call_count
+            prompt_call_count += 1
+            return "yes"
+
+        with patch("builtins.input", side_effect=counting_input):
+            with pytest.raises(SystemExit) as raised_exit:
+                setup.prompt_and_write(
+                    path_by_name={"my-repo": "C:\\my-repo"},
+                    save_path=corrupt_file,
+                )
+        assert raised_exit.value.code != 0
+        assert prompt_call_count == 0
+
+    def test_malformed_registry_leaves_file_untouched(self, tmp_path: Path) -> None:
+        corrupt_file = tmp_path / "project-paths.json"
+        original_content = "{ not valid json"
+        corrupt_file.write_text(original_content, encoding="utf-8")
+        with patch("builtins.input", return_value="yes"):
+            with pytest.raises(SystemExit):
+                setup.prompt_and_write(
+                    path_by_name={"my-repo": "C:\\my-repo"},
+                    save_path=corrupt_file,
+                )
+        assert corrupt_file.read_text(encoding="utf-8") == original_content
+
+    def test_schema_mismatch_exits_before_prompting(self, tmp_path: Path) -> None:
+        target_file = tmp_path / "project-paths.json"
+        target_file.write_text(
+            json.dumps({"_meta": {"schema_version": 99}}), encoding="utf-8"
+        )
+        prompt_call_count = 0
+
+        def counting_input(prompt_text: str) -> str:
+            nonlocal prompt_call_count
+            prompt_call_count += 1
+            return "yes"
+
+        with patch("builtins.input", side_effect=counting_input):
+            with pytest.raises(SystemExit) as raised_exit:
+                setup.prompt_and_write(
+                    path_by_name={"my-repo": "C:\\my-repo"},
+                    save_path=target_file,
+                )
+        assert raised_exit.value.code != 0
+        assert prompt_call_count == 0
+
+    def test_schema_mismatch_leaves_file_untouched(self, tmp_path: Path) -> None:
+        target_file = tmp_path / "project-paths.json"
+        original_registry = {"_meta": {"schema_version": 99}}
+        target_file.write_text(json.dumps(original_registry), encoding="utf-8")
+        with patch("builtins.input", return_value="yes"):
+            with pytest.raises(SystemExit):
+                setup.prompt_and_write(
+                    path_by_name={"my-repo": "C:\\my-repo"},
+                    save_path=target_file,
+                )
+        written_back = json.loads(target_file.read_text(encoding="utf-8"))
+        assert written_back == original_registry
+
+    def test_registry_read_exactly_once_across_full_write_path(
+        self, tmp_path: Path
+    ) -> None:
+        target_file = tmp_path / "project-paths.json"
+        target_file.write_text(
+            json.dumps({"_meta": {"schema_version": 1}, "existing-repo": "C:\\existing"}),
+            encoding="utf-8",
+        )
+        read_call_count = 0
+        original_read = setup._read_existing_registry
+
+        def counting_read(target: Path) -> dict:
+            nonlocal read_call_count
+            read_call_count += 1
+            return original_read(target)
+
+        with patch("setup_project_paths._read_existing_registry", side_effect=counting_read):
+            with patch("builtins.input", return_value="yes"):
+                setup.prompt_and_write(
+                    path_by_name={"my-repo": "C:\\my-repo"},
+                    save_path=target_file,
+                )
+        assert read_call_count == 1
 
 
 class TestDiscoverRepoRootsDedup:

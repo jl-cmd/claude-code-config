@@ -90,7 +90,7 @@ def test_suppresses_output_on_gh_redirect_deny() -> None:
 
 
 def test_asks_on_rm_rf_still_works() -> None:
-    payload = _make_bash_payload("rm -rf /tmp/somewhere")
+    payload = _make_bash_payload("rm -rf /var/log/myapp")
     result = _run_hook(payload)
     response = json.loads(result.stdout)
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"

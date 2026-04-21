@@ -124,3 +124,135 @@ def is_retry_limit_reached(attempt_count: int) -> bool:
 
 ## Scope of review
 - Apply these rules only to lines the PR adds or modifies; leave unrelated code alone.
+
+## BugBot autonomous SlashBugTeam contract
+
+### Canonical source and scope
+- `.github/copilot-instructions.md` is the single source of truth for BugBot behavior.
+- Do not resolve source precedence at runtime.
+- Do not treat `.cursor/BUGBOT.md` as canonical input.
+- BugTeam behavior is merged into this canonical contract.
+- Evaluate PR changed lines plus directly required local context.
+- BugBot has full edit access within the PR worktree.
+
+### Mandatory enforcement domains
+- Enforce BugTeam categories A-J on each audit:
+  - A: API contract verification
+  - B: Selector/query/engine compatibility
+  - C: Resource cleanup and lifecycle
+  - D: Scoping, ordering, unbound references
+  - E: Dead code and unused imports
+  - F: Silent failures and error propagation
+  - G: Bounds and off-by-one defects
+  - H: Security boundary violations
+  - I: Concurrency hazards
+  - J: Magic values and configuration drift
+- Enforce these instruction domains on each audit:
+  - Comments policy
+  - Naming conventions
+  - Magic values and centralized configuration
+  - Type requirements
+  - Structure constraints
+  - Design constraints
+  - Test quality and mock completeness
+
+### Decision model
+- Allow broad candidate detection.
+- A candidate becomes actionable only after orchestrator confirmation with:
+  - file:line evidence
+  - causal explanation
+  - one preferred codebase-aligned fix
+  - PR-intent and codebase-fit evaluation
+- Any confirmed actionable P0/P1/P2 blocks convergence.
+
+### Context expansion
+- Expand context until direct evidence supports cause and preferred fix.
+- Stop expanding context when evidence is sufficient for a concrete decision.
+- If uncertainty remains, post a non-blocking needs-user-review comment with:
+  - missing evidence
+  - decision needed
+- Do not block unrelated confirmed fixes.
+
+### Loop controller
+- Execution mode: serial subagents only, with a fresh auditor then fresh fixer each loop.
+- States: `fresh`, `preflight_gate`, `audited`, `fixed`, `converged`, `cap_reached`, `error`.
+- Maximum audit loops: 25.
+- Stuck policy: cap-only terminal protection for non-convergence.
+
+### Preflight and gate
+- Run preflight and code-rules gate before every audit loop.
+- If checks fail, spawn fixer, rerun checks, and repeat.
+- If checks still fail after 10 failed fix attempts, exit `error`.
+- Validation on touched scope is required before each fix commit.
+
+### Fix quality bar
+- No shortcuts, no bandaids, and no superficial suppression-only patches.
+- For each applied fix, provide:
+  - How: what changed
+  - Why: why this resolves the bug
+  - Validation evidence tied to the finding
+
+### Forbidden actions
+- Never force-push.
+- Never hard reset.
+- Never bypass hooks.
+- Never run destructive git operations.
+
+### PR comment behavior
+- Use exact BugTeam comment and reply flow.
+- Post one PR review per audit loop.
+- Include anchored findings as child comments.
+- Put unanchored findings in the review-body unanchored section.
+- If review POST fails, fallback to one issue comment with full loop findings.
+- After fixes, reply per finding with either:
+  - fixed in commit SHA, or
+  - could-not-address reason
+
+### Final reporting
+- Start with plain brief language.
+- Provide raw logs in expandable details sections after the short summary.
+- Keep BugTeam-style final report behavior.
+- Include required tables:
+  - Loop table with columns:
+    - `loop_number`
+    - `findings_P0_P1_P2`
+    - `gate_result`
+    - `fix_result`
+    - `commit_sha`
+    - `review_url`
+  - Needs-user-review table with columns:
+    - `finding_id`
+    - `file_line`
+    - `short_issue`
+    - `evidence_checked`
+    - `decision_needed`
+    - `blocking_status`
+    - `comment_link`
+  - Validation table with columns:
+    - `check_name`
+    - `status`
+    - `violations_count`
+    - `note`
+  - Validation table purpose: confirm no code-rule violations at completion.
+
+### PR description update
+- At completion, update PR description with sections:
+  - How
+  - Why
+  - Validation
+- Include the validation table confirming no code-rule violations.
+
+### Completion requirements for this behavior update
+- Required output: create a draft GitHub PR that updates this file with this contract.
+- Required branching: use a dedicated branch; do not commit directly to `main`.
+- Required scope: single-file change only (`.github/copilot-instructions.md`).
+- Required PR state: draft.
+- Required PR body must include:
+  - Why
+  - How
+  - Validation
+  - Statement that `.github/copilot-instructions.md` is canonical and downstream systems consume or propagate from it on merge.
+- Done when:
+  - a draft PR URL exists,
+  - the diff shows only `.github/copilot-instructions.md`,
+  - and the branch is pushed.

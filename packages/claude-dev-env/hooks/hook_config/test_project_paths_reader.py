@@ -10,7 +10,7 @@ _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
-from config.project_paths_reader import load_registry, registry_contains_path
+from hook_config.project_paths_reader import load_registry, registry_contains_path
 
 
 def test_reader_does_not_redefine_dynamic_stderr_handler_locally() -> None:
@@ -20,7 +20,7 @@ def test_reader_does_not_redefine_dynamic_stderr_handler_locally() -> None:
     identical `_DynamicStderrHandler` classes. This test fails if the
     duplicate class reappears in project_paths_reader.
     """
-    from config import project_paths_reader
+    from hook_config import project_paths_reader
 
     assert not hasattr(project_paths_reader, "_DynamicStderrHandler")
 

@@ -17,12 +17,17 @@ GH_REDIRECT_ACTIVE_VALUE = "1"
 def _run_hook(
     payload: dict,
     gh_redirect_active: bool = True,
+    disable_ephemeral_auto_allow: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     child_environment = os.environ.copy()
     if gh_redirect_active:
         child_environment[GH_REDIRECT_ACTIVE_ENV_VAR] = GH_REDIRECT_ACTIVE_VALUE
     else:
         child_environment.pop(GH_REDIRECT_ACTIVE_ENV_VAR, None)
+    if disable_ephemeral_auto_allow:
+        child_environment["CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW"] = "1"
+    else:
+        child_environment.pop("CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW", None)
     return subprocess.run(
         [sys.executable, str(SCRIPT_PATH)],
         input=json.dumps(payload),
@@ -162,10 +167,35 @@ def test_gh_api_post_comment_is_allowed_when_redirect_env_var_is_unset() -> None
 def test_rm_rf_still_asks_when_redirect_env_var_is_unset() -> None:
     payload = _make_bash_payload("rm -rf /tmp/somewhere")
 
-    result = _run_hook(payload, gh_redirect_active=False)
+    result = _run_hook(
+        payload,
+        gh_redirect_active=False,
+        disable_ephemeral_auto_allow=True,
+    )
 
     response = json.loads(result.stdout)
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_under_temp_directory_is_silent_when_ephemeral_auto_allow_enabled(
+    tmp_path: Path,
+) -> None:
+    ephemeral_target = Path(tempfile.mkdtemp(prefix="rm_rf_ephemeral_"))
+    payload = _make_bash_payload(f"rm -rf {ephemeral_target}")
+    child_environment = os.environ.copy()
+    child_environment.pop(GH_REDIRECT_ACTIVE_ENV_VAR, None)
+    child_environment.pop("CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW", None)
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=child_environment,
+        cwd=str(tmp_path),
+    )
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
 
 
 def _run_hook_with_fake_home(

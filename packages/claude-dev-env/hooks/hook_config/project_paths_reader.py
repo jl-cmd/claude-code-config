@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from config.dynamic_stderr_handler import DynamicStderrHandler
+from hook_config.dynamic_stderr_handler import DynamicStderrHandler
 
 _META_KEY = "_meta"
 _DEFAULT_CONFIG_RELATIVE_PARTS = (".claude", "project-paths.json")

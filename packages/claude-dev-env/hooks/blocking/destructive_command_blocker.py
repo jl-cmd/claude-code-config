@@ -71,8 +71,10 @@ def load_allow_git_reset_hard_projects() -> list[str]:
         if isinstance(each_project_path, str)
     ]
 
+RM_RF_DESTRUCTIVE_DESCRIPTION = "rm -rf (destructive recursive forced delete)"
+
 DESTRUCTIVE_BASH_PATTERNS = [
-    (re.compile(r'\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r', re.IGNORECASE), "rm -rf (destructive recursive forced delete)"),
+    (re.compile(r'\brm\s+-[a-z]*r[a-z]*f|\brm\s+-[a-z]*f[a-z]*r', re.IGNORECASE), RM_RF_DESTRUCTIVE_DESCRIPTION),
     (re.compile(r'\brm\s+--recursive\b.*--force\b|\brm\s+--force\b.*--recursive\b', re.IGNORECASE), "rm --recursive --force (destructive recursive forced delete)"),
     (re.compile(r'\brm\s+-r\s+([/~]|\.(?:\s|$)|\$HOME)', re.IGNORECASE), "rm -r on broad path (/, ~, $HOME, .)"),
     (re.compile(r'\bmkfs\b', re.IGNORECASE), "mkfs (format filesystem)"),
@@ -139,24 +141,54 @@ def _build_silent_gh_deny_response(matched_description: str) -> dict:
     }
 
 
-def targets_only_claude_directory(command: str) -> bool:
-    """Check if rm command targets only paths under ~/.claude/."""
-    all_rm_target_paths = re.findall(
+def _normalized_rm_target_paths(command: str) -> list[str] | None:
+    rm_target_token_pattern = re.compile(
         r'(?:rm\s+(?:-\w+\s+)*)("[^"]+"|\'[^\']+\'|\S+)',
-        command,
     )
+    all_rm_target_paths = rm_target_token_pattern.findall(command)
     if not all_rm_target_paths:
-        return False
-
+        return []
+    all_resolved_paths: list[str] = []
     for each_raw_path in all_rm_target_paths:
         each_stripped_path = each_raw_path.strip("\"'")
         each_cleaned_path = re.split(r'[;&|]', each_stripped_path)[0]
         if each_cleaned_path != each_stripped_path:
-            return False
+            return None
         each_resolved_path = os.path.normpath(os.path.expanduser(each_cleaned_path))
+        all_resolved_paths.append(each_resolved_path)
+    return all_resolved_paths
+
+
+def targets_only_claude_directory(command: str) -> bool:
+    """Check if rm command targets only paths under ~/.claude/."""
+    all_resolved_paths = _normalized_rm_target_paths(command)
+    if all_resolved_paths is None:
+        return False
+    if not all_resolved_paths:
+        return False
+    for each_resolved_path in all_resolved_paths:
         if not each_resolved_path.startswith(CLAUDE_DIRECTORY_PATH):
             return False
+    return True
 
+
+def targets_only_ephemeral_paths(command: str) -> bool:
+    """Check if rm -rf targets resolve only under ephemeral directories."""
+    rm_rf_pattern_regex = None
+    for each_pattern_regex, each_pattern_description in DESTRUCTIVE_BASH_PATTERNS:
+        if each_pattern_description == RM_RF_DESTRUCTIVE_DESCRIPTION:
+            rm_rf_pattern_regex = each_pattern_regex
+            break
+    if rm_rf_pattern_regex is None or not rm_rf_pattern_regex.search(command):
+        return False
+    all_resolved_paths = _normalized_rm_target_paths(command)
+    if all_resolved_paths is None:
+        return False
+    if not all_resolved_paths:
+        return False
+    for each_resolved_path in all_resolved_paths:
+        if not directory_is_ephemeral(each_resolved_path):
+            return False
     return True
 
 
@@ -185,7 +217,9 @@ def main() -> None:
     if matched_description is not None and targets_only_claude_directory(command):
         sys.exit(0)
 
-    # Allow git reset --hard in explicitly approved projects (case-insensitive for Windows drive letters)
+    if matched_description is not None and targets_only_ephemeral_paths(command):
+        sys.exit(0)
+
     if matched_description is not None and "git reset --hard" in matched_description:
         current_working_directory = os.getcwd()
         if directory_is_ephemeral(current_working_directory):
@@ -195,7 +229,6 @@ def main() -> None:
             allowed_project_lowercased = os.path.normpath(allowed_project).lower()
             if current_working_directory_lowercased.startswith(allowed_project_lowercased):
                 sys.exit(0)
-            # Also check the cd target in the command itself
             for path_match in re.findall(r'cd\s+"([^"]+)"', command):
                 if os.path.normpath(path_match).lower().startswith(allowed_project_lowercased):
                     sys.exit(0)

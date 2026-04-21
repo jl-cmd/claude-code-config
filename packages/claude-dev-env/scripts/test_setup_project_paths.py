@@ -14,7 +14,7 @@ for each_sys_path_entry in (str(_SCRIPTS_DIR), str(_HOOKS_DIR)):
         sys.path.insert(0, each_sys_path_entry)
 
 import setup_project_paths as setup
-from config.setup_project_paths_constants import ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
+from hook_config.setup_project_paths_constants import ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
 
 
 class TestFinalSegmentFilter:

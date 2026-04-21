@@ -22,7 +22,7 @@ _hooks_dir = Path(__file__).resolve().parent.parent / "hooks"
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
-from config.setup_project_paths_constants import (
+from hook_config.setup_project_paths_constants import (
     ES_EXE_BINARY_NAME,
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
     EXCLUDED_PATH_SEGMENTS,

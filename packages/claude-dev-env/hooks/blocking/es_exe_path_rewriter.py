@@ -17,8 +17,8 @@ _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
-from config.dynamic_stderr_handler import DynamicStderrHandler
-from config.project_paths_reader import load_registry
+from hook_config.dynamic_stderr_handler import DynamicStderrHandler
+from hook_config.project_paths_reader import load_registry
 
 _ES_EXE_TRIGGER_PATTERN = re.compile(
     r"(?i)(?<![\w.])(?:Everything[/\\])?es\.exe(?![\w.])",

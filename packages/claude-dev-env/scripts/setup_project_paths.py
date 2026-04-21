@@ -33,6 +33,7 @@ from hook_config.setup_project_paths_constants import (
     ISO_TIMESTAMP_SUFFIX_UTC,
     JSON_INDENT_SPACES,
     META_KEY,
+    STDERR_TRUNCATION_LENGTH,
     SUPPORTED_SCHEMA_VERSION,
     TEMP_FILE_SUFFIX,
     USER_RESPONSE_AFFIRMATIVE_VALUES,
@@ -47,6 +48,10 @@ class SchemaMismatchError(Exception):
 
 class RegistryReadError(Exception):
     """Raised when an existing registry file is unreadable or corrupt."""
+
+
+class EverythingScanError(Exception):
+    """Raised when es.exe returns a non-zero exit code during the folder scan."""
 
 
 def _split_path_segments(path_string: str) -> list[str]:
@@ -210,7 +215,10 @@ def _run_es_exe_folders_query() -> list[str]:
         check=False,
     )
     if completion.returncode != 0:
-        return []
+        truncated_stderr = completion.stderr[:STDERR_TRUNCATION_LENGTH].strip()
+        raise EverythingScanError(
+            f"es.exe exited with code {completion.returncode}: {truncated_stderr}"
+        )
     return [line.strip() for line in completion.stdout.splitlines() if line.strip()]
 
 
@@ -304,7 +312,15 @@ def main() -> int:
     print(
         f"Running Everything folder scan for {GIT_DIRECTORY_SEGMENT_NAME} directories..."
     )
-    all_repo_roots = discover_repo_roots_via_everything()
+    try:
+        all_repo_roots = discover_repo_roots_via_everything()
+    except EverythingScanError as scan_error:
+        print(
+            f"Everything scan failed: {scan_error}. "
+            "Ensure the Everything service is running and try again.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from scan_error
     if not all_repo_roots:
         print("No candidate git repositories found via es.exe.")
         return 0

@@ -38,3 +38,5 @@ CONFIRMATION_PROMPT_TEXT = "Write this mapping to the config file? (yes/no): "
 ABORTED_NOTHING_WRITTEN_MESSAGE = "Aborted. Nothing written."
 
 WROTE_ENTRIES_STATUS_TEMPLATE = "Wrote {entry_count} entries to {save_path}."
+
+STDERR_TRUNCATION_LENGTH = 200

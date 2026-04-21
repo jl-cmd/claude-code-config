@@ -434,6 +434,83 @@ class TestPromptAndWriteUsesConstants:
         assert expected_message in captured.out
 
 
+class TestEverythingScanError:
+    def test_nonzero_return_code_raises_everything_scan_error(self) -> None:
+        import subprocess
+
+        failed_completion = subprocess.CompletedProcess(
+            args=["es.exe"],
+            returncode=1,
+            stdout="",
+            stderr="service not running",
+        )
+        with patch("subprocess.run", return_value=failed_completion):
+            with pytest.raises(setup.EverythingScanError) as raised_error:
+                setup._run_es_exe_folders_query()
+        assert "service not running" in str(raised_error.value)
+
+    def test_nonzero_return_code_includes_return_code_in_message(self) -> None:
+        import subprocess
+
+        failed_completion = subprocess.CompletedProcess(
+            args=["es.exe"],
+            returncode=2,
+            stdout="",
+            stderr="access denied",
+        )
+        with patch("subprocess.run", return_value=failed_completion):
+            with pytest.raises(setup.EverythingScanError) as raised_error:
+                setup._run_es_exe_folders_query()
+        assert "2" in str(raised_error.value)
+
+    def test_zero_return_code_returns_parsed_paths(self) -> None:
+        import subprocess
+
+        successful_completion = subprocess.CompletedProcess(
+            args=["es.exe"],
+            returncode=0,
+            stdout="C:\\Projects\\alpha\\.git\nD:\\Work\\beta\\.git\n",
+            stderr="",
+        )
+        with patch("subprocess.run", return_value=successful_completion):
+            all_paths = setup._run_es_exe_folders_query()
+        assert all_paths == ["C:\\Projects\\alpha\\.git", "D:\\Work\\beta\\.git"]
+
+    def test_main_catches_everything_scan_error_and_exits_nonzero(self) -> None:
+        with (
+            patch(
+                "setup_project_paths._everything_binary_is_available",
+                return_value=True,
+            ),
+            patch(
+                "setup_project_paths._run_es_exe_folders_query",
+                side_effect=setup.EverythingScanError("service not running: exit 1"),
+            ),
+            pytest.raises(SystemExit) as raised_exit,
+        ):
+            setup.main()
+        assert raised_exit.value.code != 0
+
+    def test_main_prints_clear_error_to_stderr_on_everything_scan_error(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        with (
+            patch(
+                "setup_project_paths._everything_binary_is_available",
+                return_value=True,
+            ),
+            patch(
+                "setup_project_paths._run_es_exe_folders_query",
+                side_effect=setup.EverythingScanError("service not running: exit 1"),
+            ),
+            pytest.raises(SystemExit),
+        ):
+            setup.main()
+        captured = capsys.readouterr()
+        assert "Everything scan failed" in captured.err
+        assert "service" in captured.err.lower()
+
+
 class TestSharedConfigPath:
     def test_default_user_config_path_matches_project_paths_reader(self) -> None:
         from hook_config.project_paths_reader import registry_file_path

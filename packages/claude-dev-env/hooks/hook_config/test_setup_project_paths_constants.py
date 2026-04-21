@@ -69,3 +69,11 @@ def test_wrote_entries_status_template_constant_exists() -> None:
     assert isinstance(WROTE_ENTRIES_STATUS_TEMPLATE, str)
     assert "{entry_count}" in WROTE_ENTRIES_STATUS_TEMPLATE
     assert "{save_path}" in WROTE_ENTRIES_STATUS_TEMPLATE
+
+
+def test_stderr_truncation_length_constant_exists() -> None:
+    """Pin PR #230 round 9: STDERR_TRUNCATION_LENGTH required for EverythingScanError messages."""
+    from hook_config.setup_project_paths_constants import STDERR_TRUNCATION_LENGTH
+
+    assert isinstance(STDERR_TRUNCATION_LENGTH, int)
+    assert STDERR_TRUNCATION_LENGTH > 0

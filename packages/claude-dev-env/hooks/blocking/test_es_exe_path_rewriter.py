@@ -275,3 +275,61 @@ class TestNoOutputCases:
         ):
             stdout, _, _ = _run_main_with_input(hook_input)
         assert stdout.strip() == ""
+
+
+class TestQuoteAwareTokenizer:
+    def test_double_quoted_multiword_arg_with_registry_key_prefix_is_not_substituted(
+        self,
+    ) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = 'es.exe "my-repo foo" baz'
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == command
+
+    def test_single_quoted_multiword_arg_with_registry_key_prefix_is_not_substituted(
+        self,
+    ) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = "es.exe 'my-repo baz' config.py"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == command
+
+    def test_bare_token_matching_registry_key_is_rewritten(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = "es.exe my-repo config.py"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == f'es.exe "Y:\\Projects\\my-repo" config.py'
+
+    def test_whitespace_between_bare_tokens_is_preserved_after_rewrite(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo", "other-repo": "C:\\Dev\\other"}
+        command = "es.exe my-repo  other-repo   config.py"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == f'es.exe "Y:\\Projects\\my-repo"  "C:\\Dev\\other"   config.py'
+
+    def test_tab_separator_is_preserved_when_bare_token_is_rewritten(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = "es.exe my-repo\tconfig.py"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == f'es.exe "Y:\\Projects\\my-repo"\tconfig.py'
+
+
+class TestAbsolutePathDetection:
+    def test_windows_drive_letter_path_detected_as_absolute(self) -> None:
+        assert rewriter._token_is_absolute_path("C:\\Users\\x")
+
+    def test_windows_drive_letter_path_with_forward_slashes_detected_as_absolute(
+        self,
+    ) -> None:
+        assert rewriter._token_is_absolute_path("Y:/Projects/foo")
+
+    def test_unc_path_detected_as_absolute(self) -> None:
+        assert rewriter._token_is_absolute_path("\\\\server\\share\\path")
+
+    def test_posix_absolute_path_detected_as_absolute(self) -> None:
+        assert rewriter._token_is_absolute_path("/etc/hosts")
+
+    def test_relative_path_not_detected_as_absolute(self) -> None:
+        assert not rewriter._token_is_absolute_path("./foo")
+
+    def test_bare_registry_token_not_detected_as_absolute(self) -> None:
+        assert not rewriter._token_is_absolute_path("my-repo")

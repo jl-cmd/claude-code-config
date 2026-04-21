@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from hook_config.dynamic_stderr_handler import DynamicStderrHandler
+from hook_config.setup_project_paths_constants import UTF8_ENCODING
 
 _META_KEY = "_meta"
 _DEFAULT_CONFIG_RELATIVE_PARTS = (".claude", "project-paths.json")
@@ -46,7 +47,7 @@ def load_registry(config_path: Path | None = None) -> dict[str, str]:
     if not resolved_path.is_file():
         return {}
     try:
-        raw_text = resolved_path.read_text(encoding="utf-8")
+        raw_text = resolved_path.read_text(encoding=UTF8_ENCODING)
     except OSError as e:
         _logger.error("cannot read %s: %s", resolved_path, e)
         return {}

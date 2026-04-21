@@ -122,3 +122,20 @@ def test_registry_file_path_returns_dot_claude_project_paths_json() -> None:
 def test_registry_file_path_is_absolute() -> None:
     resolved_path = registry_file_path()
     assert resolved_path.is_absolute()
+
+
+def test_load_registry_uses_shared_utf8_encoding_constant() -> None:
+    """Pin fix_1: load_registry must import UTF8_ENCODING from setup_project_paths_constants.
+
+    The bare string literal "utf-8" in the read_text call must be replaced
+    with the shared constant so there is one source of truth for the encoding name.
+    """
+    from hook_config import project_paths_reader
+    from hook_config.setup_project_paths_constants import UTF8_ENCODING
+
+    import inspect
+
+    source = inspect.getsource(project_paths_reader)
+    assert 'encoding="utf-8"' not in source, (
+        'load_registry must use UTF8_ENCODING constant, not the bare literal "utf-8"'
+    )

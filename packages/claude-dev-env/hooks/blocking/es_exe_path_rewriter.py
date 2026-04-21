@@ -10,27 +10,26 @@ the Bash call runs. Never blocks or denies — on any error exits 0 with empty o
 import json
 import logging
 import re
+import shlex
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
 from hook_config.dynamic_stderr_handler import DynamicStderrHandler
+from hook_config.path_rewriter_constants import (
+    BASH_TOOL_NAME,
+    HOOK_EVENT_NAME,
+    PERMISSION_ALLOW,
+    PLACEHOLDER_TOKEN_PATTERN,
+)
 from hook_config.project_paths_reader import load_registry
 
 _ES_EXE_TRIGGER_PATTERN = re.compile(
     r"(?i)(?<![\w.])(?:Everything[/\\])?es\.exe(?![\w.])",
 )
-
-_PLACEHOLDER_TOKEN_PATTERN = re.compile(r"""['"]?\{([^}]+)\}['"]?""")
-
-_ABSOLUTE_PATH_PATTERN = re.compile(r"^[A-Za-z]:[/\\]")
-
-_BASH_TOOL_NAME = "Bash"
-_HOOK_EVENT_NAME = "PreToolUse"
-_PERMISSION_ALLOW = "allow"
 
 
 _logger = logging.getLogger("es_exe_path_rewriter")
@@ -49,7 +48,13 @@ def command_invokes_es_exe(command: str) -> bool:
 
 def _token_is_absolute_path(token: str) -> bool:
     stripped = token.strip("\"'")
-    return bool(_ABSOLUTE_PATH_PATTERN.match(stripped))
+    try:
+        return (
+            PureWindowsPath(stripped).is_absolute()
+            or PurePosixPath(stripped).is_absolute()
+        )
+    except (ValueError, TypeError):
+        return False
 
 
 def _quote_path(absolute_path: str) -> str:
@@ -63,7 +68,7 @@ def _rewrite_placeholder_tokens(command_suffix: str, registry: dict[str, str]) -
             return match.group(0)
         return _quote_path(registry[inner_name])
 
-    return _PLACEHOLDER_TOKEN_PATTERN.sub(replace_placeholder, command_suffix)
+    return PLACEHOLDER_TOKEN_PATTERN.sub(replace_placeholder, command_suffix)
 
 
 def _split_on_es_exe(command: str) -> tuple[str, str]:
@@ -74,17 +79,21 @@ def _split_on_es_exe(command: str) -> tuple[str, str]:
 
 
 def _rewrite_bare_tokens(command_suffix: str, registry: dict[str, str]) -> str:
-    all_parts: list[str] = []
-    for each_part in re.split(r"(\s+)", command_suffix):
-        if not each_part or each_part.isspace():
-            all_parts.append(each_part)
+    all_raw_parts = re.split(r"(\s+)", command_suffix)
+    all_rewritten_parts: list[str] = []
+    for each_raw_part in all_raw_parts:
+        if not each_raw_part or each_raw_part.isspace():
+            all_rewritten_parts.append(each_raw_part)
             continue
-        stripped = each_part.strip("\"'")
-        if stripped in registry and not _token_is_absolute_path(each_part):
-            all_parts.append(_quote_path(registry[stripped]))
+        is_quoted = each_raw_part.startswith('"') or each_raw_part.startswith("'")
+        if is_quoted:
+            all_rewritten_parts.append(each_raw_part)
+            continue
+        if each_raw_part in registry and not _token_is_absolute_path(each_raw_part):
+            all_rewritten_parts.append(_quote_path(registry[each_raw_part]))
         else:
-            all_parts.append(each_part)
-    return "".join(all_parts)
+            all_rewritten_parts.append(each_raw_part)
+    return "".join(all_rewritten_parts)
 
 
 def rewrite_command(command: str, registry: dict[str, str]) -> str:
@@ -106,8 +115,8 @@ def _build_allow_response(rewritten_command: str, original_tool_input: dict) -> 
     updated_input = {**original_tool_input, "command": rewritten_command}
     return {
         "hookSpecificOutput": {
-            "hookEventName": _HOOK_EVENT_NAME,
-            "permissionDecision": _PERMISSION_ALLOW,
+            "hookEventName": HOOK_EVENT_NAME,
+            "permissionDecision": PERMISSION_ALLOW,
             "updatedInput": updated_input,
         }
     }
@@ -117,7 +126,7 @@ def main() -> None:
     try:
         hook_input = json.load(sys.stdin)
         tool_name = hook_input.get("tool_name", "")
-        if tool_name != _BASH_TOOL_NAME:
+        if tool_name != BASH_TOOL_NAME:
             sys.exit(0)
         tool_input = hook_input.get("tool_input", {})
         command = tool_input.get("command", "")

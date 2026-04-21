@@ -810,8 +810,7 @@ def check_constants_outside_config_advisory(content: str, file_path: str) -> lis
 
     advisory_issues: list[str] = []
     lines = content.split("\n")
-    inside_function = False
-    function_body_indent_threshold = 0
+    function_indent_stack: list[int] = []
     constant_pattern = re.compile(r"^([A-Z][A-Z0-9_]{2,})\s*=\s*[^=]")
 
     for line_number, line in enumerate(lines, 1):
@@ -822,19 +821,18 @@ def check_constants_outside_config_advisory(content: str, file_path: str) -> lis
 
         indent = len(line) - len(line.lstrip())
 
-        if inside_function and indent <= function_body_indent_threshold and not stripped.startswith(("#", "@", ")")):
-            inside_function = False
-
-        if re.match(r"^(async\s+)?def\s+\w+", stripped):
-            inside_function = True
-            function_body_indent_threshold = indent
-            continue
+        while function_indent_stack and indent <= function_indent_stack[-1] and not stripped.startswith(("#", "@", ")")):
+            function_indent_stack.pop()
 
         if re.match(r"^class\s+\w+", stripped):
-            inside_function = False
+            function_indent_stack.clear()
             continue
 
-        if inside_function:
+        if re.match(r"^(async\s+)?def\s+\w+", stripped):
+            function_indent_stack.append(indent)
+            continue
+
+        if function_indent_stack:
             match = constant_pattern.match(stripped)
             if match:
                 constant_name = match.group(1)

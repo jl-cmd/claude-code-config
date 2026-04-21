@@ -118,3 +118,27 @@ def test_advisory_cap_matches_max_issues_per_check_constant() -> None:
     assert len(advisory_issues) == code_rules_enforcer.MAX_ISSUES_PER_CHECK, (
         "Advisory cap must equal MAX_ISSUES_PER_CHECK, not a hardcoded literal"
     )
+
+
+def test_advisory_should_flag_outer_constants_after_nested_def() -> None:
+    source_with_nested_def = (
+        "def outer():\n"
+        "    OUTER_CONST = 1\n"
+        "    def inner():\n"
+        "        INNER_CONST = 2\n"
+        "    ANOTHER_OUTER = 3\n"
+    )
+    advisory_issues = code_rules_enforcer.check_constants_outside_config_advisory(
+        source_with_nested_def,
+        "example_module.py",
+    )
+    flagged_names = " ".join(advisory_issues)
+    assert "OUTER_CONST" in flagged_names, (
+        "OUTER_CONST before nested def must be flagged"
+    )
+    assert "INNER_CONST" in flagged_names, (
+        "INNER_CONST inside nested def must be flagged"
+    )
+    assert "ANOTHER_OUTER" in flagged_names, (
+        "ANOTHER_OUTER after nested def must be flagged — this is the regression case"
+    )

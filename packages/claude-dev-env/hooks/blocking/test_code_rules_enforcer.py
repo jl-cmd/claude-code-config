@@ -59,3 +59,119 @@ def test_should_flag_constant_used_once_at_module_scope_and_once_in_function() -
     assert issues == [], (
         f"Expected module-scope + function usage to count as 2 distinct callers, got: {issues}"
     )
+
+
+UNUSED_OPTIONAL_PRODUCTION_FILE_PATH = "packages/app/services/feature.py"
+UNUSED_OPTIONAL_TEST_FILE_PATH = "packages/app/tests/test_feature.py"
+UNUSED_OPTIONAL_CONFIG_FILE_PATH = "packages/app/config/constants.py"
+
+
+def test_should_flag_optional_param_never_varied_in_file() -> None:
+    source = (
+        "def build_url(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "\n"
+        "def call_first() -> str:\n"
+        "    return build_url('/users')\n"
+        "\n"
+        "def call_second() -> str:\n"
+        "    return build_url('/items')\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, UNUSED_OPTIONAL_PRODUCTION_FILE_PATH
+    )
+    assert any("prefix" in issue for issue in issues), (
+        f"Expected 'prefix' flagged as never-varied, got: {issues}"
+    )
+
+
+def test_should_not_flag_when_param_is_varied_at_call_site() -> None:
+    source = (
+        "def build_url(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "\n"
+        "def call_with_default() -> str:\n"
+        "    return build_url('/users')\n"
+        "\n"
+        "def call_with_override() -> str:\n"
+        "    return build_url('/items', prefix='/v2')\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, UNUSED_OPTIONAL_PRODUCTION_FILE_PATH
+    )
+    assert not any("prefix" in issue for issue in issues), (
+        f"Expected 'prefix' not flagged when varied, got: {issues}"
+    )
+
+
+def test_should_not_flag_unused_optional_in_test_files() -> None:
+    source = (
+        "def build_url(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "\n"
+        "def call_first() -> str:\n"
+        "    return build_url('/users')\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, UNUSED_OPTIONAL_TEST_FILE_PATH
+    )
+    assert issues == [], f"Expected no issues in test file, got: {issues}"
+
+
+def test_should_not_flag_unused_optional_in_config_files() -> None:
+    source = (
+        "def build_url(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "\n"
+        "def call_first() -> str:\n"
+        "    return build_url('/users')\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, UNUSED_OPTIONAL_CONFIG_FILE_PATH
+    )
+    assert issues == [], f"Expected no issues in config file, got: {issues}"
+
+
+def test_should_not_flag_when_no_same_file_call_sites_exist() -> None:
+    source = (
+        "def build_url(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, UNUSED_OPTIONAL_PRODUCTION_FILE_PATH
+    )
+    assert issues == [], (
+        f"Expected no issues when no same-file call sites, got: {issues}"
+    )
+
+
+def test_should_include_line_number_and_param_name_in_issue() -> None:
+    source = (
+        "def fetch(url: str, timeout: int = 30) -> str:\n"
+        "    return get(url, timeout=timeout)\n"
+        "\n"
+        "def run_fetch() -> str:\n"
+        "    return fetch('http://example.com')\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, UNUSED_OPTIONAL_PRODUCTION_FILE_PATH
+    )
+    assert any("Line 1" in issue and "timeout" in issue for issue in issues), (
+        f"Expected issue with line number and param name, got: {issues}"
+    )
+
+
+def test_should_not_flag_when_param_passed_as_exact_default() -> None:
+    source = (
+        "def fetch(url: str, timeout: int = 30) -> str:\n"
+        "    return get(url, timeout=timeout)\n"
+        "\n"
+        "def run_fetch() -> str:\n"
+        "    return fetch('http://example.com', timeout=30)\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, UNUSED_OPTIONAL_PRODUCTION_FILE_PATH
+    )
+    assert any("timeout" in issue for issue in issues), (
+        f"Expected 'timeout' flagged when always passed as default value, got: {issues}"
+    )

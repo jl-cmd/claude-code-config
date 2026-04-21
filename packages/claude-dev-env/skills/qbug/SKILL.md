@@ -55,7 +55,7 @@ python "${CLAUDE_SKILL_DIR}/../bugteam/scripts/bugteam_preflight.py"
 
 Pre-flight checks (in order):
 
-1. **Git hooks path** — verifies `git config --global --get core.hooksPath` resolves to a path ending in `hooks/git-hooks`. If unset or pointing elsewhere, exits non-zero:
+1. **Git hooks path** — verifies `git -C <repository_root> config --get core.hooksPath` resolves to a path ending in `hooks/git-hooks`. Queries the repository-effective config so repo-level overrides (Husky, lefthook) are detected. If unset or pointing elsewhere, exits non-zero:
    ```
    Git-side CODE_RULES enforcement is not active on this host.
    Run: npx claude-dev-env .
@@ -88,7 +88,7 @@ qbug_temp_dir: Path = Path(tempfile.gettempdir()) / f"qbug-pr-{pr_number}"
 qbug_temp_dir.mkdir(parents=True, exist_ok=True)
 ```
 
-## Step 2: Spawn the single subagent
+## Step 2: Spawn the primary and secondary audit agents
 
 Before calling `Agent`, the lead resolves the three absolute paths the subagent needs and substitutes them into the prompt template (the `<gate_script>`, `<categories_file>`, and `<qbug_temp_dir>` placeholders in § Subagent cycle prompt):
 
@@ -101,7 +101,7 @@ gate_script_path = (skill_dir / ".." / "bugteam" / "scripts" / "bugteam_code_rul
 categories_file_path = (skill_dir / ".." / "bugteam" / "PROMPTS.md").resolve()
 ```
 
-Then call `Agent` twice in the same message — the primary clean-coder and the Haiku secondary run in parallel per the audit contract. The lead merges their findings before the FIX step:
+Then call `Agent` twice in the same message — the primary clean-coder and the Haiku secondary run in parallel per the audit contract. The Haiku secondary receives an **audit-only** prompt (no FIX step, no git operations) and returns findings to the lead only. The lead merges their findings before the FIX step:
 
 ```
 Agent(
@@ -116,12 +116,12 @@ Agent(
   subagent_type="code-quality-agent",
   model="haiku",
   description="qbug Haiku secondary audit for PR <number>",
-  prompt="<filled cycle XML; see § Subagent cycle prompt>",
+  prompt="<audit-only prompt: read the PR diff, apply A-J categories from <categories_file>, return structured findings. No FIX, no git add, no git commit, no git push.>",
   run_in_background=False
 )
 ```
 
-The lead merges primary and Haiku secondary findings per the de-dup rules in the audit contract before proceeding. No `TeamCreate`, no `team_name`, no teammate shutdown protocol. The primary subagent returns when it has exited the cycle (`converged`, `stuck`, or `error`).
+The Haiku secondary is a read-only auditor per `audit-contract.md` — it returns findings to the lead and never modifies the working tree. The lead merges primary and Haiku secondary findings per the de-dup rules in the audit contract before proceeding. No `TeamCreate`, no `team_name`, no teammate shutdown protocol. The primary subagent returns when it has exited the cycle (`converged`, `stuck`, or `error`).
 
 ## Subagent cycle prompt
 
@@ -316,7 +316,7 @@ Delete the resolved `<qbug_temp_dir>` tree and any `.qbug-*.md` temp files in th
 
 ## Constraints
 
-- **One subagent, not a team.** Lead spawns a single `clean-coder` via the Agent tool. No `TeamCreate`. The subagent does not spawn further subagents.
+- **One primary + one secondary auditor, not a team.** Lead spawns a `clean-coder` primary (audit + fix cycle) and a `code-quality-agent` Haiku secondary (audit-only, read-only — no FIX, no git). No `TeamCreate`. Neither subagent spawns further subagents.
 - **No loop cap.** Cycle runs until `converged`, `stuck`, or `error`. User can interrupt.
 - **Code rules gate before every AUDIT.** Same `validate_content` logic as /bugteam.
 - **One commit per FIX action.** Linear branch, fast-forward push only.

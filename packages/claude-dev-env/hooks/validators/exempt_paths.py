@@ -29,7 +29,7 @@ def _ensure_blocking_package_on_path() -> None:
 
 _ensure_blocking_package_on_path()
 
-from code_rules_path_utils import is_config_file  # type: ignore[import-not-found] # noqa: E402  # runtime sys.path set above
+from code_rules_path_utils import is_config_file  # type: ignore[import-not-found] # noqa: E402
 
 
 TEST_PATH_PATTERNS: frozenset[str] = frozenset(

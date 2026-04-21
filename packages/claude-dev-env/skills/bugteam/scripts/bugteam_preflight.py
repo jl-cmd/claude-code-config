@@ -7,8 +7,13 @@ import sys
 from pathlib import Path
 
 
-def verify_git_hooks_path() -> int:
+def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     """Check that core.hooksPath resolves to the claude-dev-env git-hooks directory.
+
+    When *repository_root* is provided, queries the effective config for that
+    repository (``git -C <root> config --get``), which detects repo-level
+    overrides such as Husky or lefthook. Falls back to the current working
+    directory's effective config when *repository_root* is None.
 
     Returns zero when the configured path ends with the expected hooks suffix.
     Returns non-zero and prints a correction message when unset or pointing elsewhere.
@@ -20,8 +25,12 @@ def verify_git_hooks_path() -> int:
         "Or set core.hooksPath at any scope, e.g.:\n"
         "  git config --global core.hooksPath ~/.claude/hooks/git-hooks"
     )
+    git_command: list[str] = ["git"]
+    if repository_root is not None:
+        git_command.extend(["-C", str(repository_root)])
+    git_command.extend(["config", "--get", "core.hooksPath"])
     query_result = subprocess.run(
-        ["git", "config", "--get", "core.hooksPath"],
+        git_command,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -142,15 +151,15 @@ def main(argv: list[str] | None = None) -> int:
     if os.environ.get("BUGTEAM_PREFLIGHT_SKIP", "").strip() == "1":
         print("bugteam_preflight: skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
         return 0
-    hooks_path_exit_code = verify_git_hooks_path()
-    if hooks_path_exit_code != 0:
-        return hooks_path_exit_code
     start = Path.cwd()
     repository_root = (
         arguments.repo_root.resolve()
         if arguments.repo_root is not None
         else find_repository_root(start)
     )
+    hooks_path_exit_code = verify_git_hooks_path(repository_root)
+    if hooks_path_exit_code != 0:
+        return hooks_path_exit_code
     if not arguments.no_pytest and has_pytest_configuration(repository_root):
         if not has_discoverable_tests(repository_root):
             print(

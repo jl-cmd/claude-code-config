@@ -46,8 +46,8 @@ def test_should_require_paranoid_mode_with_haiku_on_post_fix() -> None:
 
 def test_should_require_internal_iteration_cap_of_three() -> None:
     skill_text = _load_skill_text()
-    assert "3" in skill_text and "internal" in skill_text.lower(), (
-        "FIX step must specify an internal iteration cap of 3"
+    assert "internal iteration cap = 3" in skill_text, (
+        "FIX step must specify the exact phrase 'internal iteration cap = 3'"
     )
     assert "stuck: post-fix audit not converging" in skill_text, (
         "Exit message for cap exceeded must be 'stuck: post-fix audit not converging'"

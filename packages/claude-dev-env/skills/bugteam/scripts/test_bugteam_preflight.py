@@ -115,11 +115,13 @@ def test_should_accept_hooks_path_with_trailing_slash() -> None:
 def test_should_exit_zero_when_hooks_path_set_at_repo_scope(tmp_path: Path) -> None:
     claude_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
     claude_hooks_path.mkdir(parents=True)
+    repo_root = tmp_path / "my-repo"
+    repo_root.mkdir()
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process(
             str(claude_hooks_path) + "\n", returncode=0
         )
-        exit_code = bugteam_preflight.verify_git_hooks_path()
+        exit_code = bugteam_preflight.verify_git_hooks_path(repo_root)
     assert exit_code == 0, (
         "verify_git_hooks_path must accept a valid path returned by effective "
         "config query (not restricted to --global scope)"
@@ -127,6 +129,13 @@ def test_should_exit_zero_when_hooks_path_set_at_repo_scope(tmp_path: Path) -> N
     called_command = mock_run.call_args[0][0]
     assert "--global" not in called_command, (
         "verify_git_hooks_path must query effective config, not --global only"
+    )
+    assert "-C" in called_command, (
+        "verify_git_hooks_path must use git -C <repo_root> for repo-effective config"
+    )
+    dash_c_index = called_command.index("-C")
+    assert called_command[dash_c_index + 1] == str(repo_root), (
+        "git -C must receive the resolved repository root path"
     )
 
 

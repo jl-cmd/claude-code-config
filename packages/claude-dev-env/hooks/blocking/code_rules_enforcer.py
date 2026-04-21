@@ -35,7 +35,7 @@ _BLOCKING_DIR = str(Path(__file__).resolve().parent)
 if _BLOCKING_DIR not in sys.path:
     sys.path.insert(0, _BLOCKING_DIR)
 
-from code_rules_path_utils import is_config_file  # noqa: E402  # runtime sys.path set above
+from code_rules_path_utils import is_config_file  # noqa: E402
 
 PYTHON_EXTENSIONS = {".py"}
 JAVASCRIPT_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx"}
@@ -817,7 +817,8 @@ def _scan_function_body_constants(content: str) -> list[str]:
             function_indent_stack.pop()
 
         if re.match(r"^class\s+\w+", stripped):
-            function_indent_stack.clear()
+            if indent == 0:
+                function_indent_stack.clear()
             continue
 
         if re.match(r"^(async\s+)?def\s+\w+", stripped):

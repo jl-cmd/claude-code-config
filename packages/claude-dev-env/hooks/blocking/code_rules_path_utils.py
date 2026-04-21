@@ -17,11 +17,12 @@ from pathlib import Path
 def is_config_file(file_path: str) -> bool:
     """Return True when the path points to a config file.
 
-    A file is considered a config file when its parent directory segment is
-    literally ``config`` (any depth), or when its filename is ``settings.py``
-    (with or without a parent directory prefix). Filename-only matches such as
-    ``scripts/db/config.py`` or ``lib/myconfig.py`` return False because the
-    directory segment must be the one named ``config``, not the filename stem.
+    Uses pathlib parts so a filename of ``config.py`` does not match — any
+    directory segment before the filename must be literally ``config``.
+    ``settings.py`` matches regardless of parent directory.  Filename-only
+    matches such as ``scripts/db/config.py`` or ``lib/myconfig.py`` return
+    False because the check requires a *directory* segment named ``config``,
+    not a filename stem.
     """
     normalized = file_path.replace("\\", "/").lower()
     if normalized.endswith("/settings.py") or normalized == "settings.py":

@@ -40,14 +40,14 @@ Invoke the `Agent` tool with:
 - `description: "Copilot review loop for PR #<N>"`
 - `prompt`: the full instructions in **Step 3 (Subagent prompt template)**, with placeholders filled in from Step 1.
 
-Record the returned agent ID. Tell the user:
+Record the returned agent ID. Report to the user in one or two lines:
 
 - The subagent is running in the background.
-- It will self-terminate on convergence.
-- To stop early: user says "stop the copilot loop" and you call `TaskStop <agent_id>`.
-- The main session is free; completion arrives as a notification.
+- It self-terminates on convergence.
+- To stop it early, the user says "stop the copilot loop" and you call `TaskStop <agent_id>`.
+- The main session stays free; completion arrives as a notification.
 
-Do **not** use `/loop` or `CronCreate` in the main session. The subagent owns its own cadence.
+Let the subagent own the cadence. The skill's job in the main session ends once the subagent is spawned and reported.
 
 ### Step 3: Subagent prompt template
 
@@ -68,7 +68,7 @@ Pass this verbatim to the subagent (substituting the bracketed values):
 >    - **No review exists:** re-request (step 4), schedule next wakeup, return.
 >    - **Latest review's `commit_id` != current HEAD:** re-request (step 4), schedule next wakeup, return.
 >    - **Latest review's `commit_id` == current HEAD with unresolved inline findings:** TDD-fix them, push, reply inline on each thread, re-request (step 4), schedule next wakeup, return.
->    - **Latest review's `commit_id` == current HEAD and clean:** report convergence to parent (one-sentence summary), **do not** schedule another wakeup. You are done.
+>    - **Latest review's `commit_id` == current HEAD and clean:** report convergence to the parent with a one-sentence summary and terminate. The loop is done; skip the ScheduleWakeup call.
 > 4. Re-request Copilot. The reviewer ID **must** be `copilot-pull-request-reviewer[bot]` with the `[bot]` suffix — empirically verified: `Copilot`, `copilot`, and `github-copilot` all return `requested_reviewers: []` with no error, silently no-op.
 >    ```bash
 >    gh api -X POST repos/[OWNER]/[REPO]/pulls/[NUMBER]/requested_reviewers \
@@ -82,19 +82,21 @@ Pass this verbatim to the subagent (substituting the bracketed values):
 > **Fix protocol** (step 3, third branch):
 >
 > - Read each referenced file:line.
-> - Write a failing test first when the finding has behavior to test; skip only for pure doc/comment nits.
+> - Write a failing test first when the finding has behavior to test. For pure doc or comment nits that have no behavior, go straight to the fix.
 > - Implement the fix.
-> - Commit on the existing branch. Never `--amend`, `--force`, `--no-verify`, or rebase.
-> - Push.
-> - Reply inline on each comment thread: `gh api -X POST repos/[OWNER]/[REPO]/pulls/[NUMBER]/comments` with `in_reply_to` set to the comment id, referencing the new commit SHA.
+> - Stage the fix and create one new commit on the existing branch: `git add <files> && git commit -m "fix(review): ..."`.
+> - Push the new commit: `git push origin [BRANCH]`.
+> - Reply inline on each comment thread with `gh api -X POST repos/[OWNER]/[REPO]/pulls/[NUMBER]/comments` using `in_reply_to` set to the comment id, referencing the new commit SHA.
+>
+> When a pre-push, pre-commit, or other hook rejects the change, solve it. Read the hook's error message, diagnose the root cause in the code or test, and fix that. Then rerun the commit or push. Hooks exist to catch real problems; treat each rejection as new evidence to act on.
 >
 > **Stop conditions:**
 >
-> - Convergence (clean review against HEAD): report and terminate.
-> - Unrecoverable error (push blocked by hook you cannot resolve, API auth failure, CI broken and you cannot fix it in one commit): report the blocker to the parent and terminate without scheduling another wakeup.
+> - Convergence (clean review against HEAD): report one-sentence summary to parent and terminate.
+> - Blocker you have exhausted fix attempts on (API auth failure persists, CI regression whose root cause falls outside this PR, a hook you have investigated and cannot resolve in one commit): report the specific blocker and its diagnosis to the parent, then terminate without scheduling another wakeup.
 > - Parent sends `TaskStop`: terminate immediately.
 >
-> **Safety cap:** if you have run 20 ticks without convergence, stop and report — something is wrong with the loop.
+> **Safety cap:** after 20 ticks without convergence, stop and report. That many rounds means something structural is wrong with the loop.
 
 ### Step 4: Report back to the user
 
@@ -107,13 +109,13 @@ After spawning, tell the user in one or two lines: subagent ID, PR URL, that it 
 - User says stop → `TaskStop <agent_id>`.
 - User asks what loops are running → `TaskList`.
 
-## Constraints (for the subagent)
+## Ground rules (for the subagent)
 
-- **Never `--force`, `--amend`, or rebase.** Each tick appends commits.
-- **Never `--no-verify`.** If a pre-push hook fails, diagnose and fix.
-- **Draft PR state.** If the PR is ready-for-review, leave it alone. If the user wants it drafted before the loop, they say so.
-- **One tick = at most one fix commit.** Do not batch multiple review rounds into a single tick.
-- **The `[bot]` suffix is load-bearing.** Every other spelling of the Copilot reviewer silently fails.
+- **Append commits.** Each tick adds one new commit on the existing branch with `git commit` and `git push origin [BRANCH]`.
+- **Honor pre-push and pre-commit hooks.** When a hook rejects the change, read its output, fix the underlying issue (the failing test, the missing constant, the broken import), and retry. Solve, do not punt.
+- **Respect the PR's current state.** Whatever draft-vs-ready state the PR has when the loop starts is the state the subagent preserves. The user decides when to flip it.
+- **One fix commit per tick.** Batch all of the current tick's findings into a single commit; the next tick handles the next review round.
+- **Use `copilot-pull-request-reviewer[bot]` with the `[bot]` suffix for the reviewer ID.** That exact spelling is load-bearing — it is the only form the API accepts.
 
 ## Examples
 

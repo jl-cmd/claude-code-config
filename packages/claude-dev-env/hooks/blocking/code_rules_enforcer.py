@@ -1099,6 +1099,65 @@ def check_existence_check_tests(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _is_upper_snake_name(name: str) -> bool:
+    """Return True when an identifier is written in UPPER_SNAKE_CASE."""
+    return bool(UPPER_SNAKE_CONSTANT_PATTERN.match(name))
+
+
+def _assert_is_constant_equality_only(assert_node: ast.Assert) -> bool:
+    """Return True when the assertion compares an UPPER_SNAKE name to a literal."""
+    test_expr = assert_node.test
+    if not isinstance(test_expr, ast.Compare):
+        return False
+    if len(test_expr.ops) != 1 or not isinstance(test_expr.ops[0], ast.Eq):
+        return False
+    left = test_expr.left
+    right = test_expr.comparators[0]
+    left_is_upper_snake = isinstance(left, ast.Name) and _is_upper_snake_name(left.id)
+    right_is_literal = isinstance(right, ast.Constant)
+    right_is_upper_snake = isinstance(right, ast.Name) and _is_upper_snake_name(right.id)
+    return left_is_upper_snake and (right_is_literal or right_is_upper_snake)
+
+
+def check_constant_equality_tests(content: str, file_path: str) -> list[str]:
+    """Flag test functions whose sole assertion compares a constant to a literal.
+
+    Tests like 'assert CACHE_DIR == "cache"' cover no behavior — they just
+    verify the constant has not changed. Such tests should be deleted.
+    Only applies to test files; production files are exempt.
+    """
+    if not is_test_file(file_path):
+        return []
+
+    try:
+        syntax_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    issues: list[str] = []
+    for each_node in ast.walk(syntax_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not each_node.name.startswith("test"):
+            continue
+        all_assertions = [
+            each_stmt
+            for each_stmt in ast.walk(each_node)
+            if isinstance(each_stmt, ast.Assert)
+        ]
+        if not all_assertions:
+            continue
+        if len(all_assertions) > 1:
+            continue
+        if _assert_is_constant_equality_only(all_assertions[0]):
+            issues.append(
+                f"Line {each_node.lineno}: constant-value test"
+                f" — delete; tests must cover behavior"
+            )
+
+    return issues
+
+
 def _is_upper_snake_constant_name(name: str) -> bool:
     """Return True for UPPER_SNAKE identifiers including those with a leading underscore."""
     return bool(FILE_GLOBAL_UPPER_SNAKE_PATTERN.match(name))
@@ -1237,6 +1296,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_boolean_naming(content, file_path))
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
         all_issues.extend(check_existence_check_tests(content, file_path))
+        all_issues.extend(check_constant_equality_tests(content, file_path))
 
     elif extension in JAVASCRIPT_EXTENSIONS:
         if not is_test_file(file_path):

@@ -1114,9 +1114,11 @@ def _assert_is_constant_equality_only(assert_node: ast.Assert) -> bool:
     left = test_expr.left
     right = test_expr.comparators[0]
     left_is_upper_snake = isinstance(left, ast.Name) and _is_upper_snake_name(left.id)
-    right_is_literal = isinstance(right, ast.Constant)
     right_is_upper_snake = isinstance(right, ast.Name) and _is_upper_snake_name(right.id)
-    return left_is_upper_snake and (right_is_literal or right_is_upper_snake)
+    if left_is_upper_snake and right_is_upper_snake:
+        return False
+    right_is_literal = isinstance(right, ast.Constant)
+    return left_is_upper_snake and right_is_literal
 
 
 def check_constant_equality_tests(content: str, file_path: str) -> list[str]:
@@ -1410,7 +1412,7 @@ def check_incomplete_mocks(content: str, file_path: str) -> None:
         return
 
     mock_definitions: dict[str, tuple[set[str], int]] = {}
-    for each_node in module_tree.body:
+    for each_node in ast.walk(module_tree):
         if not isinstance(each_node, ast.Assign):
             continue
         for each_target in each_node.targets:
@@ -1529,18 +1531,10 @@ def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
 
-    method_node_ids: set[int] = set()
-    for each_node in ast.walk(module_tree):
-        if isinstance(each_node, ast.ClassDef):
-            for each_class_member in each_node.body:
-                if isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    method_node_ids.add(id(each_class_member))
-
     all_function_nodes: dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
-    for each_node in ast.walk(module_tree):
+    for each_node in module_tree.body:
         if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if id(each_node) not in method_node_ids:
-                all_function_nodes[each_node.name] = each_node
+            all_function_nodes[each_node.name] = each_node
 
     all_call_nodes: list[ast.Call] = [
         each_node

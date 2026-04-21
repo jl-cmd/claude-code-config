@@ -161,19 +161,19 @@ def test_should_include_line_number_and_param_name_in_issue() -> None:
     )
 
 
-def test_should_not_flag_when_param_passed_as_exact_default() -> None:
+def test_should_flag_when_every_call_passes_the_exact_default() -> None:
     source = (
         "def fetch(url: str, timeout: int = 30) -> str:\n"
         "    return get(url, timeout=timeout)\n"
         "\n"
         "def run_fetch() -> str:\n"
-        "    return fetch('http://example.com', timeout=60)\n"
+        "    return fetch('http://example.com', timeout=30)\n"
     )
     issues = code_rules_enforcer.check_unused_optional_parameters(
         source, UNUSED_OPTIONAL_PRODUCTION_FILE_PATH
     )
-    assert not any("timeout" in issue for issue in issues), (
-        f"Expected 'timeout' not flagged when a non-default value is passed, got: {issues}"
+    assert any("timeout" in issue for issue in issues), (
+        f"Expected 'timeout' flagged when every call passes the exact default, got: {issues}"
     )
 
 
@@ -318,6 +318,74 @@ def test_should_advise_with_distinct_skeletons(capsys: object) -> None:
     captured = getattr(capsys, "readouterr")()
     assert "/teams/" in captured.err, (
         f"Expected advisory for repeated /teams/<x>/users/<x> pattern, got: {captured.err!r}"
+    )
+
+
+CONSTANT_EQUALITY_TEST_FILE_PATH = "packages/app/tests/test_constants.py"
+
+
+def test_should_not_flag_two_named_constants_compared_to_each_other() -> None:
+    source = (
+        "FOO = 'a'\n"
+        "BAR = 'b'\n"
+        "\n"
+        "def test_constants_differ() -> None:\n"
+        "    assert FOO == BAR\n"
+    )
+    issues = code_rules_enforcer.check_constant_equality_tests(
+        source, CONSTANT_EQUALITY_TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"Expected no flag when both sides are named constants, got: {issues}"
+    )
+
+
+def test_should_flag_named_constant_compared_to_literal() -> None:
+    source = (
+        "FOO = 'a'\n"
+        "\n"
+        "def test_foo_value() -> None:\n"
+        "    assert FOO == 'literal'\n"
+    )
+    issues = code_rules_enforcer.check_constant_equality_tests(
+        source, CONSTANT_EQUALITY_TEST_FILE_PATH
+    )
+    assert any("constant-value test" in issue for issue in issues), (
+        f"Expected flag when UPPER_SNAKE compared to literal, got: {issues}"
+    )
+
+
+NESTED_FUNCTION_PRODUCTION_FILE_PATH = "packages/app/services/nested.py"
+
+
+def test_should_not_flag_nested_function_optional_param() -> None:
+    source = (
+        "def outer() -> None:\n"
+        "    def inner(timeout: int = 30) -> None:\n"
+        "        pass\n"
+        "    inner()\n"
+        "    inner()\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, NESTED_FUNCTION_PRODUCTION_FILE_PATH
+    )
+    assert not any("timeout" in issue for issue in issues), (
+        f"Expected nested function 'timeout' not flagged, got: {issues}"
+    )
+
+
+def test_should_advise_when_mock_defined_inside_test_function_is_incomplete(
+    capsys: object,
+) -> None:
+    source = (
+        "def test_thing() -> None:\n"
+        "    mock_user = {'name': 'x'}\n"
+        "    assert mock_user['email'] == 'y'\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, INCOMPLETE_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    assert "mock_user" in captured.err and "email" in captured.err, (
+        f"Expected advisory for mock defined inside test function, got: {captured.err!r}"
     )
 
 

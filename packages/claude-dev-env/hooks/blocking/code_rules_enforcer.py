@@ -1030,6 +1030,21 @@ def check_skip_decorators_in_tests(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _collect_body_assertions(statement_nodes: list[ast.stmt]) -> list[ast.Assert]:
+    """Collect Assert nodes from a function body without descending into nested scopes."""
+    assertions: list[ast.Assert] = []
+    for each_stmt in statement_nodes:
+        if isinstance(each_stmt, ast.Assert):
+            assertions.append(each_stmt)
+            continue
+        if isinstance(each_stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        for each_child in ast.walk(each_stmt):
+            if isinstance(each_child, ast.Assert):
+                assertions.append(each_child)
+    return assertions
+
+
 def _is_existence_only_assertion(call_node: ast.Call) -> bool:
     """Return True when a Call node is callable() or hasattr()."""
     if not isinstance(call_node.func, ast.Name):
@@ -1041,11 +1056,7 @@ def _test_body_has_only_existence_assertions(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
     """Return True when a test function body contains only existence-check assertions."""
-    assertion_nodes = [
-        each_stmt
-        for each_stmt in ast.walk(function_node)
-        if isinstance(each_stmt, ast.Assert)
-    ]
+    assertion_nodes = _collect_body_assertions(function_node.body)
     if not assertion_nodes:
         return False
 
@@ -1119,8 +1130,12 @@ def _assert_is_constant_equality_only(assert_node: ast.Assert) -> bool:
     is_right_upper_snake = isinstance(right, ast.Name) and _is_upper_snake_name(right.id)
     if is_left_upper_snake and is_right_upper_snake:
         return False
+    is_left_a_literal = isinstance(left, ast.Constant)
     is_right_a_literal = isinstance(right, ast.Constant)
-    return is_left_upper_snake and is_right_a_literal
+    return (
+        (is_left_upper_snake and is_right_a_literal)
+        or (is_right_upper_snake and is_left_a_literal)
+    )
 
 
 def check_constant_equality_tests(content: str, file_path: str) -> list[str]:
@@ -1144,11 +1159,7 @@ def check_constant_equality_tests(content: str, file_path: str) -> list[str]:
             continue
         if not each_node.name.startswith("test"):
             continue
-        all_assertions = [
-            each_stmt
-            for each_stmt in ast.walk(each_node)
-            if isinstance(each_stmt, ast.Assert)
-        ]
+        all_assertions = _collect_body_assertions(each_node.body)
         if not all_assertions:
             continue
         if len(all_assertions) > 1:
@@ -1290,11 +1301,24 @@ def _collect_optional_param_defaults(
     return param_defaults
 
 
+_NON_LITERAL_DEFAULT_SENTINEL = object()
+
+
+def _is_non_literal_default(value: object) -> bool:
+    """Return True when a value is the sentinel for a non-literal default."""
+    return value is _NON_LITERAL_DEFAULT_SENTINEL
+
+
 def _ast_constant_value(node: ast.expr) -> object:
-    """Return the Python value of a Constant node, or a sentinel for non-constants."""
+    """Return the Python value of a Constant node, or a stable sentinel for non-constants.
+
+    Non-literal defaults (e.g. DEFAULT_TIMEOUT) return a single shared sentinel
+    so that the unused-optional check can identify and skip them rather than
+    treating every non-literal as automatically different.
+    """
     if isinstance(node, ast.Constant):
         return node.value
-    return object()
+    return _NON_LITERAL_DEFAULT_SENTINEL
 
 
 def _call_passes_keyword_argument_differing_from_default(
@@ -1322,6 +1346,11 @@ def _call_has_kwargs_expansion(call_node: ast.Call) -> bool:
     return any(each_keyword.arg is None for each_keyword in call_node.keywords)
 
 
+def _call_has_starargs_expansion(call_node: ast.Call) -> bool:
+    """Return True when a Call contains a *args expansion (Starred node in positional args)."""
+    return any(isinstance(each_arg, ast.Starred) for each_arg in call_node.args)
+
+
 def _call_passes_positional_argument_for_param(
     call_node: ast.Call,
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
@@ -1330,12 +1359,14 @@ def _call_passes_positional_argument_for_param(
 ) -> bool:
     """Return True when a Call passes param_name positionally with a varied value.
 
-    Returns False conservatively when **kwargs expansion is present, because the
-    expansion may pass the parameter with an unknown value — treating it as
-    indeterminate prevents false positives from the unused-optional check.
+    Returns False when **kwargs expansion is present (the keyword helper covers
+    that case). Returns True conservatively when *args expansion is present,
+    because the expanded iterable may provide the parameter at runtime.
     """
     if _call_has_kwargs_expansion(call_node):
         return False
+    if _call_has_starargs_expansion(call_node):
+        return True
     all_args = function_node.args.posonlyargs + function_node.args.args
     try:
         param_index = next(
@@ -1364,6 +1395,12 @@ def _function_name_from_call(call_node: ast.Call) -> str | None:
     return None
 
 
+BUILTIN_DICT_METHOD_NAMES: frozenset[str] = frozenset({
+    "get", "items", "keys", "values", "update", "pop",
+    "setdefault", "copy", "clear",
+})
+
+
 def _collect_mock_dict_keys(assign_value: ast.expr) -> set[str] | None:
     """Return the string key set for a dict literal, or None if not a dict literal."""
     if not isinstance(assign_value, ast.Dict):
@@ -1375,16 +1412,57 @@ def _collect_mock_dict_keys(assign_value: ast.expr) -> set[str] | None:
     return key_names
 
 
+def _scope_shadows_name(
+    scope_node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+    variable_name: str,
+) -> bool:
+    """Return True when a nested scope locally re-assigns variable_name."""
+    for each_stmt in scope_node.body:
+        if not isinstance(each_stmt, ast.Assign):
+            continue
+        for each_target in each_stmt.targets:
+            if isinstance(each_target, ast.Name) and each_target.id == variable_name:
+                return True
+    return False
+
+
+def _walk_scope_skipping_shadowed(
+    scope_node: ast.AST,
+    variable_name: str,
+) -> list[ast.AST]:
+    """Walk all nodes in a scope, skipping nested function/class bodies that shadow variable_name."""
+    collected: list[ast.AST] = []
+    nodes_to_visit: list[ast.AST] = [scope_node]
+    while nodes_to_visit:
+        current = nodes_to_visit.pop()
+        collected.append(current)
+        for each_child in ast.iter_child_nodes(current):
+            if (
+                isinstance(each_child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                and each_child is not scope_node
+                and _scope_shadows_name(each_child, variable_name)
+            ):
+                continue
+            nodes_to_visit.append(each_child)
+    return collected
+
+
 def _collect_mock_field_accesses_in_scope(
     scope_node: ast.AST,
     mock_name: str,
 ) -> list[tuple[str, int]]:
-    """Return (field_name, line_number) for attribute or subscript accesses on mock_name within a scope."""
+    """Return (field_name, line_number) for attribute or subscript accesses on mock_name within a scope.
+
+    Skips nested function/class bodies that locally redefine the same mock
+    variable to avoid false positives from name shadowing.
+    """
     accesses: list[tuple[str, int]] = []
-    for each_node in ast.walk(scope_node):
+    for each_node in _walk_scope_skipping_shadowed(scope_node, mock_name):
         if isinstance(each_node, ast.Attribute):
             if isinstance(each_node.value, ast.Name) and each_node.value.id == mock_name:
                 if isinstance(each_node.ctx, ast.Load):
+                    if each_node.attr in BUILTIN_DICT_METHOD_NAMES:
+                        continue
                     accesses.append((each_node.attr, each_node.lineno))
         elif isinstance(each_node, ast.Subscript):
             if isinstance(each_node.value, ast.Name) and each_node.value.id == mock_name:
@@ -1399,8 +1477,12 @@ def _collect_mock_attribute_assignments_in_scope(
     scope_node: ast.AST,
     mock_name: str,
 ) -> set[str]:
-    """Return attribute names assigned directly on a mock variable within a scope."""
-    assigned_attributes: set[str] = set()
+    """Return field names assigned on a mock variable within a scope.
+
+    Collects both attribute assignments (mock_x.field = ...) and subscript
+    assignments with constant string keys (mock_x['field'] = ...).
+    """
+    assigned_fields: set[str] = set()
     for each_node in ast.walk(scope_node):
         if not isinstance(each_node, ast.Assign):
             continue
@@ -1410,8 +1492,16 @@ def _collect_mock_attribute_assignments_in_scope(
                 and isinstance(each_target.value, ast.Name)
                 and each_target.value.id == mock_name
             ):
-                assigned_attributes.add(each_target.attr)
-    return assigned_attributes
+                assigned_fields.add(each_target.attr)
+            elif (
+                isinstance(each_target, ast.Subscript)
+                and isinstance(each_target.value, ast.Name)
+                and each_target.value.id == mock_name
+                and isinstance(each_target.slice, ast.Constant)
+                and isinstance(each_target.slice.value, str)
+            ):
+                assigned_fields.add(each_target.slice.value)
+    return assigned_fields
 
 
 def _collect_scoped_mock_definitions(
@@ -1489,15 +1579,13 @@ def check_incomplete_mocks(content: str, file_path: str) -> None:
 
 
 def _build_fstring_skeleton(joined_str_node: ast.JoinedStr) -> str:
-    """Collapse interpolations in an f-string to a placeholder to form a pattern skeleton."""
-    interpolation_placeholder = "<x>"
-    parts: list[str] = []
-    for each_part in joined_str_node.values:
-        if isinstance(each_part, ast.Constant) and isinstance(each_part.value, str):
-            parts.append(each_part.value)
-        else:
-            parts.append(interpolation_placeholder)
-    return "".join(parts)
+    """Collapse interpolations in an f-string to a placeholder to form a pattern skeleton.
+
+    Delegates to _extract_fstring_literal_parts for the iteration logic and
+    remaps its INTERP placeholder to the skeleton-specific '<x>' token.
+    """
+    _display_body, shape_body = _extract_fstring_literal_parts(joined_str_node)
+    return shape_body.replace("INTERP", "<x>")
 
 
 def check_duplicated_format_patterns(content: str, file_path: str) -> None:
@@ -1606,6 +1694,8 @@ def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
 
         for param_name, default_node in param_defaults.items():
             default_value = _ast_constant_value(default_node)
+            if _is_non_literal_default(default_value):
+                continue
             is_param_varied = any(
                 _call_passes_keyword_argument_differing_from_default(
                     each_call, param_name, default_value

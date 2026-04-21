@@ -20,9 +20,7 @@ def _copilot_instructions_text() -> str:
 def _magic_values_configuration_section(document_text: str) -> str:
     section_heading = "### Magic values & configuration"
     section_end_heading = "\n### Types"
-    start_index = document_text.find(section_heading)
-    if start_index == -1:
-        return ""
+    start_index = document_text.index(section_heading)
     after_start = document_text[start_index:]
     end_offset = after_start.find(section_end_heading)
     if end_offset == -1:
@@ -32,9 +30,7 @@ def _magic_values_configuration_section(document_text: str) -> str:
 
 def _structure_section(document_text: str) -> str:
     section_heading = "### Structure"
-    start_index = document_text.find(section_heading)
-    if start_index == -1:
-        return ""
+    start_index = document_text.index(section_heading)
     after_start = document_text[start_index:]
     end_offset = after_start.find("\n### ", 3)
     if end_offset == -1:

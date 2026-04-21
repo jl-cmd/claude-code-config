@@ -70,8 +70,11 @@ def test_should_require_loop_n_diagnostics_json() -> None:
     )
 
 
-def test_should_require_all_eight_source_keys_in_diagnostics() -> None:
-    skill_text = _load_skill_text()
+def test_contract_should_require_all_eight_source_keys_in_diagnostics() -> None:
+    contract_path = (
+        Path(__file__).parent.parent / "bugteam" / "reference" / "audit-contract.md"
+    )
+    contract_text = contract_path.read_text(encoding="utf-8")
     required_keys = [
         "loop",
         "gate_findings",
@@ -83,8 +86,8 @@ def test_should_require_all_eight_source_keys_in_diagnostics() -> None:
         "deduped",
     ]
     for each_key in required_keys:
-        assert each_key in skill_text, (
-            f"loop-N-diagnostics.json must contain key '{each_key}'"
+        assert each_key in contract_text, (
+            f"loop-N-diagnostics.json schema in audit-contract.md must contain key '{each_key}'"
         )
 
 

@@ -12,15 +12,22 @@ import os
 import sys
 from pathlib import Path
 
-_HOOKS_ROOT = Path(__file__).resolve().parent.parent
-if str(_HOOKS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_ROOT))
+
+def _insert_hooks_tree_for_imports() -> None:
+    hooks_tree = Path(__file__).resolve().parent.parent
+    hooks_tree_string = str(hooks_tree)
+    if hooks_tree_string not in sys.path:
+        sys.path.insert(0, hooks_tree_string)
+
+
+_insert_hooks_tree_for_imports()
 
 from hook_config.project_paths_reader import (
     load_registry,
     registry_contains_path,
     registry_file_path,
 )
+
 
 def current_working_directory() -> str:
     """Return the process working directory as a string."""

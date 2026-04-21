@@ -8,9 +8,6 @@ from pathlib import Path
 from hook_config.dynamic_stderr_handler import DynamicStderrHandler
 from hook_config.setup_project_paths_constants import UTF8_ENCODING
 
-_META_KEY = "_meta"
-_DEFAULT_CONFIG_RELATIVE_PARTS = (".claude", "project-paths.json")
-
 
 _logger = logging.getLogger("project_paths_reader")
 if not _logger.handlers:
@@ -23,8 +20,7 @@ if not _logger.handlers:
 
 def registry_file_path() -> Path:
     """Return the canonical path to ~/.claude/project-paths.json."""
-    dot_claude_segment, file_name_segment = _DEFAULT_CONFIG_RELATIVE_PARTS
-    return Path.home() / dot_claude_segment / file_name_segment
+    return Path.home() / ".claude" / "project-paths.json"
 
 
 def _default_config_path() -> Path:
@@ -58,10 +54,11 @@ def load_registry(config_path: Path | None = None) -> dict[str, str]:
         return {}
     if not isinstance(parsed, dict):
         return {}
+    meta_key = "_meta"
     return {
         each_key: each_value
         for each_key, each_value in parsed.items()
-        if each_key != _META_KEY
+        if each_key != meta_key
         and isinstance(each_key, str)
         and isinstance(each_value, str)
     }

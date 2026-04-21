@@ -1,5 +1,6 @@
 """Tests for project_paths_reader — config reader for ~/.claude/project-paths.json."""
 
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
+from hook_config import project_paths_reader
 from hook_config.project_paths_reader import (
     load_registry,
     registry_contains_path,
@@ -24,8 +26,6 @@ def test_reader_does_not_redefine_dynamic_stderr_handler_locally() -> None:
     identical `_DynamicStderrHandler` classes. This test fails if the
     duplicate class reappears in project_paths_reader.
     """
-    from hook_config import project_paths_reader
-
     assert not hasattr(project_paths_reader, "_DynamicStderrHandler")
 
 
@@ -130,11 +130,6 @@ def test_load_registry_uses_shared_utf8_encoding_constant() -> None:
     The bare string literal "utf-8" in the read_text call must be replaced
     with the shared constant so there is one source of truth for the encoding name.
     """
-    from hook_config import project_paths_reader
-    from hook_config.setup_project_paths_constants import UTF8_ENCODING
-
-    import inspect
-
     source = inspect.getsource(project_paths_reader)
     assert 'encoding="utf-8"' not in source, (
         'load_registry must use UTF8_ENCODING constant, not the bare literal "utf-8"'

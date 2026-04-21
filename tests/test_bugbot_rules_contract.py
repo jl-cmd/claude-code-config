@@ -17,6 +17,14 @@ def _copilot_instructions_text() -> str:
     return copilot_path.read_text(encoding="utf-8")
 
 
+def _copilot_instructions_part1_text() -> str:
+    text = _copilot_instructions_text()
+    part_marker = "\n## Part 2"
+    if part_marker in text:
+        return text.split(part_marker, maxsplit=1)[0]
+    return text
+
+
 def test_bugbot_documents_upper_snake_exemptions_matching_hook() -> None:
     """code_rules_enforcer exempts migrations, workflow registries, and tests."""
     text = _bugbot_text()
@@ -58,7 +66,7 @@ def test_bugbot_file_length_matches_hook_advisory_behavior() -> None:
 
 def test_copilot_instructions_upper_snake_path_exemptions() -> None:
     """GitHub Copilot instructions document UPPER_SNAKE path exemptions without naming implementation files."""
-    text = _copilot_instructions_text()
+    text = _copilot_instructions_part1_text()
     lower = text.lower()
     assert "/migrations/" in text
     assert "/workflow/" in text
@@ -74,7 +82,7 @@ def test_copilot_instructions_upper_snake_path_exemptions() -> None:
 
 def test_copilot_instructions_file_length_is_advisory_smell_not_hard_gate() -> None:
     """Copilot instructions describe length as advisory context, not a blocking rule."""
-    text = _copilot_instructions_text()
+    text = _copilot_instructions_part1_text()
     lower = text.lower()
     assert "400" in text
     assert "1000" in text

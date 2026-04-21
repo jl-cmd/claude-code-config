@@ -1,6 +1,8 @@
 """Tests for setup_project_paths — one-time bootstrap script."""
 
+import inspect
 import json
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -9,12 +11,24 @@ import pytest
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 _HOOKS_DIR = _SCRIPTS_DIR.parent / "hooks"
-for each_sys_path_entry in (str(_SCRIPTS_DIR), str(_HOOKS_DIR)):
+_SESSION_HOOKS_PACKAGE_DIR = _SCRIPTS_DIR.parent / "hooks" / "session"
+for each_sys_path_entry in (
+    str(_SCRIPTS_DIR),
+    str(_HOOKS_DIR),
+    str(_SESSION_HOOKS_PACKAGE_DIR),
+):
     if each_sys_path_entry not in sys.path:
         sys.path.insert(0, each_sys_path_entry)
 
 import setup_project_paths as setup
-from hook_config.setup_project_paths_constants import ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
+import untracked_repo_detector as detector_module
+from hook_config.project_paths_reader import registry_file_path
+from hook_config.setup_project_paths_constants import (
+    ABORTED_NOTHING_WRITTEN_MESSAGE,
+    CONFIRMATION_PROMPT_TEXT,
+    ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
+    WROTE_ENTRIES_STATUS_TEMPLATE,
+)
 
 
 class TestFinalSegmentFilter:
@@ -213,8 +227,6 @@ class TestMapNamingConvention:
         name is `path_by_name` (path indexed by name). The old inverted
         name `name_by_path` must not reappear.
         """
-        import inspect
-
         merge_signature = inspect.signature(setup.merge_registries)
         assert "new_path_by_name" in merge_signature.parameters
         assert "new_name_by_path" not in merge_signature.parameters
@@ -387,8 +399,6 @@ class TestDiscoverRepoRootsDedup:
 
 class TestPromptAndWriteUsesConstants:
     def test_confirmation_prompt_text_comes_from_constants(self) -> None:
-        from hook_config.setup_project_paths_constants import CONFIRMATION_PROMPT_TEXT
-
         captured_prompts: list[str] = []
 
         def capturing_input(prompt_text: str) -> str:
@@ -406,8 +416,6 @@ class TestPromptAndWriteUsesConstants:
     def test_abort_message_comes_from_constants(
         self, capsys: pytest.CaptureFixture
     ) -> None:
-        from hook_config.setup_project_paths_constants import ABORTED_NOTHING_WRITTEN_MESSAGE
-
         with patch("builtins.input", return_value="no"):
             setup.prompt_and_write(
                 path_by_name={"my-repo": "C:\\my-repo"},
@@ -419,8 +427,6 @@ class TestPromptAndWriteUsesConstants:
     def test_wrote_entries_status_uses_constants_template(
         self, tmp_path: Path, capsys: pytest.CaptureFixture
     ) -> None:
-        from hook_config.setup_project_paths_constants import WROTE_ENTRIES_STATUS_TEMPLATE
-
         target_file = tmp_path / "project-paths.json"
         with patch("builtins.input", return_value="yes"):
             setup.prompt_and_write(
@@ -436,8 +442,6 @@ class TestPromptAndWriteUsesConstants:
 
 class TestEverythingScanError:
     def test_nonzero_return_code_raises_everything_scan_error(self) -> None:
-        import subprocess
-
         failed_completion = subprocess.CompletedProcess(
             args=["es.exe"],
             returncode=1,
@@ -450,8 +454,6 @@ class TestEverythingScanError:
         assert "service not running" in str(raised_error.value)
 
     def test_nonzero_return_code_includes_return_code_in_message(self) -> None:
-        import subprocess
-
         failed_completion = subprocess.CompletedProcess(
             args=["es.exe"],
             returncode=2,
@@ -464,8 +466,6 @@ class TestEverythingScanError:
         assert "2" in str(raised_error.value)
 
     def test_zero_return_code_returns_parsed_paths(self) -> None:
-        import subprocess
-
         successful_completion = subprocess.CompletedProcess(
             args=["es.exe"],
             returncode=0,
@@ -513,23 +513,11 @@ class TestEverythingScanError:
 
 class TestSharedConfigPath:
     def test_default_user_config_path_matches_project_paths_reader(self) -> None:
-        from hook_config.project_paths_reader import registry_file_path
-
         assert setup._default_user_config_path() == registry_file_path()
 
     def test_untracked_repo_detector_config_path_matches_project_paths_reader(
         self,
     ) -> None:
-        import sys
-        from pathlib import Path as SysPath
-
-        session_dir = SysPath(__file__).resolve().parent.parent / "hooks" / "session"
-        if str(session_dir) not in sys.path:
-            sys.path.insert(0, str(session_dir))
-
-        import untracked_repo_detector as detector_module
-        from hook_config.project_paths_reader import registry_file_path
-
         shared_path = registry_file_path()
         assert str(shared_path) in detector_module._build_confirm_instruction(
             str(shared_path.parent)
@@ -538,8 +526,6 @@ class TestSharedConfigPath:
         )
 
     def test_all_three_modules_resolve_identical_config_path(self) -> None:
-        from hook_config.project_paths_reader import registry_file_path
-
         shared_path = registry_file_path()
         assert shared_path == setup._default_user_config_path()
         assert shared_path.name == "project-paths.json"

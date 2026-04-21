@@ -15,6 +15,7 @@ for each_sys_path_entry in (str(_SESSION_DIR), str(_HOOKS_ROOT)):
         sys.path.insert(0, each_sys_path_entry)
 
 import untracked_repo_detector as detector
+from hook_config.project_paths_reader import registry_file_path
 
 
 def _run_main_with_cwd(cwd: str, known_registry: dict) -> tuple[str, str, int]:
@@ -154,8 +155,6 @@ class TestSharedRegistryPath:
     def test_confirm_instruction_contains_registry_file_path(
         self, tmp_path: Path
     ) -> None:
-        from hook_config.project_paths_reader import registry_file_path
-
         repo_root = str(tmp_path / "some-repo")
         instruction_text = detector._build_confirm_instruction(repo_root)
         assert str(registry_file_path()) in instruction_text

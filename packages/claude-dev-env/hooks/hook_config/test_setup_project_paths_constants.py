@@ -9,8 +9,13 @@ _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
+import hook_config.setup_project_paths_constants as constants_module
 from hook_config.setup_project_paths_constants import (
+    ABORTED_NOTHING_WRITTEN_MESSAGE,
+    CONFIRMATION_PROMPT_TEXT,
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
+    STDERR_TRUNCATION_LENGTH,
+    WROTE_ENTRIES_STATUS_TEMPLATE,
 )
 
 
@@ -41,31 +46,23 @@ def test_user_config_file_relative_parts_is_removed() -> None:
     This constant had zero references after round 6 moved the canonical
     source to registry_file_path() in project_paths_reader.py.
     """
-    import hook_config.setup_project_paths_constants as constants_module
-
     assert not hasattr(constants_module, "USER_CONFIG_FILE_RELATIVE_PARTS")
 
 
 def test_confirmation_prompt_text_constant_exists() -> None:
     """Pin PR #230 round 7: prompt string extracted from prompt_and_write magic values."""
-    from hook_config.setup_project_paths_constants import CONFIRMATION_PROMPT_TEXT
-
     assert isinstance(CONFIRMATION_PROMPT_TEXT, str)
     assert len(CONFIRMATION_PROMPT_TEXT) > 0
 
 
 def test_aborted_nothing_written_message_constant_exists() -> None:
     """Pin PR #230 round 7: abort message extracted from prompt_and_write magic values."""
-    from hook_config.setup_project_paths_constants import ABORTED_NOTHING_WRITTEN_MESSAGE
-
     assert isinstance(ABORTED_NOTHING_WRITTEN_MESSAGE, str)
     assert len(ABORTED_NOTHING_WRITTEN_MESSAGE) > 0
 
 
 def test_wrote_entries_status_template_constant_exists() -> None:
     """Pin PR #230 round 7: success message template extracted from prompt_and_write magic values."""
-    from hook_config.setup_project_paths_constants import WROTE_ENTRIES_STATUS_TEMPLATE
-
     assert isinstance(WROTE_ENTRIES_STATUS_TEMPLATE, str)
     assert "{entry_count}" in WROTE_ENTRIES_STATUS_TEMPLATE
     assert "{save_path}" in WROTE_ENTRIES_STATUS_TEMPLATE
@@ -73,7 +70,5 @@ def test_wrote_entries_status_template_constant_exists() -> None:
 
 def test_stderr_truncation_length_constant_exists() -> None:
     """Pin PR #230 round 9: STDERR_TRUNCATION_LENGTH required for EverythingScanError messages."""
-    from hook_config.setup_project_paths_constants import STDERR_TRUNCATION_LENGTH
-
     assert isinstance(STDERR_TRUNCATION_LENGTH, int)
     assert STDERR_TRUNCATION_LENGTH > 0

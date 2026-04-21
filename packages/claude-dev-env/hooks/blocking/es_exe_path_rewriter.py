@@ -14,9 +14,15 @@ import shlex
 import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-_HOOKS_ROOT = Path(__file__).resolve().parent.parent
-if str(_HOOKS_ROOT) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_ROOT))
+
+def _insert_hooks_tree_for_imports() -> None:
+    hooks_tree = Path(__file__).resolve().parent.parent
+    hooks_tree_string = str(hooks_tree)
+    if hooks_tree_string not in sys.path:
+        sys.path.insert(0, hooks_tree_string)
+
+
+_insert_hooks_tree_for_imports()
 
 from hook_config.dynamic_stderr_handler import DynamicStderrHandler
 from hook_config.path_rewriter_constants import (

@@ -178,12 +178,12 @@ def _rm_flags_before_double_dash_are_unsafe(tokens_after_rm: list[str]) -> bool:
 
 def _collect_rm_target_tokens(tokens_after_rm: list[str]) -> list[str]:
     targets: list[str] = []
-    seen_end_of_options = False
+    has_seen_end_of_options = False
     for each_token in tokens_after_rm:
-        if not seen_end_of_options and each_token == "--":
-            seen_end_of_options = True
+        if not has_seen_end_of_options and each_token == "--":
+            has_seen_end_of_options = True
             continue
-        if not seen_end_of_options and each_token.startswith("-"):
+        if not has_seen_end_of_options and each_token.startswith("-"):
             continue
         targets.append(each_token)
     return targets

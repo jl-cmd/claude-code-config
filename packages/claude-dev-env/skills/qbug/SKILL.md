@@ -94,7 +94,6 @@ Then call `Agent`:
 ```
 Agent(
   subagent_type="clean-coder",
-  model="sonnet",
   description="qbug audit/fix cycle for PR <number>",
   prompt="<filled cycle XML; see § Subagent cycle prompt>",
   run_in_background=False
@@ -166,13 +165,36 @@ The subagent receives this prompt and loops internally — the lead does not re-
 
        - Read the patch file.
        - Audit only added/modified lines. Read <categories_file> for the
-         A–J category definitions; investigate each category explicitly
-         and return either at least one finding or a verified-clean
-         entry with cleared evidence.
+         A–J category definitions; investigate each category explicitly.
+       - For each category, produce EXACTLY ONE of:
+         (a) A structured finding:
+               {file, line, category, severity, excerpt, failure_mode,
+                evidence_files[]}
+         (b) Structured proof-of-absence:
+               {files_opened[], lines_quoted[], adversarial_probes[]}
+         Bare "verified clean" labels with no quoted evidence are REJECTED.
        - Assign each finding a stable id of the form `loop<N>-<K>`
          (N=loop_count, K=1-based within this loop).
        - Partition into anchored (line appears in the diff) vs
          unanchored (line does not).
+
+       Adversarial second pass: after the primary finding list is complete,
+       re-examine with the prompt "Assume your first pass missed at least
+       3 P1 bugs. Where are they?" Produce either new findings citing new
+       file:line references, or explicitly state which failure modes were
+       tested-against-and-ruled-out for each category probed.
+
+       Haiku secondary auditor: the LEAD spawns two Agent() calls in one
+       message — primary (subagent_type=clean-coder, model=sonnet) and
+       secondary (subagent_type=code-quality-agent, model=haiku, self-
+       contained clean-room prompt in findbugs shape). Haiku findings
+       return to the LEAD only (never posted to the PR). The LEAD merges
+       unique Haiku findings into the primary set before FIX begins.
+       De-dup key: (file, line, category). Severity conflict: max wins.
+
+       Persist the merged audit result to
+       <qbug_temp_dir>/loop-<loop_count>-audit.json with keys:
+         {findings[], proof_of_absence[], source}
 
        Post ONE review per loop. Use the payload shape from
        <categories_file>'s sibling SKILL.md § "PR comments" — build

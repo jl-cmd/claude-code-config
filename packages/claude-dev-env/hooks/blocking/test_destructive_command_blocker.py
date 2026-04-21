@@ -228,6 +228,15 @@ def test_rm_rf_asks_when_any_target_is_non_ephemeral() -> None:
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
+def test_rm_rf_asks_when_double_dash_includes_hyphen_prefixed_non_ephemeral_target() -> None:
+    payload = _make_bash_payload("rm -rf -- /tmp/scratch -non_ephemeral")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
 def test_rm_rf_asks_when_command_is_compound_with_ampersand() -> None:
     payload = _make_bash_payload("rm -rf /tmp/reply && gh pr checks 19")
 

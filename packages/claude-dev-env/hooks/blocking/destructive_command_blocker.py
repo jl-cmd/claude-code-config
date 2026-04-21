@@ -147,6 +147,19 @@ def _path_is_bare_ephemeral_root(resolved_path: str) -> bool:
     return forward_slash_normalized_path in forbidden_bare_ephemeral_roots
 
 
+def _collect_rm_target_tokens(tokens_after_rm: list[str]) -> list[str]:
+    targets: list[str] = []
+    seen_end_of_options = False
+    for each_token in tokens_after_rm:
+        if not seen_end_of_options and each_token == "--":
+            seen_end_of_options = True
+            continue
+        if not seen_end_of_options and each_token.startswith("-"):
+            continue
+        targets.append(each_token)
+    return targets
+
+
 def rm_targets_only_ephemeral_paths(command: str) -> bool:
     """Return True when command is a single rm invocation whose every target is inside an ephemeral directory.
 
@@ -164,7 +177,7 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
         return False
     if len(all_command_tokens) < 2 or all_command_tokens[0] != "rm":
         return False
-    all_target_tokens = [each_token for each_token in all_command_tokens[1:] if not each_token.startswith("-")]
+    all_target_tokens = _collect_rm_target_tokens(all_command_tokens[1:])
     if not all_target_tokens:
         return False
     for each_target_token in all_target_tokens:

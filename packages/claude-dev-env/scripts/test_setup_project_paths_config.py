@@ -10,11 +10,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-_SCRIPTS_DIRECTORY = Path(__file__).resolve().parent
-if str(_SCRIPTS_DIRECTORY) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIRECTORY))
+_HOOKS_DIRECTORY = Path(__file__).resolve().parent.parent / "hooks"
+if str(_HOOKS_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_DIRECTORY))
 
-from setup_project_paths_config import (
+from config.setup_project_paths_constants import (
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
     JSON_INDENT_SPACES,
 )

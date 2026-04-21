@@ -129,6 +129,24 @@ class TestRewriteCommand:
         rewritten = rewriter.rewrite_command(command, {})
         assert rewritten == command
 
+    def test_double_spaces_inside_quoted_arg_pass_through_unchanged_on_no_registry_hit(
+        self,
+    ) -> None:
+        command = 'es.exe "foo  bar" baz'
+        rewritten = rewriter.rewrite_command(command, REGISTRY_WITH_ONE_REPO)
+        assert rewritten == command
+
+    def test_tab_separator_is_preserved_when_bare_token_is_rewritten(self) -> None:
+        registry = {"my-repo": "Y:\\Projects\\my-repo"}
+        command = "es.exe my-repo\tconfig.py"
+        rewritten = rewriter.rewrite_command(command, registry)
+        assert rewritten == f'es.exe "Y:\\Projects\\my-repo"\tconfig.py'
+
+    def test_multiple_substitutions_preserve_all_inter_token_whitespace(self) -> None:
+        command = "es.exe my-repo  other-repo   config.py"
+        rewritten = rewriter.rewrite_command(command, REGISTRY_WITH_TWO_REPOS)
+        assert rewritten == f'es.exe "{KNOWN_REPO_PATH}"  "{OTHER_REPO_PATH}"   config.py'
+
 
 class TestEmittedJsonShape:
     def test_emitted_json_has_correct_hook_event_name(self) -> None:

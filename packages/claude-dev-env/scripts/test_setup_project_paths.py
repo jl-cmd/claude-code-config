@@ -8,11 +8,13 @@ from unittest.mock import patch
 import pytest
 
 _SCRIPTS_DIR = Path(__file__).resolve().parent
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
+_HOOKS_DIR = _SCRIPTS_DIR.parent / "hooks"
+for each_sys_path_entry in (str(_SCRIPTS_DIR), str(_HOOKS_DIR)):
+    if each_sys_path_entry not in sys.path:
+        sys.path.insert(0, each_sys_path_entry)
 
 import setup_project_paths as setup
-from setup_project_paths_config import ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
+from config.setup_project_paths_constants import ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
 
 
 class TestFinalSegmentFilter:
@@ -181,6 +183,26 @@ class TestUserRejection:
                 save_path=target_file,
             )
         assert not target_file.exists()
+
+
+class TestDuplicateLeafName:
+    def test_duplicate_leaf_name_keeps_first_seen_entry(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        all_roots = sorted(["Y:\\A\\foo", "Y:\\B\\foo"])
+        path_by_name = setup._build_path_by_name_from_roots(all_roots)
+        assert len(path_by_name) == 1
+        assert path_by_name["foo"] == "Y:\\A\\foo"
+
+    def test_duplicate_leaf_name_prints_collision_warning(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        all_roots = sorted(["Y:\\A\\foo", "Y:\\B\\foo"])
+        setup._build_path_by_name_from_roots(all_roots)
+        captured = capsys.readouterr()
+        assert "Duplicate leaf name 'foo'" in captured.out
+        assert "Y:\\A\\foo" in captured.out
+        assert "Y:\\B\\foo" in captured.out
 
 
 class TestMapNamingConvention:

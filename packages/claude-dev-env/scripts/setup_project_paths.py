@@ -18,25 +18,24 @@ import subprocess
 import sys
 from pathlib import Path
 
-_scripts_dir = Path(__file__).resolve().parent
-if str(_scripts_dir) not in sys.path:
-    sys.path.insert(0, str(_scripts_dir))
+_hooks_dir = Path(__file__).resolve().parent.parent / "hooks"
+if str(_hooks_dir) not in sys.path:
+    sys.path.insert(0, str(_hooks_dir))
 
-from setup_project_paths_config import (
+from config.setup_project_paths_constants import (
+    ES_EXE_BINARY_NAME,
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
     EXCLUDED_PATH_SEGMENTS,
+    GIT_DIRECTORY_SEGMENT_NAME,
     ISO_TIMESTAMP_SUFFIX_UTC,
     JSON_INDENT_SPACES,
+    META_KEY,
+    SUPPORTED_SCHEMA_VERSION,
     TEMP_FILE_SUFFIX,
     USER_CONFIG_FILE_RELATIVE_PARTS,
     USER_RESPONSE_AFFIRMATIVE_VALUES,
+    UTF8_ENCODING,
 )
-
-GIT_DIRECTORY_SEGMENT_NAME = ".git"
-ES_EXE_BINARY_NAME = "es.exe"
-SUPPORTED_SCHEMA_VERSION = 1
-META_KEY = "_meta"
-UTF8_ENCODING = "utf-8"
 
 
 class SchemaMismatchError(Exception):
@@ -263,9 +262,15 @@ def prompt_and_write(
 
 def _build_path_by_name_from_roots(all_repo_roots: list[str]) -> dict[str, str]:
     path_by_name: dict[str, str] = {}
-    for each_repo_root in all_repo_roots:
+    for each_repo_root in sorted(all_repo_roots):
         each_leaf_name = _leaf_name_of(each_repo_root)
         if each_leaf_name in path_by_name:
+            kept_path = path_by_name[each_leaf_name]
+            print(
+                f"Duplicate leaf name '{each_leaf_name}' — keeping {kept_path}, "
+                f"skipping {each_repo_root}. Edit ~/.claude/project-paths.json "
+                "after generation to disambiguate."
+            )
             continue
         path_by_name[each_leaf_name] = each_repo_root
     return path_by_name

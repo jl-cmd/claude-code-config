@@ -75,14 +75,16 @@ def _split_on_es_exe(command: str) -> tuple[str, str]:
 
 def _rewrite_bare_tokens(command_suffix: str, registry: dict[str, str]) -> str:
     all_parts: list[str] = []
-    for each_token in command_suffix.split():
-        stripped = each_token.strip("\"'")
-        if stripped in registry and not _token_is_absolute_path(each_token):
+    for each_part in re.split(r"(\s+)", command_suffix):
+        if not each_part or each_part.isspace():
+            all_parts.append(each_part)
+            continue
+        stripped = each_part.strip("\"'")
+        if stripped in registry and not _token_is_absolute_path(each_part):
             all_parts.append(_quote_path(registry[stripped]))
         else:
-            all_parts.append(each_token)
-    leading_space = " " if command_suffix.startswith(" ") else ""
-    return leading_space + " ".join(all_parts)
+            all_parts.append(each_part)
+    return "".join(all_parts)
 
 
 def rewrite_command(command: str, registry: dict[str, str]) -> str:

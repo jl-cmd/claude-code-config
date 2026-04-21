@@ -1,4 +1,4 @@
-"""Configuration constants for setup_project_paths bootstrap script."""
+"""Configuration constants for the setup_project_paths bootstrap script."""
 
 from __future__ import annotations
 
@@ -24,3 +24,13 @@ ISO_TIMESTAMP_SUFFIX_UTC = "Z"
 USER_RESPONSE_AFFIRMATIVE_VALUES = frozenset({"yes", "y"})
 
 JSON_INDENT_SPACES = 2
+
+GIT_DIRECTORY_SEGMENT_NAME = ".git"
+
+ES_EXE_BINARY_NAME = "es.exe"
+
+SUPPORTED_SCHEMA_VERSION = 1
+
+META_KEY = "_meta"
+
+UTF8_ENCODING = "utf-8"

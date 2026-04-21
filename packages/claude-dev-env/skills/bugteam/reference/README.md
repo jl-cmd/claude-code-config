@@ -14,12 +14,16 @@ Canonical documentation quotes: [`../sources.md`](../sources.md).
 
 ## Retired: pre-push-review skill
 
-The `pre-push-review` skill was retired in favor of the expanded code-rules enforcer gate and the `/qbug` skill.
+The `pre-push-review` skill was retired. Its mechanical checks are now covered automatically by the expanded code-rules enforcer and the git hooks installed via `npx claude-dev-env`.
 
-The enforcer (`packages/claude-dev-env/hooks/blocking/code_rules_enforcer.py`) now runs blocking and advisory checks covering all patterns the pre-push-review skill previously surfaced manually. Running `/qbug` before pushing replaces the old `Skill(pre-push-review)` invocation in every workflow that referenced it.
+**What replaced what:**
+
+- **Mechanical pre-push checks** (lint, magic values, boolean naming, imports, etc.) — handled by the `code_rules_enforcer.py` PreToolUse hook (blocks at write time) and by the git pre-push hook installed via `npx claude-dev-env`. The git pre-push hook is the gate that runs at `git push` time; no manual invocation is needed.
+
+- **`/qbug`** — a full PR audit-fix cycle that spawns subagents, runs multiple audit loops, and produces a structured report. It is NOT a lightweight pre-push gate. Do not use `/qbug` as a substitute for `git push` (the hook fires automatically). Use `/qbug` when you want a thorough multi-loop review of a PR before requesting human review.
 
 References updated:
-- `skills/pr-review-responder/SKILL.md` — Rule 6 and checklist item updated to `/qbug`
-- `commands/plan.md` — Phase 5 step 10 updated to `/qbug` gate
+- `skills/pr-review-responder/SKILL.md` — Rule 6 and checklist item updated to reference the git pre-push hook
+- `commands/plan.md` — Phase 5 step 10 updated to reference the git pre-push hook
 - `hooks/github-action/pre-push-review.yml` — deleted (workflow no longer needed)
 - `hooks/github-action/test_workflow.py` — deleted alongside the workflow

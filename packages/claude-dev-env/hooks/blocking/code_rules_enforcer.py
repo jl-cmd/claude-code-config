@@ -894,9 +894,9 @@ def _assign_target_names_for_bool(node: ast.Assign) -> list[str]:
 def _annassign_target_name_for_bool(node: ast.AnnAssign) -> list[str]:
     if not isinstance(node.target, ast.Name):
         return []
-    annotation_is_bool = isinstance(node.annotation, ast.Name) and node.annotation.id == "bool"
-    value_is_bool = node.value is not None and _is_bool_constant(node.value)
-    if annotation_is_bool and value_is_bool:
+    is_annotation_bool_type = isinstance(node.annotation, ast.Name) and node.annotation.id == "bool"
+    is_value_bool_constant = node.value is not None and _is_bool_constant(node.value)
+    if is_annotation_bool_type and is_value_bool_constant:
         return [node.target.id]
     return []
 
@@ -1113,12 +1113,12 @@ def _assert_is_constant_equality_only(assert_node: ast.Assert) -> bool:
         return False
     left = test_expr.left
     right = test_expr.comparators[0]
-    left_is_upper_snake = isinstance(left, ast.Name) and _is_upper_snake_name(left.id)
-    right_is_upper_snake = isinstance(right, ast.Name) and _is_upper_snake_name(right.id)
-    if left_is_upper_snake and right_is_upper_snake:
+    is_left_upper_snake = isinstance(left, ast.Name) and _is_upper_snake_name(left.id)
+    is_right_upper_snake = isinstance(right, ast.Name) and _is_upper_snake_name(right.id)
+    if is_left_upper_snake and is_right_upper_snake:
         return False
-    right_is_literal = isinstance(right, ast.Constant)
-    return left_is_upper_snake and right_is_literal
+    is_right_a_literal = isinstance(right, ast.Constant)
+    return is_left_upper_snake and is_right_a_literal
 
 
 def check_constant_equality_tests(content: str, file_path: str) -> list[str]:
@@ -1300,12 +1300,24 @@ def _call_passes_keyword_argument_differing_from_default(
     param_name: str,
     default_value: object,
 ) -> bool:
-    """Return True when a Call passes param_name with a value different from default."""
+    """Return True when a Call passes param_name with a value different from default.
+
+    Returns True conservatively when **kwargs expansion is present, because the
+    expansion may pass the parameter with an unknown value — treating it as
+    indeterminate prevents false positives from the unused-optional check.
+    """
     for each_keyword in call_node.keywords:
+        if each_keyword.arg is None:
+            return True
         if each_keyword.arg == param_name:
             passed_value = _ast_constant_value(each_keyword.value)
             return passed_value != default_value
     return False
+
+
+def _call_has_kwargs_expansion(call_node: ast.Call) -> bool:
+    """Return True when a Call contains a **kwargs expansion (arg=None in AST keywords)."""
+    return any(each_keyword.arg is None for each_keyword in call_node.keywords)
 
 
 def _call_passes_positional_argument_for_param(
@@ -1314,7 +1326,14 @@ def _call_passes_positional_argument_for_param(
     param_name: str,
     default_value: object,
 ) -> bool:
-    """Return True when a Call passes param_name positionally with a varied value."""
+    """Return True when a Call passes param_name positionally with a varied value.
+
+    Returns False conservatively when **kwargs expansion is present, because the
+    expansion may pass the parameter with an unknown value — treating it as
+    indeterminate prevents false positives from the unused-optional check.
+    """
+    if _call_has_kwargs_expansion(call_node):
+        return False
     all_args = function_node.args.posonlyargs + function_node.args.args
     try:
         param_index = next(
@@ -1354,32 +1373,13 @@ def _collect_mock_dict_keys(assign_value: ast.expr) -> set[str] | None:
     return key_names
 
 
-def _collect_mock_attribute_assignments(
-    module_tree: ast.Module,
-    mock_name: str,
-) -> set[str]:
-    """Return attribute names assigned directly on a mock variable (mock.field = ...)."""
-    assigned_attributes: set[str] = set()
-    for each_node in ast.walk(module_tree):
-        if not isinstance(each_node, ast.Assign):
-            continue
-        for each_target in each_node.targets:
-            if (
-                isinstance(each_target, ast.Attribute)
-                and isinstance(each_target.value, ast.Name)
-                and each_target.value.id == mock_name
-            ):
-                assigned_attributes.add(each_target.attr)
-    return assigned_attributes
-
-
-def _collect_mock_field_accesses(
-    module_tree: ast.Module,
+def _collect_mock_field_accesses_in_scope(
+    scope_node: ast.AST,
     mock_name: str,
 ) -> list[tuple[str, int]]:
-    """Return (field_name, line_number) for every attribute or subscript access on mock_name."""
+    """Return (field_name, line_number) for attribute or subscript accesses on mock_name within a scope."""
     accesses: list[tuple[str, int]] = []
-    for each_node in ast.walk(module_tree):
+    for each_node in ast.walk(scope_node):
         if isinstance(each_node, ast.Attribute):
             if isinstance(each_node.value, ast.Name) and each_node.value.id == mock_name:
                 if isinstance(each_node.ctx, ast.Load):
@@ -1393,13 +1393,67 @@ def _collect_mock_field_accesses(
     return accesses
 
 
+def _collect_mock_attribute_assignments_in_scope(
+    scope_node: ast.AST,
+    mock_name: str,
+) -> set[str]:
+    """Return attribute names assigned directly on a mock variable within a scope."""
+    assigned_attributes: set[str] = set()
+    for each_node in ast.walk(scope_node):
+        if not isinstance(each_node, ast.Assign):
+            continue
+        for each_target in each_node.targets:
+            if (
+                isinstance(each_target, ast.Attribute)
+                and isinstance(each_target.value, ast.Name)
+                and each_target.value.id == mock_name
+            ):
+                assigned_attributes.add(each_target.attr)
+    return assigned_attributes
+
+
+def _collect_scoped_mock_definitions(
+    module_tree: ast.Module,
+) -> list[tuple[int, str, set[str], int, ast.AST]]:
+    """Return (scope_id, mock_name, declared_keys, definition_line, scope_node) for each mock.
+
+    Keyed by (scope_node id, variable_name) so the same mock name in two different
+    test functions is tracked independently. Scope is the enclosing function node,
+    or the module node for module-level assignments.
+    """
+    scope_definitions: list[tuple[int, str, set[str], int, ast.AST]] = []
+    for each_scope in [module_tree, *ast.walk(module_tree)]:
+        if not isinstance(each_scope, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
+            continue
+        scope_body = each_scope.body if isinstance(each_scope, ast.Module) else each_scope.body
+        for each_stmt in scope_body:
+            if not isinstance(each_stmt, ast.Assign):
+                continue
+            for each_target in each_stmt.targets:
+                if not isinstance(each_target, ast.Name):
+                    continue
+                target_name = each_target.id
+                if not (target_name.startswith("mock_") or target_name.startswith("MOCK_")):
+                    continue
+                mock_keys = _collect_mock_dict_keys(each_stmt.value)
+                if mock_keys is not None:
+                    scope_definitions.append(
+                        (id(each_scope), target_name, mock_keys, each_stmt.lineno, each_scope)
+                    )
+                elif isinstance(each_stmt.value, ast.Call):
+                    scope_definitions.append(
+                        (id(each_scope), target_name, set(), each_stmt.lineno, each_scope)
+                    )
+    return scope_definitions
+
+
 def check_incomplete_mocks(content: str, file_path: str) -> None:
     """Emit stderr advisories when a mock dict/object is missing fields that are accessed.
 
     Scans test files for variables named mock_* or MOCK_* whose value is a dict
-    literal. For each such mock, collects all attribute and subscript accesses on
-    that variable name throughout the module. Any accessed field not present in
-    the dict literal (or assigned as an attribute) produces a stderr advisory.
+    literal. Each mock definition is keyed by (scope_node_id, variable_name) so
+    the same name in different test functions is checked independently. Advisories
+    are deduplicated per (mock_name, field_name) pair within each scope.
 
     This is advisory-only (no return value, no blocking).
     """
@@ -1411,33 +1465,25 @@ def check_incomplete_mocks(content: str, file_path: str) -> None:
     except SyntaxError:
         return
 
-    mock_definitions: dict[str, tuple[set[str], int]] = {}
-    for each_node in ast.walk(module_tree):
-        if not isinstance(each_node, ast.Assign):
-            continue
-        for each_target in each_node.targets:
-            if not isinstance(each_target, ast.Name):
-                continue
-            target_name = each_target.id
-            if not (target_name.startswith("mock_") or target_name.startswith("MOCK_")):
-                continue
-            mock_keys = _collect_mock_dict_keys(each_node.value)
-            if mock_keys is not None:
-                mock_definitions[target_name] = (mock_keys, each_node.lineno)
-            elif isinstance(each_node.value, ast.Call):
-                mock_definitions[target_name] = (set(), each_node.lineno)
+    all_scoped_definitions = _collect_scoped_mock_definitions(module_tree)
 
-    for mock_name, (declared_keys, definition_line) in mock_definitions.items():
-        assigned_attributes = _collect_mock_attribute_assignments(module_tree, mock_name)
+    for _scope_id, mock_name, declared_keys, definition_line, scope_node in all_scoped_definitions:
+        assigned_attributes = _collect_mock_attribute_assignments_in_scope(scope_node, mock_name)
         all_known_fields = declared_keys | assigned_attributes
-        field_accesses = _collect_mock_field_accesses(module_tree, mock_name)
+        field_accesses = _collect_mock_field_accesses_in_scope(scope_node, mock_name)
+        already_advised: set[tuple[str, str]] = set()
         for accessed_field, access_line in field_accesses:
-            if accessed_field not in all_known_fields:
-                print(
-                    f"[CODE_RULES advisory] Line {definition_line}: mock {mock_name}"
-                    f" missing field {accessed_field} accessed at line {access_line}",
-                    file=sys.stderr,
-                )
+            if accessed_field in all_known_fields:
+                continue
+            advisory_key = (mock_name, accessed_field)
+            if advisory_key in already_advised:
+                continue
+            already_advised.add(advisory_key)
+            print(
+                f"[CODE_RULES advisory] Line {definition_line}: mock {mock_name}"
+                f" missing field {accessed_field} accessed at line {access_line}",
+                file=sys.stderr,
+            )
 
 
 def _build_fstring_skeleton(joined_str_node: ast.JoinedStr) -> str:

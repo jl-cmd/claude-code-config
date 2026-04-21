@@ -424,3 +424,74 @@ def test_should_emit_advisories_for_incomplete_mocks_and_format_patterns_via_val
     assert "/api/" in captured.err and "3" in captured.err, (
         f"Expected duplicated-format advisory from validate_content, got: {captured.err!r}"
     )
+
+
+SCOPE_KEYED_MOCK_TEST_FILE_PATH = "packages/app/tests/test_scope_mocks.py"
+KWARGS_EXPANSION_PRODUCTION_FILE_PATH = "packages/app/services/fetcher.py"
+
+
+def test_should_check_each_scope_mock_against_its_own_field_set(capsys: object) -> None:
+    """Same mock_user name in two test functions with different field sets.
+
+    First function defines mock_user with only 'id'; accesses 'email' — should warn.
+    Second function defines mock_user with 'id' and 'email'; accesses 'email' — no warn.
+    The second definition must NOT overwrite the first scope's tracking.
+    """
+    source = (
+        "def test_first_scope() -> None:\n"
+        "    mock_user = {'id': 1}\n"
+        "    email = mock_user['email']\n"
+        "\n"
+        "def test_second_scope() -> None:\n"
+        "    mock_user = {'id': 2, 'email': 'b@b.com'}\n"
+        "    email = mock_user['email']\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, SCOPE_KEYED_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    advisory_lines = [
+        line for line in captured.err.splitlines() if "mock_user" in line and "email" in line
+    ]
+    assert len(advisory_lines) == 1, (
+        f"Expected exactly 1 advisory (first scope missing email), got: {captured.err!r}"
+    )
+
+
+def test_should_emit_exactly_one_advisory_for_repeated_accesses_to_same_missing_field(
+    capsys: object,
+) -> None:
+    """mock_user accessed 5 times for 'email' but email is missing — emit exactly one advisory."""
+    source = (
+        "def test_repeated_access() -> None:\n"
+        "    mock_user = {'id': 1}\n"
+        "    _ = mock_user['email']\n"
+        "    _ = mock_user['email']\n"
+        "    _ = mock_user['email']\n"
+        "    _ = mock_user['email']\n"
+        "    _ = mock_user['email']\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, SCOPE_KEYED_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    advisory_lines = [
+        line for line in captured.err.splitlines() if "mock_user" in line and "email" in line
+    ]
+    assert len(advisory_lines) == 1, (
+        f"Expected exactly 1 advisory for 5 repeated accesses to missing 'email', got: {captured.err!r}"
+    )
+
+
+def test_should_not_flag_optional_param_when_only_call_site_uses_kwargs_expansion() -> None:
+    """A call using **defaults passes unknown values — the param must NOT be flagged."""
+    source = (
+        "def fetch(url: str, timeout: int = 30) -> str:\n"
+        "    return url\n"
+        "\n"
+        "def run() -> str:\n"
+        "    defaults = {'timeout': 30}\n"
+        "    return fetch('http://example.com', **defaults)\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, KWARGS_EXPANSION_PRODUCTION_FILE_PATH
+    )
+    assert not any("timeout" in issue for issue in issues), (
+        f"Expected 'timeout' NOT flagged when call uses **kwargs expansion, got: {issues}"
+    )

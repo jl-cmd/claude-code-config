@@ -1028,6 +1028,77 @@ def check_skip_decorators_in_tests(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _is_existence_only_assertion(call_node: ast.Call) -> bool:
+    """Return True when a Call node is callable(), hasattr(), or 'x is not None' pattern."""
+    if not isinstance(call_node.func, ast.Name):
+        return False
+    return call_node.func.id in ("callable", "hasattr")
+
+
+def _test_body_has_only_existence_assertions(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    """Return True when a test function body contains only existence-check assertions."""
+    assertion_nodes = [
+        each_stmt
+        for each_stmt in ast.walk(function_node)
+        if isinstance(each_stmt, ast.Assert)
+    ]
+    if not assertion_nodes:
+        return False
+
+    non_existence_assertions = 0
+    for each_assert in assertion_nodes:
+        test_expr = each_assert.test
+        if isinstance(test_expr, ast.Call) and _is_existence_only_assertion(test_expr):
+            continue
+        if isinstance(test_expr, ast.Compare):
+            comparators = test_expr.comparators
+            ops = test_expr.ops
+            if (
+                len(ops) == 1
+                and isinstance(ops[0], ast.IsNot)
+                and len(comparators) == 1
+                and isinstance(comparators[0], ast.Constant)
+                and comparators[0].value is None
+            ):
+                continue
+        non_existence_assertions += 1
+
+    return non_existence_assertions == 0
+
+
+def check_existence_check_tests(content: str, file_path: str) -> list[str]:
+    """Flag test functions containing only existence-check assertions.
+
+    Tests asserting only callable(x), hasattr(m, 'name'), or x is not None
+    verify nothing about behavior. They should be deleted or replaced with
+    assertions that exercise actual functionality.
+    Only applies to test files.
+    """
+    if not is_test_file(file_path):
+        return []
+
+    try:
+        syntax_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    issues: list[str] = []
+    for each_node in ast.walk(syntax_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not each_node.name.startswith("test"):
+            continue
+        if _test_body_has_only_existence_assertions(each_node):
+            issues.append(
+                f"Line {each_node.lineno}: existence-check test"
+                f" — delete or replace with a behavior test"
+            )
+
+    return issues
+
+
 def _is_upper_snake_constant_name(name: str) -> bool:
     """Return True for UPPER_SNAKE identifiers including those with a leading underscore."""
     return bool(FILE_GLOBAL_UPPER_SNAKE_PATTERN.match(name))
@@ -1165,6 +1236,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_banned_identifiers(content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
+        all_issues.extend(check_existence_check_tests(content, file_path))
 
     elif extension in JAVASCRIPT_EXTENSIONS:
         if not is_test_file(file_path):

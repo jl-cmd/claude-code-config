@@ -159,13 +159,128 @@ def test_gh_api_post_comment_is_allowed_when_redirect_env_var_is_unset() -> None
     assert result.returncode == 0
 
 
-def test_rm_rf_still_asks_when_redirect_env_var_is_unset() -> None:
-    payload = _make_bash_payload("rm -rf /tmp/somewhere")
+def _run_rm_hook(payload: dict) -> subprocess.CompletedProcess[str]:
+    child_environment = os.environ.copy()
+    child_environment.pop(GH_REDIRECT_ACTIVE_ENV_VAR, None)
+    child_environment.pop("CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW", None)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_PATH)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=child_environment,
+    )
 
-    result = _run_hook(payload, gh_redirect_active=False)
+
+def test_rm_rf_asks_when_target_is_non_ephemeral_path() -> None:
+    payload = _make_bash_payload("rm -rf /var/log/myapp")
+
+    result = _run_rm_hook(payload)
 
     response = json.loads(result.stdout)
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_allowed_when_target_is_under_tmp_segment() -> None:
+    payload = _make_bash_payload("rm -rf /tmp/some_scratch_dir")
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_when_target_is_under_os_temp_directory() -> None:
+    system_temp_subdirectory = Path(tempfile.mkdtemp(prefix="rm_target_"))
+    payload = _make_bash_payload(f"rm -rf {system_temp_subdirectory}")
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_when_target_is_under_worktrees_segment() -> None:
+    payload = _make_bash_payload("rm -rf /Users/me/repo/worktrees/feature_branch/build")
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_when_both_targets_are_ephemeral() -> None:
+    payload = _make_bash_payload("rm -rf /tmp/first_dir /tmp/second_dir")
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_asks_when_any_target_is_non_ephemeral() -> None:
+    payload = _make_bash_payload("rm -rf /tmp/scratch /etc/passwd")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_command_is_compound_with_ampersand() -> None:
+    payload = _make_bash_payload("rm -rf /tmp/reply && gh pr checks 19")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_target_is_bare_tmp_root() -> None:
+    payload = _make_bash_payload("rm -rf /tmp")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_target_is_bare_os_temp_root() -> None:
+    payload = _make_bash_payload(f"rm -rf {tempfile.gettempdir()}")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_ephemeral_auto_allow_disabled_via_env_var() -> None:
+    payload = _make_bash_payload("rm -rf /tmp/scratch")
+
+    child_environment = os.environ.copy()
+    child_environment.pop(GH_REDIRECT_ACTIVE_ENV_VAR, None)
+    child_environment["CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW"] = "1"
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT_PATH)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+        env=child_environment,
+    )
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_recursive_force_long_flags_allowed_under_tmp() -> None:
+    payload = _make_bash_payload("rm --recursive --force /tmp/long_flag_scratch")
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
 
 
 def _run_hook_with_fake_home(

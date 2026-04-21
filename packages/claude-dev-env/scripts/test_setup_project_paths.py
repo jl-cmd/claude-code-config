@@ -12,6 +12,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 import setup_project_paths as setup
+from setup_project_paths_config import ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
 
 
 class TestFinalSegmentFilter:
@@ -103,22 +104,22 @@ class TestMergeRegistries:
             "_meta": {"schema_version": 1, "last_scan": "2026-01-01T00:00:00Z"},
             "old-repo": "C:\\Old\\old-repo",
         }
-        new_name_by_path = {"new-repo": "D:\\New\\new-repo"}
-        merged = setup.merge_registries(existing_registry, new_name_by_path)
+        new_path_by_name = {"new-repo": "D:\\New\\new-repo"}
+        merged = setup.merge_registries(existing_registry, new_path_by_name)
         assert merged["old-repo"] == "C:\\Old\\old-repo"
         assert merged["new-repo"] == "D:\\New\\new-repo"
 
     def test_merge_updates_meta_last_scan(self) -> None:
         existing_registry: dict = {}
-        new_name_by_path = {"alpha": "C:\\alpha"}
-        merged = setup.merge_registries(existing_registry, new_name_by_path)
+        new_path_by_name = {"alpha": "C:\\alpha"}
+        merged = setup.merge_registries(existing_registry, new_path_by_name)
         assert "_meta" in merged
         assert "last_scan" in merged["_meta"]
 
     def test_merge_new_entry_wins_on_name_collision(self) -> None:
         existing_registry = {"my-repo": "C:\\Old\\path"}
-        new_name_by_path = {"my-repo": "D:\\New\\path"}
-        merged = setup.merge_registries(existing_registry, new_name_by_path)
+        new_path_by_name = {"my-repo": "D:\\New\\path"}
+        merged = setup.merge_registries(existing_registry, new_path_by_name)
         assert merged["my-repo"] == "D:\\New\\path"
 
 
@@ -148,6 +149,26 @@ class TestAtomicWrite:
             )
 
 
+class TestEsExeQueryArguments:
+    def test_arguments_do_not_include_name_flag(self) -> None:
+        assert "-name" not in ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
+
+    def test_arguments_include_folders_only_flag(self) -> None:
+        assert "/ad" in ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
+
+    def test_arguments_include_git_folder_query(self) -> None:
+        assert "folder:.git" in ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS
+
+    def test_filter_to_git_roots_processes_full_absolute_paths(self) -> None:
+        all_raw_paths = [
+            "C:\\Projects\\my-repo\\.git",
+            "D:\\Work\\other-repo\\.git",
+        ]
+        all_roots = setup.filter_to_git_roots(all_raw_paths)
+        assert "C:\\Projects\\my-repo" in all_roots
+        assert "D:\\Work\\other-repo" in all_roots
+
+
 class TestUserRejection:
     def test_user_rejection_at_final_prompt_writes_nothing(
         self, tmp_path: Path
@@ -156,7 +177,26 @@ class TestUserRejection:
         assert not target_file.exists()
         with patch("builtins.input", return_value="no"):
             setup.prompt_and_write(
-                name_by_path={"my-repo": "C:\\my-repo"},
+                path_by_name={"my-repo": "C:\\my-repo"},
                 save_path=target_file,
             )
         assert not target_file.exists()
+
+
+class TestMapNamingConvention:
+    def test_merge_registries_signature_uses_path_by_name(self) -> None:
+        """Pin PR #230 round 3 rename: X_by_Y means X indexed by Y.
+
+        The map's keys are repo names and values are paths, so the correct
+        name is `path_by_name` (path indexed by name). The old inverted
+        name `name_by_path` must not reappear.
+        """
+        import inspect
+
+        merge_signature = inspect.signature(setup.merge_registries)
+        assert "new_path_by_name" in merge_signature.parameters
+        assert "new_name_by_path" not in merge_signature.parameters
+
+    def test_build_helper_is_named_path_by_name(self) -> None:
+        assert hasattr(setup, "_build_path_by_name_from_roots")
+        assert not hasattr(setup, "_build_name_by_path_from_roots")

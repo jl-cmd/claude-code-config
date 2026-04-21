@@ -18,14 +18,15 @@ import subprocess
 import sys
 from pathlib import Path
 
-_SCRIPTS_DIR = Path(__file__).resolve().parent
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
+_scripts_dir = Path(__file__).resolve().parent
+if str(_scripts_dir) not in sys.path:
+    sys.path.insert(0, str(_scripts_dir))
 
 from setup_project_paths_config import (
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
     EXCLUDED_PATH_SEGMENTS,
     ISO_TIMESTAMP_SUFFIX_UTC,
+    JSON_INDENT_SPACES,
     TEMP_FILE_SUFFIX,
     USER_CONFIG_FILE_RELATIVE_PARTS,
     USER_RESPONSE_AFFIRMATIVE_VALUES,
@@ -112,7 +113,7 @@ def _current_iso_timestamp_utc() -> str:
 
 def merge_registries(
     existing_registry: dict,
-    new_name_by_path: dict[str, str],
+    new_path_by_name: dict[str, str],
 ) -> dict:
     """Merge newly discovered entries into the existing registry.
 
@@ -125,7 +126,7 @@ def merge_registries(
         for each_key, each_value in existing_registry.items()
         if each_key != META_KEY
     }
-    for each_name, each_path in new_name_by_path.items():
+    for each_name, each_path in new_path_by_name.items():
         merged_registry[each_name] = each_path
     merged_registry[META_KEY] = {
         "schema_version": SUPPORTED_SCHEMA_VERSION,
@@ -174,7 +175,7 @@ def write_registry_atomically(registry_to_write: dict, target_file: Path) -> Non
     _verify_schema_version_is_supported(existing_registry)
     target_file.parent.mkdir(parents=True, exist_ok=True)
     temp_sibling_path = target_file.with_suffix(target_file.suffix + TEMP_FILE_SUFFIX)
-    serialized_text = json.dumps(registry_to_write, indent=2, sort_keys=True)
+    serialized_text = json.dumps(registry_to_write, indent=JSON_INDENT_SPACES, sort_keys=True)
     try:
         temp_sibling_path.write_text(serialized_text, encoding=UTF8_ENCODING)
         os.replace(temp_sibling_path, target_file)
@@ -238,7 +239,7 @@ def _leaf_name_of(repo_root_path: str) -> str:
 
 
 def prompt_and_write(
-    name_by_path: dict[str, str],
+    path_by_name: dict[str, str],
     save_path: Path,
 ) -> None:
     """Present the mapping to the user and write it only on explicit approval.
@@ -248,26 +249,26 @@ def prompt_and_write(
     nothing.
     """
     print(f"Proposed mapping (save target: {save_path}):")
-    for each_name, each_path in sorted(name_by_path.items()):
+    for each_name, each_path in sorted(path_by_name.items()):
         print(f"  {each_name} -> {each_path}")
     print()
     if not _prompt_for_affirmative("Write this mapping to the config file? (yes/no): "):
         print("Aborted. Nothing written.")
         return
     existing_registry = _read_existing_registry(save_path)
-    merged = merge_registries(existing_registry, name_by_path)
+    merged = merge_registries(existing_registry, path_by_name)
     write_registry_atomically(merged, save_path)
-    print(f"Wrote {len(name_by_path)} entries to {save_path}.")
+    print(f"Wrote {len(path_by_name)} entries to {save_path}.")
 
 
-def _build_name_by_path_from_roots(all_repo_roots: list[str]) -> dict[str, str]:
-    name_by_path: dict[str, str] = {}
+def _build_path_by_name_from_roots(all_repo_roots: list[str]) -> dict[str, str]:
+    path_by_name: dict[str, str] = {}
     for each_repo_root in all_repo_roots:
         each_leaf_name = _leaf_name_of(each_repo_root)
-        if each_leaf_name in name_by_path:
+        if each_leaf_name in path_by_name:
             continue
-        name_by_path[each_leaf_name] = each_repo_root
-    return name_by_path
+        path_by_name[each_leaf_name] = each_repo_root
+    return path_by_name
 
 
 def main() -> int:
@@ -286,9 +287,9 @@ def main() -> int:
         print("No candidate git repositories found via es.exe.")
         return 0
     print(f"Found {len(all_repo_roots)} candidate repositories.")
-    name_by_path = _build_name_by_path_from_roots(all_repo_roots)
+    path_by_name = _build_path_by_name_from_roots(all_repo_roots)
     save_path = _default_user_config_path()
-    prompt_and_write(name_by_path=name_by_path, save_path=save_path)
+    prompt_and_write(path_by_name=path_by_name, save_path=save_path)
     return 0
 
 

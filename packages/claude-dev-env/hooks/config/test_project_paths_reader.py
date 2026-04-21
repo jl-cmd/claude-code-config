@@ -13,6 +13,18 @@ if str(_HOOKS_ROOT) not in sys.path:
 from config.project_paths_reader import load_registry, registry_contains_path
 
 
+def test_reader_does_not_redefine_dynamic_stderr_handler_locally() -> None:
+    """Pin PR #230 round 3 DRY fix: handler is imported from the shared module.
+
+    Both project_paths_reader and es_exe_path_rewriter previously defined
+    identical `_DynamicStderrHandler` classes. This test fails if the
+    duplicate class reappears in project_paths_reader.
+    """
+    from config import project_paths_reader
+
+    assert not hasattr(project_paths_reader, "_DynamicStderrHandler")
+
+
 def test_load_registry_returns_empty_dict_when_file_missing(tmp_path: Path) -> None:
     missing_path = tmp_path / "nonexistent.json"
     loaded_registry = load_registry(config_path=missing_path)

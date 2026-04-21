@@ -17,6 +17,16 @@ for each_sys_path_entry in (str(_BLOCKING_DIR), str(_HOOKS_ROOT)):
 import es_exe_path_rewriter as rewriter
 
 
+def test_rewriter_does_not_redefine_dynamic_stderr_handler_locally() -> None:
+    """Pin PR #230 round 3 DRY fix: handler is imported from the shared module.
+
+    Both project_paths_reader and es_exe_path_rewriter previously defined
+    identical `_DynamicStderrHandler` classes. This test fails if the
+    duplicate class reappears in es_exe_path_rewriter.
+    """
+    assert not hasattr(rewriter, "_DynamicStderrHandler")
+
+
 REGISTRY_WITH_ONE_REPO = {"my-repo": "Y:\\Projects\\my-repo"}
 REGISTRY_WITH_TWO_REPOS = {
     "my-repo": "Y:\\Projects\\my-repo",

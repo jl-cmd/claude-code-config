@@ -6,28 +6,15 @@ import os
 import sys
 from pathlib import Path
 
+from config.dynamic_stderr_handler import DynamicStderrHandler
+
 _META_KEY = "_meta"
 _DEFAULT_CONFIG_RELATIVE_PARTS = (".claude", "project-paths.json")
-
-class _DynamicStderrHandler(logging.Handler):
-    """Logging handler that resolves sys.stderr at emit time, not at init time.
-
-    This allows tests that patch sys.stderr to capture log output emitted
-    from this handler without needing to re-import the module.
-    """
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            formatted_line = self.format(record)
-            sys.stderr.write(formatted_line + "\n")
-            sys.stderr.flush()
-        except Exception:
-            self.handleError(record)
 
 
 _logger = logging.getLogger("project_paths_reader")
 if not _logger.handlers:
-    _stderr_handler = _DynamicStderrHandler()
+    _stderr_handler = DynamicStderrHandler()
     _stderr_handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
     _logger.addHandler(_stderr_handler)
     _logger.setLevel(logging.INFO)

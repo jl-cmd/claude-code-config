@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS = ["-name", "/ad", "folder:.git"]
+ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS = ["/ad", "folder:.git"]
 
 EXCLUDED_PATH_SEGMENTS = frozenset(
     {
@@ -22,3 +22,5 @@ TEMP_FILE_SUFFIX = ".tmp"
 ISO_TIMESTAMP_SUFFIX_UTC = "Z"
 
 USER_RESPONSE_AFFIRMATIVE_VALUES = frozenset({"yes", "y"})
+
+JSON_INDENT_SPACES = 2

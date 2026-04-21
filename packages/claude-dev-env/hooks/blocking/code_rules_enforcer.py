@@ -1434,6 +1434,64 @@ def check_incomplete_mocks(content: str, file_path: str) -> None:
                 )
 
 
+def _build_fstring_skeleton(joined_str_node: ast.JoinedStr) -> str:
+    """Collapse interpolations in an f-string to a placeholder to form a pattern skeleton."""
+    interpolation_placeholder = "<x>"
+    parts: list[str] = []
+    for each_part in joined_str_node.values:
+        if isinstance(each_part, ast.Constant) and isinstance(each_part.value, str):
+            parts.append(each_part.value)
+        else:
+            parts.append(interpolation_placeholder)
+    return "".join(parts)
+
+
+def check_duplicated_format_patterns(content: str, file_path: str) -> None:
+    """Emit stderr advisories when an f-string skeleton appears 3+ times in a production file.
+
+    Collapses each f-string's interpolations to '<x>' placeholders, then counts
+    skeleton occurrences per file. When any skeleton appears three or more times,
+    it suggests the pattern belongs in a helper or model method.
+
+    This is advisory-only (no return value, no blocking). Skips test files,
+    config files, workflow registry files, migration files, and hook infrastructure.
+    """
+    if is_test_file(file_path):
+        return
+    if is_config_file(file_path):
+        return
+    if is_workflow_registry_file(file_path):
+        return
+    if is_migration_file(file_path):
+        return
+    if is_hook_infrastructure(file_path):
+        return
+
+    try:
+        module_tree = ast.parse(content)
+    except SyntaxError:
+        return
+
+    minimum_repetition_count = 3
+
+    skeleton_occurrences: dict[str, list[int]] = {}
+    for each_node in ast.walk(module_tree):
+        if not isinstance(each_node, ast.JoinedStr):
+            continue
+        skeleton = _build_fstring_skeleton(each_node)
+        if skeleton not in skeleton_occurrences:
+            skeleton_occurrences[skeleton] = []
+        skeleton_occurrences[skeleton].append(each_node.lineno)
+
+    for skeleton, line_numbers in skeleton_occurrences.items():
+        if len(line_numbers) >= minimum_repetition_count:
+            print(
+                f"[CODE_RULES advisory] f-string pattern {skeleton!r} appears"
+                f" {len(line_numbers)} times — consider encapsulating in a helper or model.",
+                file=sys.stderr,
+            )
+
+
 def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
     """Flag optional parameters never varied at same-file call sites.
 

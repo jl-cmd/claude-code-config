@@ -242,3 +242,96 @@ def test_should_advise_for_attribute_access_on_mock_object(capsys: object) -> No
     assert "mock_user" in captured.err and "email" in captured.err, (
         f"Expected advisory about missing 'email' attribute, got: {captured.err!r}"
     )
+
+
+DUPLICATED_FORMAT_PRODUCTION_FILE_PATH = "packages/app/services/api_client.py"
+DUPLICATED_FORMAT_TEST_FILE_PATH = "packages/app/tests/test_api_client.py"
+
+
+def test_should_advise_when_fstring_skeleton_appears_three_or_more_times(capsys: object) -> None:
+    source = (
+        "def get_user(user_id: str) -> str:\n"
+        "    return f'/api/{user_id}'\n"
+        "\n"
+        "def get_order(order_id: str) -> str:\n"
+        "    return f'/api/{order_id}'\n"
+        "\n"
+        "def get_product(product_id: str) -> str:\n"
+        "    return f'/api/{product_id}'\n"
+    )
+    code_rules_enforcer.check_duplicated_format_patterns(
+        source, DUPLICATED_FORMAT_PRODUCTION_FILE_PATH
+    )
+    captured = getattr(capsys, "readouterr")()
+    assert "/api/" in captured.err and "3" in captured.err, (
+        f"Expected advisory for repeated /api/<x> pattern, got: {captured.err!r}"
+    )
+
+
+def test_should_not_advise_when_fstring_skeleton_appears_fewer_than_three_times(capsys: object) -> None:
+    source = (
+        "def get_user(user_id: str) -> str:\n"
+        "    return f'/api/{user_id}'\n"
+        "\n"
+        "def get_order(order_id: str) -> str:\n"
+        "    return f'/api/{order_id}'\n"
+    )
+    code_rules_enforcer.check_duplicated_format_patterns(
+        source, DUPLICATED_FORMAT_PRODUCTION_FILE_PATH
+    )
+    captured = getattr(capsys, "readouterr")()
+    assert "/api/" not in captured.err, (
+        f"Expected no advisory for pattern appearing only twice, got: {captured.err!r}"
+    )
+
+
+def test_should_not_advise_for_duplicated_format_patterns_in_test_files(capsys: object) -> None:
+    source = (
+        "def test_user() -> None:\n"
+        "    url_a = f'/api/{1}'\n"
+        "    url_b = f'/api/{2}'\n"
+        "    url_c = f'/api/{3}'\n"
+    )
+    code_rules_enforcer.check_duplicated_format_patterns(
+        source, DUPLICATED_FORMAT_TEST_FILE_PATH
+    )
+    captured = getattr(capsys, "readouterr")()
+    assert "/api/" not in captured.err, (
+        f"Expected no advisory in test file, got: {captured.err!r}"
+    )
+
+
+def test_should_advise_with_distinct_skeletons(capsys: object) -> None:
+    source = (
+        "def first(team: str, user: str) -> str:\n"
+        "    return f'/teams/{team}/users/{user}'\n"
+        "\n"
+        "def second(team: str, role: str) -> str:\n"
+        "    return f'/teams/{team}/users/{role}'\n"
+        "\n"
+        "def third(team: str, admin: str) -> str:\n"
+        "    return f'/teams/{team}/users/{admin}'\n"
+    )
+    code_rules_enforcer.check_duplicated_format_patterns(
+        source, DUPLICATED_FORMAT_PRODUCTION_FILE_PATH
+    )
+    captured = getattr(capsys, "readouterr")()
+    assert "/teams/" in captured.err, (
+        f"Expected advisory for repeated /teams/<x>/users/<x> pattern, got: {captured.err!r}"
+    )
+    source = (
+        "class MockUser:\n"
+        "    pass\n"
+        "\n"
+        "mock_user = MockUser()\n"
+        "mock_user.name = 'Alice'\n"
+        "\n"
+        "def test_user_email() -> None:\n"
+        "    email = mock_user.email\n"
+        "    assert email\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, INCOMPLETE_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    assert "mock_user" in captured.err and "email" in captured.err, (
+        f"Expected advisory about missing 'email' attribute, got: {captured.err!r}"
+    )

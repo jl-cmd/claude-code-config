@@ -22,6 +22,7 @@ _hooks_dir = Path(__file__).resolve().parent.parent / "hooks"
 if str(_hooks_dir) not in sys.path:
     sys.path.insert(0, str(_hooks_dir))
 
+from hook_config.project_paths_reader import registry_file_path
 from hook_config.setup_project_paths_constants import (
     ES_EXE_BINARY_NAME,
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,
@@ -32,7 +33,6 @@ from hook_config.setup_project_paths_constants import (
     META_KEY,
     SUPPORTED_SCHEMA_VERSION,
     TEMP_FILE_SUFFIX,
-    USER_CONFIG_FILE_RELATIVE_PARTS,
     USER_RESPONSE_AFFIRMATIVE_VALUES,
     UTF8_ENCODING,
 )
@@ -40,6 +40,10 @@ from hook_config.setup_project_paths_constants import (
 
 class SchemaMismatchError(Exception):
     """Raised when the on-disk config declares a schema newer than this script supports."""
+
+
+class RegistryReadError(Exception):
+    """Raised when an existing registry file is unreadable or corrupt."""
 
 
 def _split_path_segments(path_string: str) -> list[str]:
@@ -139,14 +143,20 @@ def _read_existing_registry(target_file: Path) -> dict:
         return {}
     try:
         raw_text = target_file.read_text(encoding=UTF8_ENCODING)
-    except OSError:
-        return {}
+    except OSError as read_error:
+        raise RegistryReadError(
+            f"Cannot read registry at {target_file}: {read_error}"
+        ) from read_error
     try:
         parsed = json.loads(raw_text)
-    except json.JSONDecodeError:
-        return {}
+    except json.JSONDecodeError as decode_error:
+        raise RegistryReadError(
+            f"Malformed JSON in registry at {target_file}: {decode_error}"
+        ) from decode_error
     if not isinstance(parsed, dict):
-        return {}
+        raise RegistryReadError(
+            f"Registry at {target_file} is not a JSON object."
+        )
     return parsed
 
 
@@ -202,29 +212,16 @@ def _run_es_exe_folders_query() -> list[str]:
     return [line.strip() for line in completion.stdout.splitlines() if line.strip()]
 
 
-def _deduplicate_preserving_order(all_paths: list[str]) -> list[str]:
-    seen_normalized: set[str] = set()
-    all_unique_paths: list[str] = []
-    for each_path in all_paths:
-        normalized_key = os.path.normpath(each_path).lower()
-        if normalized_key in seen_normalized:
-            continue
-        seen_normalized.add(normalized_key)
-        all_unique_paths.append(each_path)
-    return all_unique_paths
-
-
 def discover_repo_roots_via_everything() -> list[str]:
-    """Run es.exe, filter to genuine git roots, and deduplicate."""
+    """Run es.exe, filter to genuine git roots, deduplicate, and sort."""
     all_raw_paths = _run_es_exe_folders_query()
     all_git_roots = filter_to_git_roots(all_raw_paths)
     all_included = apply_exclusion_filter(all_git_roots)
-    return _deduplicate_preserving_order(sorted(all_included))
+    return sorted(set(all_included))
 
 
 def _default_user_config_path() -> Path:
-    dot_claude_segment, file_name_segment = USER_CONFIG_FILE_RELATIVE_PARTS
-    return Path.home() / dot_claude_segment / file_name_segment
+    return registry_file_path()
 
 
 def _prompt_for_affirmative(prompt_text: str) -> bool:
@@ -254,7 +251,15 @@ def prompt_and_write(
     if not _prompt_for_affirmative("Write this mapping to the config file? (yes/no): "):
         print("Aborted. Nothing written.")
         return
-    existing_registry = _read_existing_registry(save_path)
+    try:
+        existing_registry = _read_existing_registry(save_path)
+    except RegistryReadError as registry_error:
+        print(
+            f"Existing registry at {save_path} is unreadable: {registry_error}. "
+            "Refusing to overwrite. Fix or remove the file manually and re-run.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from registry_error
     merged = merge_registries(existing_registry, path_by_name)
     write_registry_atomically(merged, save_path)
     print(f"Wrote {len(path_by_name)} entries to {save_path}.")

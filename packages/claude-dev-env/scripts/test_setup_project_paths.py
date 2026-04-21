@@ -222,3 +222,108 @@ class TestMapNamingConvention:
     def test_build_helper_is_named_path_by_name(self) -> None:
         assert hasattr(setup, "_build_path_by_name_from_roots")
         assert not hasattr(setup, "_build_name_by_path_from_roots")
+
+
+class TestRegistryReadError:
+    def test_missing_file_returns_empty_dict(self, tmp_path: Path) -> None:
+        missing_file = tmp_path / "nonexistent.json"
+        result = setup._read_existing_registry(missing_file)
+        assert result == {}
+
+    def test_malformed_json_raises_registry_read_error(self, tmp_path: Path) -> None:
+        corrupt_file = tmp_path / "project-paths.json"
+        corrupt_file.write_text("{ not valid json", encoding="utf-8")
+        with pytest.raises(setup.RegistryReadError):
+            setup._read_existing_registry(corrupt_file)
+
+    def test_non_dict_top_level_raises_registry_read_error(self, tmp_path: Path) -> None:
+        non_dict_file = tmp_path / "project-paths.json"
+        non_dict_file.write_text(json.dumps(["a", "b"]), encoding="utf-8")
+        with pytest.raises(setup.RegistryReadError):
+            setup._read_existing_registry(non_dict_file)
+
+    def test_oserror_raises_registry_read_error(self, tmp_path: Path) -> None:
+        existing_file = tmp_path / "project-paths.json"
+        existing_file.write_text("{}", encoding="utf-8")
+        with patch.object(
+            type(existing_file),
+            "read_text",
+            side_effect=OSError("permission denied"),
+        ):
+            with pytest.raises(setup.RegistryReadError):
+                setup._read_existing_registry(existing_file)
+
+    def test_registry_read_error_in_prompt_and_write_exits_nonzero(
+        self, tmp_path: Path
+    ) -> None:
+        corrupt_file = tmp_path / "project-paths.json"
+        corrupt_file.write_text("{ not valid json", encoding="utf-8")
+        with patch("builtins.input", return_value="yes"):
+            with pytest.raises(SystemExit) as raised_exit:
+                setup.prompt_and_write(
+                    path_by_name={"my-repo": "C:\\my-repo"},
+                    save_path=corrupt_file,
+                )
+        assert raised_exit.value.code != 0
+
+    def test_registry_read_error_does_not_overwrite_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        corrupt_file = tmp_path / "project-paths.json"
+        original_content = "{ not valid json"
+        corrupt_file.write_text(original_content, encoding="utf-8")
+        with patch("builtins.input", return_value="yes"):
+            with pytest.raises(SystemExit):
+                setup.prompt_and_write(
+                    path_by_name={"my-repo": "C:\\my-repo"},
+                    save_path=corrupt_file,
+                )
+        assert corrupt_file.read_text(encoding="utf-8") == original_content
+
+
+class TestDiscoverRepoRootsDedup:
+    def test_discover_returns_sorted_unique_paths(self) -> None:
+        all_paths = [
+            "C:\\Projects\\beta\\.git",
+            "C:\\Projects\\alpha\\.git",
+            "C:\\Projects\\alpha\\.git",
+        ]
+        with patch("setup_project_paths._run_es_exe_folders_query", return_value=all_paths):
+            all_roots = setup.discover_repo_roots_via_everything()
+        assert all_roots == sorted(set(all_roots))
+        assert len(all_roots) == len(set(all_roots))
+
+
+class TestSharedConfigPath:
+    def test_default_user_config_path_matches_project_paths_reader(self) -> None:
+        from hook_config.project_paths_reader import registry_file_path
+
+        assert setup._default_user_config_path() == registry_file_path()
+
+    def test_untracked_repo_detector_config_path_matches_project_paths_reader(
+        self,
+    ) -> None:
+        import sys
+        from pathlib import Path as SysPath
+
+        session_dir = SysPath(__file__).resolve().parent.parent / "hooks" / "session"
+        if str(session_dir) not in sys.path:
+            sys.path.insert(0, str(session_dir))
+
+        import untracked_repo_detector as detector_module
+        from hook_config.project_paths_reader import registry_file_path
+
+        shared_path = registry_file_path()
+        assert str(shared_path) in detector_module._build_confirm_instruction(
+            str(shared_path.parent)
+        ) or "project-paths.json" in detector_module._build_confirm_instruction(
+            str(shared_path.parent)
+        )
+
+    def test_all_three_modules_resolve_identical_config_path(self) -> None:
+        from hook_config.project_paths_reader import registry_file_path
+
+        shared_path = registry_file_path()
+        assert shared_path == setup._default_user_config_path()
+        assert shared_path.name == "project-paths.json"
+        assert shared_path.parent.name == ".claude"

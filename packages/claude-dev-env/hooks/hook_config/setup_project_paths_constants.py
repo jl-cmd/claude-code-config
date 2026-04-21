@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS = ["/ad", "folder:.git"]
+ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS = ("/ad", "folder:.git")
 
 EXCLUDED_PATH_SEGMENTS = frozenset(
     {

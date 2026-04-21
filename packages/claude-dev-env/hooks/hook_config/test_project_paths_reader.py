@@ -10,7 +10,11 @@ _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
-from hook_config.project_paths_reader import load_registry, registry_contains_path
+from hook_config.project_paths_reader import (
+    load_registry,
+    registry_contains_path,
+    registry_file_path,
+)
 
 
 def test_reader_does_not_redefine_dynamic_stderr_handler_locally() -> None:
@@ -106,3 +110,15 @@ def test_registry_contains_path_treats_backslash_and_forward_slash_as_equal() ->
     assert registry_contains_path(known_registry, forward_slash_path) is True
     known_registry_forward = {"my-repo": forward_slash_path}
     assert registry_contains_path(known_registry_forward, backslash_path) is True
+
+
+def test_registry_file_path_returns_dot_claude_project_paths_json() -> None:
+    resolved_path = registry_file_path()
+    assert resolved_path.name == "project-paths.json"
+    assert resolved_path.parent.name == ".claude"
+    assert resolved_path.parent.parent == Path.home()
+
+
+def test_registry_file_path_is_absolute() -> None:
+    resolved_path = registry_file_path()
+    assert resolved_path.is_absolute()

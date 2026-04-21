@@ -143,6 +143,16 @@ class TestUntrackedRepoDetection:
         )
 
 
+class TestSharedRegistryPath:
+    def test_config_file_path_matches_registry_file_path_helper(self) -> None:
+        from hook_config.project_paths_reader import registry_file_path
+
+        assert detector._CONFIG_FILE_PATH == str(registry_file_path())
+
+    def test_config_file_path_points_to_project_paths_json(self) -> None:
+        assert detector._CONFIG_FILE_PATH.endswith("project-paths.json")
+
+
 class TestPathNormalization:
     def test_windows_and_posix_forms_of_same_path_compare_equal(
         self, tmp_path: Path

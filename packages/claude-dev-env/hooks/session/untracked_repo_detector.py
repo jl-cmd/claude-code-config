@@ -16,10 +16,13 @@ _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
-from hook_config.project_paths_reader import load_registry, registry_contains_path
+from hook_config.project_paths_reader import (
+    load_registry,
+    registry_contains_path,
+    registry_file_path,
+)
 
-_CONFIG_FILE_NAME = "project-paths.json"
-_CONFIG_FILE_PATH = str(Path.home() / ".claude" / _CONFIG_FILE_NAME)
+_CONFIG_FILE_PATH = str(registry_file_path())
 
 
 def current_working_directory() -> str:

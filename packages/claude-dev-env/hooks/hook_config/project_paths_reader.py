@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import sys
 from pathlib import Path
 
 from hook_config.dynamic_stderr_handler import DynamicStderrHandler
@@ -21,9 +20,14 @@ if not _logger.handlers:
     _logger.propagate = False
 
 
-def _default_config_path() -> Path:
+def registry_file_path() -> Path:
+    """Return the canonical path to ~/.claude/project-paths.json."""
     dot_claude_segment, file_name_segment = _DEFAULT_CONFIG_RELATIVE_PARTS
     return Path.home() / dot_claude_segment / file_name_segment
+
+
+def _default_config_path() -> Path:
+    return registry_file_path()
 
 
 def _normalize_path_separators(raw_path: str) -> str:

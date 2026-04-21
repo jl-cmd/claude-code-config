@@ -175,3 +175,70 @@ def test_should_not_flag_when_param_passed_as_exact_default() -> None:
     assert any("timeout" in issue for issue in issues), (
         f"Expected 'timeout' flagged when always passed as default value, got: {issues}"
     )
+
+
+INCOMPLETE_MOCK_TEST_FILE_PATH = "packages/app/tests/test_orders.py"
+INCOMPLETE_MOCK_PRODUCTION_FILE_PATH = "packages/app/services/orders.py"
+
+
+def test_should_advise_when_mock_missing_accessed_field(capsys: object) -> None:
+    source = (
+        "mock_order = {'id': 1}\n"
+        "\n"
+        "def test_order_total() -> None:\n"
+        "    total = mock_order['total']\n"
+        "    assert total > 0\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, INCOMPLETE_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    assert "mock_order" in captured.err and "total" in captured.err, (
+        f"Expected advisory about missing 'total' field, got: {captured.err!r}"
+    )
+
+
+def test_should_not_advise_when_mock_has_all_accessed_fields(capsys: object) -> None:
+    source = (
+        "mock_order = {'id': 1, 'total': 50}\n"
+        "\n"
+        "def test_order_total() -> None:\n"
+        "    total = mock_order['total']\n"
+        "    assert total > 0\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, INCOMPLETE_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    assert "mock_order" not in captured.err, (
+        f"Expected no advisory when all fields present, got: {captured.err!r}"
+    )
+
+
+def test_should_not_advise_for_incomplete_mocks_in_production_files(capsys: object) -> None:
+    source = (
+        "mock_order = {'id': 1}\n"
+        "\n"
+        "def run_order() -> None:\n"
+        "    total = mock_order['total']\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, INCOMPLETE_MOCK_PRODUCTION_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    assert "mock_order" not in captured.err, (
+        f"Expected no advisory in production file, got: {captured.err!r}"
+    )
+
+
+def test_should_advise_for_attribute_access_on_mock_object(capsys: object) -> None:
+    source = (
+        "class MockUser:\n"
+        "    pass\n"
+        "\n"
+        "mock_user = MockUser()\n"
+        "mock_user.name = 'Alice'\n"
+        "\n"
+        "def test_user_email() -> None:\n"
+        "    email = mock_user.email\n"
+        "    assert email\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, INCOMPLETE_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    assert "mock_user" in captured.err and "email" in captured.err, (
+        f"Expected advisory about missing 'email' attribute, got: {captured.err!r}"
+    )

@@ -1337,6 +1337,103 @@ def _function_name_from_call(call_node: ast.Call) -> str | None:
     return None
 
 
+def _collect_mock_dict_keys(assign_value: ast.expr) -> set[str] | None:
+    """Return the string key set for a dict literal, or None if not a dict literal."""
+    if not isinstance(assign_value, ast.Dict):
+        return None
+    key_names: set[str] = set()
+    for each_key in assign_value.keys:
+        if isinstance(each_key, ast.Constant) and isinstance(each_key.value, str):
+            key_names.add(each_key.value)
+    return key_names
+
+
+def _collect_mock_attribute_assignments(
+    module_tree: ast.Module,
+    mock_name: str,
+) -> set[str]:
+    """Return attribute names assigned directly on a mock variable (mock.field = ...)."""
+    assigned_attributes: set[str] = set()
+    for each_node in ast.walk(module_tree):
+        if not isinstance(each_node, ast.Assign):
+            continue
+        for each_target in each_node.targets:
+            if (
+                isinstance(each_target, ast.Attribute)
+                and isinstance(each_target.value, ast.Name)
+                and each_target.value.id == mock_name
+            ):
+                assigned_attributes.add(each_target.attr)
+    return assigned_attributes
+
+
+def _collect_mock_field_accesses(
+    module_tree: ast.Module,
+    mock_name: str,
+) -> list[tuple[str, int]]:
+    """Return (field_name, line_number) for every attribute or subscript access on mock_name."""
+    accesses: list[tuple[str, int]] = []
+    for each_node in ast.walk(module_tree):
+        if isinstance(each_node, ast.Attribute):
+            if isinstance(each_node.value, ast.Name) and each_node.value.id == mock_name:
+                if isinstance(each_node.ctx, ast.Load):
+                    accesses.append((each_node.attr, each_node.lineno))
+        elif isinstance(each_node, ast.Subscript):
+            if isinstance(each_node.value, ast.Name) and each_node.value.id == mock_name:
+                if isinstance(each_node.ctx, ast.Load):
+                    slice_node = each_node.slice
+                    if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
+                        accesses.append((slice_node.value, each_node.lineno))
+    return accesses
+
+
+def check_incomplete_mocks(content: str, file_path: str) -> None:
+    """Emit stderr advisories when a mock dict/object is missing fields that are accessed.
+
+    Scans test files for variables named mock_* or MOCK_* whose value is a dict
+    literal. For each such mock, collects all attribute and subscript accesses on
+    that variable name throughout the module. Any accessed field not present in
+    the dict literal (or assigned as an attribute) produces a stderr advisory.
+
+    This is advisory-only (no return value, no blocking).
+    """
+    if not is_test_file(file_path):
+        return
+
+    try:
+        module_tree = ast.parse(content)
+    except SyntaxError:
+        return
+
+    mock_definitions: dict[str, tuple[set[str], int]] = {}
+    for each_node in module_tree.body:
+        if not isinstance(each_node, ast.Assign):
+            continue
+        for each_target in each_node.targets:
+            if not isinstance(each_target, ast.Name):
+                continue
+            target_name = each_target.id
+            if not (target_name.startswith("mock_") or target_name.startswith("MOCK_")):
+                continue
+            mock_keys = _collect_mock_dict_keys(each_node.value)
+            if mock_keys is not None:
+                mock_definitions[target_name] = (mock_keys, each_node.lineno)
+            elif isinstance(each_node.value, ast.Call):
+                mock_definitions[target_name] = (set(), each_node.lineno)
+
+    for mock_name, (declared_keys, definition_line) in mock_definitions.items():
+        assigned_attributes = _collect_mock_attribute_assignments(module_tree, mock_name)
+        all_known_fields = declared_keys | assigned_attributes
+        field_accesses = _collect_mock_field_accesses(module_tree, mock_name)
+        for accessed_field, access_line in field_accesses:
+            if accessed_field not in all_known_fields:
+                print(
+                    f"[CODE_RULES advisory] Line {definition_line}: mock {mock_name}"
+                    f" missing field {accessed_field} accessed at line {access_line}",
+                    file=sys.stderr,
+                )
+
+
 def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
     """Flag optional parameters never varied at same-file call sites.
 

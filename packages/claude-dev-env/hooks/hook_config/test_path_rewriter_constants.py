@@ -43,3 +43,7 @@ def test_placeholder_token_pattern_matches_single_quoted_form() -> None:
     match = PLACEHOLDER_TOKEN_PATTERN.match("'{my-repo}'")
     assert match is not None
     assert match.group(1) == "my-repo"
+
+
+def test_placeholder_token_pattern_does_not_match_shell_parameter_expansion() -> None:
+    assert PLACEHOLDER_TOKEN_PATTERN.search("${myrepo}") is None

@@ -8,4 +8,6 @@ HOOK_EVENT_NAME = "PreToolUse"
 
 PERMISSION_ALLOW = "allow"
 
-PLACEHOLDER_TOKEN_PATTERN = re.compile(r"""['"]?\{([^}]+)\}['"]?""")
+PLACEHOLDER_TOKEN_PATTERN = re.compile(
+    r"""['"]?(?<!\$)\{([^}]+)\}['"]?""",
+)

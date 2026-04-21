@@ -986,6 +986,48 @@ def check_boolean_naming(content: str, file_path: str) -> list[str]:
 
 
 
+def _decorator_name_contains_skip(decorator_node: ast.expr) -> bool:
+    """Return True when a decorator AST node references an identifier containing 'skip'."""
+    if isinstance(decorator_node, ast.Name):
+        return "skip" in decorator_node.id.lower()
+    if isinstance(decorator_node, ast.Attribute):
+        return "skip" in decorator_node.attr.lower()
+    if isinstance(decorator_node, ast.Call):
+        return _decorator_name_contains_skip(decorator_node.func)
+    return False
+
+
+def check_skip_decorators_in_tests(content: str, file_path: str) -> list[str]:
+    """Flag @skip decorators on test functions in test files.
+
+    Tests must fail on missing dependencies rather than skip silently.
+    Only applies to test files; production files are exempt.
+    Only flags decorators applied to functions whose names start with 'test'.
+    """
+    if not is_test_file(file_path):
+        return []
+
+    try:
+        syntax_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    issues: list[str] = []
+    for each_node in ast.walk(syntax_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not each_node.name.startswith("test"):
+            continue
+        for each_decorator in each_node.decorator_list:
+            if _decorator_name_contains_skip(each_decorator):
+                issues.append(
+                    f"Line {each_decorator.lineno}: @skip decorator on test"
+                    f" — tests must fail on missing deps"
+                )
+
+    return issues
+
+
 def _is_upper_snake_constant_name(name: str) -> bool:
     """Return True for UPPER_SNAKE identifiers including those with a leading underscore."""
     return bool(FILE_GLOBAL_UPPER_SNAKE_PATTERN.match(name))
@@ -1122,6 +1164,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_type_escape_hatches(content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))
+        all_issues.extend(check_skip_decorators_in_tests(content, file_path))
 
     elif extension in JAVASCRIPT_EXTENSIONS:
         if not is_test_file(file_path):

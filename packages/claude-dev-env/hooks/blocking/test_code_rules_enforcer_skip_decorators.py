@@ -120,3 +120,31 @@ def test_should_flag_decorator_with_skip_in_name() -> None:
     assert any("skip" in issue.lower() for issue in issues), (
         f"Expected skip-named decorator issue, got: {issues}"
     )
+
+
+def test_stops_at_max_issues_per_check() -> None:
+    source = (
+        "import pytest\n"
+        "\n"
+        "@pytest.mark.skip(reason='a')\n"
+        "def test_one() -> None:\n"
+        "    pass\n"
+        "\n"
+        "@pytest.mark.skip(reason='b')\n"
+        "def test_two() -> None:\n"
+        "    pass\n"
+        "\n"
+        "@pytest.mark.skip(reason='c')\n"
+        "def test_three() -> None:\n"
+        "    pass\n"
+        "\n"
+        "@pytest.mark.skip(reason='d')\n"
+        "def test_four() -> None:\n"
+        "    pass\n"
+        "\n"
+        "@pytest.mark.skip(reason='e')\n"
+        "def test_five() -> None:\n"
+        "    pass\n"
+    )
+    issues = code_rules_enforcer.check_skip_decorators_in_tests(source, TEST_FILE_PATH)
+    assert len(issues) == code_rules_enforcer.MAX_ISSUES_PER_CHECK

@@ -1024,6 +1024,8 @@ def check_skip_decorators_in_tests(content: str, file_path: str) -> list[str]:
                     f"Line {each_decorator.lineno}: @skip decorator on test"
                     f" — tests must fail on missing deps"
                 )
+                if len(issues) >= MAX_ISSUES_PER_CHECK:
+                    return issues
 
     return issues
 

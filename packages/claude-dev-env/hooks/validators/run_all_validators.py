@@ -9,6 +9,7 @@ import argparse
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -45,7 +46,9 @@ def _hooks_subprocess_working_directory_and_environment() -> tuple[str, dict[str
     working_directory_string = hooks_directory_string
     if sys.platform == "win32" and working_directory_string.startswith("\\\\"):
         working_directory_string = (
-            os.environ.get("TEMP") or os.environ.get("TMP") or "."
+            os.environ.get("TEMP")
+            or os.environ.get("TMP")
+            or tempfile.gettempdir()
         )
     return working_directory_string, environment
 

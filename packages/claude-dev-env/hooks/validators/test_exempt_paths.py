@@ -36,3 +36,15 @@ def test_should_exempt_settings_py_by_filename() -> None:
 
 def test_should_exempt_windows_path_inside_config_directory() -> None:
     assert is_config_file("packages\\myapp\\config\\timing.py") is True
+
+
+def test_should_not_exempt_filename_ending_with_settings_py_but_not_exactly_settings_py() -> None:
+    assert is_config_file("mysettings.py") is False
+
+
+def test_should_exempt_bare_settings_py_filename() -> None:
+    assert is_config_file("settings.py") is True
+
+
+def test_should_exempt_settings_py_in_nested_path() -> None:
+    assert is_config_file("path/to/settings.py") is True

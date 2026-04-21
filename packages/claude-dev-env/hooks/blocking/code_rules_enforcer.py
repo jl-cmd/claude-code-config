@@ -842,7 +842,7 @@ def check_constants_outside_config_advisory(content: str, file_path: str) -> lis
                     f"Line {line_number}: Function-local constant {constant_name} - consider moving to config/"
                 )
 
-        if len(advisory_issues) >= 3:
+        if len(advisory_issues) >= MAX_ISSUES_PER_CHECK:
             break
 
     return advisory_issues

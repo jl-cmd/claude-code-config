@@ -100,3 +100,21 @@ def test_advisory_should_still_flag_actual_method_body_constant() -> None:
         "Method-body UPPER_SNAKE constant must still surface as advisory"
     )
     assert "MAXIMUM_RETRIES" in advisory_issues[0]
+
+
+def test_advisory_cap_matches_max_issues_per_check_constant() -> None:
+    many_constants_source = (
+        "def crowded_function():\n"
+        "    ALPHA_CONSTANT = 1\n"
+        "    BETA_CONSTANT = 2\n"
+        "    GAMMA_CONSTANT = 3\n"
+        "    DELTA_CONSTANT = 4\n"
+        "    EPSILON_CONSTANT = 5\n"
+    )
+    advisory_issues = code_rules_enforcer.check_constants_outside_config_advisory(
+        many_constants_source,
+        "example_module.py",
+    )
+    assert len(advisory_issues) == code_rules_enforcer.MAX_ISSUES_PER_CHECK, (
+        "Advisory cap must equal MAX_ISSUES_PER_CHECK, not a hardcoded literal"
+    )

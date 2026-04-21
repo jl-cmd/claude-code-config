@@ -145,7 +145,7 @@ Every audit loop writes two JSON files under the skill's scoped temp directory (
 
 ```json
 {
-  "loop": 0,
+  "loop": 1,
   "gate_findings": [],
   "primary_findings": [],
   "adversarial_findings": [],

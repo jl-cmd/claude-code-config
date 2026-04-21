@@ -16,14 +16,6 @@ from __future__ import annotations
 from pathlib import Path
 
 
-CONFIG_PATH_PATTERNS: frozenset[str] = frozenset(
-    {
-        "config/",
-        "config\\",
-        "settings.py",
-    }
-)
-
 TEST_PATH_PATTERNS: frozenset[str] = frozenset(
     {
         "test_",
@@ -67,7 +59,7 @@ MIGRATION_PATH_PATTERNS: frozenset[str] = frozenset(
 
 def is_config_file(file_path: str) -> bool:
     normalized = file_path.replace("\\", "/").lower()
-    if normalized.endswith("settings.py"):
+    if normalized.endswith("/settings.py") or normalized == "settings.py":
         return True
     path_parts = Path(normalized).parts
     return "config" in path_parts[:-1]

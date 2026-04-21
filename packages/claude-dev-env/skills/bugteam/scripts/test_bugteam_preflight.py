@@ -15,6 +15,8 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def _load_preflight_module() -> ModuleType:
     module_path = Path(__file__).parent / "bugteam_preflight.py"
@@ -38,7 +40,7 @@ def _make_completed_process(
     return process
 
 
-def test_should_exit_nonzero_when_core_hooks_path_unset(capsys) -> None:
+def test_should_exit_nonzero_when_core_hooks_path_unset(capsys: pytest.CaptureFixture[str]) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process("", returncode=1)
         exit_code = bugteam_preflight.verify_git_hooks_path()
@@ -48,7 +50,7 @@ def test_should_exit_nonzero_when_core_hooks_path_unset(capsys) -> None:
     assert "npx claude-dev-env" in captured.err or "git config" in captured.err
 
 
-def test_should_exit_zero_when_core_hooks_path_points_to_claude_hooks(tmp_path) -> None:
+def test_should_exit_zero_when_core_hooks_path_points_to_claude_hooks(tmp_path: Path) -> None:
     claude_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
     claude_hooks_path.mkdir(parents=True)
     with patch("subprocess.run") as mock_run:
@@ -59,7 +61,7 @@ def test_should_exit_zero_when_core_hooks_path_points_to_claude_hooks(tmp_path) 
     assert exit_code == 0
 
 
-def test_should_exit_nonzero_when_core_hooks_path_points_elsewhere(capsys) -> None:
+def test_should_exit_nonzero_when_core_hooks_path_points_elsewhere(capsys: pytest.CaptureFixture[str]) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process(
             "/some/other/path/.husky\n", returncode=0
@@ -70,7 +72,7 @@ def test_should_exit_nonzero_when_core_hooks_path_points_elsewhere(capsys) -> No
     assert "core.hooksPath" in captured.err
 
 
-def test_should_include_correction_commands_in_error_message(capsys) -> None:
+def test_should_include_correction_commands_in_error_message(capsys: pytest.CaptureFixture[str]) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process("", returncode=1)
         bugteam_preflight.verify_git_hooks_path()
@@ -88,7 +90,7 @@ def test_main_should_exit_nonzero_when_hooks_path_unset() -> None:
     assert exit_code != 0
 
 
-def test_main_should_continue_when_hooks_path_valid(tmp_path) -> None:
+def test_main_should_continue_when_hooks_path_valid(tmp_path: Path) -> None:
     claude_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
     claude_hooks_path.mkdir(parents=True)
     with patch("subprocess.run") as mock_run:
@@ -107,6 +109,24 @@ def test_should_accept_hooks_path_with_trailing_slash() -> None:
         exit_code = bugteam_preflight.verify_git_hooks_path()
     assert exit_code == 0, (
         "hooksPath with trailing slash must pass verification after normalization"
+    )
+
+
+def test_should_exit_zero_when_hooks_path_set_at_repo_scope(tmp_path: Path) -> None:
+    claude_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
+    claude_hooks_path.mkdir(parents=True)
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process(
+            str(claude_hooks_path) + "\n", returncode=0
+        )
+        exit_code = bugteam_preflight.verify_git_hooks_path()
+    assert exit_code == 0, (
+        "verify_git_hooks_path must accept a valid path returned by effective "
+        "config query (not restricted to --global scope)"
+    )
+    called_command = mock_run.call_args[0][0]
+    assert "--global" not in called_command, (
+        "verify_git_hooks_path must query effective config, not --global only"
     )
 
 

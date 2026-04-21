@@ -56,10 +56,14 @@ def test_should_require_internal_iteration_cap_of_three() -> None:
 
 def test_should_only_git_add_when_post_fix_audit_is_clean() -> None:
     skill_text = _load_skill_text()
-    post_fix_section_index = skill_text.lower().find("post-fix")
-    git_add_index = skill_text.find("git add", post_fix_section_index)
-    assert git_add_index > post_fix_section_index, (
-        "git add must appear after the post-fix audit section"
+    post_fix_audit_block_header = "Post-fix self-audit"
+    post_fix_audit_block_index = skill_text.find(post_fix_audit_block_header)
+    assert post_fix_audit_block_index != -1, (
+        f"SKILL.md must contain the literal block header '{post_fix_audit_block_header}'"
+    )
+    git_add_index = skill_text.find("git add", post_fix_audit_block_index)
+    assert git_add_index > post_fix_audit_block_index, (
+        "git add must appear after the Post-fix self-audit block header, not before"
     )
 
 

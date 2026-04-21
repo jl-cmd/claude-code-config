@@ -1185,7 +1185,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_fstring_structural_literals(content, file_path))
         all_issues.extend(check_constants_outside_config(content, file_path))
         for each_advisory in check_constants_outside_config_advisory(content, file_path):
-            print(f"[CODE_RULES advisory] {each_advisory}", file=sys.stderr)
+            print(f"[CODE_RULES advisory] {file_path}: {each_advisory}", file=sys.stderr)
         all_issues.extend(check_file_global_constants_use_count(content, file_path))
         all_issues.extend(check_type_escape_hatches(content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))

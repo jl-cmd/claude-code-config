@@ -17,10 +17,11 @@ def verify_git_hooks_path() -> int:
     enforcement_absent_message = (
         "Git-side CODE_RULES enforcement is not active on this host.\n"
         "Run: npx claude-dev-env .\n"
-        "Or:  git config --global core.hooksPath ~/.claude/hooks/git-hooks"
+        "Or set core.hooksPath at any scope, e.g.:\n"
+        "  git config --global core.hooksPath ~/.claude/hooks/git-hooks"
     )
     query_result = subprocess.run(
-        ["git", "config", "--global", "--get", "core.hooksPath"],
+        ["git", "config", "--get", "core.hooksPath"],
         capture_output=True,
         text=True,
         encoding="utf-8",

@@ -7,6 +7,44 @@ import sys
 from pathlib import Path
 
 
+def verify_git_hooks_path() -> int:
+    """Check that core.hooksPath resolves to the claude-dev-env git-hooks directory.
+
+    Returns zero when the configured path ends with the expected hooks suffix.
+    Returns non-zero and prints a correction message when unset or pointing elsewhere.
+    """
+    expected_hooks_path_suffix = "hooks/git-hooks"
+    enforcement_absent_message = (
+        "Git-side CODE_RULES enforcement is not active on this host.\n"
+        "Run: npx claude-dev-env .\n"
+        "Or:  git config --global core.hooksPath ~/.claude/hooks/git-hooks"
+    )
+    query_result = subprocess.run(
+        ["git", "config", "--global", "--get", "core.hooksPath"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if query_result.returncode != 0:
+        print(
+            f"bugteam_preflight: {enforcement_absent_message}",
+            file=sys.stderr,
+        )
+        return 1
+    configured_path = query_result.stdout.strip().replace("\\", "/")
+    if not configured_path.endswith(expected_hooks_path_suffix):
+        print(
+            f"bugteam_preflight: core.hooksPath is '{configured_path}' — "
+            f"expected path ending in '{expected_hooks_path_suffix}'.\n"
+            f"{enforcement_absent_message}",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def find_repository_root(start: Path) -> Path:
     resolved = start.resolve()
     candidates = [resolved, *resolved.parents]
@@ -103,6 +141,9 @@ def main(argv: list[str] | None = None) -> int:
     if os.environ.get("BUGTEAM_PREFLIGHT_SKIP", "").strip() == "1":
         print("bugteam_preflight: skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
         return 0
+    hooks_path_exit_code = verify_git_hooks_path()
+    if hooks_path_exit_code != 0:
+        return hooks_path_exit_code
     start = Path.cwd()
     repository_root = (
         arguments.repo_root.resolve()

@@ -52,6 +52,17 @@ python "${CLAUDE_SKILL_DIR}/../bugteam/scripts/bugteam_preflight.py"
 
 `${CLAUDE_SKILL_DIR}` is host-substituted before the shell runs. Non-zero → fix before continuing. `BUGTEAM_PREFLIGHT_SKIP=1` is emergency only. Add `--pre-commit` when `.pre-commit-config.yaml` exists.
 
+Pre-flight checks (in order):
+
+1. **Git hooks path** — verifies `git config --global --get core.hooksPath` resolves to a path ending in `hooks/git-hooks`. If unset or pointing elsewhere, exits non-zero:
+   ```
+   Git-side CODE_RULES enforcement is not active on this host.
+   Run: npx claude-dev-env .
+   Or:  git config --global core.hooksPath ~/.claude/hooks/git-hooks
+   ```
+2. **pytest** — runs the test suite when `pytest.ini` or `[tool.pytest]` is present.
+3. **pre-commit** — runs when `--pre-commit` flag is passed and `.pre-commit-config.yaml` exists.
+
 ## Step 1: Resolve PR scope (lead)
 
 1. `gh pr view --json number,baseRefName,headRefName,url`

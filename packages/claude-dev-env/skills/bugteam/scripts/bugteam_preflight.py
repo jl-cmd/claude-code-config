@@ -29,14 +29,29 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     if repository_root is not None:
         git_command.extend(["-C", str(repository_root)])
     git_command.extend(["config", "--get", "core.hooksPath"])
-    query_result = subprocess.run(
-        git_command,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        query_result = subprocess.run(
+            git_command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError:
+        print(
+            "bugteam_preflight: git is not installed or not available on PATH.\n"
+            f"{enforcement_absent_message}",
+            file=sys.stderr,
+        )
+        return 1
+    except OSError as os_error:
+        print(
+            f"bugteam_preflight: failed to run git: {os_error}\n"
+            f"{enforcement_absent_message}",
+            file=sys.stderr,
+        )
+        return 1
     if query_result.returncode != 0:
         print(
             f"bugteam_preflight: {enforcement_absent_message}",

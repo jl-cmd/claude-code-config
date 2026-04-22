@@ -148,3 +148,42 @@ def test_should_accept_hooks_path_with_backslash_and_trailing_slash() -> None:
     assert exit_code == 0, (
         "Windows hooksPath with trailing backslash must pass after normalization"
     )
+
+
+def test_should_exit_nonzero_when_git_executable_not_found(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Preflight must not crash with a traceback when git is missing from PATH."""
+    with patch("subprocess.run", side_effect=FileNotFoundError()):
+        exit_code = bugteam_preflight.verify_git_hooks_path()
+    assert exit_code != 0, (
+        "FileNotFoundError from subprocess.run must produce a non-zero exit, "
+        "not a propagated traceback"
+    )
+    captured = capsys.readouterr()
+    assert "git" in captured.err.lower(), (
+        "Error message must mention git so the user knows what is missing"
+    )
+    assert (
+        "npx claude-dev-env" in captured.err
+        or "git config --global core.hooksPath" in captured.err
+    ), "Error message must include the enforcement-absent remediation hints"
+
+
+def test_should_exit_nonzero_when_subprocess_run_raises_os_error(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Preflight must surface a clean error for other OS-level git launch failures."""
+    with patch("subprocess.run", side_effect=OSError("permission denied")):
+        exit_code = bugteam_preflight.verify_git_hooks_path()
+    assert exit_code != 0, (
+        "OSError from subprocess.run must produce a non-zero exit, "
+        "not a propagated traceback"
+    )
+    captured = capsys.readouterr()
+    assert "bugteam_preflight" in captured.err, (
+        "Error message must be prefixed with the preflight tool name for context"
+    )
+    assert "permission denied" in captured.err, (
+        "Error message must include the underlying OSError detail for diagnosis"
+    )

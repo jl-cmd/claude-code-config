@@ -672,3 +672,32 @@ def test_advisory_should_flag_outer_constants_after_nested_def() -> None:
     assert "ANOTHER_OUTER" in flagged_names, (
         "ANOTHER_OUTER after nested def must be flagged — this is the regression case"
     )
+
+
+def test_should_not_leak_shadowed_nested_assignment_into_outer_mock_known_fields(
+    capsys: object,
+) -> None:
+    """Assignment collector must skip nested scopes that shadow the mock name.
+
+    The access collector uses _walk_scope_skipping_shadowed; the assignment
+    collector must do the same, otherwise attribute assignments inside a
+    nested function that redefines mock_user leak into the outer mock's
+    known-fields set and suppress advisories for genuinely missing fields.
+    """
+    source = (
+        "mock_user = {'id': 1}\n"
+        "outer_value = mock_user['email']\n"
+        "\n"
+        "def test_inner() -> None:\n"
+        "    mock_user = {'id': 2}\n"
+        "    mock_user.email = 'shadowed@example.com'\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, MODULE_LEVEL_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    advisory_lines = [
+        line for line in captured.err.splitlines() if "mock_user" in line and "email" in line
+    ]
+    assert len(advisory_lines) == 1, (
+        "Expected outer mock's missing 'email' advisory to fire even when a shadowing "
+        f"nested function assigns mock_user.email, got: {captured.err!r}"
+    )

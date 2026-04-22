@@ -1554,9 +1554,14 @@ def _collect_mock_attribute_assignments_in_scope(
 
     Collects both attribute assignments (mock_x.field = ...) and subscript
     assignments with constant string keys (mock_x['field'] = ...).
+
+    Skips nested function/class bodies that locally redefine the same mock
+    variable, mirroring _collect_mock_field_accesses_in_scope so an outer
+    mock's known-fields set cannot absorb assignments made on a shadowed
+    inner mock of the same name.
     """
     assigned_fields: set[str] = set()
-    for each_node in ast.walk(scope_node):
+    for each_node in _walk_scope_skipping_shadowed(scope_node, mock_name):
         if not isinstance(each_node, ast.Assign):
             continue
         for each_target in each_node.targets:

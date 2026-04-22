@@ -17,15 +17,6 @@ def _agents_instructions_text() -> str:
     return agents_path.read_text(encoding="utf-8")
 
 
-def _copilot_part1_instructions_text() -> str:
-    full_text = _copilot_instructions_text()
-    part2_marker = "## Part 2"
-    part2_index = full_text.find(part2_marker)
-    if part2_index == -1:
-        return full_text
-    return full_text[:part2_index]
-
-
 def test_bugbot_documents_upper_snake_exemptions_matching_hook() -> None:
     """code_rules_enforcer exempts migrations, workflow registries, and tests."""
     text = _bugbot_text()

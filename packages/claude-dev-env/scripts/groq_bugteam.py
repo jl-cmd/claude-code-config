@@ -98,12 +98,16 @@ def should_skip_to_next_model(error: urllib.error.HTTPError) -> bool:
 def clamp_text(text: str, max_characters: int) -> str:
     if len(text) <= max_characters:
         return text
-    head_length = max_characters * TEXT_CLAMP_HEAD_PARTS // TEXT_CLAMP_TOTAL_PARTS
-    tail_length = max_characters - head_length
-    head = text[:head_length]
-    tail = text[-tail_length:]
     truncated_count = len(text) - max_characters
-    return f"{head}\n\n... [truncated {truncated_count} chars] ...\n\n{tail}"
+    truncation_marker = f"\n\n... [truncated {truncated_count} chars] ...\n\n"
+    if len(truncation_marker) >= max_characters:
+        return text[:max_characters]
+    content_budget = max_characters - len(truncation_marker)
+    head_length = content_budget * TEXT_CLAMP_HEAD_PARTS // TEXT_CLAMP_TOTAL_PARTS
+    tail_length = content_budget - head_length
+    head = text[:head_length]
+    tail = text[-tail_length:] if tail_length else ""
+    return f"{head}{truncation_marker}{tail}"
 
 
 def post_to_groq(
@@ -160,7 +164,9 @@ def call_groq_with_fallback(
                 if should_skip_to_next_model(http_error):
                     break
                 if not is_recoverable_http_error(http_error):
-                    break
+                    raise RuntimeError(
+                        f"Groq request failed with non-recoverable HTTP error: {http_error}"
+                    ) from http_error
             except (
                 urllib.error.URLError,
                 TimeoutError,
@@ -179,6 +185,29 @@ def parse_json_object(raw_text: str) -> dict:
     if not match:
         raise ValueError("Groq response did not contain a JSON object")
     return json.loads(match.group(0))
+
+
+def coerce_indexes_to_int_set(raw_indexes: list | None) -> set[int]:
+    coerced: set[int] = set()
+    for each_raw_index in raw_indexes or []:
+        try:
+            coerced.add(int(each_raw_index))
+        except (TypeError, ValueError):
+            continue
+    return coerced
+
+
+def coerce_skipped_entries(raw_skipped: list | None) -> dict[int, str]:
+    coerced: dict[int, str] = {}
+    for each_entry in raw_skipped or []:
+        if not isinstance(each_entry, dict):
+            continue
+        try:
+            finding_index = int(each_entry.get("finding_index"))
+        except (TypeError, ValueError):
+            continue
+        coerced[finding_index] = str(each_entry.get("reason", ""))
+    return coerced
 
 
 def normalize_findings(raw_findings: list, files_content: dict) -> list:
@@ -475,11 +504,10 @@ def run_pipeline(input_data: dict) -> dict:
                     )
                 continue
             raw_updated_content = fix_result.get("updated_content", current_content)
-            applied_indexes = set(fix_result.get("applied_finding_indexes", []))
-            skipped_entries = {
-                each_skipped["finding_index"]: each_skipped.get("reason", "")
-                for each_skipped in fix_result.get("skipped", [])
-            }
+            applied_indexes = coerce_indexes_to_int_set(
+                fix_result.get("applied_finding_indexes", [])
+            )
+            skipped_entries = coerce_skipped_entries(fix_result.get("skipped", []))
             updated_content = preserve_trailing_newline(current_content, raw_updated_content)
             content_changed = updated_content != current_content
             if should_write_fixed_file(applied_indexes, updated_content, current_content):

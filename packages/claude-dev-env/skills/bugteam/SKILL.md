@@ -2,8 +2,8 @@
 name: bugteam
 description: >-
   Claude Code agent team on the open pull request: run the CODE_RULES gate,
-  spawn a fresh clean-room audit (code-quality-agent, sonnet) and a fix pass
-  (clean-coder, sonnet), post per-loop GitHub review threads from teammates,
+  spawn a fresh clean-room audit (code-quality-agent, opus) and a fix pass
+  (clean-coder, opus), post per-loop GitHub review threads from teammates,
   stop at zero findings or a 10-audit safety cap. Grants then revokes
   `.claude/**` edit permission around the run. SKILL.md is the orchestration
   checklist; `reference/` holds expanded prose by domain; CONSTRAINTS,
@@ -122,9 +122,9 @@ TeamCreate(
 
 **`<team_temp_dir>`:** `Path(tempfile.gettempdir()) / team_name` (lead resolves once to an absolute path; every shell gets that literal string).
 
-**Roles (spawned per loop, not here):** bugfind → `code-quality-agent` sonnet; bugfix → resolved from env var `BUGTEAM_FIX_IMPLEMENTER` (default `clean-coder`; accepted values also include `groq-coder` for the Claude-validates / Groq-patches pipeline) sonnet. **Display:** inherit `teammateMode` from `~/.claude.json`. Reference subagent types by name when spawning teammates ([`sources.md`](sources.md) § Referencing subagent types when spawning teammates).
+**Roles (spawned per loop, not here):** bugfind → `code-quality-agent` opus (4.7) at xhigh effort; bugfix → `clean-coder` opus (4.7) at xhigh effort. `model="opus"` resolves to Opus 4.7 on the Anthropic API and runs at the model's default `xhigh` effort level — see [`CONSTRAINTS.md`](CONSTRAINTS.md) § **Opus 4.7 at xhigh effort for both teammates** for rationale. **Display:** inherit `teammateMode` from `~/.claude.json`. Reference subagent types by name when spawning teammates ([`sources.md`](sources.md) § Referencing subagent types when spawning teammates).
 
-**FIX implementer selection:** when the invocation sets `BUGTEAM_FIX_IMPLEMENTER=groq-coder`, spawn the FIX teammate with `subagent_type="groq-coder"` and ensure `GROQ_API_KEY` is present in the lead's environment before Step 3. Any other value (or unset) defaults to `clean-coder`. The FIX spawn XML in [`PROMPTS.md`](PROMPTS.md) is identical for both implementers.
+**Optional Groq-backed FIX path (explicit opt-in only):** the default flow above always uses Opus teammates. A separate optional path exists only when the user explicitly sets `BUGTEAM_FIX_IMPLEMENTER=groq-coder` before invocation: spawn the FIX teammate with `subagent_type="groq-coder"` and ensure `GROQ_API_KEY` is present in the lead's environment before Step 3. Any other value (or unset) keeps `clean-coder` on Opus. The FIX spawn XML in [`PROMPTS.md`](PROMPTS.md) is identical for both implementers.
 
 **`--bugbot-retrigger` flag:** when present on the `/bugteam` invocation, after every successful FIX push in Step 3, post an additional `bugbot run` issue comment via the Step 2.5 issue-comments fallback endpoint (`POST .../issues/{issue}/comments`) to re-trigger Cursor's bugbot on the new commit. Omit when the flag is absent.
 
@@ -235,7 +235,7 @@ Agent(
   subagent_type="code-quality-agent",
   name="bugfind-pr<N>-loop<L>",
   team_name="<team_name>",
-  model="sonnet",
+  model="opus",
   description="Bugfind audit PR <N> loop <L>",
   prompt="<audit XML; see PROMPTS.md>"
 )
@@ -265,7 +265,7 @@ Agent(
   subagent_type="clean-coder",
   name="bugfix-pr<N>-loop<L>",
   team_name="<team_name>",
-  model="sonnet",
+  model="opus",
   description="Bugfix PR <N> loop <L>",
   prompt="<fix XML; see PROMPTS.md>"
 )

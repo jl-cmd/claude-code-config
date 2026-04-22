@@ -78,9 +78,6 @@ from config.groq_bugteam_config import (
     NO_FINDINGS_REVIEW_BODY,
     PIPELINE_FAILURE_EXIT_CODE,
     REVIEW_BODY_HEADER_TEMPLATE,
-    SPEC_IMPLEMENTER_SYSTEM_PROMPT,
-    SPEC_MODE_FLAG,
-    SPEC_MODE_VALUE,
     TEXT_CLAMP_HEAD_PARTS,
     TEXT_CLAMP_TOTAL_PARTS,
 )
@@ -251,6 +248,8 @@ def should_write_fixed_file(
 
 def is_safe_relative_path(each_path: str) -> bool:
     if os.path.isabs(each_path):
+        return False
+    if each_path.replace("\\", "/").startswith("/"):
         return False
     normalized = os.path.normpath(each_path)
     if normalized.startswith(".." + os.sep) or normalized == "..":
@@ -440,7 +439,7 @@ def build_review_body(
 def run_pipeline(input_data: dict) -> dict:
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     if not api_key:
-        return {"error": "GROQ_API_KEY not set in environment"}
+        return {"error": MISSING_API_KEY_ERROR}
 
     diff_text = input_data.get("diff", "")
     files_content = input_data.get("files_content", {})

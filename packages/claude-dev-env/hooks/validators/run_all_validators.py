@@ -28,6 +28,26 @@ hooks_dir = VALIDATORS_DIR.parent
 package_name = VALIDATORS_DIR.name
 
 
+def _windows_non_unc_working_directory_string(
+    candidate_directory_strings: list[str | None],
+) -> str:
+    """Return the first candidate cwd that is not a UNC path (Windows only)."""
+    for each_candidate in candidate_directory_strings:
+        if each_candidate is None:
+            continue
+        expanded_candidate = str(Path(each_candidate).expanduser())
+        if expanded_candidate.startswith("\\\\"):
+            continue
+        return expanded_candidate
+    current_working_directory = os.getcwd()
+    expanded_current_working_directory = str(Path(current_working_directory).expanduser())
+    if not expanded_current_working_directory.startswith("\\\\"):
+        return expanded_current_working_directory
+    raise RuntimeError(
+        "Cannot find a non-UNC working directory for hook validator subprocesses."
+    )
+
+
 def _hooks_subprocess_working_directory_and_environment() -> tuple[str, dict[str, str]]:
     """Return cwd and env for validator subprocesses.
 
@@ -45,10 +65,14 @@ def _hooks_subprocess_working_directory_and_environment() -> tuple[str, dict[str
     )
     working_directory_string = hooks_directory_string
     if sys.platform == "win32" and working_directory_string.startswith("\\\\"):
-        working_directory_string = (
-            os.environ.get("TEMP")
-            or os.environ.get("TMP")
-            or tempfile.gettempdir()
+        windows_temp_fallback_directory = str(Path(r"C:\Windows\Temp"))
+        working_directory_string = _windows_non_unc_working_directory_string(
+            [
+                os.environ.get("TEMP"),
+                os.environ.get("TMP"),
+                tempfile.gettempdir(),
+                windows_temp_fallback_directory,
+            ]
         )
     return working_directory_string, environment
 

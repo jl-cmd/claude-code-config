@@ -1144,9 +1144,12 @@ def _collect_body_assertions(statement_nodes: list[ast.stmt]) -> list[ast.Assert
 
 def _is_existence_only_assertion(call_node: ast.Call) -> bool:
     """Return True when a Call node is callable() or hasattr()."""
-    if not isinstance(call_node.func, ast.Name):
-        return False
-    return call_node.func.id in ("callable", "hasattr")
+    function_reference = call_node.func
+    if isinstance(function_reference, ast.Name):
+        return function_reference.id in ("callable", "hasattr")
+    if isinstance(function_reference, ast.Attribute):
+        return function_reference.attr in ("callable", "hasattr")
+    return False
 
 
 def _test_body_has_only_existence_assertions(

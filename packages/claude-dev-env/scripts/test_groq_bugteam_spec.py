@@ -18,9 +18,7 @@ import types
 def _load_spec_module():
     scripts_directory = pathlib.Path(__file__).parent
     sys.path.insert(0, str(scripts_directory))
-    for cached_module_name in list(sys.modules):
-        if cached_module_name == "config" or cached_module_name.startswith("config."):
-            del sys.modules[cached_module_name]
+    sys.modules.pop("groq_bugteam_spec", None)
     module_path = scripts_directory / "groq_bugteam_spec.py"
     module_spec = importlib.util.spec_from_file_location(
         "groq_bugteam_spec", module_path

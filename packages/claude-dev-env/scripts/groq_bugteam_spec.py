@@ -157,10 +157,7 @@ def run_spec_mode() -> dict:
         spec_list, current_content = read_spec_input_from_stdin()
     except (json.JSONDecodeError, ValueError) as parse_error:
         return {"error": f"stdin is not valid JSON: {parse_error}"}
-    try:
-        return apply_fix_from_spec(spec_list, current_content)
-    except Exception as spec_error:
-        return {"error": f"spec mode failed: {spec_error}"}
+    return apply_fix_from_spec(spec_list, current_content)
 
 
 def is_spec_mode_invocation(argv: list[str]) -> bool:

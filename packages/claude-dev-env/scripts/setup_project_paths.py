@@ -211,6 +211,7 @@ def _run_es_exe_folders_query() -> list[str]:
         [ES_EXE_BINARY_NAME, *ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS],
         capture_output=True,
         text=True,
+        encoding=UTF8_ENCODING,
         check=False,
     )
     if completion.returncode != 0:

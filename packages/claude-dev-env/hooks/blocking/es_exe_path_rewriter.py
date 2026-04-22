@@ -99,10 +99,7 @@ def _rewrite_bare_tokens(command_suffix: str, registry: dict[str, str]) -> str:
         if not each_raw_part or each_raw_part.isspace():
             all_rewritten_parts.append(each_raw_part)
             continue
-        unquoted_text, was_quoted = _strip_matching_outer_quotes(each_raw_part)
-        if was_quoted and " " in unquoted_text:
-            all_rewritten_parts.append(each_raw_part)
-            continue
+        unquoted_text, _was_quoted = _strip_matching_outer_quotes(each_raw_part)
         if unquoted_text in registry and not _token_is_absolute_path(unquoted_text):
             all_rewritten_parts.append(_quote_path(registry[unquoted_text]))
         else:

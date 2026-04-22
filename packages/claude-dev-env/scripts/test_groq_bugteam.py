@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import sys
 import urllib.error
 
@@ -75,6 +76,20 @@ class TestClampText:
         tiny_budget = 10
         clamped = groq_bugteam.clamp_text(long_text, tiny_budget)
         assert len(clamped) <= tiny_budget
+        assert clamped == long_text[:tiny_budget]
+        assert "truncated" not in clamped
+
+    def test_truncation_marker_count_matches_characters_actually_dropped(self):
+        long_text = "a" * 1000
+        max_characters = 200
+        clamped = groq_bugteam.clamp_text(long_text, max_characters)
+        marker_match = re.search(r"truncated (\d+) chars", clamped)
+        assert marker_match is not None
+        reported_truncated_count = int(marker_match.group(1))
+        full_marker = f"\n\n... [truncated {reported_truncated_count} chars] ...\n\n"
+        preserved_original_length = len(clamped) - len(full_marker)
+        actually_truncated_count = len(long_text) - preserved_original_length
+        assert reported_truncated_count == actually_truncated_count
 
 
 class TestParseJsonObject:
@@ -376,6 +391,16 @@ class TestCoerceSkippedEntries:
 
     def test_handles_none_input(self):
         assert groq_bugteam.coerce_skipped_entries(None) == {}
+
+    def test_treats_none_reason_as_empty_string(self):
+        assert groq_bugteam.coerce_skipped_entries(
+            [{"finding_index": 1, "reason": None}]
+        ) == {1: ""}
+
+    def test_stringifies_non_string_reasons(self):
+        assert groq_bugteam.coerce_skipped_entries(
+            [{"finding_index": 1, "reason": 42}]
+        ) == {1: "42"}
 
 
 class TestBuildFixUserMessage:

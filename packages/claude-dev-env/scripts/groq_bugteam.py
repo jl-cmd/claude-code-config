@@ -98,11 +98,16 @@ def should_skip_to_next_model(error: urllib.error.HTTPError) -> bool:
 def clamp_text(text: str, max_characters: int) -> str:
     if len(text) <= max_characters:
         return text
-    truncated_count = len(text) - max_characters
-    truncation_marker = f"\n\n... [truncated {truncated_count} chars] ...\n\n"
-    if len(truncation_marker) >= max_characters:
-        return text[:max_characters]
-    content_budget = max_characters - len(truncation_marker)
+    truncated_count = len(text)
+    while True:
+        truncation_marker = f"\n\n... [truncated {truncated_count} chars] ...\n\n"
+        if len(truncation_marker) >= max_characters:
+            return text[:max_characters]
+        content_budget = max_characters - len(truncation_marker)
+        refined_truncated_count = len(text) - content_budget
+        if refined_truncated_count == truncated_count:
+            break
+        truncated_count = refined_truncated_count
     head_length = content_budget * TEXT_CLAMP_HEAD_PARTS // TEXT_CLAMP_TOTAL_PARTS
     tail_length = content_budget - head_length
     head = text[:head_length]
@@ -206,7 +211,8 @@ def coerce_skipped_entries(raw_skipped: list | None) -> dict[int, str]:
             finding_index = int(each_entry.get("finding_index"))
         except (TypeError, ValueError):
             continue
-        coerced[finding_index] = str(each_entry.get("reason", ""))
+        raw_reason = each_entry.get("reason", "")
+        coerced[finding_index] = "" if raw_reason is None else str(raw_reason)
     return coerced
 
 

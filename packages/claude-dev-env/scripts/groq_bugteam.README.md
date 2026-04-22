@@ -122,7 +122,7 @@ cd packages/claude-dev-env/scripts
 python3 -m pytest test_groq_bugteam.py -v
 ```
 
-43 tests covering the pure-logic helpers (`clamp_text`, `parse_json_object`, `normalize_findings`, `group_findings_by_file`, `build_review_body`, `should_write_fixed_file`, `preserve_trailing_newline`, HTTP error classification, pipeline refusals). Network calls to Groq and filesystem/git side effects are not unit-tested; exercise them with a live run.
+The test suite covers the pure-logic helpers (`clamp_text`, `parse_json_object`, `normalize_findings`, `group_findings_by_file`, `build_review_body`, `should_write_fixed_file`, `preserve_trailing_newline`, `is_safe_relative_path`, `decode_subprocess_stderr`, `build_fix_user_message`, HTTP error classification, pipeline refusals) and the co-located config invariants. Network calls to Groq and filesystem/git side effects are not unit-tested; exercise them with a live run.
 
 ## Why this exists
 

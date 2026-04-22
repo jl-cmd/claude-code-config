@@ -245,6 +245,39 @@ def should_write_fixed_file(
     return updated_content != current_content
 
 
+def is_safe_relative_path(each_path: str) -> bool:
+    if os.path.isabs(each_path):
+        return False
+    normalized = os.path.normpath(each_path)
+    if normalized.startswith(".." + os.sep) or normalized == "..":
+        return False
+    parts = normalized.replace("\\", "/").split("/")
+    if ".." in parts:
+        return False
+    return True
+
+
+def decode_subprocess_stderr(stderr_value) -> str:
+    if stderr_value is None:
+        return ""
+    if isinstance(stderr_value, bytes):
+        return stderr_value.decode("utf-8", "replace")
+    return str(stderr_value)
+
+
+def build_fix_user_message(file_path: str, current_content: str, findings_block: str) -> str:
+    trailing_separator = "" if current_content.endswith("\n") else "\n"
+    return (
+        f"Fix the findings listed below in file `{file_path}`.\n\n"
+        "<findings>\n"
+        f"{findings_block}\n"
+        "</findings>\n\n"
+        "<current_file_contents>\n"
+        f"{current_content}"
+        f"{trailing_separator}</current_file_contents>\n"
+    )
+
+
 def preserve_trailing_newline(original: str, updated: str) -> str:
     original_ends_with_newline = original.endswith("\n")
     updated_ends_with_newline = updated.endswith("\n")
@@ -282,15 +315,7 @@ def generate_fix_for_file(
         ],
         indent=JSON_INDENT_SPACES,
     )
-    user_message = (
-        f"Fix the findings listed below in file `{file_path}`.\n\n"
-        "<findings>\n"
-        f"{findings_block}\n"
-        "</findings>\n\n"
-        "<current_file_contents>\n"
-        f"{current_content}\n"
-        "</current_file_contents>\n"
-    )
+    user_message = build_fix_user_message(file_path, current_content, findings_block)
     groq_result = call_groq_with_fallback(
         api_key,
         messages=[
@@ -310,8 +335,21 @@ def apply_fixes_and_commit(
 ) -> str:
     if not fixes:
         return ""
+    worktree_root = os.path.realpath(worktree_path)
     for each_path, each_new_content in fixes.items():
-        absolute_path = os.path.join(worktree_path, each_path)
+        if not is_safe_relative_path(each_path):
+            raise ValueError(
+                f"Refusing to write unsafe path from Groq response: {each_path!r}"
+            )
+        absolute_path = os.path.join(worktree_root, each_path)
+        resolved_path = os.path.realpath(absolute_path)
+        if (
+            resolved_path != worktree_root
+            and not resolved_path.startswith(worktree_root + os.sep)
+        ):
+            raise ValueError(
+                f"Refusing to write path that escapes worktree: {each_path!r}"
+            )
         parent_directory = os.path.dirname(absolute_path)
         if parent_directory:
             os.makedirs(parent_directory, exist_ok=True)
@@ -443,12 +481,21 @@ def run_pipeline(input_data: dict) -> dict:
                 for each_skipped in fix_result.get("skipped", [])
             }
             updated_content = preserve_trailing_newline(current_content, raw_updated_content)
+            content_changed = updated_content != current_content
             if should_write_fixed_file(applied_indexes, updated_content, current_content):
                 files_to_write[each_file_path] = updated_content
             for each_global_index, _each_finding in each_findings_for_file:
-                if each_global_index in applied_indexes:
+                if each_global_index in applied_indexes and content_changed:
                     fix_outcomes.append(
                         {"finding_index": each_global_index, "status": "fixed"}
+                    )
+                elif each_global_index in applied_indexes:
+                    fix_outcomes.append(
+                        {
+                            "finding_index": each_global_index,
+                            "status": "skipped",
+                            "reason": "model claimed fix applied but file content is unchanged",
+                        }
                     )
                 elif each_global_index in skipped_entries:
                     fix_outcomes.append(
@@ -479,11 +526,7 @@ def run_pipeline(input_data: dict) -> dict:
             if commit_sha:
                 push_current_branch(worktree_path, head_ref)
         except subprocess.CalledProcessError as git_error:
-            stderr_preview = (
-                git_error.stderr.decode("utf-8", "replace")[:500]
-                if git_error.stderr
-                else ""
-            )
+            stderr_preview = decode_subprocess_stderr(git_error.stderr)[:500]
             return {
                 "findings": findings,
                 "fix_outcomes": fix_outcomes,
@@ -494,6 +537,18 @@ def run_pipeline(input_data: dict) -> dict:
                 "audit_model": audit_model,
                 "fix_model": fix_model,
                 "error": f"git operation failed: {stderr_preview}",
+            }
+        except ValueError as unsafe_path_error:
+            return {
+                "findings": findings,
+                "fix_outcomes": fix_outcomes,
+                "commit_sha": "",
+                "review_body": build_review_body(
+                    findings, audit_model, "", fix_outcomes
+                ),
+                "audit_model": audit_model,
+                "fix_model": fix_model,
+                "error": f"unsafe fix rejected: {unsafe_path_error}",
             }
 
     review_body = build_review_body(findings, audit_model, commit_sha, fix_outcomes)

@@ -276,6 +276,20 @@ class TestIsRecoverableHttpError:
         assert groq_bugteam.should_skip_to_next_model(self._make_error(status)) is False
 
 
+class TestBuildFixUserMessage:
+    def test_embeds_file_content_byte_for_byte_with_trailing_newline(self):
+        original_content = "line1\nline2\n"
+        message = groq_bugteam.build_fix_user_message("some.py", original_content, findings_block="[]")
+        assert original_content in message
+        assert "line2\n</current_file_contents>" in message
+
+    def test_embeds_file_content_byte_for_byte_without_trailing_newline(self):
+        original_content = "line1\nline2"
+        message = groq_bugteam.build_fix_user_message("some.py", original_content, findings_block="[]")
+        assert f"{original_content}\n</current_file_contents>" in message
+        assert "line2\n\n</current_file_contents>" not in message
+
+
 class TestShouldWriteFixedFile:
     def test_does_not_write_when_no_finding_applied(self):
         assert groq_bugteam.should_write_fixed_file(
@@ -320,6 +334,39 @@ class TestPreserveTrailingNewline:
         assert (
             groq_bugteam.preserve_trailing_newline(original="x", updated="y") == "y"
         )
+
+
+class TestIsSafeRelativePath:
+    def test_rejects_absolute_posix_path(self):
+        assert groq_bugteam.is_safe_relative_path("/etc/passwd") is False
+
+    def test_rejects_parent_directory_escape(self):
+        assert groq_bugteam.is_safe_relative_path("../../etc/passwd") is False
+
+    def test_rejects_embedded_parent_reference(self):
+        assert groq_bugteam.is_safe_relative_path("src/../../etc/passwd") is False
+
+    def test_accepts_simple_relative_path(self):
+        assert groq_bugteam.is_safe_relative_path("src/foo.py") is True
+
+    def test_accepts_nested_relative_path(self):
+        assert groq_bugteam.is_safe_relative_path("packages/mod/scripts/foo.py") is True
+
+
+class TestDecodeSubprocessStderr:
+    def test_decodes_bytes_input(self):
+        decoded = groq_bugteam.decode_subprocess_stderr(b"fatal: broken")
+        assert decoded == "fatal: broken"
+
+    def test_returns_str_input_unchanged(self):
+        assert groq_bugteam.decode_subprocess_stderr("fatal: broken") == "fatal: broken"
+
+    def test_handles_none_input(self):
+        assert groq_bugteam.decode_subprocess_stderr(None) == ""
+
+    def test_replaces_undecodable_bytes(self):
+        decoded = groq_bugteam.decode_subprocess_stderr(b"\xff\xfe broken")
+        assert "broken" in decoded
 
 
 class TestRunPipelineRefusals:

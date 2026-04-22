@@ -40,6 +40,8 @@ from config.groq_bugteam_config import (
     SPEC_MODE_VALUE,
 )
 
+from groq_bugteam_dotenv import load_claude_dev_env_dotenv_file
+
 
 def extract_failing_criteria_by_finding(
     acceptance_checks: list[dict],
@@ -103,6 +105,7 @@ def resolve_groq_bugteam_module() -> ModuleType:
 
 
 def apply_fix_from_spec(spec_list: list[dict], current_content: str) -> dict:
+    load_claude_dev_env_dotenv_file()
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError(MISSING_API_KEY_ERROR)

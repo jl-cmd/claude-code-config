@@ -7,7 +7,9 @@ team, no 10-loop convergence: one audit call, one fix call, one commit and
 push per PR.
 
 Stateless and PII-free. All GitHub identifiers arrive on stdin as JSON;
-``GROQ_API_KEY`` is read from the environment. Output is JSON on stdout.
+``GROQ_API_KEY`` is read from the environment after loading
+``packages/claude-dev-env/.env`` when that file exists (gitignored; see
+``.env.example``). Output is JSON on stdout.
 
 Pipeline (per invocation):
   1. Read PR metadata, unified diff, file contents from stdin.
@@ -81,6 +83,9 @@ from config.groq_bugteam_config import (
     TEXT_CLAMP_HEAD_PARTS,
     TEXT_CLAMP_TOTAL_PARTS,
 )
+
+from groq_bugteam_dotenv import load_claude_dev_env_dotenv_file
+
 
 @dataclass(frozen=True)
 class GroqCallResult:
@@ -437,6 +442,7 @@ def build_review_body(
 
 
 def run_pipeline(input_data: dict) -> dict:
+    load_claude_dev_env_dotenv_file()
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     if not api_key:
         return {"error": MISSING_API_KEY_ERROR}
@@ -593,6 +599,7 @@ from groq_bugteam_spec import (
 
 
 def main() -> None:
+    load_claude_dev_env_dotenv_file()
     if is_spec_mode_invocation(sys.argv[1:]):
         run_spec_mode_main()
         return

@@ -104,7 +104,7 @@ After all files have been patched (or skipped):
 - Never edit files outside those referenced in `bugs_to_fix`.
 - Never synthesize your own patch text — Groq performs the mechanical edit; you specify it.
 - Never claim a finding `fixed` without re-reading the file from disk post-patch and re-evaluating every acceptance criterion.
-- If `GROQ_API_KEY` is not set in the environment, return immediately with every finding marked `could_not_address` and reason `GROQ_API_KEY not set in environment`.
+- If `GROQ_API_KEY` is still unset after `groq_bugteam.py` loads `packages/claude-dev-env/.env` (when that file exists), stop and tell the user to create `packages/claude-dev-env/.env` from `packages/claude-dev-env/.env.example`, then return with every finding marked `could_not_address` and the same reason string the script uses (`MISSING_API_KEY_ERROR` in `groq_bugteam_config.py`, includes the `.env` / `.env.example` paths).
 
 ## Why This Role Exists
 

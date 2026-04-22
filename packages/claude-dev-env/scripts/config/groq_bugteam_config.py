@@ -210,4 +210,7 @@ TEXT_CLAMP_TOTAL_PARTS = 2
 
 SPEC_MODE_FLAG = "--mode"
 SPEC_MODE_VALUE = "spec"
-MISSING_API_KEY_ERROR = "GROQ_API_KEY not set in environment"
+MISSING_API_KEY_ERROR = (
+    "GROQ_API_KEY not set in environment; create packages/claude-dev-env/.env "
+    "from packages/claude-dev-env/.env.example (gitignored) or export GROQ_API_KEY"
+)

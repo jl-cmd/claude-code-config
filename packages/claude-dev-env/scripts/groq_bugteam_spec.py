@@ -5,13 +5,21 @@ groq_bugteam.py can keep the single-shot audit+fix pipeline isolated
 from the mechanical patch applier. Both entrypoints share the same
 HTTP client (``call_groq_with_fallback``), string helpers
 (``parse_json_object``, ``preserve_trailing_newline``), and config
-constants via the parent groq_bugteam module, which this module
-accesses lazily at call time to remain compatible with test
-monkeypatches that retarget groq_bugteam.call_groq_with_fallback.
+constants via the parent groq_bugteam module, resolved at call time
+through resolve_groq_bugteam_module(). That resolver handles both
+contexts: tests register the parent as ``sys.modules["groq_bugteam"]``
+via spec_from_file_location, while a direct CLI invocation of
+``python groq_bugteam.py --mode spec`` runs the parent as
+``sys.modules["__main__"]``. The resolver also keeps tests able to
+monkeypatch ``groq_bugteam.call_groq_with_fallback`` and have the
+patch reach this module.
 
-This module is imported back into groq_bugteam at the bottom of
-groq_bugteam.py so groq_bugteam.apply_fix_from_spec continues to work
-for existing callers and tests.
+This module is imported from the bottom of groq_bugteam.py so
+groq_bugteam.apply_fix_from_spec remains attribute-accessible to
+existing callers and tests. The module must not import groq_bugteam
+at its top level -- that would close the cycle during CLI startup
+and raise ImportError before groq_bugteam_spec finishes defining its
+public names.
 """
 
 from __future__ import annotations
@@ -19,8 +27,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-
-import groq_bugteam
+from types import ModuleType
 
 from config.groq_bugteam_config import (
     GROQ_FIX_MAX_COMPLETION_TOKENS,
@@ -81,12 +88,26 @@ def build_spec_user_message(spec_list: list[dict], current_content: str) -> str:
     return json.dumps(payload, indent=JSON_INDENT_SPACES)
 
 
+def resolve_groq_bugteam_module() -> ModuleType:
+    registered_module = sys.modules.get("groq_bugteam")
+    if registered_module is not None:
+        return registered_module
+    main_module = sys.modules.get("__main__")
+    if main_module is not None and hasattr(main_module, "call_groq_with_fallback"):
+        return main_module
+    raise RuntimeError(
+        "groq_bugteam module not found in sys.modules; "
+        "groq_bugteam_spec must be invoked from a context where "
+        "groq_bugteam is the parent module (test loader or CLI)."
+    )
+
+
 def apply_fix_from_spec(spec_list: list[dict], current_content: str) -> dict:
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError(MISSING_API_KEY_ERROR)
 
-    groq_bugteam_module = sys.modules["groq_bugteam"]
+    groq_bugteam_module = resolve_groq_bugteam_module()
     user_message = build_spec_user_message(spec_list, current_content)
     groq_result = groq_bugteam_module.call_groq_with_fallback(
         api_key,

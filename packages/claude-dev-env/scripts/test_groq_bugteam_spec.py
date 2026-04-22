@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 import sys
+import types
 
 
 def _load_spec_module():
@@ -45,3 +46,37 @@ def test_is_spec_mode_invocation_detects_flag_value_pair():
     assert groq_bugteam_spec.is_spec_mode_invocation(["--mode", "spec"]) is True
     assert groq_bugteam_spec.is_spec_mode_invocation(["--mode", "pipeline"]) is False
     assert groq_bugteam_spec.is_spec_mode_invocation([]) is False
+
+
+def test_resolver_prefers_registered_groq_bugteam_over_main(monkeypatch):
+    fake_groq_bugteam = types.ModuleType("groq_bugteam")
+    fake_groq_bugteam.call_groq_with_fallback = lambda *args, **kwargs: None
+    monkeypatch.setitem(sys.modules, "groq_bugteam", fake_groq_bugteam)
+
+    resolved_module = groq_bugteam_spec.resolve_groq_bugteam_module()
+
+    assert resolved_module is fake_groq_bugteam
+
+
+def test_resolver_falls_back_to_main_when_groq_bugteam_absent(monkeypatch):
+    monkeypatch.delitem(sys.modules, "groq_bugteam", raising=False)
+    fake_main = types.ModuleType("__main__")
+    fake_main.call_groq_with_fallback = lambda *args, **kwargs: None
+    monkeypatch.setitem(sys.modules, "__main__", fake_main)
+
+    resolved_module = groq_bugteam_spec.resolve_groq_bugteam_module()
+
+    assert resolved_module is fake_main
+
+
+def test_resolver_raises_when_neither_module_available(monkeypatch):
+    monkeypatch.delitem(sys.modules, "groq_bugteam", raising=False)
+    placeholder_main = types.ModuleType("__main__")
+    monkeypatch.setitem(sys.modules, "__main__", placeholder_main)
+
+    try:
+        groq_bugteam_spec.resolve_groq_bugteam_module()
+    except RuntimeError as resolver_error:
+        assert "groq_bugteam module not found" in str(resolver_error)
+    else:
+        raise AssertionError("resolver should have raised RuntimeError")

@@ -74,6 +74,10 @@ After a `/bugteam` invocation returns (converged, cap reached, stuck, or error),
 3. Back off: 60s → 120s → 240s → 480s → 960s. If five successive polls return empty, exit polling for this PR.
 4. If bugbot posts a new finding in any poll, re-invoke `/bugteam <pr_number>` via the same `bws run` wrapper with the bugbot finding text seeded into the invocation's `bugs_to_fix` preamble. Reset the backoff.
 
+### Polling Cost and Cadence
+
+The five-step backoff sums to `60 + 120 + 240 + 480 + 960 = 1860` seconds (~31 minutes) of idle polling per PR before the skill declares bugbot quiet. A sweep over ten open PRs therefore retains up to ~5 wall-clock hours of bugbot-watch time beyond the active `/bugteam` work. Callers who need faster turnaround should pass `--serial` to disable fan-out (so polling starts only after the previous PR finishes) or accept the tradeoff: the backoff exists specifically to catch late bugbot analyses that can take several minutes to appear after a push.
+
 ## Final Report
 
 After every PR has exited polling, emit:

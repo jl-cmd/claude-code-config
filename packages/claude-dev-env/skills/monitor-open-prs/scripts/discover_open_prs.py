@@ -12,7 +12,7 @@ import json
 import subprocess
 
 
-def build_gh_search_argv(owner: str) -> list:
+def build_gh_search_argv(owner: str) -> list[str]:
     gh_command_name = "gh"
     search_subcommand = ("search", "prs")
     owner_flag = "--owner"
@@ -32,7 +32,7 @@ def build_gh_search_argv(owner: str) -> list:
     ]
 
 
-def split_repository_name(name_with_owner: str) -> tuple:
+def split_repository_name(name_with_owner: str) -> tuple[str, str]:
     repo_separator = "/"
     if repo_separator not in name_with_owner:
         return "", name_with_owner
@@ -53,7 +53,7 @@ def flatten_pr_entry(raw_pr_entry: dict) -> dict:
     }
 
 
-def fetch_open_prs_for_owner(owner: str) -> list:
+def fetch_open_prs_for_owner(owner: str) -> list[dict]:
     search_argv = build_gh_search_argv(owner)
     completed_process = subprocess.run(
         search_argv, check=True, capture_output=True, text=True
@@ -62,8 +62,8 @@ def fetch_open_prs_for_owner(owner: str) -> list:
     return [flatten_pr_entry(each_entry) for each_entry in raw_pr_entries]
 
 
-def discover_open_prs(all_owners: list) -> list:
-    all_discovered: list = []
+def discover_open_prs(all_owners: list[str]) -> list[dict]:
+    all_discovered: list[dict] = []
     for each_owner in all_owners:
         all_discovered.extend(fetch_open_prs_for_owner(each_owner))
     return all_discovered

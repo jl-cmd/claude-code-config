@@ -9,6 +9,7 @@ the "zero function references" exemption does not swallow real references.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 from pathlib import Path
@@ -356,8 +357,6 @@ def test_should_advise_with_distinct_skeletons(capsys: object) -> None:
 
 
 def test_build_fstring_skeleton_preserves_literal_interp_substring() -> None:
-    import ast
-
     joined_str_expression = ast.parse("f'PREFIX INTERP {value} SUFFIX'", mode="eval").body
     assert isinstance(joined_str_expression, ast.JoinedStr)
     skeleton = code_rules_enforcer._build_fstring_skeleton(joined_str_expression)

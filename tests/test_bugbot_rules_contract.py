@@ -38,14 +38,6 @@ def _structure_section(document_text: str) -> str:
     return after_start[:end_offset]
 
 
-def _copilot_instructions_part1_text() -> str:
-    text = _copilot_instructions_text()
-    part_marker = "\n## Part 2"
-    if part_marker in text:
-        return text.split(part_marker, maxsplit=1)[0]
-    return text
-
-
 def test_bugbot_documents_upper_snake_exemptions_matching_hook() -> None:
     """code_rules_enforcer exempts migrations, workflow registries, and tests."""
     text = _bugbot_text()

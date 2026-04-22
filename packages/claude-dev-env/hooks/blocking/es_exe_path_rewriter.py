@@ -25,14 +25,14 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from hook_config.dynamic_stderr_handler import DynamicStderrHandler
-from hook_config.path_rewriter_constants import (
+from config.dynamic_stderr_handler import DynamicStderrHandler
+from config.path_rewriter_constants import (
     BASH_TOOL_NAME,
     HOOK_EVENT_NAME,
     PERMISSION_ALLOW,
     PLACEHOLDER_TOKEN_PATTERN,
 )
-from hook_config.project_paths_reader import load_registry
+from config.project_paths_reader import load_registry
 
 _ES_EXE_TRIGGER_PATTERN = re.compile(
     r"(?i)(?<![\w.])(?:Everything[/\\])?es\.exe(?![\w.])",
@@ -87,11 +87,8 @@ def _split_on_es_exe(command: str) -> tuple[str, str]:
 
 def _strip_matching_outer_quotes(token: str) -> tuple[str, bool]:
     """Return (inner_text, was_quoted) after removing matched outer quotes."""
-    if len(token) >= 2:
-        if (token[0] == '"' and token[-1] == '"') or (
-            token[0] == "'" and token[-1] == "'"
-        ):
-            return token[1:-1], True
+    if len(token) > 1 and token[0] in ('"', "'") and token[-1] == token[0]:
+        return token[1:-1], True
     return token, False
 
 

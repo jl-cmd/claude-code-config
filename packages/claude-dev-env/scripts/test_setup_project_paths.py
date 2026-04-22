@@ -22,8 +22,8 @@ for each_sys_path_entry in (
 
 import setup_project_paths as setup
 import untracked_repo_detector as detector_module
-from hook_config.project_paths_reader import registry_file_path
-from hook_config.setup_project_paths_constants import (
+from config.project_paths_reader import registry_file_path
+from config.setup_project_paths_constants import (
     ABORTED_NOTHING_WRITTEN_MESSAGE,
     CONFIRMATION_PROMPT_TEXT,
     ES_EXE_FOLDERS_ONLY_QUERY_ARGUMENTS,

@@ -24,12 +24,12 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from hook_config.project_paths_reader import (
+from config.project_paths_reader import (
     load_registry,
     registry_contains_path,
     registry_file_path,
 )
-from hook_config.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME
+from config.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME
 
 
 def current_working_directory() -> str:

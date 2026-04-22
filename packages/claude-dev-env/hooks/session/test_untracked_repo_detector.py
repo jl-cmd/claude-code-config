@@ -15,8 +15,8 @@ for each_sys_path_entry in (str(_SESSION_DIR), str(_HOOKS_ROOT)):
         sys.path.insert(0, each_sys_path_entry)
 
 import untracked_repo_detector as detector
-from hook_config.project_paths_reader import registry_file_path
-from hook_config.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME
+from config.project_paths_reader import registry_file_path
+from config.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME
 
 
 def _run_main_with_cwd(cwd: str, known_registry: dict) -> tuple[str, str, int]:

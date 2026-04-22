@@ -45,8 +45,11 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         return
     if collected_path.name != _SYNC_AI_RULES_TEST_FILENAME:
         return
-    sys.modules.pop("config", None)
-    sys.modules.pop("config.sync_ai_rules_paths", None)
+    for each_cached_module_name in list(sys.modules):
+        is_config_root = each_cached_module_name == "config"
+        is_config_submodule = each_cached_module_name.startswith("config.")
+        if is_config_root or is_config_submodule:
+            sys.modules.pop(each_cached_module_name, None)
     importlib.invalidate_caches()
     repository_root_path = Path(__file__).resolve().parent
     git_hooks_directory_string = str(

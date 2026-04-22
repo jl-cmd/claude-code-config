@@ -493,18 +493,24 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
 
 def _extract_fstring_literal_parts(
     joined_string_node: ast.JoinedStr,
+    interpolation_placeholder: str = "INTERP",
 ) -> tuple[str, str]:
     """Return (display_body, shape_body) for an f-string node.
 
     ``display_body`` concatenates only the literal segments for use in the
     human-readable flag message. ``shape_body`` substitutes each interpolation
-    slot with the placeholder word ``INTERP`` so regex patterns for path
-    shape (``\\w+/\\w+/\\w+``) still match across interpolation boundaries
+    slot with ``interpolation_placeholder`` so callers can choose a token that
+    both preserves structural shape and does not collide with literal text in
+    the source. The default ``"INTERP"`` keeps regex patterns for path shape
+    (``\\w+/\\w+/\\w+``) matching across interpolation boundaries
     (e.g. ``/api/v1/{id}/home`` keeps its three path segments instead of
-    collapsing to ``/api/v1//home``). Escaped braces (``{{`` / ``}}``) are
-    already decoded by :mod:`ast` into their literal forms.
+    collapsing to ``/api/v1//home``). Callers that will compare shape bodies
+    verbatim — such as the skeleton builder — should pass their final token
+    here directly rather than post-processing with ``.replace``, since that
+    would corrupt literal text containing the default placeholder. Escaped
+    braces (``{{`` / ``}}``) are already decoded by :mod:`ast` into their
+    literal forms.
     """
-    interpolation_placeholder = "INTERP"
     display_segments: list[str] = []
     shape_segments: list[str] = []
     for each_part in joined_string_node.values:
@@ -1181,6 +1187,8 @@ def check_existence_check_tests(content: str, file_path: str) -> list[str]:
                 f"Line {each_node.lineno}: existence-check test"
                 f" — delete or replace with a behavior test"
             )
+            if len(issues) >= MAX_ISSUES_PER_CHECK:
+                return issues
 
     return issues
 
@@ -1242,6 +1250,8 @@ def check_constant_equality_tests(content: str, file_path: str) -> list[str]:
                 f"Line {each_node.lineno}: constant-value test"
                 f" — delete; tests must cover behavior"
             )
+            if len(issues) >= MAX_ISSUES_PER_CHECK:
+                return issues
 
     return issues
 
@@ -1659,11 +1669,17 @@ def check_incomplete_mocks(content: str, file_path: str) -> None:
 def _build_fstring_skeleton(joined_str_node: ast.JoinedStr) -> str:
     """Collapse interpolations in an f-string to a placeholder to form a pattern skeleton.
 
-    Delegates to _extract_fstring_literal_parts for the iteration logic and
-    remaps its INTERP placeholder to the skeleton-specific '<x>' token.
+    Injects the skeleton placeholder directly via _extract_fstring_literal_parts
+    instead of post-processing, so literal text in the source that happens to
+    contain the default placeholder (or any other substring) is preserved
+    verbatim and cannot collide with interpolation slots.
     """
-    _display_body, shape_body = _extract_fstring_literal_parts(joined_str_node)
-    return shape_body.replace("INTERP", "<x>")
+    skeleton_interpolation_placeholder = "<x>"
+    _display_body, shape_body = _extract_fstring_literal_parts(
+        joined_str_node,
+        interpolation_placeholder=skeleton_interpolation_placeholder,
+    )
+    return shape_body
 
 
 def check_duplicated_format_patterns(content: str, file_path: str) -> None:
@@ -1788,6 +1804,8 @@ def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
                     f"Line {function_node.lineno}: optional parameter {param_name}"
                     f" is never varied — inline default or drop"
                 )
+                if len(issues) >= MAX_ISSUES_PER_CHECK:
+                    return issues
 
     return issues
 

@@ -183,6 +183,34 @@ def test_should_flag_when_every_call_passes_the_exact_default() -> None:
     )
 
 
+def test_check_unused_optional_parameters_stops_at_max_issues_per_check() -> None:
+    source = (
+        "def make_url_one(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "def make_url_two(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "def make_url_three(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "def make_url_four(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "def make_url_five(path: str, prefix: str = '/api') -> str:\n"
+        "    return f'{prefix}{path}'\n"
+        "\n"
+        "def call_all() -> None:\n"
+        "    make_url_one('/a')\n"
+        "    make_url_two('/b')\n"
+        "    make_url_three('/c')\n"
+        "    make_url_four('/d')\n"
+        "    make_url_five('/e')\n"
+    )
+    issues = code_rules_enforcer.check_unused_optional_parameters(
+        source, UNUSED_OPTIONAL_PRODUCTION_FILE_PATH
+    )
+    assert len(issues) == code_rules_enforcer.MAX_ISSUES_PER_CHECK, (
+        f"Expected exactly MAX_ISSUES_PER_CHECK issues, got {len(issues)}: {issues}"
+    )
+
+
 INCOMPLETE_MOCK_TEST_FILE_PATH = "packages/app/tests/test_orders.py"
 INCOMPLETE_MOCK_PRODUCTION_FILE_PATH = "packages/app/services/orders.py"
 
@@ -324,6 +352,18 @@ def test_should_advise_with_distinct_skeletons(capsys: object) -> None:
     captured = getattr(capsys, "readouterr")()
     assert "/teams/" in captured.err, (
         f"Expected advisory for repeated /teams/<x>/users/<x> pattern, got: {captured.err!r}"
+    )
+
+
+def test_build_fstring_skeleton_preserves_literal_interp_substring() -> None:
+    import ast
+
+    joined_str_expression = ast.parse("f'PREFIX INTERP {value} SUFFIX'", mode="eval").body
+    assert isinstance(joined_str_expression, ast.JoinedStr)
+    skeleton = code_rules_enforcer._build_fstring_skeleton(joined_str_expression)
+    assert skeleton == "PREFIX INTERP <x> SUFFIX", (
+        "Literal 'INTERP' text inside an f-string must survive skeleton building — "
+        f"only interpolation slots should become '<x>'. Got: {skeleton!r}"
     )
 
 

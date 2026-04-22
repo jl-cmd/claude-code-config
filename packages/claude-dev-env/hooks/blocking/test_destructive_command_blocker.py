@@ -274,6 +274,15 @@ def test_rm_rf_asks_when_target_is_bare_tmp_root() -> None:
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
+def test_rm_rf_asks_when_target_is_double_slash_tmp_root() -> None:
+    payload = _make_bash_payload("rm -rf //tmp")
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
 def test_rm_rf_asks_when_target_is_bare_os_temp_root() -> None:
     payload = _make_bash_payload(f"rm -rf {tempfile.gettempdir()}")
 

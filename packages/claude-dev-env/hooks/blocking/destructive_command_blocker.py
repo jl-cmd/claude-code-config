@@ -141,8 +141,15 @@ def _build_silent_gh_deny_response(matched_description: str) -> dict:
 
 
 def _path_is_bare_ephemeral_root(resolved_path: str) -> bool:
-    forward_slash_normalized_path = resolved_path.replace("\\", "/").lower().rstrip("/")
-    system_temporary_root = os.path.normpath(tempfile.gettempdir()).replace("\\", "/").lower().rstrip("/")
+    leading_repeated_slash_pattern = re.compile(r"^/{2,}")
+    forward_slash_normalized_path = leading_repeated_slash_pattern.sub(
+        "/",
+        resolved_path.replace("\\", "/").lower().rstrip("/"),
+    )
+    system_temporary_root = leading_repeated_slash_pattern.sub(
+        "/",
+        os.path.normpath(tempfile.gettempdir()).replace("\\", "/").lower().rstrip("/"),
+    )
     forbidden_bare_ephemeral_roots = {"/tmp", "/temp", "/worktrees", "/worktree", system_temporary_root}
     return forward_slash_normalized_path in forbidden_bare_ephemeral_roots
 

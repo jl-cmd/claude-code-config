@@ -117,3 +117,18 @@ def test_stops_at_max_issues_per_check() -> None:
     assert len(issues) == code_rules_enforcer.MAX_ISSUES_PER_CHECK, (
         f"Expected exactly MAX_ISSUES_PER_CHECK issues, got {len(issues)}: {issues}"
     )
+
+
+def test_should_not_flag_outer_test_when_nested_helper_contains_existence_check() -> None:
+    source = (
+        "def test_outer_behavior() -> None:\n"
+        "    if True:\n"
+        "        def nested_helper() -> None:\n"
+        "            assert callable(some_function)\n"
+        "    assert 1 + 1 == 2\n"
+    )
+    issues = code_rules_enforcer.check_existence_check_tests(source, TEST_FILE_PATH)
+    assert issues == [], (
+        f"Expected no issues: nested helper's callable assertion must not count"
+        f" against the outer test, got: {issues}"
+    )

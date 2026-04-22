@@ -41,17 +41,7 @@ def _magic_values_configuration_section(document_text: str) -> str:
 
 
 def _structure_section(document_text: str) -> str:
-    section_heading = "### Structure"
-    start_offset = document_text.find(section_heading)
-    assert start_offset != -1, (
-        f"Section heading {section_heading!r} not found in document "
-        f"(first 200 chars: {document_text[:200]!r})"
-    )
-    after_start = document_text[start_offset:]
-    next_section_offset = after_start.find("\n### ", 3)
-    if next_section_offset == -1:
-        return after_start
-    return after_start[:next_section_offset]
+    return _slice_named_section(document_text, section_heading="### Structure", section_end_marker="\n### ")
 
 
 def test_bugbot_documents_upper_snake_exemptions_matching_hook() -> None:

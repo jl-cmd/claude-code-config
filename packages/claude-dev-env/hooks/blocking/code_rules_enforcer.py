@@ -1109,6 +1109,26 @@ def check_skip_decorators_in_tests(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _collect_assert_nodes_bounded(node: ast.AST) -> list[ast.Assert]:
+    """Collect Assert nodes under node without crossing scope boundaries.
+
+    Terminates descent at FunctionDef, AsyncFunctionDef, ClassDef, and Lambda
+    nodes so that assertions belonging to nested scopes are not attributed to
+    the enclosing function body.
+    """
+    scope_boundary_types = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+    assertions: list[ast.Assert] = []
+    nodes_to_visit: list[ast.AST] = list(ast.iter_child_nodes(node))
+    while nodes_to_visit:
+        current = nodes_to_visit.pop()
+        if isinstance(current, ast.Assert):
+            assertions.append(current)
+        if isinstance(current, scope_boundary_types):
+            continue
+        nodes_to_visit.extend(ast.iter_child_nodes(current))
+    return assertions
+
+
 def _collect_body_assertions(statement_nodes: list[ast.stmt]) -> list[ast.Assert]:
     """Collect Assert nodes from a function body without descending into nested scopes."""
     assertions: list[ast.Assert] = []
@@ -1118,9 +1138,7 @@ def _collect_body_assertions(statement_nodes: list[ast.stmt]) -> list[ast.Assert
             continue
         if isinstance(each_stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             continue
-        for each_child in ast.walk(each_stmt):
-            if isinstance(each_child, ast.Assert):
-                assertions.append(each_child)
+        assertions.extend(_collect_assert_nodes_bounded(each_stmt))
     return assertions
 
 

@@ -5,6 +5,10 @@ caller so the single-caller rule fires correctly.
 
 Loop2-D: module-scope usages must register as a distinct caller bucket so
 the "zero function references" exemption does not swallow real references.
+
+Loop1-1: scope-bounded assertion collection — nested function/class bodies
+inside compound statements must not have their assertions attributed to the
+enclosing test function.
 """
 
 from __future__ import annotations

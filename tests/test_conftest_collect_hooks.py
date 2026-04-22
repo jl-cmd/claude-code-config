@@ -46,9 +46,7 @@ def _drop_hook_local_directory_from_sys_path() -> None:
 
 @pytest.fixture
 def isolated_collect_hook_state(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(conftest, "_sys_path_snapshot_before_repo_root_insert", [])
-    if hasattr(conftest, "_matched_module_nodeid_stack"):
-        monkeypatch.setattr(conftest, "_matched_module_nodeid_stack", [])
+    monkeypatch.setattr(conftest, "_pending_sys_path_restores", [])
     monkeypatch.setattr(sys, "path", list(sys.path))
 
 
@@ -63,7 +61,7 @@ class TestCollectHookSymmetry:
         conftest.pytest_collectreport(_make_collect_report(nodeid=STANDARD_NODEID))
 
         assert list(sys.path) == baseline_sys_path
-        assert conftest._sys_path_snapshot_before_repo_root_insert == []
+        assert conftest._pending_sys_path_restores == []
 
     def should_restore_sys_path_after_nested_subtree_nodeid(
         self, isolated_collect_hook_state: None
@@ -79,9 +77,9 @@ class TestCollectHookSymmetry:
         )
 
         assert list(sys.path) == baseline_sys_path
-        assert conftest._sys_path_snapshot_before_repo_root_insert == []
+        assert conftest._pending_sys_path_restores == []
 
-    def should_not_pop_snapshot_for_unrelated_collectreport_nodeid(
+    def should_not_pop_pending_restore_for_unrelated_collectreport_nodeid(
         self, isolated_collect_hook_state: None
     ) -> None:
         _drop_hook_local_directory_from_sys_path()
@@ -89,8 +87,8 @@ class TestCollectHookSymmetry:
         conftest.pytest_collectstart(
             _make_module_collector(nodeid=NESTED_SUBTREE_NODEID)
         )
-        snapshot_count_before_unrelated_report = len(
-            conftest._sys_path_snapshot_before_repo_root_insert
+        pending_restores_before_unrelated_report = list(
+            conftest._pending_sys_path_restores
         )
 
         unrelated_nodeid = "packages/claude-dev-env/hooks/test_other.py"
@@ -98,11 +96,25 @@ class TestCollectHookSymmetry:
             _make_collect_report(nodeid=unrelated_nodeid)
         )
         assert (
-            len(conftest._sys_path_snapshot_before_repo_root_insert)
-            == snapshot_count_before_unrelated_report
+            conftest._pending_sys_path_restores
+            == pending_restores_before_unrelated_report
         )
 
         conftest.pytest_collectreport(
             _make_collect_report(nodeid=NESTED_SUBTREE_NODEID)
         )
-        assert conftest._sys_path_snapshot_before_repo_root_insert == []
+        assert conftest._pending_sys_path_restores == []
+
+    def should_record_nodeid_and_snapshot_together_on_collectstart(
+        self, isolated_collect_hook_state: None
+    ) -> None:
+        _drop_hook_local_directory_from_sys_path()
+
+        conftest.pytest_collectstart(
+            _make_module_collector(nodeid=NESTED_SUBTREE_NODEID)
+        )
+
+        assert len(conftest._pending_sys_path_restores) == 1
+        pending_restore = conftest._pending_sys_path_restores[-1]
+        assert pending_restore.matched_module_nodeid == NESTED_SUBTREE_NODEID
+        assert isinstance(pending_restore.sys_path_snapshot, list)

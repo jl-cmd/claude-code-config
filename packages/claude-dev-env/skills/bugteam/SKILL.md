@@ -122,7 +122,11 @@ TeamCreate(
 
 **`<team_temp_dir>`:** `Path(tempfile.gettempdir()) / team_name` (lead resolves once to an absolute path; every shell gets that literal string).
 
-**Roles (spawned per loop, not here):** bugfind → `code-quality-agent` sonnet; bugfix → `clean-coder` sonnet. **Display:** inherit `teammateMode` from `~/.claude.json`. Reference subagent types by name when spawning teammates ([`sources.md`](sources.md) § Referencing subagent types when spawning teammates).
+**Roles (spawned per loop, not here):** bugfind → `code-quality-agent` sonnet; bugfix → resolved from env var `BUGTEAM_FIX_IMPLEMENTER` (default `clean-coder`; accepted values also include `groq-coder` for the Claude-validates / Groq-patches pipeline) sonnet. **Display:** inherit `teammateMode` from `~/.claude.json`. Reference subagent types by name when spawning teammates ([`sources.md`](sources.md) § Referencing subagent types when spawning teammates).
+
+**FIX implementer selection:** when the invocation sets `BUGTEAM_FIX_IMPLEMENTER=groq-coder`, spawn the FIX teammate with `subagent_type="groq-coder"` and ensure `GROQ_API_KEY` is present in the lead's environment before Step 3. Any other value (or unset) defaults to `clean-coder`. The FIX spawn XML in [`PROMPTS.md`](PROMPTS.md) is identical for both implementers.
+
+**`--bugbot-retrigger` flag:** when present on the `/bugteam` invocation, after every successful FIX push in Step 3, post an additional `bugbot run` issue comment via the Step 2.5 issue-comments fallback endpoint (`POST .../issues/{issue}/comments`) to re-trigger Cursor's bugbot on the new commit. Omit when the flag is absent.
 
 **Loop state (lead; not a single script):**
 

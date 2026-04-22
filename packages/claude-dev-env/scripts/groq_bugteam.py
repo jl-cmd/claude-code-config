@@ -74,9 +74,13 @@ from config.groq_bugteam_config import (
     MAXIMUM_DIFF_CHARACTERS,
     MAXIMUM_FILE_CONTENT_CHARACTERS,
     MAXIMUM_FINDINGS_PER_PR,
+    MISSING_API_KEY_ERROR,
     NO_FINDINGS_REVIEW_BODY,
     PIPELINE_FAILURE_EXIT_CODE,
     REVIEW_BODY_HEADER_TEMPLATE,
+    SPEC_IMPLEMENTER_SYSTEM_PROMPT,
+    SPEC_MODE_FLAG,
+    SPEC_MODE_VALUE,
     TEXT_CLAMP_HEAD_PARTS,
     TEXT_CLAMP_TOTAL_PARTS,
 )
@@ -563,7 +567,116 @@ def run_pipeline(input_data: dict) -> dict:
     }
 
 
-def main() -> None:
+def extract_failing_criteria_by_finding(acceptance_checks: list) -> dict:
+    failing_by_finding: dict = {}
+    for each_check in acceptance_checks:
+        if each_check.get("met"):
+            continue
+        each_finding_index = each_check.get("finding_index")
+        each_criterion_text = each_check.get("criterion", "")
+        failing_by_finding.setdefault(each_finding_index, []).append(each_criterion_text)
+    return failing_by_finding
+
+
+def demote_findings_with_failing_criteria(
+    applied_finding_indexes: list,
+    skipped_entries: list,
+    failing_criteria_by_finding: dict,
+) -> tuple[list, list]:
+    demoted_applied = [
+        each_index
+        for each_index in applied_finding_indexes
+        if each_index not in failing_criteria_by_finding
+    ]
+    already_skipped_indexes = {each["finding_index"] for each in skipped_entries}
+    augmented_skipped = list(skipped_entries)
+    for each_finding_index, each_failing_criteria in failing_criteria_by_finding.items():
+        if each_finding_index in already_skipped_indexes:
+            continue
+        reason_text = "; ".join(each_failing_criteria)
+        augmented_skipped.append(
+            {"finding_index": each_finding_index, "reason": reason_text}
+        )
+    return demoted_applied, augmented_skipped
+
+
+def build_spec_user_message(spec_list: list, current_content: str) -> str:
+    payload = {"spec": spec_list, "current_content": current_content}
+    return json.dumps(payload, indent=JSON_INDENT_SPACES)
+
+
+def apply_fix_from_spec(spec_list: list, current_content: str) -> dict:
+    api_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError(MISSING_API_KEY_ERROR)
+
+    user_message = build_spec_user_message(spec_list, current_content)
+    groq_result = call_groq_with_fallback(
+        api_key,
+        messages=[
+            {"role": "system", "content": SPEC_IMPLEMENTER_SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        temperature=GROQ_FIX_TEMPERATURE,
+        max_completion_tokens=GROQ_FIX_MAX_COMPLETION_TOKENS,
+    )
+    parsed_response = parse_json_object(groq_result.content)
+
+    raw_updated_content = parsed_response.get("updated_content", current_content)
+    applied_finding_indexes = list(parsed_response.get("applied_finding_indexes", []))
+    skipped_entries = list(parsed_response.get("skipped", []))
+    acceptance_checks = list(parsed_response.get("acceptance_checks", []))
+
+    failing_criteria_by_finding = extract_failing_criteria_by_finding(acceptance_checks)
+    demoted_applied, augmented_skipped = demote_findings_with_failing_criteria(
+        applied_finding_indexes, skipped_entries, failing_criteria_by_finding
+    )
+    updated_content = preserve_trailing_newline(current_content, raw_updated_content)
+
+    return {
+        "updated_content": updated_content,
+        "applied_finding_indexes": demoted_applied,
+        "skipped": augmented_skipped,
+        "acceptance_checks": acceptance_checks,
+    }
+
+
+def read_spec_input_from_stdin() -> tuple:
+    stdin_text = sys.stdin.read()
+    parsed_input = json.loads(stdin_text)
+    spec_list = parsed_input.get("spec", [])
+    current_content = parsed_input.get("current_content", "")
+    return spec_list, current_content
+
+
+def run_spec_mode() -> dict:
+    try:
+        spec_list, current_content = read_spec_input_from_stdin()
+    except (json.JSONDecodeError, ValueError) as parse_error:
+        return {"error": f"stdin is not valid JSON: {parse_error}"}
+    try:
+        return apply_fix_from_spec(spec_list, current_content)
+    except Exception as spec_error:
+        return {"error": f"spec mode failed: {spec_error}"}
+
+
+def is_spec_mode_invocation(argv: list) -> bool:
+    for each_argv_index, each_argv_token in enumerate(argv):
+        if each_argv_token != SPEC_MODE_FLAG:
+            continue
+        if each_argv_index + 1 >= len(argv):
+            continue
+        if argv[each_argv_index + 1] == SPEC_MODE_VALUE:
+            return True
+    return False
+
+
+def emit_outcome(outcome: dict) -> None:
+    json.dump(outcome, sys.stdout, indent=JSON_INDENT_SPACES)
+    sys.stdout.write("\n")
+
+
+def run_default_pipeline_main() -> None:
     try:
         stdin_text = sys.stdin.read()
         input_data = json.loads(stdin_text)
@@ -580,6 +693,20 @@ def main() -> None:
     sys.stdout.write("\n")
     if "error" in pipeline_outcome:
         sys.exit(PIPELINE_FAILURE_EXIT_CODE)
+
+
+def run_spec_mode_main() -> None:
+    spec_outcome = run_spec_mode()
+    emit_outcome(spec_outcome)
+    if "error" in spec_outcome:
+        sys.exit(PIPELINE_FAILURE_EXIT_CODE)
+
+
+def main() -> None:
+    if is_spec_mode_invocation(sys.argv[1:]):
+        run_spec_mode_main()
+        return
+    run_default_pipeline_main()
 
 
 if __name__ == "__main__":

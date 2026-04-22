@@ -14,7 +14,7 @@ _BLOCKING_DIR = str(Path(__file__).resolve().parent.parent / "blocking")
 if _BLOCKING_DIR not in sys.path:
     sys.path.insert(0, _BLOCKING_DIR)
 
-from .exempt_paths import is_config_file
+from exempt_paths import is_config_file  # noqa: E402
 from code_rules_path_utils import is_config_file as path_utils_is_config_file  # noqa: E402
 
 

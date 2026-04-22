@@ -81,15 +81,10 @@ def git_repo(
         capture_output=True,
     )
     subprocess.run(["git", "init", str(work_dir)], check=True, capture_output=True)
-    empty_hooks_directory = work_dir / "_pytest_empty_git_hooks"
-    empty_hooks_directory.mkdir(parents=True, exist_ok=True)
+    isolated_hooks_directory = work_dir / ".git" / "pytest-hook-isolation"
+    isolated_hooks_directory.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        [
-            "git",
-            "config",
-            "core.hooksPath",
-            str(empty_hooks_directory),
-        ],
+        ["git", "config", "core.hooksPath", str(isolated_hooks_directory)],
         cwd=str(work_dir),
         check=True,
         capture_output=True,
@@ -130,7 +125,7 @@ def git_repo(
         capture_output=True,
     )
     subprocess.run(
-        ["git", "push", "--set-upstream", "origin", "HEAD:main"],
+        ["git", "push", "--no-verify", "--set-upstream", "origin", "HEAD:main"],
         cwd=str(work_dir),
         check=True,
         capture_output=True,

@@ -33,7 +33,12 @@ tests/test_sync_ai_rules.py packages/claude-dev-env/hooks/``) resolve
 intends. The setup and restore are both gated on ``isinstance(collector,
 pytest.Module)`` so they fire exactly once per ``test_sync_ai_rules.py``
 collection even though the file also raises ``pytest_collectstart`` events
-for each nested class and function.
+for each nested class and function. To keep the start/report hooks symmetric
+across rootdir shifts and nested collection layouts, ``pytest_collectstart``
+records the matched collector's ``nodeid`` on a stack and
+``pytest_collectreport`` pops only when ``report.nodeid`` equals the
+top-of-stack entry, so whatever nodeid pytest assigned at collectstart is
+the exact nodeid required to release the snapshot at collectreport.
 
 The ``sys.path`` baseline (repo root, ``.github/scripts``, hook tree) is
 established declaratively via ``pytest.ini``'s ``pythonpath``, so CI targeted
@@ -63,6 +68,7 @@ _HOOK_LOCAL_DIRECTORY_PATH = os.path.join(
     "packages", "claude-dev-env", "hooks", "git-hooks",
 )
 _sys_path_snapshot_before_repo_root_insert: list[list[str]] = []
+_matched_module_nodeid_stack: list[str] = []
 
 
 def _evict_cached_config_bindings() -> None:
@@ -87,14 +93,16 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
     while _HOOK_LOCAL_DIRECTORY_PATH in sys.path:
         sys.path.remove(_HOOK_LOCAL_DIRECTORY_PATH)
     _sys_path_snapshot_before_repo_root_insert.append(list(sys.path))
+    _matched_module_nodeid_stack.append(collector.nodeid)
     if not sys.path or sys.path[0] != _REPO_ROOT_DIRECTORY_PATH:
         sys.path.insert(0, _REPO_ROOT_DIRECTORY_PATH)
 
 
 def pytest_collectreport(report: pytest.CollectReport) -> None:
-    if not _sys_path_snapshot_before_repo_root_insert:
+    if not _matched_module_nodeid_stack:
         return
-    if report.nodeid != f"tests/{_SYNC_AI_RULES_TEST_FILENAME}":
+    if report.nodeid != _matched_module_nodeid_stack[-1]:
         return
+    _matched_module_nodeid_stack.pop()
     sys.path[:] = _sys_path_snapshot_before_repo_root_insert.pop()
     _evict_cached_config_bindings()

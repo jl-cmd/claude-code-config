@@ -214,3 +214,9 @@ MISSING_API_KEY_ERROR = (
     "GROQ_API_KEY not set in environment; create packages/claude-dev-env/.env "
     "from packages/claude-dev-env/.env.example (gitignored) or export GROQ_API_KEY"
 )
+
+REQUIRED_GROQ_BUGTEAM_ATTRIBUTES: tuple[str, ...] = (
+    "call_groq_with_fallback",
+    "parse_json_object",
+    "preserve_trailing_newline",
+)

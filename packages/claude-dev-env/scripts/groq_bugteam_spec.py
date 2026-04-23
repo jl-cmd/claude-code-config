@@ -35,6 +35,7 @@ from config.groq_bugteam_config import (
     JSON_INDENT_SPACES,
     MISSING_API_KEY_ERROR,
     PIPELINE_FAILURE_EXIT_CODE,
+    REQUIRED_GROQ_BUGTEAM_ATTRIBUTES,
     SPEC_IMPLEMENTER_SYSTEM_PROMPT,
     SPEC_MODE_FLAG,
     SPEC_MODE_VALUE,
@@ -94,18 +95,49 @@ def build_spec_user_message(spec_list: list[dict], current_content: str) -> str:
     return json.dumps(payload, indent=JSON_INDENT_SPACES)
 
 
+def find_missing_required_attributes(candidate_module: ModuleType) -> list[str]:
+    return [
+        each_attribute_name
+        for each_attribute_name in REQUIRED_GROQ_BUGTEAM_ATTRIBUTES
+        if not hasattr(candidate_module, each_attribute_name)
+    ]
+
+
 def resolve_groq_bugteam_module() -> ModuleType:
     registered_module = sys.modules.get("groq_bugteam")
-    if registered_module is not None:
+    if registered_module is not None and not find_missing_required_attributes(
+        registered_module
+    ):
         return registered_module
     main_module = sys.modules.get("__main__")
-    if main_module is not None and hasattr(main_module, "call_groq_with_fallback"):
+    if main_module is not None and not find_missing_required_attributes(main_module):
         return main_module
+    stub_module = registered_module if registered_module is not None else main_module
+    if stub_module is not None:
+        missing_attributes = find_missing_required_attributes(stub_module)
+        raise RuntimeError(
+            "groq_bugteam module found but missing required attributes: "
+            + ", ".join(missing_attributes)
+        )
     raise RuntimeError(
         "groq_bugteam module not found in sys.modules; "
         "groq_bugteam_spec must be invoked from a context where "
         "groq_bugteam is the parent module (test loader or CLI)."
     )
+
+
+def coerce_to_list(candidate_value: object) -> list:
+    if isinstance(candidate_value, list):
+        return candidate_value
+    return []
+
+
+def coerce_to_string_or_fallback(
+    candidate_value: object, fallback_value: str
+) -> str:
+    if isinstance(candidate_value, str):
+        return candidate_value
+    return fallback_value
 
 
 def apply_fix_from_spec(spec_list: list[dict], current_content: str) -> dict:
@@ -127,14 +159,14 @@ def apply_fix_from_spec(spec_list: list[dict], current_content: str) -> dict:
     )
     parsed_response = groq_bugteam_module.parse_json_object(groq_result.content)
 
-    raw_updated_content = parsed_response.get("updated_content")
-    if raw_updated_content is None:
-        raw_updated_content = current_content
-    applied_finding_indexes = list(
-        parsed_response.get("applied_finding_indexes") or []
+    raw_updated_content = coerce_to_string_or_fallback(
+        parsed_response.get("updated_content"), current_content
     )
-    skipped_entries = list(parsed_response.get("skipped") or [])
-    acceptance_checks = list(parsed_response.get("acceptance_checks") or [])
+    applied_finding_indexes = coerce_to_list(
+        parsed_response.get("applied_finding_indexes")
+    )
+    skipped_entries = coerce_to_list(parsed_response.get("skipped"))
+    acceptance_checks = coerce_to_list(parsed_response.get("acceptance_checks"))
 
     failing_criteria_by_finding = extract_failing_criteria_by_finding(acceptance_checks)
     demoted_applied, augmented_skipped = demote_findings_with_failing_criteria(

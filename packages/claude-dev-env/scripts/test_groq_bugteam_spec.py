@@ -50,9 +50,15 @@ def test_is_spec_mode_invocation_detects_flag_value_pair():
     assert groq_bugteam_spec.is_spec_mode_invocation([]) is False
 
 
+def _attach_required_groq_attributes(target_module: types.ModuleType) -> None:
+    target_module.call_groq_with_fallback = lambda *args, **kwargs: None
+    target_module.parse_json_object = lambda text: {}
+    target_module.preserve_trailing_newline = lambda original, updated: updated
+
+
 def test_resolver_prefers_registered_groq_bugteam_over_main(monkeypatch):
     fake_groq_bugteam = types.ModuleType("groq_bugteam")
-    fake_groq_bugteam.call_groq_with_fallback = lambda *args, **kwargs: None
+    _attach_required_groq_attributes(fake_groq_bugteam)
     monkeypatch.setitem(sys.modules, "groq_bugteam", fake_groq_bugteam)
 
     resolved_module = groq_bugteam_spec.resolve_groq_bugteam_module()
@@ -63,12 +69,43 @@ def test_resolver_prefers_registered_groq_bugteam_over_main(monkeypatch):
 def test_resolver_falls_back_to_main_when_groq_bugteam_absent(monkeypatch):
     monkeypatch.delitem(sys.modules, "groq_bugteam", raising=False)
     fake_main = types.ModuleType("__main__")
-    fake_main.call_groq_with_fallback = lambda *args, **kwargs: None
+    _attach_required_groq_attributes(fake_main)
     monkeypatch.setitem(sys.modules, "__main__", fake_main)
 
     resolved_module = groq_bugteam_spec.resolve_groq_bugteam_module()
 
     assert resolved_module is fake_main
+
+
+def test_resolver_falls_back_to_main_when_registered_module_is_stub(monkeypatch):
+    stub_groq_bugteam = types.ModuleType("groq_bugteam")
+    stub_groq_bugteam.call_groq_with_fallback = lambda *args, **kwargs: None
+    monkeypatch.setitem(sys.modules, "groq_bugteam", stub_groq_bugteam)
+    complete_main = types.ModuleType("__main__")
+    _attach_required_groq_attributes(complete_main)
+    monkeypatch.setitem(sys.modules, "__main__", complete_main)
+
+    resolved_module = groq_bugteam_spec.resolve_groq_bugteam_module()
+
+    assert resolved_module is complete_main
+
+
+def test_resolver_raises_when_registered_module_missing_required_attributes(
+    monkeypatch,
+):
+    stub_groq_bugteam = types.ModuleType("groq_bugteam")
+    stub_groq_bugteam.call_groq_with_fallback = lambda *args, **kwargs: None
+    monkeypatch.setitem(sys.modules, "groq_bugteam", stub_groq_bugteam)
+    monkeypatch.delitem(sys.modules, "__main__", raising=False)
+
+    try:
+        groq_bugteam_spec.resolve_groq_bugteam_module()
+    except RuntimeError as resolver_error:
+        resolver_error_text = str(resolver_error)
+        assert "parse_json_object" in resolver_error_text
+        assert "preserve_trailing_newline" in resolver_error_text
+    else:
+        raise AssertionError("resolver should have raised RuntimeError")
 
 
 def test_resolver_raises_when_neither_module_available(monkeypatch):
@@ -79,7 +116,8 @@ def test_resolver_raises_when_neither_module_available(monkeypatch):
     try:
         groq_bugteam_spec.resolve_groq_bugteam_module()
     except RuntimeError as resolver_error:
-        assert "groq_bugteam module not found" in str(resolver_error)
+        resolver_error_text = str(resolver_error)
+        assert "groq_bugteam" in resolver_error_text
     else:
         raise AssertionError("resolver should have raised RuntimeError")
 
@@ -212,6 +250,64 @@ def test_null_collection_fields_coerce_to_empty_lists(monkeypatch):
     assert outcome["applied_finding_indexes"] == []
     assert outcome["skipped"] == []
     assert outcome["acceptance_checks"] == []
+
+
+def test_dict_collection_fields_coerce_to_empty_lists(monkeypatch):
+    original_file = "alpha\n"
+    spec_list = [
+        {
+            "finding_index": 2,
+            "severity": "P2",
+            "category": "E",
+            "file": "sample.py",
+            "target_line_start": 1,
+            "target_line_end": 1,
+            "intended_change": "no-op",
+            "replacement_code": "alpha",
+            "acceptance_criteria": ["alpha remains"],
+        }
+    ]
+    fake_response = {
+        "updated_content": original_file,
+        "applied_finding_indexes": {"not": "a list"},
+        "skipped": {"0": "not a list either"},
+        "acceptance_checks": {"also": "a dict"},
+    }
+    _install_fake_groq_bugteam_module(monkeypatch, fake_response)
+
+    outcome = groq_bugteam_spec.apply_fix_from_spec(spec_list, original_file)
+
+    assert outcome["applied_finding_indexes"] == []
+    assert outcome["skipped"] == []
+    assert outcome["acceptance_checks"] == []
+
+
+def test_non_string_updated_content_falls_back_to_current_content(monkeypatch):
+    original_file = "alpha\nbeta\n"
+    spec_list = [
+        {
+            "finding_index": 0,
+            "severity": "P2",
+            "category": "E",
+            "file": "sample.py",
+            "target_line_start": 1,
+            "target_line_end": 1,
+            "intended_change": "no-op fallback",
+            "replacement_code": "alpha",
+            "acceptance_criteria": ["alpha remains on line 1"],
+        }
+    ]
+    fake_response = {
+        "updated_content": {"unexpected": "dict instead of str"},
+        "applied_finding_indexes": [],
+        "skipped": [],
+        "acceptance_checks": [],
+    }
+    _install_fake_groq_bugteam_module(monkeypatch, fake_response)
+
+    outcome = groq_bugteam_spec.apply_fix_from_spec(spec_list, original_file)
+
+    assert outcome["updated_content"] == original_file
 
 
 def test_run_spec_mode_main_emits_error_json_on_missing_api_key(

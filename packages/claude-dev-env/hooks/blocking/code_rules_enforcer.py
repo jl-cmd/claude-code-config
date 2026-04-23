@@ -1516,27 +1516,111 @@ def _collect_mock_dict_keys(assign_value: ast.expr) -> set[str] | None:
     return key_names
 
 
+def _target_binds_name(target_node: ast.AST, variable_name: str) -> bool:
+    """Return True when an assignment target binds variable_name.
+
+    Handles the recursive assignment target shapes Python permits:
+    a bare ``Name``, a ``Tuple`` or ``List`` of targets (including
+    nested ones), and a ``Starred`` wrapper around any of the above.
+    """
+    if isinstance(target_node, ast.Name):
+        return target_node.id == variable_name
+    if isinstance(target_node, (ast.Tuple, ast.List)):
+        return any(_target_binds_name(each_element, variable_name) for each_element in target_node.elts)
+    if isinstance(target_node, ast.Starred):
+        return _target_binds_name(target_node.value, variable_name)
+    return False
+
+
+def _function_arguments_bind_name(
+    arguments_node: ast.arguments,
+    variable_name: str,
+) -> bool:
+    """Return True when any parameter slot declares variable_name."""
+    all_positional_arguments = list(arguments_node.posonlyargs) + list(arguments_node.args)
+    for each_argument in all_positional_arguments + list(arguments_node.kwonlyargs):
+        if each_argument.arg == variable_name:
+            return True
+    if arguments_node.vararg is not None and arguments_node.vararg.arg == variable_name:
+        return True
+    if arguments_node.kwarg is not None and arguments_node.kwarg.arg == variable_name:
+        return True
+    return False
+
+
+def _node_binds_name(node: ast.AST, variable_name: str) -> bool:
+    """Return True when a single AST node binds variable_name in its enclosing scope."""
+    if isinstance(node, ast.Assign):
+        return any(_target_binds_name(each_target, variable_name) for each_target in node.targets)
+    if isinstance(node, ast.AnnAssign):
+        return _target_binds_name(node.target, variable_name)
+    if isinstance(node, ast.AugAssign):
+        return _target_binds_name(node.target, variable_name)
+    if isinstance(node, (ast.For, ast.AsyncFor)):
+        return _target_binds_name(node.target, variable_name)
+    if isinstance(node, (ast.With, ast.AsyncWith)):
+        for each_item in node.items:
+            optional_target = each_item.optional_vars
+            if optional_target is not None and _target_binds_name(optional_target, variable_name):
+                return True
+        return False
+    if isinstance(node, ast.ExceptHandler):
+        return node.name == variable_name
+    if isinstance(node, ast.NamedExpr):
+        return _target_binds_name(node.target, variable_name)
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        for each_alias in node.names:
+            bound_name = each_alias.asname if each_alias.asname is not None else each_alias.name.split(".")[0]
+            if bound_name == variable_name:
+                return True
+        return False
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return node.name == variable_name
+    return False
+
+
+def _body_binds_name_recursively(body_statements: list[ast.stmt], variable_name: str) -> bool:
+    """Return True when any node reachable within body_statements binds variable_name.
+
+    Walks the body using a stack, descending into control-flow constructs
+    (if/for/while/try/with) but treating nested function, async-function,
+    class, and lambda definitions as opaque: their bodies belong to a
+    different scope and do not affect bindings in the enclosing one.
+    Function/class definitions themselves still bind their own name in
+    the enclosing scope, which is handled by _node_binds_name.
+    """
+    nodes_to_visit: list[ast.AST] = list(body_statements)
+    while nodes_to_visit:
+        current_node = nodes_to_visit.pop()
+        if _node_binds_name(current_node, variable_name):
+            return True
+        if isinstance(current_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            continue
+        nodes_to_visit.extend(ast.iter_child_nodes(current_node))
+    return False
+
+
 def _scope_shadows_name(
     scope_node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
     variable_name: str,
 ) -> bool:
-    """Return True when a nested scope locally re-assigns variable_name.
+    """Return True when scope_node locally binds variable_name.
 
-    Detects both plain ``Assign`` (``mock = {...}``) and ``AnnAssign``
-    (``mock: dict = {...}``) bindings so an outer scope's accesses do
-    not leak into a nested scope that re-binds the same name under an
-    annotation.
+    Detects every binding form Python treats as a local assignment:
+    plain ``Assign``, annotated ``AnnAssign``, augmented ``AugAssign``,
+    ``for`` targets, ``with`` as-targets, ``except`` handler names,
+    walrus ``NamedExpr`` targets, ``import`` and ``from`` bindings
+    (base name or ``as`` alias), nested function/class definitions
+    (whose own name binds locally), and function parameters for
+    ``FunctionDef`` / ``AsyncFunctionDef`` scopes. Bindings are
+    detected at any nesting depth inside control-flow constructs;
+    nested function, async-function, class, and lambda bodies are
+    treated as opaque because their contents live in a different scope.
     """
-    for each_stmt in scope_node.body:
-        if isinstance(each_stmt, ast.Assign):
-            for each_target in each_stmt.targets:
-                if isinstance(each_target, ast.Name) and each_target.id == variable_name:
-                    return True
-        elif isinstance(each_stmt, ast.AnnAssign):
-            annotated_target = each_stmt.target
-            if isinstance(annotated_target, ast.Name) and annotated_target.id == variable_name:
-                return True
-    return False
+    if isinstance(scope_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if _function_arguments_bind_name(scope_node.args, variable_name):
+            return True
+    return _body_binds_name_recursively(list(scope_node.body), variable_name)
 
 
 def _walk_scope_skipping_shadowed(

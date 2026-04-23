@@ -109,6 +109,14 @@ def _record_pending_sys_path_restore(collector_nodeid: str) -> None:
     )
 
 
+def _path_is_inside_directory(path_to_check: Path, containing_directory: Path) -> bool:
+    try:
+        path_to_check.relative_to(containing_directory)
+    except ValueError:
+        return False
+    return True
+
+
 def pytest_collectstart(collector: pytest.Collector) -> None:
     collected_path = getattr(collector, "path", None)
     if collected_path is None:
@@ -124,18 +132,24 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
 
     _ensure_hooks_root_on_sys_path()
 
-    try:
-        resolved_collected_path.relative_to(_GIT_HOOKS_DIRECTORY_PATH.resolve())
-    except ValueError:
-        pass
-    else:
+    resolved_git_hooks_directory_path = _GIT_HOOKS_DIRECTORY_PATH.resolve()
+    resolved_hooks_root_directory_path = _HOOKS_ROOT_DIRECTORY_PATH.resolve()
+
+    is_inside_git_hooks = _path_is_inside_directory(
+        resolved_collected_path, resolved_git_hooks_directory_path
+    )
+    if is_inside_git_hooks:
         if collected_path.name.startswith("test_"):
             _evict_config_module()
         return
 
-    try:
-        resolved_collected_path.relative_to(_HOOKS_ROOT_DIRECTORY_PATH.resolve())
-    except ValueError:
+    _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
+    _evict_config_module()
+
+    is_inside_hooks_root = _path_is_inside_directory(
+        resolved_collected_path, resolved_hooks_root_directory_path
+    )
+    if not is_inside_hooks_root:
         return
 
     if collected_path.name.startswith("test_") or collected_path.name.startswith(

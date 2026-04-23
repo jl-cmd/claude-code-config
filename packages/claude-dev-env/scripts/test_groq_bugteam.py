@@ -12,13 +12,13 @@ import re
 import sys
 import urllib.error
 
-import groq_bugteam_dotenv
-import pytest
-
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 for _cached in list(sys.modules):
     if _cached == "config" or _cached.startswith("config."):
         del sys.modules[_cached]
+
+import groq_bugteam_dotenv  # noqa: E402
+import pytest  # noqa: E402
 
 from config import groq_bugteam_config  # noqa: E402
 

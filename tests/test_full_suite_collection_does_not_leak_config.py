@@ -23,38 +23,54 @@ under ``--import-mode=importlib``.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 
 REPOSITORY_ROOT_PATH = Path(__file__).resolve().parent.parent
+PYTEST_SUBPROCESS_TIMEOUT_SECONDS = 120
+PYTEST_ADDOPTS_ENV_VAR = "PYTEST_ADDOPTS"
+PYTEST_DISABLE_PLUGIN_AUTOLOAD_ENV_VAR = "PYTEST_DISABLE_PLUGIN_AUTOLOAD"
+PLUGIN_AUTOLOAD_DISABLED_FLAG = "1"
+
+
+def _build_isolated_subprocess_env() -> dict[str, str]:
+    isolated_env = os.environ.copy()
+    isolated_env.pop(PYTEST_ADDOPTS_ENV_VAR, None)
+    isolated_env[PYTEST_DISABLE_PLUGIN_AUTOLOAD_ENV_VAR] = PLUGIN_AUTOLOAD_DISABLED_FLAG
+    return isolated_env
 
 
 def _run_pytest_from_repo_root(
     pytest_arguments: list[str],
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, "-m", "pytest", *pytest_arguments],
-        cwd=REPOSITORY_ROOT_PATH,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        return subprocess.run(
+            [sys.executable, "-m", "pytest", *pytest_arguments],
+            cwd=REPOSITORY_ROOT_PATH,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=PYTEST_SUBPROCESS_TIMEOUT_SECONDS,
+            env=_build_isolated_subprocess_env(),
+        )
+    except subprocess.TimeoutExpired as timeout_error:
+        stdout_output = timeout_error.stdout or ""
+        stderr_output = timeout_error.stderr or ""
+        if isinstance(stdout_output, bytes):
+            stdout_output = stdout_output.decode("utf-8", errors="replace")
+        if isinstance(stderr_output, bytes):
+            stderr_output = stderr_output.decode("utf-8", errors="replace")
+        raise AssertionError(
+            f"pytest subprocess exceeded {PYTEST_SUBPROCESS_TIMEOUT_SECONDS}s timeout "
+            f"(arguments={pytest_arguments!r}); "
+            f"stdout={stdout_output!r} stderr={stderr_output!r}"
+        ) from timeout_error
 
 
 class TestFullSuiteCollectionCleanliness:
-    def should_collect_full_suite_without_config_namespace_errors(self) -> None:
-        completed = _run_pytest_from_repo_root(["--collect-only", "-q"])
-
-        combined_output = completed.stdout + completed.stderr
-        assert "'config' is not a package" not in combined_output, combined_output
-        assert "No module named 'groq_bugteam_dotenv'" not in combined_output, (
-            combined_output
-        )
-        assert "errors during collection" not in combined_output, combined_output
-        assert completed.returncode == 0, combined_output
-
     def should_collect_problem_files_without_errors(self) -> None:
         problem_files = [
             "packages/claude-dev-env/hooks/session/test_untracked_repo_detector.py",

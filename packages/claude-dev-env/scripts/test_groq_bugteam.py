@@ -25,7 +25,9 @@ from config import groq_bugteam_config  # noqa: E402
 
 def _load_groq_bugteam_module():
     scripts_directory = pathlib.Path(__file__).parent
-    sys.path.insert(0, str(scripts_directory))
+    scripts_directory_string = str(scripts_directory)
+    if scripts_directory_string not in sys.path:
+        sys.path.insert(0, scripts_directory_string)
     for cached_module_name in list(sys.modules):
         if cached_module_name == "config" or cached_module_name.startswith("config."):
             del sys.modules[cached_module_name]

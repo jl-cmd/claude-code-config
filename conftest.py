@@ -73,11 +73,36 @@ def _resolved_path_matches_sys_path_entry(directory_path: Path, entry: str) -> b
         return False
 
 
-def _remove_path_if_present(directory_path: Path) -> None:
+def _remove_path_if_present(directory_path: Path) -> bool:
     target = directory_path.resolve()
-    sys.path[:] = [
+    filtered_entries = [
         entry for entry in sys.path if not _resolved_path_matches_sys_path_entry(target, entry)
     ]
+    any_entry_was_removed = len(filtered_entries) != len(sys.path)
+    sys.path[:] = filtered_entries
+    return any_entry_was_removed
+
+
+def _cached_config_module_resolves_inside(directory_path: Path) -> bool:
+    cached_config_module = sys.modules.get("config")
+    if cached_config_module is None:
+        return False
+    cached_module_file = getattr(cached_config_module, "__file__", None)
+    if cached_module_file is None:
+        return False
+    try:
+        cached_module_path = Path(cached_module_file).resolve()
+    except OSError:
+        return False
+    return _path_is_inside_directory(cached_module_path, directory_path.resolve())
+
+
+def _cached_config_is_flat_git_hooks_module() -> bool:
+    return _cached_config_module_resolves_inside(_GIT_HOOKS_DIRECTORY_PATH)
+
+
+def _config_module_is_currently_cached() -> bool:
+    return "config" in sys.modules
 
 
 def _hooks_root_is_on_sys_path() -> bool:
@@ -139,12 +164,18 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         resolved_collected_path, resolved_git_hooks_directory_path
     )
     if is_inside_git_hooks:
-        if collected_path.name.startswith("test_"):
+        collector_expects_flat_config = collected_path.name.startswith("test_")
+        cached_config_binding_is_wrong_for_git_hooks = (
+            _config_module_is_currently_cached()
+            and not _cached_config_is_flat_git_hooks_module()
+        )
+        if collector_expects_flat_config and cached_config_binding_is_wrong_for_git_hooks:
             _evict_config_module()
         return
 
-    _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
-    _evict_config_module()
+    any_git_hooks_entry_was_removed = _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
+    if any_git_hooks_entry_was_removed or _cached_config_is_flat_git_hooks_module():
+        _evict_config_module()
 
     is_inside_hooks_root = _path_is_inside_directory(
         resolved_collected_path, resolved_hooks_root_directory_path
@@ -155,7 +186,8 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
     if collected_path.name.startswith("test_") or collected_path.name.startswith(
         "should_"
     ):
-        _evict_config_module()
+        if _cached_config_is_flat_git_hooks_module():
+            _evict_config_module()
 
 
 def pytest_collectreport(report: pytest.CollectReport) -> None:

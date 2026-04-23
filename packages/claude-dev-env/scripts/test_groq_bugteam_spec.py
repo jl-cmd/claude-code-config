@@ -10,9 +10,13 @@ same-named test companion for filename-based test pairing.
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import pathlib
 import sys
 import types
+
+import pytest
 
 
 def _load_spec_module():
@@ -78,3 +82,169 @@ def test_resolver_raises_when_neither_module_available(monkeypatch):
         assert "groq_bugteam module not found" in str(resolver_error)
     else:
         raise AssertionError("resolver should have raised RuntimeError")
+
+
+FAKE_API_KEY = "gsk_test_placeholder_value"
+
+
+def _install_fake_groq_bugteam_module(monkeypatch, response_object):
+    """Register a minimal fake groq_bugteam module for resolver lookup."""
+
+    fake_module = types.ModuleType("groq_bugteam")
+
+    def fake_call(api_key, messages, temperature, max_completion_tokens):
+        return types.SimpleNamespace(
+            content=json.dumps(response_object),
+            model="fake-model",
+        )
+
+    def fake_parse_json_object(text):
+        return json.loads(text)
+
+    def fake_preserve_trailing_newline(original, updated):
+        if original.endswith("\n") and not updated.endswith("\n"):
+            return updated + "\n"
+        if not original.endswith("\n") and updated.endswith("\n"):
+            return updated[:-1]
+        return updated
+
+    fake_module.call_groq_with_fallback = fake_call
+    fake_module.parse_json_object = fake_parse_json_object
+    fake_module.preserve_trailing_newline = fake_preserve_trailing_newline
+    monkeypatch.setitem(sys.modules, "groq_bugteam", fake_module)
+    monkeypatch.setenv("GROQ_API_KEY", FAKE_API_KEY)
+
+
+def test_skipped_entry_missing_finding_index_does_not_crash(monkeypatch):
+    original_file = "alpha\nbeta\n"
+    spec_list = [
+        {
+            "finding_index": 4,
+            "severity": "P1",
+            "category": "J",
+            "file": "sample.py",
+            "target_line_start": 1,
+            "target_line_end": 1,
+            "intended_change": "rename alpha",
+            "replacement_code": "alpha_fixed",
+            "acceptance_criteria": ["alpha_fixed appears on line 1"],
+        }
+    ]
+    patched_file = "alpha_fixed\nbeta\n"
+    fake_response = {
+        "updated_content": patched_file,
+        "applied_finding_indexes": [4],
+        "skipped": [{"reason": "malformed entry without finding_index"}],
+        "acceptance_checks": [
+            {
+                "finding_index": 4,
+                "criterion": "alpha_fixed appears on line 1",
+                "met": True,
+            }
+        ],
+    }
+    _install_fake_groq_bugteam_module(monkeypatch, fake_response)
+
+    outcome = groq_bugteam_spec.apply_fix_from_spec(spec_list, original_file)
+
+    assert outcome["updated_content"] == patched_file
+    assert outcome["applied_finding_indexes"] == [4]
+
+
+def test_null_updated_content_falls_back_to_current_content(monkeypatch):
+    original_file = "alpha\nbeta\n"
+    spec_list = [
+        {
+            "finding_index": 0,
+            "severity": "P2",
+            "category": "E",
+            "file": "sample.py",
+            "target_line_start": 1,
+            "target_line_end": 1,
+            "intended_change": "no-op fallback",
+            "replacement_code": "alpha",
+            "acceptance_criteria": ["alpha remains on line 1"],
+        }
+    ]
+    fake_response = {
+        "updated_content": None,
+        "applied_finding_indexes": [],
+        "skipped": [
+            {
+                "finding_index": 0,
+                "reason": "Groq returned null updated_content",
+            }
+        ],
+        "acceptance_checks": [],
+    }
+    _install_fake_groq_bugteam_module(monkeypatch, fake_response)
+
+    outcome = groq_bugteam_spec.apply_fix_from_spec(spec_list, original_file)
+
+    assert outcome["updated_content"] == original_file
+
+
+def test_null_collection_fields_coerce_to_empty_lists(monkeypatch):
+    original_file = "alpha\n"
+    spec_list = [
+        {
+            "finding_index": 1,
+            "severity": "P2",
+            "category": "E",
+            "file": "sample.py",
+            "target_line_start": 1,
+            "target_line_end": 1,
+            "intended_change": "no-op",
+            "replacement_code": "alpha",
+            "acceptance_criteria": ["alpha remains"],
+        }
+    ]
+    fake_response = {
+        "updated_content": original_file,
+        "applied_finding_indexes": None,
+        "skipped": None,
+        "acceptance_checks": None,
+    }
+    _install_fake_groq_bugteam_module(monkeypatch, fake_response)
+
+    outcome = groq_bugteam_spec.apply_fix_from_spec(spec_list, original_file)
+
+    assert outcome["applied_finding_indexes"] == []
+    assert outcome["skipped"] == []
+    assert outcome["acceptance_checks"] == []
+
+
+def test_run_spec_mode_main_emits_error_json_on_missing_api_key(
+    monkeypatch, capsys
+):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "groq_bugteam_dotenv.load_claude_dev_env_dotenv_file",
+        lambda: None,
+    )
+    spec_payload = {
+        "spec": [
+            {
+                "finding_index": 0,
+                "severity": "P1",
+                "category": "J",
+                "file": "sample.py",
+                "target_line_start": 1,
+                "target_line_end": 1,
+                "intended_change": "noop",
+                "replacement_code": "noop",
+                "acceptance_criteria": ["noop"],
+            }
+        ],
+        "current_content": "noop\n",
+    }
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(spec_payload)))
+
+    with pytest.raises(SystemExit) as exit_info:
+        groq_bugteam_spec.run_spec_mode_main()
+
+    captured = capsys.readouterr()
+    emitted_outcome = json.loads(captured.out)
+    assert "error" in emitted_outcome
+    assert "GROQ_API_KEY" in emitted_outcome["error"]
+    assert exit_info.value.code != 0

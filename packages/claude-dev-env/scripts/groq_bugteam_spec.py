@@ -70,7 +70,11 @@ def demote_findings_with_failing_criteria(
         for each_index in applied_finding_indexes
         if each_index not in failing_criteria_by_finding
     ]
-    already_skipped_indexes = {each["finding_index"] for each in skipped_entries}
+    already_skipped_indexes = {
+        each.get("finding_index")
+        for each in skipped_entries
+        if each.get("finding_index") is not None
+    }
     augmented_skipped = list(skipped_entries)
     for (
         each_finding_index,
@@ -123,10 +127,14 @@ def apply_fix_from_spec(spec_list: list[dict], current_content: str) -> dict:
     )
     parsed_response = groq_bugteam_module.parse_json_object(groq_result.content)
 
-    raw_updated_content = parsed_response.get("updated_content", current_content)
-    applied_finding_indexes = list(parsed_response.get("applied_finding_indexes", []))
-    skipped_entries = list(parsed_response.get("skipped", []))
-    acceptance_checks = list(parsed_response.get("acceptance_checks", []))
+    raw_updated_content = parsed_response.get("updated_content")
+    if raw_updated_content is None:
+        raw_updated_content = current_content
+    applied_finding_indexes = list(
+        parsed_response.get("applied_finding_indexes") or []
+    )
+    skipped_entries = list(parsed_response.get("skipped") or [])
+    acceptance_checks = list(parsed_response.get("acceptance_checks") or [])
 
     failing_criteria_by_finding = extract_failing_criteria_by_finding(acceptance_checks)
     demoted_applied, augmented_skipped = demote_findings_with_failing_criteria(
@@ -157,7 +165,10 @@ def run_spec_mode() -> dict:
         spec_list, current_content = read_spec_input_from_stdin()
     except (json.JSONDecodeError, ValueError) as parse_error:
         return {"error": f"stdin is not valid JSON: {parse_error}"}
-    return apply_fix_from_spec(spec_list, current_content)
+    try:
+        return apply_fix_from_spec(spec_list, current_content)
+    except Exception as spec_error:
+        return {"error": f"spec-mode fix failed: {spec_error}"}
 
 
 def is_spec_mode_invocation(argv: list[str]) -> bool:

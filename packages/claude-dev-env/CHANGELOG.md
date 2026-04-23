@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.29.3](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.29.2...claude-dev-env-v1.29.3) (2026-04-22)
+
+
+### Bug Fixes
+
+* **tests:** eliminate remaining preflight skips and subprocess flakiness ([#250](https://github.com/jl-cmd/claude-code-config/issues/250)) ([f787b81](https://github.com/jl-cmd/claude-code-config/commit/f787b819249d547fa0cb778b39ba29f351c7bcfd))
+* **tests:** use tmp_path as subprocess cwd to stabilize on UNC worktrees ([#248](https://github.com/jl-cmd/claude-code-config/issues/248)) ([492e567](https://github.com/jl-cmd/claude-code-config/commit/492e567764df2f813262bc637cb93834057e00ee))
+
+## [1.29.2](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.29.1...claude-dev-env-v1.29.2) (2026-04-22)
+
+
+### Bug Fixes
+
+* stabilize 4 baseline test failures on main ([#246](https://github.com/jl-cmd/claude-code-config/issues/246)) ([ffc7879](https://github.com/jl-cmd/claude-code-config/commit/ffc7879bc52cb43af4f970610e387a972b8bdf37))
+
+## [1.29.1](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.29.0...claude-dev-env-v1.29.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* **setup_project_paths:** evict stale config bindings before import ([#244](https://github.com/jl-cmd/claude-code-config/issues/244)) ([905b271](https://github.com/jl-cmd/claude-code-config/commit/905b271104d382ed770ce244fb237d473d30df9e))
+
+## [1.29.0](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.28.1...claude-dev-env-v1.29.0) (2026-04-22)
+
+
+### Features
+
+* **agents:** add caveman agent and output style ([#238](https://github.com/jl-cmd/claude-code-config/issues/238)) ([5c874b5](https://github.com/jl-cmd/claude-code-config/commit/5c874b5344754478b542d5b8e58922cc996bd526))
+* **hooks:** es.exe path-rewriter + untracked-repo detector + setup script ([#230](https://github.com/jl-cmd/claude-code-config/issues/230)) ([528bb18](https://github.com/jl-cmd/claude-code-config/commit/528bb18b90484c4c2295a4d13772a045e515ac99))
+* **scripts:** groq_bugteam.py — Groq-backed single-pass bugteam ([#237](https://github.com/jl-cmd/claude-code-config/issues/237)) ([fdaa52a](https://github.com/jl-cmd/claude-code-config/commit/fdaa52a85e4ddd4f974b74b05a88097e9ea426fa))
+* **skills:** add copilot-review skill ([#228](https://github.com/jl-cmd/claude-code-config/issues/228)) ([e1e0742](https://github.com/jl-cmd/claude-code-config/commit/e1e0742a60135bdb68c257732a9052c2a6bbae4b))
+* **skills:** bugteam/qbug spawn Opus 4.7 at xhigh effort ([#239](https://github.com/jl-cmd/claude-code-config/issues/239)) ([3523527](https://github.com/jl-cmd/claude-code-config/commit/3523527e57c911cdb931374113098b4776bdf660))
+
+
+### Bug Fixes
+
+* **qbug:** close audit-cycle leaks, enforce 1-loop convergence ([#231](https://github.com/jl-cmd/claude-code-config/issues/231)) ([39154b4](https://github.com/jl-cmd/claude-code-config/commit/39154b42c9338a44ac440ce5388506a3373f9fb3))
+
+
+### Maintenance
+
+* make AGENTS.md canonical for AI-rules sync ([#236](https://github.com/jl-cmd/claude-code-config/issues/236)) ([2c6d77d](https://github.com/jl-cmd/claude-code-config/commit/2c6d77d644b6c1491461312d0f14fa5e426d8fe8))
+
 ## [1.28.1](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.28.0...claude-dev-env-v1.28.1) (2026-04-21)
 
 

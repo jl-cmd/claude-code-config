@@ -15,8 +15,19 @@ evicts it before each incompatible test file is collected.
 ``sys.path``; with ``hooks`` ahead of ``.``, that insert is skipped and ``config``
 would incorrectly resolve to ``hooks/config``. For ``tests/test_sync_ai_rules.py``
 collection only, this module removes the hooks tree from ``sys.path`` and evicts
-``config``; the next ``pytest_collectstart`` call re-adds the hooks directory so
-later collection and tests keep working.
+``config``; ``pytest_collectreport`` then restores the prior ``sys.path`` snapshot
+so later hook tests continue to resolve ``config`` to the hook-local package as
+``pytest.ini``'s ``pythonpath`` intends.
+
+To keep the start/report hooks symmetric across rootdir shifts and nested
+collection layouts, ``pytest_collectstart`` pushes a single
+``_PendingSysPathRestore`` tuple — pairing the matched collector's ``nodeid``
+with the pre-modification ``sys.path`` snapshot — and ``pytest_collectreport``
+pops only when ``report.nodeid`` equals the top-of-stack entry's nodeid.
+Bundling both fields in one tuple keeps the nodeid and snapshot invariantly in
+sync, so a future refactor cannot drift one ahead of the other and leave
+``pytest_collectreport`` popping a snapshot that never had a matching
+collectstart.
 
 In production the imports do not overlap: shims prepend only ``git-hooks/``, and
 the sync script prepends only the repository root. Only pytest mixes them.
@@ -27,6 +38,7 @@ from __future__ import annotations
 import importlib
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -34,6 +46,15 @@ _SYNC_AI_RULES_TEST_FILENAME = "test_sync_ai_rules.py"
 _REPOSITORY_ROOT_PATH = Path(__file__).resolve().parent
 _GIT_HOOKS_DIRECTORY_PATH = _REPOSITORY_ROOT_PATH / "packages" / "claude-dev-env" / "hooks" / "git-hooks"
 _HOOKS_ROOT_DIRECTORY_PATH = _REPOSITORY_ROOT_PATH / "packages" / "claude-dev-env" / "hooks"
+_HOOK_LOCAL_DIRECTORY_PATH = str(_GIT_HOOKS_DIRECTORY_PATH)
+
+
+class _PendingSysPathRestore(NamedTuple):
+    matched_module_nodeid: str
+    sys_path_snapshot: list[str]
+
+
+_pending_sys_path_restores: list[_PendingSysPathRestore] = []
 
 
 def _evict_config_module() -> None:
@@ -67,13 +88,32 @@ def _ensure_hooks_root_on_sys_path() -> None:
     sys.path.insert(0, str(_HOOKS_ROOT_DIRECTORY_PATH.resolve()))
 
 
+def _is_sync_ai_rules_module_collector(collector: pytest.Collector) -> bool:
+    if not isinstance(collector, pytest.Module):
+        return False
+    collected_path = getattr(collector, "path", None)
+    if collected_path is None:
+        return False
+    return collected_path.name == _SYNC_AI_RULES_TEST_FILENAME
+
+
+def _record_pending_sys_path_restore(collector_nodeid: str) -> None:
+    _pending_sys_path_restores.append(
+        _PendingSysPathRestore(
+            matched_module_nodeid=collector_nodeid,
+            sys_path_snapshot=list(sys.path),
+        )
+    )
+
+
 def pytest_collectstart(collector: pytest.Collector) -> None:
     collected_path = getattr(collector, "path", None)
     if collected_path is None:
         return
     resolved_collected_path = collected_path.resolve()
 
-    if collected_path.name == _SYNC_AI_RULES_TEST_FILENAME:
+    if _is_sync_ai_rules_module_collector(collector):
+        _record_pending_sys_path_restore(collector.nodeid)
         _evict_config_module()
         _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
         _remove_path_if_present(_HOOKS_ROOT_DIRECTORY_PATH)
@@ -99,3 +139,13 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         "should_"
     ):
         _evict_config_module()
+
+
+def pytest_collectreport(report: pytest.CollectReport) -> None:
+    if not _pending_sys_path_restores:
+        return
+    if report.nodeid != _pending_sys_path_restores[-1].matched_module_nodeid:
+        return
+    pending_restore = _pending_sys_path_restores.pop()
+    sys.path[:] = pending_restore.sys_path_snapshot
+    _evict_config_module()

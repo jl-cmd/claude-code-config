@@ -158,6 +158,27 @@ def _path_is_bare_named_worktrees_container(resolved_path: str) -> bool:
     return Path(resolved_path).name.lower() in ("worktrees", "worktree")
 
 
+def _path_basename_is_shell_glob_wildcard(resolved_path: str) -> bool:
+    bracket_class_empty_length = len("[]")
+    basename = Path(resolved_path).name
+    if not basename:
+        return False
+    if basename in ("*", "?"):
+        return True
+    if basename.startswith("[") and basename.endswith("]") and len(basename) > bracket_class_empty_length:
+        return True
+    if "*" in basename or "?" in basename:
+        return True
+    return False
+
+
+def _split_command_preserving_windows_backslashes(command: str) -> list[str]:
+    if os.name == "nt" and "\\" in command:
+        forward_slash_normalized_command = command.replace("\\", "/")
+        return shlex.split(forward_slash_normalized_command)
+    return shlex.split(command)
+
+
 def _rm_flags_before_double_dash_are_unsafe(tokens_after_rm: list[str]) -> bool:
     safe_long_options = frozenset({
         "--recursive",
@@ -210,7 +231,7 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
     if compound_shell_operator_pattern.search(command):
         return False
     try:
-        all_command_tokens = shlex.split(command)
+        all_command_tokens = _split_command_preserving_windows_backslashes(command)
     except ValueError:
         return False
     if len(all_command_tokens) < 2 or all_command_tokens[0] != "rm":
@@ -223,6 +244,8 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
         return False
     for each_target_token in all_target_tokens:
         each_resolved_path = os.path.normpath(os.path.expanduser(each_target_token))
+        if _path_basename_is_shell_glob_wildcard(each_resolved_path):
+            return False
         if _path_is_bare_ephemeral_root(each_resolved_path):
             return False
         if _path_is_bare_named_worktrees_container(each_resolved_path):

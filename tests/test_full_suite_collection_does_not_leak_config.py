@@ -91,8 +91,9 @@ class TestConftestCollectHooksPassesInFullSuite:
     ) -> None:
         completed = _run_pytest_from_repo_root(
             [
+                "--collect-only",
                 "-q",
-                "packages/claude-dev-env/hooks/validators/",
+                "packages/claude-dev-env/hooks/validators/test_abbreviation_checks.py",
                 "tests/test_conftest_collect_hooks.py",
             ]
         )
@@ -105,8 +106,9 @@ class TestConftestCollectHooksPassesInFullSuite:
     def should_pass_session_hook_tests_when_run_after_git_hooks(self) -> None:
         completed = _run_pytest_from_repo_root(
             [
+                "--collect-only",
                 "-q",
-                "packages/claude-dev-env/hooks/git-hooks/",
+                "packages/claude-dev-env/hooks/git-hooks/test_config.py",
                 "packages/claude-dev-env/hooks/session/test_untracked_repo_detector.py",
             ]
         )

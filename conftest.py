@@ -183,12 +183,6 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
     if not is_inside_hooks_root:
         return
 
-    if collected_path.name.startswith("test_") or collected_path.name.startswith(
-        "should_"
-    ):
-        if _cached_config_is_flat_git_hooks_module():
-            _evict_config_module()
-
 
 def pytest_collectreport(report: pytest.CollectReport) -> None:
     if not _pending_sys_path_restores:

@@ -172,8 +172,19 @@ def _path_basename_is_shell_glob_wildcard(resolved_path: str) -> bool:
     return False
 
 
+def _command_contains_windows_style_path(command: str) -> bool:
+    windows_drive_path_pattern = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\")
+    windows_unc_path_pattern = re.compile(r"(?<!\S)\\\\[^\s\\]+\\[^\s\\]+")
+    return bool(
+        windows_drive_path_pattern.search(command)
+        or windows_unc_path_pattern.search(command)
+    )
+
+
 def _split_command_preserving_windows_backslashes(command: str) -> list[str]:
-    if os.name == "nt" and "\\" in command:
+    if "\\" in command and (
+        os.name == "nt" or _command_contains_windows_style_path(command)
+    ):
         forward_slash_normalized_command = command.replace("\\", "/")
         return shlex.split(forward_slash_normalized_command)
     return shlex.split(command)

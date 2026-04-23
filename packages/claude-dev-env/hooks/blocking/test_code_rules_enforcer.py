@@ -744,3 +744,91 @@ def test_should_not_leak_shadowed_nested_assignment_into_outer_mock_known_fields
         "Expected outer mock's missing 'email' advisory to fire even when a shadowing "
         f"nested function assigns mock_user.email, got: {captured.err!r}"
     )
+
+
+def test_should_treat_annotated_assignment_as_shadowing_in_nested_scope(
+    capsys: object,
+) -> None:
+    """AnnAssign must shadow just like Assign.
+
+    When a nested scope re-binds the mock variable via an annotated
+    assignment (``mock_user: dict = {...}``), accesses inside that nested
+    scope belong to the inner mock, not the outer one. If the shadow
+    detector ignores AnnAssign, inner accesses leak out and cause
+    spurious advisories against the outer mock for fields it never sees.
+    """
+    source = (
+        "mock_user = {'id': 1, 'name': 'outer'}\n"
+        "outer_value = mock_user['name']\n"
+        "\n"
+        "def test_inner() -> None:\n"
+        "    mock_user: dict = {'id': 2, 'timezone': 'UTC'}\n"
+        "    inner_value = mock_user['timezone']\n"
+    )
+    code_rules_enforcer.check_incomplete_mocks(source, MODULE_LEVEL_MOCK_TEST_FILE_PATH)
+    captured = getattr(capsys, "readouterr")()
+    leaked_advisories = [
+        line
+        for line in captured.err.splitlines()
+        if "mock_user" in line and "timezone" in line
+    ]
+    assert leaked_advisories == [], (
+        "Expected no advisory on the outer mock for 'timezone' — that field is "
+        "accessed only inside a nested scope that re-binds mock_user via an "
+        f"annotated assignment, got: {captured.err!r}"
+    )
+
+
+def test_should_not_advise_when_duplicated_fstring_literal_is_short(capsys: object) -> None:
+    """Short logger-prefix style f-strings must not emit a duplication advisory.
+
+    A three-times-repeated ``f"Got {x}"`` has only four characters of literal
+    text (``"Got "``). Flagging such short fragments creates noise for common
+    logging prefixes. The heuristic requires a minimum amount of structural
+    literal text before an advisory fires.
+    """
+    source = (
+        "def first(value: str) -> str:\n"
+        "    return f'Got {value}'\n"
+        "\n"
+        "def second(value: str) -> str:\n"
+        "    return f'Got {value}'\n"
+        "\n"
+        "def third(value: str) -> str:\n"
+        "    return f'Got {value}'\n"
+    )
+    code_rules_enforcer.check_duplicated_format_patterns(
+        source, DUPLICATED_FORMAT_PRODUCTION_FILE_PATH
+    )
+    captured = getattr(capsys, "readouterr")()
+    assert "Got" not in captured.err, (
+        "Expected no advisory for a short repeated f-string literal fragment, "
+        f"got: {captured.err!r}"
+    )
+
+
+def test_should_still_advise_when_duplicated_fstring_literal_is_long(capsys: object) -> None:
+    """Longer duplicated f-string skeletons must continue to fire.
+
+    The short-literal heuristic must not regress the existing
+    ``/api/<x>`` and ``/teams/<x>/users/<x>`` advisories — those path
+    skeletons carry enough structural literal text to warrant a helper.
+    """
+    source = (
+        "def get_user(user_id: str) -> str:\n"
+        "    return f'/api/{user_id}'\n"
+        "\n"
+        "def get_order(order_id: str) -> str:\n"
+        "    return f'/api/{order_id}'\n"
+        "\n"
+        "def get_product(product_id: str) -> str:\n"
+        "    return f'/api/{product_id}'\n"
+    )
+    code_rules_enforcer.check_duplicated_format_patterns(
+        source, DUPLICATED_FORMAT_PRODUCTION_FILE_PATH
+    )
+    captured = getattr(capsys, "readouterr")()
+    assert "/api/" in captured.err, (
+        "Expected the existing /api/<x> path-shape advisory to still fire, "
+        f"got: {captured.err!r}"
+    )

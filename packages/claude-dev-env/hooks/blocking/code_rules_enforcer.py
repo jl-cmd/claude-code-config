@@ -1520,12 +1520,21 @@ def _scope_shadows_name(
     scope_node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
     variable_name: str,
 ) -> bool:
-    """Return True when a nested scope locally re-assigns variable_name."""
+    """Return True when a nested scope locally re-assigns variable_name.
+
+    Detects both plain ``Assign`` (``mock = {...}``) and ``AnnAssign``
+    (``mock: dict = {...}``) bindings so an outer scope's accesses do
+    not leak into a nested scope that re-binds the same name under an
+    annotation.
+    """
     for each_stmt in scope_node.body:
-        if not isinstance(each_stmt, ast.Assign):
-            continue
-        for each_target in each_stmt.targets:
-            if isinstance(each_target, ast.Name) and each_target.id == variable_name:
+        if isinstance(each_stmt, ast.Assign):
+            for each_target in each_stmt.targets:
+                if isinstance(each_target, ast.Name) and each_target.id == variable_name:
+                    return True
+        elif isinstance(each_stmt, ast.AnnAssign):
+            annotated_target = each_stmt.target
+            if isinstance(annotated_target, ast.Name) and annotated_target.id == variable_name:
                 return True
     return False
 
@@ -1730,23 +1739,30 @@ def check_duplicated_format_patterns(content: str, file_path: str) -> None:
         return
 
     minimum_repetition_count = 3
+    minimum_literal_character_count = 5
 
     skeleton_occurrences: dict[str, list[int]] = {}
+    literal_length_by_skeleton: dict[str, int] = {}
     for each_node in ast.walk(module_tree):
         if not isinstance(each_node, ast.JoinedStr):
             continue
         skeleton = _build_fstring_skeleton(each_node)
+        literal_body, _shape_body = _extract_fstring_literal_parts(each_node)
         if skeleton not in skeleton_occurrences:
             skeleton_occurrences[skeleton] = []
+            literal_length_by_skeleton[skeleton] = len(literal_body)
         skeleton_occurrences[skeleton].append(each_node.lineno)
 
     for skeleton, line_numbers in skeleton_occurrences.items():
-        if len(line_numbers) >= minimum_repetition_count:
-            print(
-                f"[CODE_RULES advisory] f-string pattern {skeleton!r} appears"
-                f" {len(line_numbers)} times — consider encapsulating in a helper or model.",
-                file=sys.stderr,
-            )
+        if len(line_numbers) < minimum_repetition_count:
+            continue
+        if literal_length_by_skeleton[skeleton] < minimum_literal_character_count:
+            continue
+        print(
+            f"[CODE_RULES advisory] f-string pattern {skeleton!r} appears"
+            f" {len(line_numbers)} times — consider encapsulating in a helper or model.",
+            file=sys.stderr,
+        )
 
 
 def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:

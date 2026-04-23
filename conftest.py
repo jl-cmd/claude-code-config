@@ -158,7 +158,6 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
     _ensure_hooks_root_on_sys_path()
 
     resolved_git_hooks_directory_path = _GIT_HOOKS_DIRECTORY_PATH.resolve()
-    resolved_hooks_root_directory_path = _HOOKS_ROOT_DIRECTORY_PATH.resolve()
 
     is_inside_git_hooks = _path_is_inside_directory(
         resolved_collected_path, resolved_git_hooks_directory_path
@@ -176,12 +175,6 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
     any_git_hooks_entry_was_removed = _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
     if any_git_hooks_entry_was_removed or _cached_config_is_flat_git_hooks_module():
         _evict_config_module()
-
-    is_inside_hooks_root = _path_is_inside_directory(
-        resolved_collected_path, resolved_hooks_root_directory_path
-    )
-    if not is_inside_hooks_root:
-        return
 
 
 def pytest_collectreport(report: pytest.CollectReport) -> None:

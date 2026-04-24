@@ -317,17 +317,71 @@ def test_rm_rf_allowed_when_leading_cd_into_ephemeral_with_extra_compound_after_
     assert result.returncode == 0
 
 
-def test_rm_rf_allowed_when_leading_cd_into_ephemeral_with_wildcard_target() -> None:
+def test_rm_rf_asks_when_leading_cd_into_ephemeral_with_wildcard_target() -> None:
     payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf *')
 
     result = _run_rm_hook(payload)
 
-    assert result.stdout.strip() == ""
-    assert result.returncode == 0
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_rm_rf_allowed_when_leading_cd_into_ephemeral_with_dotdot_target() -> None:
+def test_rm_rf_asks_when_cwd_ephemeral_and_relative_target_escapes_via_dotdot() -> None:
     payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf ../../etc')
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_rm_uses_files0_from_long_option_with_equals() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/bugteam_scratch" && rm -rf --files0-from=/etc/passwd'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_rm_uses_unknown_long_option() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/bugteam_scratch" && rm -rf --nuke /tmp/bugteam_scratch/stuff'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_rm_target_uses_windows_backslash_absolute_path_unquoted() -> None:
+    payload = _make_bash_payload(
+        r'cd "/tmp/bugteam_scratch" && rm -rf C:\sensitive\path'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_relative_target_without_declared_cwd_fails_closed() -> None:
+    payload_with_no_cwd = {
+        "tool_name": "Bash",
+        "tool_input": {"command": "rm -rf relative/path"},
+    }
+
+    result = _run_rm_hook(payload_with_no_cwd)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_allowed_when_cwd_ephemeral_and_relative_target_stays_within() -> None:
+    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf ./build')
 
     result = _run_rm_hook(payload)
 

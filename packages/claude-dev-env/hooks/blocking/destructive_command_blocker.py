@@ -416,44 +416,58 @@ def _command_contains_any_non_cwd_scoped_destructive_pattern(command: str) -> bo
     return False
 
 
-def _command_rm_targets_include_unsafe_absolute_path(command: str) -> bool:
-    """Return True when the command contains an ``rm`` whose absolute targets are unsafe.
+def _command_rm_targets_include_unsafe_path(command: str, tool_input: dict) -> bool:
+    """Return True when the command contains an ``rm`` whose targets are unsafe.
 
-    Prevents the broad ephemeral-cwd auto-allow from granting
-    ``rm -rf /var/log/myapp`` just because the shell happens to be in
-    ``/tmp/scratch``: the actual rm target is the absolute path, not
-    anything relative to cwd, so "cwd is ephemeral" does not bound the
-    blast radius. Also rejects absolute rm targets that are bare
-    ephemeral roots (``/tmp``, ``/temp``, the OS temp root,
-    ``/worktrees``, ``/worktree``) or bare worktrees-container
-    directories — ``rm -rf /tmp`` would wipe every tenant under the
-    shared scratch namespace, and the fact that the process happens to
-    be in a subfolder of ``/tmp`` does not make that safe.
+    Unsafe means any of: bare ephemeral root (``/tmp``, ``/temp``, the OS
+    temp root, ``/worktrees``, ``/worktree``), bare named worktrees
+    container, absolute path outside the ephemeral namespace, relative
+    path that resolves (against the declared effective cwd) outside the
+    ephemeral namespace, wildcard glob metacharacter in the target
+    basename, or unsafe ``rm`` flag before ``--`` (``--files0-from=...``,
+    unknown long option, non-whitelisted short flag) as enforced by
+    ``_rm_flags_before_double_dash_are_unsafe``.
 
-    Fails closed: returns True when the command cannot be tokenized
-    via shlex (ValueError from unbalanced quotes, for instance) so the
-    broad auto-allow declines rather than granting on input the hook
-    cannot conclusively parse.
+    Fails closed: returns True on parse failure (``ValueError`` from
+    unbalanced quotes) or when a relative target is encountered without
+    a declared effective cwd to resolve it against. The broad auto-allow
+    must decline rather than grant on input the hook cannot conclusively
+    bound.
     """
     try:
-        all_command_tokens = shlex.split(command, posix=True)
+        all_command_tokens = _split_command_preserving_windows_backslashes(command)
     except ValueError:
         return True
+    declared_effective_cwd = _resolve_declared_effective_working_directory(command, tool_input)
     for each_token_index in range(len(all_command_tokens)):
         if all_command_tokens[each_token_index] != "rm":
             continue
         tokens_after_rm = all_command_tokens[each_token_index + 1:]
+        if _rm_flags_before_double_dash_are_unsafe(tokens_after_rm):
+            return True
         all_target_tokens = _collect_rm_target_tokens(tokens_after_rm)
         for each_target_token in all_target_tokens:
             each_expanded_target = os.path.expanduser(each_target_token)
-            if os.path.isabs(each_expanded_target) or each_expanded_target.replace("\\", "/").startswith("/"):
+            each_is_absolute = (
+                os.path.isabs(each_expanded_target)
+                or each_expanded_target.replace("\\", "/").startswith("/")
+            )
+            if each_is_absolute:
                 each_resolved_target = os.path.normpath(each_expanded_target)
-                if _path_is_bare_ephemeral_root(each_resolved_target):
+            else:
+                if declared_effective_cwd is None:
                     return True
-                if _path_is_bare_named_worktrees_container(each_resolved_target):
-                    return True
-                if not directory_is_ephemeral(each_resolved_target):
-                    return True
+                each_resolved_target = os.path.normpath(
+                    os.path.join(declared_effective_cwd, each_expanded_target)
+                )
+            if _path_basename_is_shell_glob_wildcard(each_resolved_target):
+                return True
+            if _path_is_bare_ephemeral_root(each_resolved_target):
+                return True
+            if _path_is_bare_named_worktrees_container(each_resolved_target):
+                return True
+            if not directory_is_ephemeral(each_resolved_target):
+                return True
     return False
 
 
@@ -500,7 +514,7 @@ def main() -> None:
         matched_description is not None
         and _destructive_match_is_cwd_scoped(matched_description)
         and _effective_working_directory_is_ephemeral(command, tool_input)
-        and not _command_rm_targets_include_unsafe_absolute_path(command)
+        and not _command_rm_targets_include_unsafe_path(command, tool_input)
         and not _command_contains_any_non_cwd_scoped_destructive_pattern(command)
     ):
         sys.exit(0)

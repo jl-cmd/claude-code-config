@@ -190,6 +190,10 @@ SENTINEL_SELECT_FAILURE_MESSAGE: str = (
     "Sentinel SELECT did not return the inserted id; round-trip failed."
 )
 
+SENTINEL_INSERT_FAILURE_MESSAGE: str = (
+    "Sentinel INSERT did not return a row; round-trip failed."
+)
+
 BYTE_OFFSET_KEY: str = "byte_offset"
 LINE_NUMBER_KEY: str = "line_number"
 

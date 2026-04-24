@@ -822,6 +822,27 @@ def test_save_offsets_cleans_up_temp_file_when_replace_fails(
     assert leftover_temp_files == []
 
 
+def test_save_offsets_cleans_up_temp_file_when_json_dump_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_file = tmp_path / "state.json"
+
+    def _fail_dump(*_args: Any, **_kwargs: Any) -> None:
+        raise ValueError("dump failed")
+
+    monkeypatch.setattr(hook_log_extractor.json, "dump", _fail_dump)
+
+    with pytest.raises(ValueError):
+        hook_log_extractor.save_offsets(
+            str(state_file),
+            {"C:/foo.jsonl": {"byte_offset": 100, "line_number": 2}},
+        )
+
+    leftover_temp_files = list(tmp_path.glob("tmp*"))
+    assert leftover_temp_files == []
+
+
 def test_load_offsets_propagates_os_error_other_than_missing_file(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -889,6 +910,36 @@ def test_load_offsets_migrates_bare_int_legacy_entries_to_empty(
     assert "legacy_offsets_format" in warning_log.read_text(encoding="utf-8")
 
 
+def test_load_offsets_ignores_legacy_warning_write_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_file = tmp_path / "state.json"
+    legacy_content = json.dumps({"C:/legacy.jsonl": 1234})
+    state_file.write_text(legacy_content, encoding="utf-8")
+    warning_log = tmp_path / "hook-extractor.log"
+
+    real_io_open = hook_log_extractor.io.open
+
+    def _io_open_fails_only_for_warning_log(
+        opened_file_path: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        if opened_file_path == str(warning_log):
+            raise OSError("read-only filesystem")
+        return real_io_open(opened_file_path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        hook_log_extractor.io, "open", _io_open_fails_only_for_warning_log
+    )
+
+    with patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG", str(warning_log)):
+        loaded_offsets = hook_log_extractor.load_offsets(str(state_file))
+
+    assert loaded_offsets == {}
+
+
 def test_save_and_load_offsets_round_trips_new_shape(tmp_path: Path) -> None:
     state_file = tmp_path / "nested" / "state.json"
     original_offset_by_path = {
@@ -935,3 +986,74 @@ def test_run_full_extraction_skips_transcripts_deleted_mid_run(
         )
 
     assert exit_code == 0
+
+
+def test_iter_attachment_records_exposes_final_line_number_after_trailing_non_attachment(
+    tmp_path: Path,
+) -> None:
+    """Final line count must include non-attachment lines after last yield."""
+    jsonl_file = tmp_path / "session.jsonl"
+    lines = [
+        _make_success_line(tool_use_id="toolu_a"),
+        json.dumps({"type": "user", "content": "noise"}),
+        json.dumps({"type": "assistant", "content": "more noise"}),
+    ]
+    jsonl_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    attachment_iterator = hook_log_extractor.iter_attachment_records_from_file(
+        str(jsonl_file),
+        start_offset=0,
+    )
+    all_yielded = list(attachment_iterator)
+
+    assert len(all_yielded) == 1
+    assert attachment_iterator.final_line_number == 3
+
+
+def test_run_full_extraction_persists_lines_consumed_with_trailing_noise(
+    tmp_path: Path,
+) -> None:
+    """Resumption must not miscount when non-attachment lines follow the last yield."""
+    jsonl_file = tmp_path / "session.jsonl"
+    lines = [
+        _make_success_line(tool_use_id="toolu_a"),
+        json.dumps({"type": "user", "content": "trailing noise"}),
+    ]
+    jsonl_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    state_file = tmp_path / "offsets.json"
+
+    fake_cursor = MagicMock()
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    with patch.object(
+        hook_log_extractor, "connect_to_neon", return_value=fake_connection
+    ):
+        hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    saved_offsets = hook_log_extractor.load_offsets(str(state_file))
+    assert saved_offsets[str(jsonl_file)]["line_number"] == 2
+
+
+def test_iter_attachment_records_final_line_number_when_no_yields(tmp_path: Path) -> None:
+    """Final line count reflects lines consumed even when zero records yielded."""
+    jsonl_file = tmp_path / "session.jsonl"
+    lines = [
+        json.dumps({"type": "user", "content": "a"}),
+        json.dumps({"type": "assistant", "content": "b"}),
+    ]
+    jsonl_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    attachment_iterator = hook_log_extractor.iter_attachment_records_from_file(
+        str(jsonl_file),
+        start_offset=0,
+    )
+    all_yielded = list(attachment_iterator)
+
+    assert all_yielded == []
+    assert attachment_iterator.final_line_number == 2

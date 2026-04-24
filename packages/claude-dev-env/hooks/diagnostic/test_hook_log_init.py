@@ -149,3 +149,13 @@ def test_run_sentinel_round_trip_raises_when_select_returns_wrong_id() -> None:
 
     with pytest.raises(RuntimeError):
         hook_log_init.run_sentinel_round_trip(fake_connection)
+
+
+def test_run_sentinel_round_trip_raises_when_insert_returns_no_row() -> None:
+    fake_cursor = MagicMock()
+    fake_cursor.fetchone.return_value = None
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    with pytest.raises(RuntimeError):
+        hook_log_init.run_sentinel_round_trip(fake_connection)

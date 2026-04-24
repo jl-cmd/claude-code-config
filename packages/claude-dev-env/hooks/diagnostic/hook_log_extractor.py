@@ -256,51 +256,81 @@ def build_row_from_attachment(
     }
 
 
+class AttachmentRecordIterator:
+    """Iterates hook attachment records and tracks lines actually consumed.
+
+    ``final_line_number`` reflects the number of lines read from the file
+    (including malformed and non-attachment lines), not just the line
+    number of the last yielded record. Callers persist this value so
+    resumption starts from ``final_line_number + 1`` on the next run.
+    """
+
+    def __init__(
+        self,
+        jsonl_file_path: str,
+        start_offset: int,
+        start_line_number: int = 0,
+    ) -> None:
+        self._jsonl_file_path = jsonl_file_path
+        self._start_offset = start_offset
+        self._start_line_number = start_line_number
+        self.final_line_number = start_line_number
+
+    def __iter__(self) -> Iterator[tuple[dict[str, object], int, int]]:
+        if not os.path.exists(self._jsonl_file_path):
+            return
+        with io.open(self._jsonl_file_path, "rb") as jsonl_file_handle:
+            if self._start_offset > 0:
+                jsonl_file_handle.seek(self._start_offset)
+            current_line_number = self._start_line_number
+            current_byte_offset = jsonl_file_handle.tell()
+            while True:
+                raw_bytes = jsonl_file_handle.readline()
+                if not raw_bytes:
+                    self.final_line_number = current_line_number
+                    return
+                current_line_number += 1
+                current_byte_offset += len(raw_bytes)
+                self.final_line_number = current_line_number
+                try:
+                    parsed_record = json.loads(raw_bytes.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(parsed_record, dict):
+                    continue
+                if parsed_record.get("type") != TOP_LEVEL_ATTACHMENT_TYPE:
+                    continue
+                attachment_block = parsed_record.get("attachment") or {}
+                if not isinstance(attachment_block, dict):
+                    continue
+                attachment_type = attachment_block.get("type", EMPTY_STRING)
+                if not isinstance(attachment_type, str):
+                    continue
+                if not attachment_type.startswith(ATTACHMENT_TYPE_PREFIX):
+                    continue
+                if attachment_type not in OUTCOME_BY_ATTACHMENT_TYPE:
+                    continue
+                yield parsed_record, current_line_number, current_byte_offset
+
+
 def iter_attachment_records_from_file(
     jsonl_file_path: str,
     start_offset: int,
     start_line_number: int = 0,
-) -> Iterator[tuple[dict[str, object], int, int]]:
-    """Yield ``(parsed_record, line_number, byte_offset_after)`` for each hook attachment.
+) -> AttachmentRecordIterator:
+    """Return an iterator over hook attachment records in a JSONL file.
 
-    Skips malformed JSON and non-attachment records. Line numbers are
-    1-indexed against the full file; byte offsets are from file start.
-    ``start_line_number`` is the line number already consumed before
-    ``start_offset`` — the first yielded record will carry a line number
-    of ``start_line_number + 1`` or higher.
+    The returned object supports iteration and exposes
+    ``final_line_number`` after iteration completes. ``final_line_number``
+    is the total number of lines consumed (malformed and non-attachment
+    lines included), which differs from the line number of the last
+    yielded record when non-attachment lines trail the last attachment.
     """
-    if not os.path.exists(jsonl_file_path):
-        return
-    with io.open(jsonl_file_path, "rb") as jsonl_file_handle:
-        if start_offset > 0:
-            jsonl_file_handle.seek(start_offset)
-        current_line_number = start_line_number
-        current_byte_offset = jsonl_file_handle.tell()
-        while True:
-            raw_bytes = jsonl_file_handle.readline()
-            if not raw_bytes:
-                return
-            current_line_number += 1
-            current_byte_offset += len(raw_bytes)
-            try:
-                parsed_record = json.loads(raw_bytes.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            if not isinstance(parsed_record, dict):
-                continue
-            if parsed_record.get("type") != TOP_LEVEL_ATTACHMENT_TYPE:
-                continue
-            attachment_block = parsed_record.get("attachment") or {}
-            if not isinstance(attachment_block, dict):
-                continue
-            attachment_type = attachment_block.get("type", EMPTY_STRING)
-            if not isinstance(attachment_type, str):
-                continue
-            if not attachment_type.startswith(ATTACHMENT_TYPE_PREFIX):
-                continue
-            if attachment_type not in OUTCOME_BY_ATTACHMENT_TYPE:
-                continue
-            yield parsed_record, current_line_number, current_byte_offset
+    return AttachmentRecordIterator(
+        jsonl_file_path=jsonl_file_path,
+        start_offset=start_offset,
+        start_line_number=start_line_number,
+    )
 
 
 def load_offsets(state_file_path: str) -> dict[str, dict[str, int]]:
@@ -357,17 +387,17 @@ def save_offsets(
     )
     temporary_file_path = temporary_file_handle.name
     try:
-        json.dump(
-            offset_by_jsonl_path,
-            temporary_file_handle,
-            indent=OFFSETS_JSON_INDENT,
-            sort_keys=True,
-        )
-        temporary_file_handle.flush()
-        os.fsync(temporary_file_handle.fileno())
-    finally:
-        temporary_file_handle.close()
-    try:
+        try:
+            json.dump(
+                offset_by_jsonl_path,
+                temporary_file_handle,
+                indent=OFFSETS_JSON_INDENT,
+                sort_keys=True,
+            )
+            temporary_file_handle.flush()
+            os.fsync(temporary_file_handle.fileno())
+        finally:
+            temporary_file_handle.close()
         os.replace(temporary_file_path, state_file_path)
     except Exception:
         try:
@@ -428,15 +458,18 @@ def _append_offline_warning_line(exception_instance: BaseException) -> None:
 
 
 def _append_legacy_offsets_warning_line() -> None:
-    warning_log_parent = os.path.dirname(OFFLINE_WARNING_LOG)
-    if warning_log_parent:
-        os.makedirs(warning_log_parent, exist_ok=True)
-    timestamp_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    warning_line_text = (
-        f"{timestamp_iso}\tmigration\t{LEGACY_OFFSETS_FORMAT_WARNING_LABEL}"
-    )
-    with io.open(OFFLINE_WARNING_LOG, "a", encoding="utf-8") as warning_log_handle:
-        warning_log_handle.write(warning_line_text + "\n")
+    try:
+        warning_log_parent = os.path.dirname(OFFLINE_WARNING_LOG)
+        if warning_log_parent:
+            os.makedirs(warning_log_parent, exist_ok=True)
+        timestamp_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        warning_line_text = (
+            f"{timestamp_iso}\tmigration\t{LEGACY_OFFSETS_FORMAT_WARNING_LABEL}"
+        )
+        with io.open(OFFLINE_WARNING_LOG, "a", encoding="utf-8") as warning_log_handle:
+            warning_log_handle.write(warning_line_text + "\n")
+    except OSError:
+        return
 
 
 def run_full_extraction(
@@ -476,16 +509,16 @@ def run_full_extraction(
             )
             batch_buffer: list[dict[str, object]] = []
             final_offset = start_offset
-            final_line_number = start_line_number
+            attachment_iterator = iter_attachment_records_from_file(
+                each_jsonl_file_path,
+                start_offset=start_offset,
+                start_line_number=start_line_number,
+            )
             for (
                 parsed_record,
                 line_number,
                 byte_offset_after,
-            ) in iter_attachment_records_from_file(
-                each_jsonl_file_path,
-                start_offset=start_offset,
-                start_line_number=start_line_number,
-            ):
+            ) in attachment_iterator:
                 built_row = build_row_from_attachment(
                     parsed_record=parsed_record,
                     source_jsonl_path=each_jsonl_file_path,
@@ -493,17 +526,17 @@ def run_full_extraction(
                 )
                 batch_buffer.append(built_row)
                 final_offset = byte_offset_after
-                final_line_number = line_number
                 if len(batch_buffer) >= INSERT_BATCH_SIZE:
                     insert_rows_batch(neon_connection, batch_buffer)
                     batch_buffer.clear()
                     offset_by_jsonl_path[each_jsonl_file_path] = {
                         BYTE_OFFSET_KEY: final_offset,
-                        LINE_NUMBER_KEY: final_line_number,
+                        LINE_NUMBER_KEY: attachment_iterator.final_line_number,
                     }
                     save_offsets(state_file_path, offset_by_jsonl_path)
             if batch_buffer:
                 insert_rows_batch(neon_connection, batch_buffer)
+            lines_consumed = attachment_iterator.final_line_number
             if final_offset != start_offset or full_rebuild:
                 try:
                     current_file_size = os.path.getsize(each_jsonl_file_path)
@@ -511,7 +544,7 @@ def run_full_extraction(
                     continue
                 offset_by_jsonl_path[each_jsonl_file_path] = {
                     BYTE_OFFSET_KEY: max(final_offset, current_file_size),
-                    LINE_NUMBER_KEY: final_line_number,
+                    LINE_NUMBER_KEY: lines_consumed,
                 }
                 save_offsets(state_file_path, offset_by_jsonl_path)
     finally:

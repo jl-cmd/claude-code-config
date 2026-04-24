@@ -40,6 +40,7 @@ from config.hook_log_extractor_constants import (
     SENTINEL_HOOK_CATEGORY,
     SENTINEL_HOOK_EVENT,
     SENTINEL_HOOK_NAME,
+    SENTINEL_INSERT_FAILURE_MESSAGE,
     SENTINEL_INSERT_SQL,
     SENTINEL_SELECT_FAILURE_MESSAGE,
     SENTINEL_SELECT_SQL,
@@ -115,13 +116,14 @@ def run_sentinel_round_trip(neon_connection: object) -> None:
             ),
         )
         sentinel_row = neon_cursor.fetchone()
-        sentinel_id = sentinel_row[0] if sentinel_row else None
-        if sentinel_id is not None:
-            neon_cursor.execute(SENTINEL_SELECT_SQL, (sentinel_id,))
-            fetched_row = neon_cursor.fetchone()
-            if fetched_row is None or fetched_row[0] != sentinel_id:
-                raise RuntimeError(SENTINEL_SELECT_FAILURE_MESSAGE)
-            neon_cursor.execute(SENTINEL_DELETE_SQL, (sentinel_id,))
+        if sentinel_row is None:
+            raise RuntimeError(SENTINEL_INSERT_FAILURE_MESSAGE)
+        sentinel_id = sentinel_row[0]
+        neon_cursor.execute(SENTINEL_SELECT_SQL, (sentinel_id,))
+        fetched_row = neon_cursor.fetchone()
+        if fetched_row is None or fetched_row[0] != sentinel_id:
+            raise RuntimeError(SENTINEL_SELECT_FAILURE_MESSAGE)
+        neon_cursor.execute(SENTINEL_DELETE_SQL, (sentinel_id,))
     neon_connection.commit()
 
 

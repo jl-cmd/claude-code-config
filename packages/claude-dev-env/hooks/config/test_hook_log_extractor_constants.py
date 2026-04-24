@@ -16,6 +16,8 @@ from config.hook_log_extractor_constants import (
     EXIT_CODE_SUCCESS,
     EXIT_CODE_UNKNOWN_QUERY,
     QUERY_NAME_PATTERN,
+    SENTINEL_INSERT_FAILURE_MESSAGE,
+    SENTINEL_SELECT_FAILURE_MESSAGE,
 )
 
 
@@ -57,3 +59,8 @@ def test_unknown_query_exit_code_distinguishes_from_init_environment_missing() -
 
 def test_extractor_offline_fallback_matches_success_so_stop_hook_does_not_surface_failure() -> None:
     assert EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING == EXIT_CODE_SUCCESS
+
+
+def test_sentinel_insert_failure_message_is_distinct_from_select_failure() -> None:
+    assert SENTINEL_INSERT_FAILURE_MESSAGE != SENTINEL_SELECT_FAILURE_MESSAGE
+    assert SENTINEL_INSERT_FAILURE_MESSAGE

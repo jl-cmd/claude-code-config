@@ -100,3 +100,70 @@ SUMMARY_COLUMN_HEADINGS: tuple[str, str, str, str] = (
 SUMMARY_NO_NEW_BLOCKS_MESSAGE: str = "No new blocks since last run."
 
 TOP_BLOCKED_COMMAND_PREVIEW_MAX_CHARACTERS: int = 80
+
+HOOK_EVENTS_TABLE_NAME: str = "hook_events"
+BLOCKED_COMMANDS_VIEW_NAME: str = "blocked_commands"
+
+HOOK_EVENTS_INSERT_SQL: str = (
+    "INSERT INTO hook_events ("
+    "event_timestamp, session_id, cwd, git_branch, hook_event, hook_name, "
+    "hook_category, script_path, tool_name, tool_use_id, outcome, exit_code, "
+    "duration_ms, command_excerpt, stdout_excerpt, stderr_excerpt, "
+    "source_jsonl_path, source_line_number"
+    ") VALUES ("
+    "%(event_timestamp)s, %(session_id)s, %(cwd)s, %(git_branch)s, "
+    "%(hook_event)s, %(hook_name)s, %(hook_category)s, %(script_path)s, "
+    "%(tool_name)s, %(tool_use_id)s, %(outcome)s, %(exit_code)s, "
+    "%(duration_ms)s, %(command_excerpt)s, %(stdout_excerpt)s, "
+    "%(stderr_excerpt)s, %(source_jsonl_path)s, %(source_line_number)s"
+    ") ON CONFLICT (source_jsonl_path, source_line_number) DO NOTHING"
+)
+
+HOOK_EVENTS_TRUNCATE_SQL: str = "TRUNCATE TABLE hook_events RESTART IDENTITY"
+
+HOOK_EVENTS_ROW_COUNT_SQL: str = "SELECT COUNT(*) FROM hook_events"
+
+SENTINEL_INSERT_SQL: str = (
+    "INSERT INTO hook_events ("
+    "event_timestamp, session_id, hook_event, hook_name, hook_category, "
+    "outcome, source_jsonl_path, source_line_number"
+    ") VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s) RETURNING id"
+)
+
+SENTINEL_SELECT_SQL: str = "SELECT id FROM hook_events WHERE id = %s"
+
+SENTINEL_DELETE_SQL: str = "DELETE FROM hook_events WHERE id = %s"
+
+TOP_BLOCKERS_SINCE_LAST_RUN_SQL: str = (
+    "SELECT hook_name, hook_category, COUNT(*) AS block_count, "
+    "MIN(COALESCE(command_excerpt, stdout_excerpt, stderr_excerpt, '')) "
+    "AS top_blocked_command_preview "
+    "FROM hook_events WHERE outcome = 'blocked' "
+    "AND event_timestamp >= (NOW() - INTERVAL '1 day') "
+    "GROUP BY hook_name, hook_category "
+    "ORDER BY block_count DESC LIMIT 10"
+)
+
+EMPTY_STRING: str = ""
+NEWLINE_JOINER: str = "\n"
+WHITESPACE_JOINER: str = " "
+SEMICOLON_SPLIT_TOKEN: str = ";"
+
+HOOKS_DIRECTORY_TOKEN: str = "/hooks/"
+
+SCRIPT_PATH_PYTHON_PREFIXES: tuple[str, ...] = ("python3 ", "python ")
+
+SUMMARY_TABLE_COLUMN_GAP: str = "  "
+
+CATEGORY_PATH_MINIMUM_PARTS: int = 2
+LINE_COUNT_CHUNK_SIZE_BYTES: int = 65536
+OFFSETS_JSON_INDENT: int = 2
+
+MISSING_ENVIRONMENT_VARIABLE_PREFIX: str = "Missing required environment variable: "
+SUCCESS_REPORT_HEADER: str = "Hook-log init succeeded."
+NEON_HOST_REPORT_LABEL: str = "Neon host:"
+TABLE_REPORT_LABEL: str = "Table:"
+ROW_COUNT_REPORT_LABEL: str = "Row count:"
+UNKNOWN_HOST_PLACEHOLDER: str = "unknown"
+SENTINEL_HOOK_CATEGORY: str = "diagnostic"
+

@@ -538,7 +538,7 @@ def test_offline_fallback_writes_one_log_line_when_connect_fails(
     with (
         patch.object(hook_log_extractor, "connect_to_neon", side_effect=_raise),
         patch.object(hook_log_extractor, "is_operational_error", return_value=True),
-        patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG_PATH", str(warning_log)),
+        patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG", str(warning_log)),
     ):
         exit_code = hook_log_extractor.run_full_extraction(
             transcripts_root=str(tmp_path),

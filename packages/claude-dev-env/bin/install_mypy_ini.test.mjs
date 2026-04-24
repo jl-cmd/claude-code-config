@@ -15,7 +15,7 @@ function makeTemporaryHomeWithClaudeHooks() {
 }
 
 
-test('installMypyIniForClaudeHooks creates a new mypy.ini when none exists', () => {
+test('installMypyIniForClaudeHooks creates a new .mypy.ini when none exists', () => {
     const { temporaryHomeDirectory, claudeHooksDirectory } = makeTemporaryHomeWithClaudeHooks();
     try {
         const installResult = installMypyIniForClaudeHooks({
@@ -24,7 +24,7 @@ test('installMypyIniForClaudeHooks creates a new mypy.ini when none exists', () 
         });
 
         assert.equal(installResult.action, 'created');
-        assert.equal(installResult.path, join(temporaryHomeDirectory, 'mypy.ini'));
+        assert.equal(installResult.path, join(temporaryHomeDirectory, '.mypy.ini'));
 
         const writtenContent = readFileSync(installResult.path, 'utf8');
         assert.match(writtenContent, /^\[mypy\]$/m);
@@ -46,7 +46,7 @@ test('installMypyIniForClaudeHooks leaves existing file untouched when already c
     try {
         const claudeHooksAsForwardSlashes = claudeHooksDirectory.replace(/\\/g, '/');
         const preExistingContent = `[mypy]\nmypy_path = ${claudeHooksAsForwardSlashes}\nstrict = True\n`;
-        const mypyIniPath = join(temporaryHomeDirectory, 'mypy.ini');
+        const mypyIniPath = join(temporaryHomeDirectory, '.mypy.ini');
         writeFileSync(mypyIniPath, preExistingContent);
 
         const installResult = installMypyIniForClaudeHooks({
@@ -65,11 +65,11 @@ test('installMypyIniForClaudeHooks leaves existing file untouched when already c
 });
 
 
-test('installMypyIniForClaudeHooks does not overwrite existing mypy.ini that lacks the expected mypy_path', () => {
+test('installMypyIniForClaudeHooks does not overwrite existing .mypy.ini that lacks the expected mypy_path', () => {
     const { temporaryHomeDirectory, claudeHooksDirectory } = makeTemporaryHomeWithClaudeHooks();
     try {
         const preExistingContent = `[mypy]\nmypy_path = /some/other/project\nstrict = True\n`;
-        const mypyIniPath = join(temporaryHomeDirectory, 'mypy.ini');
+        const mypyIniPath = join(temporaryHomeDirectory, '.mypy.ini');
         writeFileSync(mypyIniPath, preExistingContent);
 
         const installResult = installMypyIniForClaudeHooks({

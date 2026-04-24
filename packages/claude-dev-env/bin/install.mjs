@@ -387,9 +387,9 @@ function install(selectedGroups) {
             allInstalledFiles.push(mypyIniInstallResult.path);
             console.log(`  ✓ ${relative(homedir(), mypyIniInstallResult.path)} (new — enables mypy to resolve config.messages imports)`);
         } else if (mypyIniInstallResult.action === 'already-configured') {
-            console.log(`  mypy.ini: already configured for Claude hooks`);
+            console.log(`  .mypy.ini: already configured for Claude hooks`);
         } else {
-            console.warn(`  WARNING: mypy.ini exists at ${mypyIniInstallResult.path} without the expected mypy_path.`);
+            console.warn(`  WARNING: .mypy.ini exists at ${mypyIniInstallResult.path} without the expected mypy_path.`);
             console.warn(`    To enable mypy for Claude hooks, add this line under [mypy]:`);
             console.warn(`      ${mypyIniInstallResult.expectedLine}`);
         }

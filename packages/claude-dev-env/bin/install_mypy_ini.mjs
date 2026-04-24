@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const MYPY_INI_FILENAME = 'mypy.ini';
+const MYPY_INI_FILENAME = '.mypy.ini';
 const MYPY_CONFIG_SECTION_HEADER = '[mypy]';
 
 

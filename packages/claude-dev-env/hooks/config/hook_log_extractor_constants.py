@@ -98,6 +98,9 @@ FLAG_QUERY: str = "--query"
 EXIT_CODE_SUCCESS: int = 0
 EXIT_CODE_ENVIRONMENT_MISSING: int = 1
 EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING: int = 0
+EXIT_CODE_UNKNOWN_QUERY: int = 2
+
+QUERY_NAME_PATTERN: str = r"[a-z0-9_]+"
 
 SENTINEL_SESSION_ID: str = "__init_probe_session__"
 SENTINEL_HOOK_EVENT: str = "InitProbe"
@@ -117,7 +120,6 @@ SUMMARY_NO_NEW_BLOCKS_MESSAGE: str = "No new blocks since last run."
 TOP_BLOCKED_COMMAND_PREVIEW_MAX_CHARACTERS: int = 80
 
 HOOK_EVENTS_TABLE_NAME: str = "hook_events"
-BLOCKED_COMMANDS_VIEW_NAME: str = "blocked_commands"
 
 HOOK_EVENTS_INSERT_SQL: str = (
     "INSERT INTO hook_events ("
@@ -161,7 +163,6 @@ TOP_BLOCKERS_LAST_24_HOURS_SQL: str = (
 
 EMPTY_STRING: str = ""
 NEWLINE_JOINER: str = "\n"
-WHITESPACE_JOINER: str = " "
 SEMICOLON_SPLIT_TOKEN: str = ";"
 
 HOOKS_DIRECTORY_TOKEN: str = "/hooks/"
@@ -171,7 +172,6 @@ SCRIPT_PATH_PYTHON_PREFIXES: tuple[str, ...] = ("python3 ", "python ")
 SUMMARY_TABLE_COLUMN_GAP: str = "  "
 
 CATEGORY_PATH_MINIMUM_PARTS: int = 2
-LINE_COUNT_CHUNK_SIZE_BYTES: int = 65536
 OFFSETS_JSON_INDENT: int = 2
 
 MISSING_ENVIRONMENT_VARIABLE_PREFIX: str = "Missing required environment variable: "
@@ -184,4 +184,21 @@ SENTINEL_HOOK_CATEGORY: str = "diagnostic"
 
 MISSING_PSYCOPG_WARNING_LABEL: str = "missing_psycopg"
 MISSING_NEON_DATABASE_URL_WARNING_LABEL: str = "missing_neon_database_url"
+LEGACY_OFFSETS_FORMAT_WARNING_LABEL: str = "legacy_offsets_format"
+
+SENTINEL_SELECT_FAILURE_MESSAGE: str = (
+    "Sentinel SELECT did not return the inserted id; round-trip failed."
+)
+
+BYTE_OFFSET_KEY: str = "byte_offset"
+LINE_NUMBER_KEY: str = "line_number"
+
+UNKNOWN_QUERY_MESSAGE_PREFIX: str = "Unknown query: "
+INVALID_QUERY_NAME_MESSAGE_PREFIX: str = "Invalid query name: "
+
+BWS_EXECUTABLE_NAME: str = "bws"
+BWS_ACCESS_TOKEN_ENV_VAR: str = "BWS_ACCESS_TOKEN"
+BWS_RUN_SEPARATOR: str = "--"
+BWS_RUN_SUBCOMMAND: str = "run"
+STOP_WRAPPER_EXTRACTOR_SCRIPT_NAME: str = "hook_log_extractor.py"
 

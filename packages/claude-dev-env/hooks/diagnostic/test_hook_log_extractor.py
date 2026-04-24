@@ -23,6 +23,7 @@ if str(_HOOKS_ROOT) not in sys.path:
 from diagnostic import hook_log_extractor
 from config.hook_log_extractor_constants import (
     COMMAND_EXCERPT_MAX_CHARACTERS,
+    EXIT_CODE_UNKNOWN_QUERY,
     HOOK_CATEGORY_UNCATEGORIZED,
     KNOWN_HOOK_CATEGORIES,
     NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
@@ -436,7 +437,10 @@ def test_load_offsets_returns_empty_when_file_missing(tmp_path: Path) -> None:
 
 def test_save_and_load_offsets_round_trips(tmp_path: Path) -> None:
     state_file = tmp_path / "nested" / "state.json"
-    original_offset_by_path = {"C:/foo.jsonl": 100, "C:/bar.jsonl": 250}
+    original_offset_by_path = {
+        "C:/foo.jsonl": {"byte_offset": 100, "line_number": 3},
+        "C:/bar.jsonl": {"byte_offset": 250, "line_number": 8},
+    }
     hook_log_extractor.save_offsets(str(state_file), original_offset_by_path)
     round_tripped = hook_log_extractor.load_offsets(str(state_file))
     assert round_tripped == original_offset_by_path
@@ -497,7 +501,8 @@ def test_run_full_extraction_advances_offset(tmp_path: Path) -> None:
     assert exit_code == 0
     saved_offsets = hook_log_extractor.load_offsets(str(state_file))
     assert str(jsonl_file) in saved_offsets
-    assert saved_offsets[str(jsonl_file)] > 0
+    assert saved_offsets[str(jsonl_file)]["byte_offset"] > 0
+    assert saved_offsets[str(jsonl_file)]["line_number"] >= 1
 
 
 def test_run_full_extraction_idempotent_when_offset_at_end(tmp_path: Path) -> None:
@@ -508,7 +513,12 @@ def test_run_full_extraction_idempotent_when_offset_at_end(tmp_path: Path) -> No
     state_file = tmp_path / "offsets.json"
     hook_log_extractor.save_offsets(
         str(state_file),
-        {str(jsonl_file): len(success_line.encode("utf-8"))},
+        {
+            str(jsonl_file): {
+                "byte_offset": len(success_line.encode("utf-8")),
+                "line_number": 1,
+            },
+        },
     )
 
     fake_cursor = MagicMock()
@@ -533,7 +543,10 @@ def test_run_full_rebuild_clears_offsets_and_truncates(tmp_path: Path) -> None:
     jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
 
     state_file = tmp_path / "offsets.json"
-    hook_log_extractor.save_offsets(str(state_file), {str(jsonl_file): 99999})
+    hook_log_extractor.save_offsets(
+        str(state_file),
+        {str(jsonl_file): {"byte_offset": 99999, "line_number": 100}},
+    )
 
     fake_cursor = MagicMock()
     fake_connection = MagicMock()
@@ -557,7 +570,9 @@ def test_run_full_rebuild_clears_offsets_and_truncates(tmp_path: Path) -> None:
         for each_statement in all_executed_statements
     )
     saved_offsets_after_rebuild = hook_log_extractor.load_offsets(str(state_file))
-    assert saved_offsets_after_rebuild.get(str(jsonl_file), 0) > 0
+    rebuilt_entry = saved_offsets_after_rebuild.get(str(jsonl_file), {})
+    assert rebuilt_entry.get("byte_offset", 0) > 0
+    assert rebuilt_entry.get("line_number", 0) >= 1
 
 
 def test_offline_fallback_writes_one_log_line_when_connect_fails(
@@ -752,3 +767,171 @@ def test_main_accepts_incremental_flag_as_noop(
 
     assert exit_code == 0
     assert captured_arguments["full_rebuild"] is False
+
+
+def test_run_query_returns_nonzero_for_unknown_query(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = hook_log_extractor.run_query("definitely_not_a_query_name")
+
+    captured = capsys.readouterr()
+    assert exit_code == EXIT_CODE_UNKNOWN_QUERY
+    assert "Unknown query" in captured.err
+
+
+def test_run_query_returns_nonzero_for_invalid_query_name(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = hook_log_extractor.run_query("../../../etc/passwd")
+
+    captured = capsys.readouterr()
+    assert exit_code == EXIT_CODE_UNKNOWN_QUERY
+    assert "Invalid query name" in captured.err
+
+
+def test_run_query_rejects_uppercase_and_hyphen_names(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code_upper = hook_log_extractor.run_query("UPPER_CASE")
+    exit_code_hyphen = hook_log_extractor.run_query("has-hyphen")
+
+    captured = capsys.readouterr()
+    assert exit_code_upper == EXIT_CODE_UNKNOWN_QUERY
+    assert exit_code_hyphen == EXIT_CODE_UNKNOWN_QUERY
+    assert captured.err.count("Invalid query name") == 2
+
+
+def test_save_offsets_cleans_up_temp_file_when_replace_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_file = tmp_path / "state.json"
+
+    def _fail_replace(*_args: Any, **_kwargs: Any) -> None:
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(hook_log_extractor.os, "replace", _fail_replace)
+
+    with pytest.raises(OSError):
+        hook_log_extractor.save_offsets(
+            str(state_file),
+            {"C:/foo.jsonl": {"byte_offset": 100, "line_number": 2}},
+        )
+
+    leftover_temp_files = list(tmp_path.glob("tmp*"))
+    assert leftover_temp_files == []
+
+
+def test_load_offsets_propagates_os_error_other_than_missing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_file = tmp_path / "state.json"
+    state_file.write_text("{}", encoding="utf-8")
+
+    def _raise_permission(*_args: Any, **_kwargs: Any) -> None:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(hook_log_extractor.io, "open", _raise_permission)
+
+    with pytest.raises(PermissionError):
+        hook_log_extractor.load_offsets(str(state_file))
+
+
+def test_load_offsets_returns_empty_for_malformed_json(tmp_path: Path) -> None:
+    state_file = tmp_path / "state.json"
+    state_file.write_text("not valid json {", encoding="utf-8")
+
+    assert hook_log_extractor.load_offsets(str(state_file)) == {}
+
+
+def test_iter_attachment_records_accepts_start_line_number(tmp_path: Path) -> None:
+    jsonl_file = tmp_path / "session.jsonl"
+    first_line = _make_success_line(tool_use_id="toolu_a")
+    second_line = _make_success_line(tool_use_id="toolu_b")
+    jsonl_file.write_text(first_line + "\n" + second_line + "\n", encoding="utf-8")
+    first_line_byte_length = len((first_line + "\n").encode("utf-8"))
+
+    all_parsed_records_with_zero_start = list(
+        hook_log_extractor.iter_attachment_records_from_file(
+            str(jsonl_file),
+            start_offset=first_line_byte_length,
+            start_line_number=0,
+        ),
+    )
+    all_parsed_records_with_offset_start = list(
+        hook_log_extractor.iter_attachment_records_from_file(
+            str(jsonl_file),
+            start_offset=first_line_byte_length,
+            start_line_number=10,
+        ),
+    )
+
+    assert len(all_parsed_records_with_offset_start) == 1
+    _, zero_start_line_number, _ = all_parsed_records_with_zero_start[0]
+    _, offset_start_line_number, _ = all_parsed_records_with_offset_start[0]
+    assert offset_start_line_number == zero_start_line_number + 10
+
+
+def test_load_offsets_migrates_bare_int_legacy_entries_to_empty(
+    tmp_path: Path,
+) -> None:
+    state_file = tmp_path / "state.json"
+    legacy_content = json.dumps({"C:/legacy.jsonl": 1234})
+    state_file.write_text(legacy_content, encoding="utf-8")
+    warning_log = tmp_path / "hook-extractor.log"
+
+    with patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG", str(warning_log)):
+        loaded_offsets = hook_log_extractor.load_offsets(str(state_file))
+
+    assert loaded_offsets == {}
+    assert warning_log.exists()
+    assert "legacy_offsets_format" in warning_log.read_text(encoding="utf-8")
+
+
+def test_save_and_load_offsets_round_trips_new_shape(tmp_path: Path) -> None:
+    state_file = tmp_path / "nested" / "state.json"
+    original_offset_by_path = {
+        "C:/foo.jsonl": {"byte_offset": 100, "line_number": 2},
+        "C:/bar.jsonl": {"byte_offset": 250, "line_number": 5},
+    }
+    hook_log_extractor.save_offsets(str(state_file), original_offset_by_path)
+    round_tripped = hook_log_extractor.load_offsets(str(state_file))
+    assert round_tripped == original_offset_by_path
+
+
+def test_run_full_extraction_skips_transcripts_deleted_mid_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    jsonl_file = tmp_path / "session.jsonl"
+    jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
+    state_file = tmp_path / "offsets.json"
+
+    real_getsize = hook_log_extractor.os.path.getsize
+
+    def _raise_file_not_found_for_target(each_path: str) -> int:
+        if each_path == str(jsonl_file):
+            raise FileNotFoundError(each_path)
+        return real_getsize(each_path)
+
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = MagicMock()
+
+    with (
+        patch.object(
+            hook_log_extractor, "connect_to_neon", return_value=fake_connection
+        ),
+        patch.object(
+            hook_log_extractor.os.path,
+            "getsize",
+            side_effect=_raise_file_not_found_for_target,
+        ),
+    ):
+        exit_code = hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    assert exit_code == 0

@@ -55,7 +55,7 @@ def test_apply_schema_executes_ddl_from_schema_sql() -> None:
 
 def test_run_sentinel_round_trip_inserts_selects_and_deletes() -> None:
     fake_cursor = MagicMock()
-    fake_cursor.fetchone.return_value = (1,)
+    fake_cursor.fetchone.side_effect = [(1,), (1,)]
     fake_connection = MagicMock()
     fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
 
@@ -71,7 +71,7 @@ def test_run_sentinel_round_trip_inserts_selects_and_deletes() -> None:
 
 def test_run_sentinel_round_trip_uses_init_probe_outcome() -> None:
     fake_cursor = MagicMock()
-    fake_cursor.fetchone.return_value = (1,)
+    fake_cursor.fetchone.side_effect = [(1,), (1,)]
     fake_connection = MagicMock()
     fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
 
@@ -108,7 +108,7 @@ def test_main_happy_path_returns_zero(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     fake_cursor = MagicMock()
-    fake_cursor.fetchone.side_effect = [(1,), (5,)]
+    fake_cursor.fetchone.side_effect = [(1,), (1,), (5,)]
     fake_connection = MagicMock()
     fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
 
@@ -116,3 +116,36 @@ def test_main_happy_path_returns_zero(monkeypatch: pytest.MonkeyPatch) -> None:
         exit_code = hook_log_init.main()
 
     assert exit_code == 0
+
+
+def test_connect_to_neon_raises_when_psycopg_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
+        "postgres://u:p@ep-fake-host.aws.neon.tech/db",
+    )
+
+    with patch.object(hook_log_init, "psycopg", None):
+        with pytest.raises(hook_log_init.MissingPsycopgDependencyError):
+            hook_log_init.connect_to_neon()
+
+
+def test_run_sentinel_round_trip_raises_when_select_returns_nothing() -> None:
+    fake_cursor = MagicMock()
+    fake_cursor.fetchone.side_effect = [(1,), None]
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    with pytest.raises(RuntimeError):
+        hook_log_init.run_sentinel_round_trip(fake_connection)
+
+
+def test_run_sentinel_round_trip_raises_when_select_returns_wrong_id() -> None:
+    fake_cursor = MagicMock()
+    fake_cursor.fetchone.side_effect = [(1,), (999,)]
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    with pytest.raises(RuntimeError):
+        hook_log_init.run_sentinel_round_trip(fake_connection)

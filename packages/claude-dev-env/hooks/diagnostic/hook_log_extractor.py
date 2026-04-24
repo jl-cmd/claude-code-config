@@ -22,6 +22,7 @@ import glob
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -41,6 +42,7 @@ from config.hook_log_extractor_constants import (
     ATTACHMENT_TYPE_HOOK_SUCCESS,
     ATTACHMENT_TYPE_HOOK_SYSTEM_MESSAGE,
     ATTACHMENT_TYPE_PREFIX,
+    BYTE_OFFSET_KEY,
     CATEGORY_PATH_MINIMUM_PARTS,
     COMMAND_EXCERPT_MAX_CHARACTERS,
     CONNECT_TIMEOUT_SECONDS,
@@ -48,6 +50,7 @@ from config.hook_log_extractor_constants import (
     EMPTY_STRING,
     EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING,
     EXIT_CODE_SUCCESS,
+    EXIT_CODE_UNKNOWN_QUERY,
     FLAG_FULL_REBUILD,
     FLAG_INCREMENTAL,
     FLAG_QUERY,
@@ -58,9 +61,11 @@ from config.hook_log_extractor_constants import (
     HOOK_NAME_TOOL_SEPARATOR,
     HOOKS_DIRECTORY_TOKEN,
     INSERT_BATCH_SIZE,
+    INVALID_QUERY_NAME_MESSAGE_PREFIX,
     JSONL_FILE_GLOB,
     KNOWN_HOOK_CATEGORIES,
-    LINE_COUNT_CHUNK_SIZE_BYTES,
+    LEGACY_OFFSETS_FORMAT_WARNING_LABEL,
+    LINE_NUMBER_KEY,
     MISSING_NEON_DATABASE_URL_WARNING_LABEL,
     MISSING_PSYCOPG_WARNING_LABEL,
     NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
@@ -71,6 +76,7 @@ from config.hook_log_extractor_constants import (
     OUTCOME_BY_ATTACHMENT_TYPE,
     PROJECTS_TRANSCRIPT_ROOT,
     QUERIES_DIRECTORY_NAME,
+    QUERY_NAME_PATTERN,
     SCRIPT_PATH_PYTHON_PREFIXES,
     SQL_FILE_EXTENSION,
     STDERR_EXCERPT_MAX_CHARACTERS,
@@ -81,6 +87,7 @@ from config.hook_log_extractor_constants import (
     TOP_BLOCKED_COMMAND_PREVIEW_MAX_CHARACTERS,
     TOP_BLOCKERS_LAST_24_HOURS_SQL,
     TOP_LEVEL_ATTACHMENT_TYPE,
+    UNKNOWN_QUERY_MESSAGE_PREFIX,
 )
 
 
@@ -252,21 +259,22 @@ def build_row_from_attachment(
 def iter_attachment_records_from_file(
     jsonl_file_path: str,
     start_offset: int,
+    start_line_number: int = 0,
 ) -> Iterator[tuple[dict[str, object], int, int]]:
     """Yield ``(parsed_record, line_number, byte_offset_after)`` for each hook attachment.
 
     Skips malformed JSON and non-attachment records. Line numbers are
     1-indexed against the full file; byte offsets are from file start.
+    ``start_line_number`` is the line number already consumed before
+    ``start_offset`` — the first yielded record will carry a line number
+    of ``start_line_number + 1`` or higher.
     """
     if not os.path.exists(jsonl_file_path):
         return
     with io.open(jsonl_file_path, "rb") as jsonl_file_handle:
         if start_offset > 0:
             jsonl_file_handle.seek(start_offset)
-            preceding_line_count = _count_lines_up_to(jsonl_file_path, start_offset)
-            current_line_number = preceding_line_count
-        else:
-            current_line_number = 0
+        current_line_number = start_line_number
         current_byte_offset = jsonl_file_handle.tell()
         while True:
             raw_bytes = jsonl_file_handle.readline()
@@ -295,39 +303,49 @@ def iter_attachment_records_from_file(
             yield parsed_record, current_line_number, current_byte_offset
 
 
-def _count_lines_up_to(jsonl_file_path: str, byte_offset: int) -> int:
-    preceding_line_count = 0
-    with io.open(jsonl_file_path, "rb") as file_handle:
-        bytes_remaining = byte_offset
-        while bytes_remaining > 0:
-            chunk_bytes = file_handle.read(min(LINE_COUNT_CHUNK_SIZE_BYTES, bytes_remaining))
-            if not chunk_bytes:
-                break
-            preceding_line_count += chunk_bytes.count(b"\n")
-            bytes_remaining -= len(chunk_bytes)
-    return preceding_line_count
+def load_offsets(state_file_path: str) -> dict[str, dict[str, int]]:
+    """Load per-file ``{byte_offset, line_number}`` entries from disk.
 
-
-def load_offsets(state_file_path: str) -> dict[str, int]:
-    """Load per-file byte offsets from disk, returning empty dict if absent."""
+    Returns an empty dict when the state file is missing or contains
+    malformed JSON. Legacy bare-integer entries trigger a single
+    offline-warning line and are treated as invalid so the caller
+    re-extracts from the start of each file.
+    """
     if not os.path.exists(state_file_path):
         return {}
     try:
         with io.open(state_file_path, "r", encoding="utf-8") as state_file_handle:
             loaded_content = json.load(state_file_handle)
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError:
         return {}
     if not isinstance(loaded_content, dict):
         return {}
-    return {
-        str(each_path): int(each_offset)
-        for each_path, each_offset in loaded_content.items()
-        if isinstance(each_offset, int)
-    }
+    migrated_offsets: dict[str, dict[str, int]] = {}
+    has_legacy_entries = False
+    for each_path, each_entry in loaded_content.items():
+        path_string = str(each_path)
+        if isinstance(each_entry, dict):
+            byte_offset_value = each_entry.get(BYTE_OFFSET_KEY)
+            line_number_value = each_entry.get(LINE_NUMBER_KEY)
+            if isinstance(byte_offset_value, int) and isinstance(
+                line_number_value, int
+            ):
+                migrated_offsets[path_string] = {
+                    BYTE_OFFSET_KEY: byte_offset_value,
+                    LINE_NUMBER_KEY: line_number_value,
+                }
+                continue
+        has_legacy_entries = True
+    if has_legacy_entries:
+        _append_legacy_offsets_warning_line()
+    return migrated_offsets
 
 
-def save_offsets(state_file_path: str, offset_by_jsonl_path: dict[str, int]) -> None:
-    """Persist per-file byte offsets atomically via tempfile + os.replace."""
+def save_offsets(
+    state_file_path: str,
+    offset_by_jsonl_path: dict[str, dict[str, int]],
+) -> None:
+    """Persist per-file offset entries atomically via tempfile + os.replace."""
     state_file_parent = os.path.dirname(state_file_path)
     if state_file_parent:
         os.makedirs(state_file_parent, exist_ok=True)
@@ -337,6 +355,7 @@ def save_offsets(state_file_path: str, offset_by_jsonl_path: dict[str, int]) -> 
         dir=state_file_parent or None,
         delete=False,
     )
+    temporary_file_path = temporary_file_handle.name
     try:
         json.dump(
             offset_by_jsonl_path,
@@ -348,7 +367,14 @@ def save_offsets(state_file_path: str, offset_by_jsonl_path: dict[str, int]) -> 
         os.fsync(temporary_file_handle.fileno())
     finally:
         temporary_file_handle.close()
-    os.replace(temporary_file_handle.name, state_file_path)
+    try:
+        os.replace(temporary_file_path, state_file_path)
+    except Exception:
+        try:
+            os.unlink(temporary_file_path)
+        except OSError:
+            pass
+        raise
 
 
 def is_operational_error(exception_instance: BaseException) -> bool:
@@ -401,6 +427,18 @@ def _append_offline_warning_line(exception_instance: BaseException) -> None:
         warning_log_handle.write(warning_line_text + "\n")
 
 
+def _append_legacy_offsets_warning_line() -> None:
+    warning_log_parent = os.path.dirname(OFFLINE_WARNING_LOG)
+    if warning_log_parent:
+        os.makedirs(warning_log_parent, exist_ok=True)
+    timestamp_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    warning_line_text = (
+        f"{timestamp_iso}\tmigration\t{LEGACY_OFFSETS_FORMAT_WARNING_LABEL}"
+    )
+    with io.open(OFFLINE_WARNING_LOG, "a", encoding="utf-8") as warning_log_handle:
+        warning_log_handle.write(warning_line_text + "\n")
+
+
 def run_full_extraction(
     transcripts_root: str,
     state_file_path: str,
@@ -412,7 +450,7 @@ def run_full_extraction(
     """
     try:
         neon_connection = connect_to_neon()
-    except BaseException as connect_exception:
+    except Exception as connect_exception:
         if is_operational_error(connect_exception):
             _append_offline_warning_line(connect_exception)
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
@@ -423,15 +461,22 @@ def run_full_extraction(
             with neon_connection.cursor() as neon_cursor:
                 neon_cursor.execute(HOOK_EVENTS_TRUNCATE_SQL)
             neon_connection.commit()
-            offset_by_jsonl_path: dict[str, int] = {}
+            offset_by_jsonl_path: dict[str, dict[str, int]] = {}
         else:
             offset_by_jsonl_path = load_offsets(state_file_path)
 
         all_jsonl_file_paths = _discover_jsonl_files(transcripts_root)
         for each_jsonl_file_path in all_jsonl_file_paths:
-            start_offset = offset_by_jsonl_path.get(each_jsonl_file_path, 0)
+            previous_entry = offset_by_jsonl_path.get(each_jsonl_file_path)
+            start_offset = (
+                previous_entry[BYTE_OFFSET_KEY] if previous_entry is not None else 0
+            )
+            start_line_number = (
+                previous_entry[LINE_NUMBER_KEY] if previous_entry is not None else 0
+            )
             batch_buffer: list[dict[str, object]] = []
             final_offset = start_offset
+            final_line_number = start_line_number
             for (
                 parsed_record,
                 line_number,
@@ -439,6 +484,7 @@ def run_full_extraction(
             ) in iter_attachment_records_from_file(
                 each_jsonl_file_path,
                 start_offset=start_offset,
+                start_line_number=start_line_number,
             ):
                 built_row = build_row_from_attachment(
                     parsed_record=parsed_record,
@@ -447,17 +493,26 @@ def run_full_extraction(
                 )
                 batch_buffer.append(built_row)
                 final_offset = byte_offset_after
+                final_line_number = line_number
                 if len(batch_buffer) >= INSERT_BATCH_SIZE:
                     insert_rows_batch(neon_connection, batch_buffer)
                     batch_buffer.clear()
-                    offset_by_jsonl_path[each_jsonl_file_path] = final_offset
+                    offset_by_jsonl_path[each_jsonl_file_path] = {
+                        BYTE_OFFSET_KEY: final_offset,
+                        LINE_NUMBER_KEY: final_line_number,
+                    }
                     save_offsets(state_file_path, offset_by_jsonl_path)
             if batch_buffer:
                 insert_rows_batch(neon_connection, batch_buffer)
             if final_offset != start_offset or full_rebuild:
-                offset_by_jsonl_path[each_jsonl_file_path] = max(
-                    final_offset, os.path.getsize(each_jsonl_file_path)
-                )
+                try:
+                    current_file_size = os.path.getsize(each_jsonl_file_path)
+                except FileNotFoundError:
+                    continue
+                offset_by_jsonl_path[each_jsonl_file_path] = {
+                    BYTE_OFFSET_KEY: max(final_offset, current_file_size),
+                    LINE_NUMBER_KEY: final_line_number,
+                }
                 save_offsets(state_file_path, offset_by_jsonl_path)
     finally:
         try:
@@ -479,7 +534,7 @@ def run_summary() -> int:
     """Print the top-10 over-blockers summary and return exit code."""
     try:
         neon_connection = connect_to_neon()
-    except BaseException as connect_exception:
+    except Exception as connect_exception:
         if is_operational_error(connect_exception):
             _append_offline_warning_line(connect_exception)
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
@@ -535,15 +590,21 @@ def _print_summary_table(all_result_rows: Sequence[tuple[object, ...]]) -> None:
 
 def run_query(named_query: str) -> int:
     """Execute a pre-baked SQL file under ``queries/`` and print results."""
+    if not re.fullmatch(QUERY_NAME_PATTERN, named_query):
+        print(
+            f"{INVALID_QUERY_NAME_MESSAGE_PREFIX}{named_query}",
+            file=sys.stderr,
+        )
+        return EXIT_CODE_UNKNOWN_QUERY
     queries_directory = Path(__file__).resolve().parent / QUERIES_DIRECTORY_NAME
     query_file_path = queries_directory / f"{named_query}{SQL_FILE_EXTENSION}"
     if not query_file_path.exists():
-        print(f"Unknown query: {named_query}", file=sys.stderr)
-        return EXIT_CODE_SUCCESS
+        print(f"{UNKNOWN_QUERY_MESSAGE_PREFIX}{named_query}", file=sys.stderr)
+        return EXIT_CODE_UNKNOWN_QUERY
     query_text = query_file_path.read_text(encoding="utf-8")
     try:
         neon_connection = connect_to_neon()
-    except BaseException as connect_exception:
+    except Exception as connect_exception:
         if is_operational_error(connect_exception):
             _append_offline_warning_line(connect_exception)
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING

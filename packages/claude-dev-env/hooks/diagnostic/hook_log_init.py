@@ -29,6 +29,7 @@ from config.hook_log_extractor_constants import (
     HOOK_EVENTS_ROW_COUNT_SQL,
     HOOK_EVENTS_TABLE_NAME,
     MISSING_ENVIRONMENT_VARIABLE_PREFIX,
+    MISSING_PSYCOPG_WARNING_LABEL,
     NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
     NEON_HOST_REPORT_LABEL,
     OUTCOME_INIT_PROBE,
@@ -40,6 +41,7 @@ from config.hook_log_extractor_constants import (
     SENTINEL_HOOK_EVENT,
     SENTINEL_HOOK_NAME,
     SENTINEL_INSERT_SQL,
+    SENTINEL_SELECT_FAILURE_MESSAGE,
     SENTINEL_SELECT_SQL,
     SENTINEL_SESSION_ID,
     SENTINEL_SOURCE_LINE_NUMBER,
@@ -48,6 +50,10 @@ from config.hook_log_extractor_constants import (
     TABLE_REPORT_LABEL,
     UNKNOWN_HOST_PLACEHOLDER,
 )
+
+
+class MissingPsycopgDependencyError(RuntimeError):
+    """Raised when the psycopg driver is not installed in the interpreter."""
 
 
 def verify_environment_variables() -> list[str]:
@@ -94,7 +100,7 @@ def apply_schema(neon_connection: object) -> None:
 
 
 def run_sentinel_round_trip(neon_connection: object) -> None:
-    """Insert a sentinel row, select it back by id, then delete it."""
+    """Insert a sentinel row, select it back by id, verify it, then delete it."""
     with neon_connection.cursor() as neon_cursor:
         neon_cursor.execute(
             SENTINEL_INSERT_SQL,
@@ -112,6 +118,9 @@ def run_sentinel_round_trip(neon_connection: object) -> None:
         sentinel_id = sentinel_row[0] if sentinel_row else None
         if sentinel_id is not None:
             neon_cursor.execute(SENTINEL_SELECT_SQL, (sentinel_id,))
+            fetched_row = neon_cursor.fetchone()
+            if fetched_row is None or fetched_row[0] != sentinel_id:
+                raise RuntimeError(SENTINEL_SELECT_FAILURE_MESSAGE)
             neon_cursor.execute(SENTINEL_DELETE_SQL, (sentinel_id,))
     neon_connection.commit()
 
@@ -131,7 +140,13 @@ def print_success_report(neon_host: str, table_name: str, row_count: int) -> Non
 
 
 def connect_to_neon() -> object:
-    """Open a psycopg v3 connection using the configured Neon database URL."""
+    """Open a psycopg v3 connection using the configured Neon database URL.
+
+    Raises ``MissingPsycopgDependencyError`` when psycopg is not installed
+    so the caller can surface a clear actionable message.
+    """
+    if psycopg is None:
+        raise MissingPsycopgDependencyError(MISSING_PSYCOPG_WARNING_LABEL)
     database_url = os.environ[NEON_DATABASE_URL_ENVIRONMENT_VARIABLE]
     return psycopg.connect(database_url, connect_timeout=CONNECT_TIMEOUT_SECONDS)
 

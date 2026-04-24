@@ -136,7 +136,7 @@
           },
           {
             "type": "command",
-            "command": "bws run -- python3 ${CLAUDE_PLUGIN_ROOT}/hooks/diagnostic/hook_log_extractor.py --incremental",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/diagnostic/hook_log_stop_wrapper.py",
             "timeout": 30
           }
         ]

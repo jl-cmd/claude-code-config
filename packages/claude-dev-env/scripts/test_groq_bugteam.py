@@ -12,7 +12,10 @@ import re
 import sys
 import urllib.error
 
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+scripts_directory = pathlib.Path(__file__).parent
+scripts_directory_string = str(scripts_directory)
+if scripts_directory_string not in sys.path:
+    sys.path.insert(0, scripts_directory_string)
 for _cached in list(sys.modules):
     if _cached == "config" or _cached.startswith("config."):
         del sys.modules[_cached]

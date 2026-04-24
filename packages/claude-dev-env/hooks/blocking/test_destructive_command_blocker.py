@@ -474,6 +474,61 @@ def test_rm_rf_allowed_for_chat_observed_absolute_path_in_bugteam_windows_worktr
     assert result.returncode == 0
 
 
+def test_rm_rf_asks_when_leading_cd_target_contains_command_substitution_dollar_parenthesis() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/$(rm -rf ~/.ssh)" && ls'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_leading_cd_target_contains_backtick_command_substitution() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/`rm -rf ~/.ssh`" && rm -rf .bugteam-tmp'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_leading_cd_target_contains_variable_expansion() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/$SNEAKY_VAR" && rm -rf .bugteam-tmp'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_leading_cd_adjacent_quoted_strings_resolve_outside_ephemeral() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/a""/../../etc" && rm -rf .'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_leading_cd_adjacent_quoted_strings_use_mixed_quotes() -> None:
+    payload = _make_bash_payload(
+        """cd "/tmp/a"'/../../etc' && rm -rf ."""
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
 def test_rm_rf_asks_when_target_is_bare_tmp_root() -> None:
     payload = _make_bash_payload("rm -rf /tmp")
 

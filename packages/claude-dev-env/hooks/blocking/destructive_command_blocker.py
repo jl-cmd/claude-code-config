@@ -291,30 +291,38 @@ def _ephemeral_recursive_rm_auto_allow_granted(command: str, matched_description
     return matched_description.startswith(("rm -rf", "rm --recursive")) and rm_targets_only_ephemeral_paths(command)
 
 
-LEADING_CD_DOUBLE_QUOTED_PATTERN = re.compile(r'^\s*cd\s+"([^"]+)"')
-LEADING_CD_SINGLE_QUOTED_PATTERN = re.compile(r"^\s*cd\s+'([^']+)'")
-LEADING_CD_UNQUOTED_PATTERN = re.compile(r'^\s*cd\s+([^\s&|;<>]+)')
+SHELL_EXPANSION_CHARACTERS_THAT_EXECUTE_CODE = ("$", "`")
 
 
 def _extract_leading_cd_target(command: str) -> str | None:
     """Return the target of a ``cd`` that starts the command, or None if absent.
 
-    Supports double-quoted, single-quoted, and unquoted target forms. The
-    unquoted form stops at whitespace or at any shell metacharacter
-    (``&``, ``|``, ``;``, ``<``, ``>``) so it captures only the path token,
-    not the rest of a compound command. Only recognizes ``cd`` at the very
-    start of the command; later ``cd`` calls inside the same pipeline are
-    ignored to keep the extractor deterministic.
+    Uses ``shlex.split`` with POSIX rules to tokenize the command so adjacent
+    quoted string concatenation (``"/tmp/a""/../../etc"``) resolves to the
+    same path the shell would cd to (``/tmp/a/../../etc``). A regex-based
+    extractor cannot see past the first quoted segment and would
+    misclassify the cd target as ephemeral while the shell ends up
+    somewhere else entirely.
+
+    Returns None when the command does not start with ``cd``, when tokenization
+    fails (unbalanced quotes), when the cd target is missing, or when the
+    target contains any shell-expansion character (``$`` for variable /
+    command substitution, `` ` `` for backtick subshell) that the shell
+    would resolve *before* cd runs. Hook authors cannot safely know what
+    ``$(rm -rf ~)`` expands to, so the conservative answer is "don't
+    auto-allow".
     """
-    for each_pattern in (
-        LEADING_CD_DOUBLE_QUOTED_PATTERN,
-        LEADING_CD_SINGLE_QUOTED_PATTERN,
-        LEADING_CD_UNQUOTED_PATTERN,
-    ):
-        leading_cd_match = each_pattern.match(command)
-        if leading_cd_match is not None:
-            return leading_cd_match.group(1)
-    return None
+    try:
+        all_command_tokens = shlex.split(command, posix=True)
+    except ValueError:
+        return None
+    if len(all_command_tokens) < 2 or all_command_tokens[0] != "cd":
+        return None
+    cd_target_token = all_command_tokens[1]
+    for each_shell_expansion_character in SHELL_EXPANSION_CHARACTERS_THAT_EXECUTE_CODE:
+        if each_shell_expansion_character in cd_target_token:
+            return None
+    return cd_target_token
 
 
 def _resolve_declared_effective_working_directory(command: str, tool_input: dict) -> str | None:

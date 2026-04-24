@@ -1340,9 +1340,9 @@ def check_file_global_constants_use_count(content: str, file_path: str) -> list[
 
     Enforces jl-cmd/claude-code-config#180: a file-global constant used by just
     one caller belongs in that caller's scope. Test files, config files, and
-    non-Python files are exempt. Constants with zero function references are
-    out of scope. Hook infrastructure files define module-level scalar
-    constants by convention and are exempt to avoid self-blocking.
+    non-Python files are exempt. Constants with zero references are out of
+    scope. Hook infrastructure files define module-level scalar constants by
+    convention and are exempt to avoid self-blocking.
     """
     if is_test_file(file_path):
         return []

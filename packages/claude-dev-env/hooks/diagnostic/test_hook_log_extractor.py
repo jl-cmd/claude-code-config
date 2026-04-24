@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -1057,3 +1058,161 @@ def test_iter_attachment_records_final_line_number_when_no_yields(tmp_path: Path
 
     assert all_yielded == []
     assert attachment_iterator.final_line_number == 2
+
+
+def test_iter_attachment_records_exposes_final_byte_offset_after_drain(
+    tmp_path: Path,
+) -> None:
+    """Iterator must report byte position reached after EOF, even with zero yields."""
+    jsonl_file = tmp_path / "session.jsonl"
+    lines = [
+        json.dumps({"type": "user", "content": "a"}),
+        json.dumps({"type": "assistant", "content": "b"}),
+    ]
+    full_bytes = ("\n".join(lines) + "\n").encode("utf-8")
+    jsonl_file.write_bytes(full_bytes)
+
+    attachment_iterator = hook_log_extractor.iter_attachment_records_from_file(
+        str(jsonl_file),
+        start_offset=0,
+    )
+    list(attachment_iterator)
+
+    assert attachment_iterator.final_byte_offset == len(full_bytes)
+
+
+def test_run_full_extraction_persists_offset_with_only_non_hook_attachments(
+    tmp_path: Path,
+) -> None:
+    """Offset must advance when iterator drained file yielding zero hook records."""
+    jsonl_file = tmp_path / "session.jsonl"
+    lines = [
+        json.dumps({"type": "user", "content": "noise"}),
+        json.dumps({"type": "assistant", "content": "more noise"}),
+    ]
+    jsonl_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    state_file = tmp_path / "offsets.json"
+
+    fake_cursor = MagicMock()
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    with patch.object(
+        hook_log_extractor, "connect_to_neon", return_value=fake_connection
+    ):
+        hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    saved_offsets = hook_log_extractor.load_offsets(str(state_file))
+    assert str(jsonl_file) in saved_offsets
+    persisted_byte_offset = saved_offsets[str(jsonl_file)]["byte_offset"]
+    assert persisted_byte_offset == jsonl_file.stat().st_size
+
+
+def test_run_full_extraction_persists_final_offset_not_file_size(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Offset must come from iterator, not os.path.getsize (race-safe)."""
+    jsonl_file = tmp_path / "session.jsonl"
+    success_line_bytes = (_make_success_line() + "\n").encode("utf-8")
+    jsonl_file.write_bytes(success_line_bytes)
+    initial_byte_length = len(success_line_bytes)
+
+    state_file = tmp_path / "offsets.json"
+
+    real_getsize = hook_log_extractor.os.path.getsize
+
+    def _getsize_reports_inflated_size(each_path: str) -> int:
+        if each_path == str(jsonl_file):
+            return initial_byte_length + 9999
+        return real_getsize(each_path)
+
+    fake_cursor = MagicMock()
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    monkeypatch.setattr(
+        hook_log_extractor.os.path,
+        "getsize",
+        _getsize_reports_inflated_size,
+    )
+
+    with patch.object(
+        hook_log_extractor, "connect_to_neon", return_value=fake_connection
+    ):
+        hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    saved_offsets = hook_log_extractor.load_offsets(str(state_file))
+    assert saved_offsets[str(jsonl_file)]["byte_offset"] == initial_byte_length
+
+
+def test_save_offsets_is_serialized_across_threads(tmp_path: Path) -> None:
+    """Locked read-modify-write cycles across threads must not clobber entries."""
+    state_file = tmp_path / "offsets.json"
+    hook_log_extractor.save_offsets(str(state_file), {})
+
+    def _writer_for_path(writer_path: str) -> None:
+        with hook_log_extractor._acquire_offsets_lock(str(state_file)):
+            existing_offsets = hook_log_extractor.load_offsets(str(state_file))
+            existing_offsets[writer_path] = {"byte_offset": 100, "line_number": 1}
+            hook_log_extractor.save_offsets(str(state_file), existing_offsets)
+
+    concurrent_threads = [
+        threading.Thread(target=_writer_for_path, args=(f"C:/file_{each_index}.jsonl",))
+        for each_index in range(5)
+    ]
+    for each_thread in concurrent_threads:
+        each_thread.start()
+    for each_thread in concurrent_threads:
+        each_thread.join()
+
+    final_offsets = hook_log_extractor.load_offsets(str(state_file))
+    assert len(final_offsets) == 5
+    for each_index in range(5):
+        assert f"C:/file_{each_index}.jsonl" in final_offsets
+
+
+def test_run_full_extraction_holds_lock_across_load_and_save(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The extraction cycle must acquire a lock around load→mutate→save."""
+    jsonl_file = tmp_path / "session.jsonl"
+    jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
+    state_file = tmp_path / "offsets.json"
+
+    lock_acquisition_count = {"count": 0}
+
+    real_lock_helper = hook_log_extractor._acquire_offsets_lock
+
+    def _counting_lock_helper(state_file_path: str) -> Any:
+        lock_acquisition_count["count"] += 1
+        return real_lock_helper(state_file_path)
+
+    monkeypatch.setattr(
+        hook_log_extractor, "_acquire_offsets_lock", _counting_lock_helper
+    )
+
+    fake_cursor = MagicMock()
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    with patch.object(
+        hook_log_extractor, "connect_to_neon", return_value=fake_connection
+    ):
+        hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    assert lock_acquisition_count["count"] >= 1

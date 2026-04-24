@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Extract hook-firing records from per-session JSONL transcripts into Neon.
 
-Reads JSONL transcripts at ``PROJECTS_TRANSCRIPT_ROOT``, keeps only
-``attachment`` records whose inner ``attachment.type`` starts with
-``hook_``, and inserts one row per record into the ``hook_events``
-table. Idempotence is enforced at the database layer via a UNIQUE
-constraint on ``(source_jsonl_path, source_line_number)`` combined with
+Reads JSONL transcripts at ``PROJECTS_TRANSCRIPT_ROOT`` and ingests only
+``attachment`` records whose inner ``attachment.type`` is one of the
+five variants enumerated in ``OUTCOME_BY_ATTACHMENT_TYPE``
+(``hook_success``, ``hook_blocking_error``, ``hook_non_blocking_error``,
+``hook_system_message``, ``hook_additional_context``). Unknown
+``hook_``-prefixed variants are skipped until
+``OUTCOME_BY_ATTACHMENT_TYPE`` is extended to cover them. Each ingested
+record becomes one row in the ``hook_events`` table. Idempotence is
+enforced at the database layer via a UNIQUE constraint on
+``(source_jsonl_path, source_line_number)`` combined with
 ``ON CONFLICT DO NOTHING``. Per-file byte offsets in
 ``OFFSET_STATE_FILE`` skip re-reading unchanged bytes.
 
@@ -17,6 +22,7 @@ session end on a missing network.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import glob
 import io
@@ -26,7 +32,20 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from typing import Iterator, Optional, Sequence
+from typing import IO, Iterator, Optional, Sequence
+
+if os.name == "nt":
+    try:
+        import msvcrt
+    except ImportError:
+        msvcrt = None
+    fcntl = None
+else:
+    try:
+        import fcntl
+    except ImportError:
+        fcntl = None
+    msvcrt = None
 
 if str(Path(__file__).resolve().parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -257,12 +276,17 @@ def build_row_from_attachment(
 
 
 class AttachmentRecordIterator:
-    """Iterates hook attachment records and tracks lines actually consumed.
+    """Iterates hook attachment records and tracks bytes actually consumed.
 
     ``final_line_number`` reflects the number of lines read from the file
     (including malformed and non-attachment lines), not just the line
-    number of the last yielded record. Callers persist this value so
-    resumption starts from ``final_line_number + 1`` on the next run.
+    number of the last yielded record. ``final_byte_offset`` reflects the
+    byte position after the last successfully-read line (or
+    ``start_offset`` when the file did not exist). ``drained`` is True
+    once iteration reached EOF. Callers persist ``final_byte_offset``
+    and ``final_line_number`` whenever ``drained`` is True so resumption
+    starts from the exact position after the last bytes the iterator
+    consumed.
     """
 
     def __init__(
@@ -275,6 +299,8 @@ class AttachmentRecordIterator:
         self._start_offset = start_offset
         self._start_line_number = start_line_number
         self.final_line_number = start_line_number
+        self.final_byte_offset = start_offset
+        self.drained = False
 
     def __iter__(self) -> Iterator[tuple[dict[str, object], int, int]]:
         if not os.path.exists(self._jsonl_file_path):
@@ -284,14 +310,18 @@ class AttachmentRecordIterator:
                 jsonl_file_handle.seek(self._start_offset)
             current_line_number = self._start_line_number
             current_byte_offset = jsonl_file_handle.tell()
+            self.final_byte_offset = current_byte_offset
             while True:
                 raw_bytes = jsonl_file_handle.readline()
                 if not raw_bytes:
                     self.final_line_number = current_line_number
+                    self.final_byte_offset = current_byte_offset
+                    self.drained = True
                     return
                 current_line_number += 1
                 current_byte_offset += len(raw_bytes)
                 self.final_line_number = current_line_number
+                self.final_byte_offset = current_byte_offset
                 try:
                     parsed_record = json.loads(raw_bytes.decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError):
@@ -407,6 +437,59 @@ def save_offsets(
         raise
 
 
+@contextlib.contextmanager
+def _acquire_offsets_lock(state_file_path: str) -> Iterator[None]:
+    """Hold a cross-platform advisory lock around an offsets read-modify-write.
+
+    Serializes concurrent extractor runs so two Claude Code sessions
+    closing at once cannot clobber each other's offset updates. Uses
+    ``msvcrt.locking`` on Windows and ``fcntl.flock`` on POSIX; falls
+    back to no locking on platforms where neither module is available.
+    """
+    lock_file_path = state_file_path + ".lock"
+    lock_parent_directory = os.path.dirname(lock_file_path)
+    if lock_parent_directory:
+        os.makedirs(lock_parent_directory, exist_ok=True)
+    lock_file_handle = io.open(lock_file_path, "a+", encoding="utf-8")
+    try:
+        _lock_file_handle_blocking(lock_file_handle)
+        try:
+            yield
+        finally:
+            _unlock_file_handle(lock_file_handle)
+    finally:
+        lock_file_handle.close()
+
+
+def _lock_file_handle_blocking(lock_file_handle: IO[str]) -> None:
+    if msvcrt is not None:
+        lock_byte_count = 1
+        while True:
+            try:
+                msvcrt.locking(
+                    lock_file_handle.fileno(), msvcrt.LK_LOCK, lock_byte_count
+                )
+                return
+            except OSError:
+                continue
+    if fcntl is not None:
+        fcntl.flock(lock_file_handle.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock_file_handle(lock_file_handle: IO[str]) -> None:
+    if msvcrt is not None:
+        lock_byte_count = 1
+        try:
+            msvcrt.locking(
+                lock_file_handle.fileno(), msvcrt.LK_UNLCK, lock_byte_count
+            )
+        except OSError:
+            return
+        return
+    if fcntl is not None:
+        fcntl.flock(lock_file_handle.fileno(), fcntl.LOCK_UN)
+
+
 def is_operational_error(exception_instance: BaseException) -> bool:
     """Return True when an exception should trigger the offline fallback."""
     if isinstance(
@@ -490,63 +573,61 @@ def run_full_extraction(
         raise
 
     try:
-        if full_rebuild:
-            with neon_connection.cursor() as neon_cursor:
-                neon_cursor.execute(HOOK_EVENTS_TRUNCATE_SQL)
-            neon_connection.commit()
-            offset_by_jsonl_path: dict[str, dict[str, int]] = {}
-        else:
-            offset_by_jsonl_path = load_offsets(state_file_path)
+        with _acquire_offsets_lock(state_file_path):
+            if full_rebuild:
+                with neon_connection.cursor() as neon_cursor:
+                    neon_cursor.execute(HOOK_EVENTS_TRUNCATE_SQL)
+                neon_connection.commit()
+                offset_by_jsonl_path: dict[str, dict[str, int]] = {}
+            else:
+                offset_by_jsonl_path = load_offsets(state_file_path)
 
-        all_jsonl_file_paths = _discover_jsonl_files(transcripts_root)
-        for each_jsonl_file_path in all_jsonl_file_paths:
-            previous_entry = offset_by_jsonl_path.get(each_jsonl_file_path)
-            start_offset = (
-                previous_entry[BYTE_OFFSET_KEY] if previous_entry is not None else 0
-            )
-            start_line_number = (
-                previous_entry[LINE_NUMBER_KEY] if previous_entry is not None else 0
-            )
-            batch_buffer: list[dict[str, object]] = []
-            final_offset = start_offset
-            attachment_iterator = iter_attachment_records_from_file(
-                each_jsonl_file_path,
-                start_offset=start_offset,
-                start_line_number=start_line_number,
-            )
-            for (
-                parsed_record,
-                line_number,
-                byte_offset_after,
-            ) in attachment_iterator:
-                built_row = build_row_from_attachment(
-                    parsed_record=parsed_record,
-                    source_jsonl_path=each_jsonl_file_path,
-                    source_line_number=line_number,
+            all_jsonl_file_paths = _discover_jsonl_files(transcripts_root)
+            for each_jsonl_file_path in all_jsonl_file_paths:
+                previous_entry = offset_by_jsonl_path.get(each_jsonl_file_path)
+                start_offset = (
+                    previous_entry[BYTE_OFFSET_KEY]
+                    if previous_entry is not None
+                    else 0
                 )
-                batch_buffer.append(built_row)
-                final_offset = byte_offset_after
-                if len(batch_buffer) >= INSERT_BATCH_SIZE:
+                start_line_number = (
+                    previous_entry[LINE_NUMBER_KEY]
+                    if previous_entry is not None
+                    else 0
+                )
+                batch_buffer: list[dict[str, object]] = []
+                attachment_iterator = iter_attachment_records_from_file(
+                    each_jsonl_file_path,
+                    start_offset=start_offset,
+                    start_line_number=start_line_number,
+                )
+                for (
+                    parsed_record,
+                    line_number,
+                    byte_offset_after,
+                ) in attachment_iterator:
+                    built_row = build_row_from_attachment(
+                        parsed_record=parsed_record,
+                        source_jsonl_path=each_jsonl_file_path,
+                        source_line_number=line_number,
+                    )
+                    batch_buffer.append(built_row)
+                    if len(batch_buffer) >= INSERT_BATCH_SIZE:
+                        insert_rows_batch(neon_connection, batch_buffer)
+                        batch_buffer.clear()
+                        offset_by_jsonl_path[each_jsonl_file_path] = {
+                            BYTE_OFFSET_KEY: byte_offset_after,
+                            LINE_NUMBER_KEY: attachment_iterator.final_line_number,
+                        }
+                        save_offsets(state_file_path, offset_by_jsonl_path)
+                if batch_buffer:
                     insert_rows_batch(neon_connection, batch_buffer)
-                    batch_buffer.clear()
+                if attachment_iterator.drained:
                     offset_by_jsonl_path[each_jsonl_file_path] = {
-                        BYTE_OFFSET_KEY: final_offset,
+                        BYTE_OFFSET_KEY: attachment_iterator.final_byte_offset,
                         LINE_NUMBER_KEY: attachment_iterator.final_line_number,
                     }
                     save_offsets(state_file_path, offset_by_jsonl_path)
-            if batch_buffer:
-                insert_rows_batch(neon_connection, batch_buffer)
-            lines_consumed = attachment_iterator.final_line_number
-            if final_offset != start_offset or full_rebuild:
-                try:
-                    current_file_size = os.path.getsize(each_jsonl_file_path)
-                except FileNotFoundError:
-                    continue
-                offset_by_jsonl_path[each_jsonl_file_path] = {
-                    BYTE_OFFSET_KEY: max(final_offset, current_file_size),
-                    LINE_NUMBER_KEY: lines_consumed,
-                }
-                save_offsets(state_file_path, offset_by_jsonl_path)
     finally:
         try:
             neon_connection.close()

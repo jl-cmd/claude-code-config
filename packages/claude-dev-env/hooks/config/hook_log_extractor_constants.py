@@ -17,8 +17,16 @@ INSERT_BATCH_SIZE: int = 500
 CONNECT_TIMEOUT_SECONDS: int = 5
 
 def _resolve_claude_home_directory() -> Path:
-    """Return the root of the local ``~/.claude`` tree, honoring ``CLAUDE_HOME``."""
-    return Path(os.environ.get("CLAUDE_HOME", str(Path.home() / ".claude")))
+    """Return the root of the local ``~/.claude`` tree, honoring ``CLAUDE_HOME``.
+
+    An unset, empty, or whitespace-only ``CLAUDE_HOME`` falls back to
+    ``~/.claude`` so state and transcript paths do not silently resolve
+    to the process working directory.
+    """
+    claude_home_override = os.environ.get("CLAUDE_HOME", "").strip()
+    if claude_home_override:
+        return Path(claude_home_override)
+    return Path.home() / ".claude"
 
 
 OFFSET_STATE_FILE: str = str(

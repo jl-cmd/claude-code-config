@@ -17,6 +17,7 @@ if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
 from diagnostic import hook_log_init
+from config import hook_log_extractor_constants
 from config.hook_log_extractor_constants import (
     EXIT_CODE_ENVIRONMENT_MISSING,
     NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
@@ -159,3 +160,40 @@ def test_run_sentinel_round_trip_raises_when_insert_returns_no_row() -> None:
 
     with pytest.raises(RuntimeError):
         hook_log_init.run_sentinel_round_trip(fake_connection)
+
+
+def test_claude_home_resolver_falls_back_to_home_when_env_var_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty CLAUDE_HOME must fall back to ~/.claude (not process CWD)."""
+    monkeypatch.setenv("CLAUDE_HOME", "")
+
+    resolved_home = hook_log_extractor_constants._resolve_claude_home_directory()
+
+    expected_home = Path.home() / ".claude"
+    assert resolved_home == expected_home
+
+
+def test_claude_home_resolver_falls_back_to_home_when_env_var_is_whitespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whitespace-only CLAUDE_HOME must fall back to ~/.claude."""
+    monkeypatch.setenv("CLAUDE_HOME", "   ")
+
+    resolved_home = hook_log_extractor_constants._resolve_claude_home_directory()
+
+    expected_home = Path.home() / ".claude"
+    assert resolved_home == expected_home
+
+
+def test_claude_home_resolver_honors_explicit_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Explicit CLAUDE_HOME path must win over the home fallback."""
+    explicit_claude_home = tmp_path / "explicit-claude-home"
+    monkeypatch.setenv("CLAUDE_HOME", str(explicit_claude_home))
+
+    resolved_home = hook_log_extractor_constants._resolve_claude_home_directory()
+
+    assert resolved_home == explicit_claude_home

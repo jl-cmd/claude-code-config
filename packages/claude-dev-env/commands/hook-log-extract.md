@@ -4,10 +4,15 @@ allowed-tools: Bash
 ---
 
 Scan every JSONL session transcript under `~/.claude/projects/` (or the
-path set by the `CLAUDE_HOME` env var), extract every `attachment`
-record whose inner type starts with `hook_`, and load one row per firing
-into the Neon `hook_events` table. The Stop hook runs this on every
-session end using the `--incremental` flag.
+path set by the `CLAUDE_HOME` env var) and ingest `attachment` records
+whose inner `type` is one of the five enumerated variants in
+`OUTCOME_BY_ATTACHMENT_TYPE` (`hook_success`, `hook_blocking_error`,
+`hook_non_blocking_error`, `hook_system_message`,
+`hook_additional_context`). Each ingested record becomes one row in
+the Neon `hook_events` table. Unknown `hook_`-prefixed variants are
+skipped until `OUTCOME_BY_ATTACHMENT_TYPE` is extended to cover them.
+The Stop hook runs this on every session end using the `--incremental`
+flag.
 
 ## Run modes
 

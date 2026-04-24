@@ -10,6 +10,7 @@ _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
 
+from config import hook_log_extractor_constants
 from config.hook_log_extractor_constants import (
     EXIT_CODE_ENVIRONMENT_MISSING,
     EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING,
@@ -64,3 +65,25 @@ def test_extractor_offline_fallback_matches_success_so_stop_hook_does_not_surfac
 def test_sentinel_insert_failure_message_is_distinct_from_select_failure() -> None:
     assert SENTINEL_INSERT_FAILURE_MESSAGE != SENTINEL_SELECT_FAILURE_MESSAGE
     assert SENTINEL_INSERT_FAILURE_MESSAGE
+
+
+def test_resolver_falls_back_to_home_when_claude_home_is_empty(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_HOME", "")
+
+    assert (
+        hook_log_extractor_constants._resolve_claude_home_directory()
+        == Path.home() / ".claude"
+    )
+
+
+def test_resolver_falls_back_to_home_when_claude_home_is_whitespace(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_HOME", "   ")
+
+    assert (
+        hook_log_extractor_constants._resolve_claude_home_directory()
+        == Path.home() / ".claude"
+    )

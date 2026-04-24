@@ -265,7 +265,7 @@ def test_rm_rf_asks_when_command_is_compound_with_ampersand() -> None:
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_rm_rf_allowed_when_cd_into_ephemeral_double_quoted_then_relative_target() -> None:
+def test_rm_rf_allowed_when_leading_cd_into_ephemeral_subdirectory_double_quoted() -> None:
     payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf .bugteam-tmp')
 
     result = _run_rm_hook(payload)
@@ -274,7 +274,7 @@ def test_rm_rf_allowed_when_cd_into_ephemeral_double_quoted_then_relative_target
     assert result.returncode == 0
 
 
-def test_rm_rf_allowed_when_cd_into_ephemeral_single_quoted_then_relative_target() -> None:
+def test_rm_rf_allowed_when_leading_cd_into_ephemeral_subdirectory_single_quoted() -> None:
     payload = _make_bash_payload("cd '/tmp/bugteam_scratch' && rm -rf .bugteam-tmp")
 
     result = _run_rm_hook(payload)
@@ -283,7 +283,7 @@ def test_rm_rf_allowed_when_cd_into_ephemeral_single_quoted_then_relative_target
     assert result.returncode == 0
 
 
-def test_rm_rf_allowed_when_cd_into_ephemeral_unquoted_then_relative_target() -> None:
+def test_rm_rf_allowed_when_leading_cd_into_ephemeral_subdirectory_unquoted() -> None:
     payload = _make_bash_payload("cd /tmp/bugteam_scratch && rm -rf .bugteam-tmp")
 
     result = _run_rm_hook(payload)
@@ -292,18 +292,7 @@ def test_rm_rf_allowed_when_cd_into_ephemeral_unquoted_then_relative_target() ->
     assert result.returncode == 0
 
 
-def test_rm_rf_allowed_when_cd_into_ephemeral_then_absolute_ephemeral_target() -> None:
-    payload = _make_bash_payload(
-        'cd "/tmp/bugteam_scratch" && rm -rf /tmp/bugteam_scratch/inner'
-    )
-
-    result = _run_rm_hook(payload)
-
-    assert result.stdout.strip() == ""
-    assert result.returncode == 0
-
-
-def test_rm_rf_allowed_when_cd_into_windows_temp_worktree_then_relative_target() -> None:
+def test_rm_rf_allowed_when_leading_cd_into_windows_temp_worktree_subdirectory() -> None:
     windows_style_temp_worktree = (
         r"C:\Users\jon\AppData\Local\Temp\bugteam-pr-58-20260424071040\pr-58\worktree"
     )
@@ -317,7 +306,69 @@ def test_rm_rf_allowed_when_cd_into_windows_temp_worktree_then_relative_target()
     assert result.returncode == 0
 
 
-def test_rm_rf_asks_when_cd_target_is_non_ephemeral() -> None:
+def test_rm_rf_allowed_when_leading_cd_into_ephemeral_with_extra_compound_after_rm() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/bugteam_scratch" && rm -rf .bugteam-tmp && gh pr checks 19'
+    )
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_when_leading_cd_into_ephemeral_with_wildcard_target() -> None:
+    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf *')
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_when_leading_cd_into_ephemeral_with_dotdot_target() -> None:
+    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf ../../etc')
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_when_tool_input_cwd_is_ephemeral_subdirectory() -> None:
+    payload_with_tool_input_cwd = {
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": "rm -rf /var/log/myapp",
+            "cwd": "/tmp/bugteam_scratch",
+        },
+    }
+
+    result = _run_rm_hook(payload_with_tool_input_cwd)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_git_push_force_allowed_when_leading_cd_into_ephemeral_subdirectory() -> None:
+    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && git push --force')
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_git_clean_force_recursive_allowed_when_leading_cd_into_ephemeral_subdirectory() -> None:
+    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && git clean -fd')
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_asks_when_leading_cd_target_is_non_ephemeral_directory() -> None:
     payload = _make_bash_payload('cd "/etc" && rm -rf scratch')
 
     result = _run_rm_hook(payload)
@@ -326,7 +377,7 @@ def test_rm_rf_asks_when_cd_target_is_non_ephemeral() -> None:
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_rm_rf_asks_when_cd_target_is_bare_ephemeral_root() -> None:
+def test_rm_rf_asks_when_leading_cd_target_is_bare_ephemeral_root() -> None:
     payload = _make_bash_payload('cd "/tmp" && rm -rf scratch')
 
     result = _run_rm_hook(payload)
@@ -335,42 +386,92 @@ def test_rm_rf_asks_when_cd_target_is_bare_ephemeral_root() -> None:
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_rm_rf_asks_when_cd_into_ephemeral_but_relative_target_escapes_via_dotdot() -> None:
-    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf ../../etc')
+def test_rm_rf_allowed_when_leading_cd_target_named_worktrees_under_ephemeral_root() -> None:
+    payload = _make_bash_payload('cd "/Users/me/repo/worktrees" && rm -rf feature')
 
     result = _run_rm_hook(payload)
 
-    response = json.loads(result.stdout)
-    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
 
 
-def test_rm_rf_asks_when_cd_into_ephemeral_but_target_is_glob_wildcard() -> None:
-    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf *')
-
-    result = _run_rm_hook(payload)
-
-    response = json.loads(result.stdout)
-    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
-
-
-def test_rm_rf_asks_when_cd_ephemeral_rm_then_extra_compound_after_rm() -> None:
-    payload = _make_bash_payload(
-        'cd "/tmp/bugteam_scratch" && rm -rf .bugteam-tmp && gh pr checks 19'
-    )
-
-    result = _run_rm_hook(payload)
-
-    response = json.loads(result.stdout)
-    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
-
-
-def test_rm_rf_asks_when_cd_target_uses_relative_path() -> None:
+def test_rm_rf_asks_when_leading_cd_target_is_relative_path() -> None:
     payload = _make_bash_payload('cd "./scratch" && rm -rf inner')
 
     result = _run_rm_hook(payload)
 
     response = json.loads(result.stdout)
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_allowed_for_chat_observed_bugteam_backslash_worktree_scratch_cleanup() -> None:
+    payload = _make_bash_payload(
+        r'cd "C:\Users\jon\AppData\Local\Temp\bugteam-pr-58-20260424071040\pr-58\worktree" && rm -rf .bugteam-tmp'
+    )
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_for_chat_observed_bugteam_forward_slash_worktree_scratch_cleanup() -> None:
+    payload = _make_bash_payload(
+        'cd "C:/Users/jon/AppData/Local/Temp/bugteam-pr-58-20260424071040/pr-58/worktree" && rm -rf .bugteam-tmp'
+    )
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_for_chat_observed_bugfix_reply_scratch_file_cleanup() -> None:
+    payload = _make_bash_payload(
+        'cd "C:/Users/jon/AppData/Local/Temp/bugteam-pr-58-20260424071040/pr-58/worktree" && rm -rf tmp_reply_loop1-1.md'
+    )
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_for_chat_observed_bugfind_multiple_scratch_files_cleanup() -> None:
+    payload = _make_bash_payload(
+        'cd "C:/Users/jon/AppData/Local/Temp/bugteam-pr-58-20260424071040/pr-256/worktree" && rm -rf tmp_review_body.md tmp_finding_1.md'
+    )
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_via_tool_input_cwd_pointing_at_chat_observed_bugteam_worktree() -> None:
+    payload_with_tool_input_cwd = {
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": "rm -rf .bugteam-tmp",
+            "cwd": "C:/Users/jon/AppData/Local/Temp/bugteam-pr-58-20260424071040/pr-58/worktree",
+        },
+    }
+
+    result = _run_rm_hook(payload_with_tool_input_cwd)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+
+
+def test_rm_rf_allowed_for_chat_observed_absolute_path_in_bugteam_windows_worktree_scratch() -> None:
+    payload = _make_bash_payload(
+        'rm -rf "C:/Users/jon/AppData/Local/Temp/bugteam-pr-58-20260424071040/pr-58/worktree/.bugteam-tmp"'
+    )
+
+    result = _run_rm_hook(payload)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
 
 
 def test_rm_rf_asks_when_target_is_bare_tmp_root() -> None:

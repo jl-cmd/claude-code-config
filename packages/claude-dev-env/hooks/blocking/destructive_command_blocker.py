@@ -291,96 +291,73 @@ def _ephemeral_recursive_rm_auto_allow_granted(command: str, matched_description
     return matched_description.startswith(("rm -rf", "rm --recursive")) and rm_targets_only_ephemeral_paths(command)
 
 
-CD_QUOTED_DOUBLE_THEN_RM_COMPOUND_PATTERN = re.compile(
-    r'^\s*cd\s+"([^"]+)"\s*&&\s*(rm\s+.+?)\s*$'
-)
-CD_QUOTED_SINGLE_THEN_RM_COMPOUND_PATTERN = re.compile(
-    r"^\s*cd\s+'([^']+)'\s*&&\s*(rm\s+.+?)\s*$"
-)
-CD_UNQUOTED_THEN_RM_COMPOUND_PATTERN = re.compile(
-    r"^\s*cd\s+(\S+)\s*&&\s*(rm\s+.+?)\s*$"
-)
+LEADING_CD_DOUBLE_QUOTED_PATTERN = re.compile(r'^\s*cd\s+"([^"]+)"')
+LEADING_CD_SINGLE_QUOTED_PATTERN = re.compile(r"^\s*cd\s+'([^']+)'")
+LEADING_CD_UNQUOTED_PATTERN = re.compile(r'^\s*cd\s+([^\s&|;<>]+)')
 
 
-def _parse_cd_then_rm_compound(command: str) -> tuple[str, str] | None:
-    for pattern in (
-        CD_QUOTED_DOUBLE_THEN_RM_COMPOUND_PATTERN,
-        CD_QUOTED_SINGLE_THEN_RM_COMPOUND_PATTERN,
-        CD_UNQUOTED_THEN_RM_COMPOUND_PATTERN,
+def _extract_leading_cd_target(command: str) -> str | None:
+    """Return the target of a ``cd`` that starts the command, or None if absent.
+
+    Supports double-quoted, single-quoted, and unquoted target forms. The
+    unquoted form stops at whitespace or at any shell metacharacter
+    (``&``, ``|``, ``;``, ``<``, ``>``) so it captures only the path token,
+    not the rest of a compound command. Only recognizes ``cd`` at the very
+    start of the command; later ``cd`` calls inside the same pipeline are
+    ignored to keep the extractor deterministic.
+    """
+    for each_pattern in (
+        LEADING_CD_DOUBLE_QUOTED_PATTERN,
+        LEADING_CD_SINGLE_QUOTED_PATTERN,
+        LEADING_CD_UNQUOTED_PATTERN,
     ):
-        match = pattern.match(command)
-        if match is not None:
-            return match.group(1), match.group(2)
+        leading_cd_match = each_pattern.match(command)
+        if leading_cd_match is not None:
+            return leading_cd_match.group(1)
     return None
 
 
-def _path_looks_absolute_cross_platform(path: str) -> bool:
-    forward_slash_normalized_path = path.replace("\\", "/")
-    if forward_slash_normalized_path.startswith("/"):
-        return True
-    return os.path.isabs(path)
+def _resolve_declared_effective_working_directory(command: str, tool_input: dict) -> str | None:
+    """Return the declared cwd for the command, or None when none is declared.
 
-
-def _cd_into_ephemeral_then_rm_rf_auto_allow_granted(command: str, matched_description: str) -> bool:
-    """Allow the narrow ``cd "<ephemeral_abs_path>" && rm -rf <targets>`` compound form.
-
-    Bugteam teammates and similar flows frequently run a single `cd` into an
-    ephemeral worktree followed by a single recursive `rm` of scratch paths
-    resolved against that worktree. The base ephemeral auto-allow rejects all
-    compounds; this narrower gate resolves each rm target against the cd
-    target and auto-allows when every resolved path is ephemeral and passes
-    the same safety checks as the non-compound case (no bare ephemeral roots,
-    no bare ``worktrees``/``worktree`` containers on the rm targets, no
-    shell-glob wildcards). The compound must contain exactly one ``cd``
-    followed by one ``rm`` joined by ``&&``; any additional ``&&``/``||``/
-    ``;``/``|`` or backtick/``$()`` substitution after the rm disqualifies
-    the command.
+    Precedence: leading ``cd "X"`` in the command, then the
+    ``tool_input['cwd']`` field passed in by the Bash tool call. Returns
+    None when neither source is present so the broad auto-allow gate never
+    depends on the hook process's own ``os.getcwd()`` (which can itself be
+    ephemeral when Claude Code runs inside a worktree, and would otherwise
+    auto-allow every destructive command). Paths are user-expanded and
+    normalized so downstream ``directory_is_ephemeral`` comparisons see a
+    canonical form on both POSIX and Windows.
     """
-    if not matched_description.startswith(("rm -rf", "rm --recursive")):
+    leading_cd_target = _extract_leading_cd_target(command)
+    if leading_cd_target is not None:
+        return os.path.normpath(os.path.expanduser(leading_cd_target))
+    tool_input_cwd_value = tool_input.get("cwd") if isinstance(tool_input, dict) else None
+    if isinstance(tool_input_cwd_value, str) and tool_input_cwd_value.strip():
+        return os.path.normpath(os.path.expanduser(tool_input_cwd_value))
+    return None
+
+
+def _effective_working_directory_is_ephemeral(command: str, tool_input: dict) -> bool:
+    """Return True when the command's declared effective cwd is a specific ephemeral directory.
+
+    Auto-allow trust model: if the destructive command declares (via leading
+    ``cd`` or ``tool_input['cwd']``) that it will execute inside a concrete
+    ephemeral directory (a temp-dir subfolder, a git worktrees directory, or
+    a subfolder of the OS temp root), treat that directory as a disposable
+    trust boundary and skip the destructive-action prompt. Rejects bare
+    ephemeral roots (``/tmp``, ``/temp``, the OS temp root, ``/worktrees``,
+    ``/worktree``) and bare ``worktrees``/``worktree`` containers so
+    auto-allow only triggers inside a named scratch area, not at the root
+    of a shared scratch namespace. Returns False when no cwd is declared;
+    the narrower target-based auto-allow still applies in that case.
+    """
+    declared_effective_cwd = _resolve_declared_effective_working_directory(command, tool_input)
+    if declared_effective_cwd is None:
         return False
-    parsed_cd_and_rm = _parse_cd_then_rm_compound(command)
-    if parsed_cd_and_rm is None:
+    if _path_is_bare_ephemeral_root(declared_effective_cwd):
         return False
-    cd_target_raw_path, rm_sub_command = parsed_cd_and_rm
-    extra_compound_operator_pattern = re.compile(r'(?:&&|\|\||;|\||`|\$\()')
-    if extra_compound_operator_pattern.search(rm_sub_command):
-        return False
-    resolved_cd_target_path = os.path.normpath(os.path.expanduser(cd_target_raw_path))
-    if not _path_looks_absolute_cross_platform(resolved_cd_target_path):
-        return False
-    if _path_is_bare_ephemeral_root(resolved_cd_target_path):
-        return False
-    if not directory_is_ephemeral(resolved_cd_target_path):
-        return False
-    try:
-        all_rm_command_tokens = _split_command_preserving_windows_backslashes(rm_sub_command)
-    except ValueError:
-        return False
-    if len(all_rm_command_tokens) < 2 or all_rm_command_tokens[0] != "rm":
-        return False
-    tokens_after_rm = all_rm_command_tokens[1:]
-    if _rm_flags_before_double_dash_are_unsafe(tokens_after_rm):
-        return False
-    all_target_tokens = _collect_rm_target_tokens(tokens_after_rm)
-    if not all_target_tokens:
-        return False
-    for each_target_token in all_target_tokens:
-        each_expanded_target = os.path.expanduser(each_target_token)
-        if os.path.isabs(each_expanded_target):
-            each_resolved_target_path = os.path.normpath(each_expanded_target)
-        else:
-            each_resolved_target_path = os.path.normpath(
-                os.path.join(resolved_cd_target_path, each_expanded_target)
-            )
-        if _path_basename_is_shell_glob_wildcard(each_resolved_target_path):
-            return False
-        if _path_is_bare_ephemeral_root(each_resolved_target_path):
-            return False
-        if _path_is_bare_named_worktrees_container(each_resolved_target_path):
-            return False
-        if not directory_is_ephemeral(each_resolved_target_path):
-            return False
-    return True
+    return directory_is_ephemeral(declared_effective_cwd)
 
 
 def _git_reset_hard_allowed_for_command(command: str, current_working_directory: str) -> bool:
@@ -422,10 +399,10 @@ def main() -> None:
     if matched_description is not None and targets_only_claude_directory(command):
         sys.exit(0)
 
-    if matched_description is not None and _ephemeral_recursive_rm_auto_allow_granted(command, matched_description):
+    if matched_description is not None and _effective_working_directory_is_ephemeral(command, tool_input):
         sys.exit(0)
 
-    if matched_description is not None and _cd_into_ephemeral_then_rm_rf_auto_allow_granted(command, matched_description):
+    if matched_description is not None and _ephemeral_recursive_rm_auto_allow_granted(command, matched_description):
         sys.exit(0)
 
     if matched_description is not None and "git reset --hard" in matched_description:

@@ -69,7 +69,8 @@ def verify_environment_variables() -> list[str]:
     documented in ``commands/hook-log-init.md``.
     """
     all_missing_variable_names: list[str] = []
-    if NEON_DATABASE_URL_ENVIRONMENT_VARIABLE not in os.environ:
+    raw_database_url_value = os.environ.get(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE)
+    if raw_database_url_value is None or raw_database_url_value.strip() == "":
         all_missing_variable_names.append(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE)
     return all_missing_variable_names
 

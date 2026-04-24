@@ -573,14 +573,25 @@ def insert_rows_batch(
 
 
 def _append_offline_warning_line(exception_instance: BaseException) -> None:
-    warning_log_parent = os.path.dirname(OFFLINE_WARNING_LOG)
-    if warning_log_parent:
-        os.makedirs(warning_log_parent, exist_ok=True)
-    timestamp_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    exception_class_name = type(exception_instance).__name__
-    warning_line_text = f"{timestamp_iso}\toffline\t{exception_class_name}"
-    with io.open(OFFLINE_WARNING_LOG, "a", encoding="utf-8") as warning_log_handle:
-        warning_log_handle.write(warning_line_text + "\n")
+    """Append an offline-marker line to the warning log; swallow disk errors.
+
+    The Stop hook contract requires that the offline-graceful path
+    always exits with ``EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING`` so
+    session shutdown never stalls on a failed extractor. A read-only
+    filesystem, missing parent path, or EACCES on the warning log file
+    itself must not propagate to the caller.
+    """
+    try:
+        warning_log_parent = os.path.dirname(OFFLINE_WARNING_LOG)
+        if warning_log_parent:
+            os.makedirs(warning_log_parent, exist_ok=True)
+        timestamp_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        exception_class_name = type(exception_instance).__name__
+        warning_line_text = f"{timestamp_iso}\toffline\t{exception_class_name}"
+        with io.open(OFFLINE_WARNING_LOG, "a", encoding="utf-8") as warning_log_handle:
+            warning_log_handle.write(warning_line_text + "\n")
+    except OSError:
+        return
 
 
 def _append_legacy_offsets_warning_line() -> None:
@@ -617,7 +628,10 @@ def run_full_extraction(
         neon_connection = connect_to_neon()
     except Exception as connect_exception:
         if is_operational_error(connect_exception):
-            _append_offline_warning_line(connect_exception)
+            try:
+                _append_offline_warning_line(connect_exception)
+            except OSError:
+                pass
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
 
@@ -754,7 +768,10 @@ def run_summary() -> int:
         neon_connection = connect_to_neon()
     except Exception as connect_exception:
         if is_operational_error(connect_exception):
-            _append_offline_warning_line(connect_exception)
+            try:
+                _append_offline_warning_line(connect_exception)
+            except OSError:
+                pass
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
     try:
@@ -824,7 +841,10 @@ def run_query(named_query: str) -> int:
         neon_connection = connect_to_neon()
     except Exception as connect_exception:
         if is_operational_error(connect_exception):
-            _append_offline_warning_line(connect_exception)
+            try:
+                _append_offline_warning_line(connect_exception)
+            except OSError:
+                pass
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
     try:

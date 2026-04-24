@@ -745,6 +745,56 @@ def test_offline_warning_line_does_not_leak_exception_message(
     assert "postgres://" not in warning_text
 
 
+def test_offline_fallback_still_exits_zero_when_warning_log_write_raises(
+    tmp_path: Path,
+) -> None:
+    """Disk-error during warning log write must not break offline-graceful exit.
+
+    The Stop hook contract requires that connect failures log a warning
+    and exit with the documented offline status so session shutdown
+    never stalls. A read-only filesystem, a missing parent path, or an
+    EACCES on the warning log itself must not propagate and must not
+    flip the exit code.
+    """
+    jsonl_file = tmp_path / "session.jsonl"
+    jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
+    state_file = tmp_path / "offsets.json"
+    warning_log = tmp_path / "hook-extractor.log"
+
+    class _FakeOperationalError(Exception):
+        pass
+
+    def _raise_connection_failure(*_args: Any, **_kwargs: Any) -> None:
+        raise _FakeOperationalError("connect failed")
+
+    def _raise_warning_log_permission_error(
+        *_args: Any, **_kwargs: Any
+    ) -> None:
+        raise OSError(errno.EACCES, "permission denied")
+
+    with (
+        patch.object(
+            hook_log_extractor,
+            "connect_to_neon",
+            side_effect=_raise_connection_failure,
+        ),
+        patch.object(hook_log_extractor, "is_operational_error", return_value=True),
+        patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG", str(warning_log)),
+        patch.object(
+            hook_log_extractor,
+            "_append_offline_warning_line",
+            side_effect=_raise_warning_log_permission_error,
+        ),
+    ):
+        exit_code = hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    assert exit_code == 0
+
+
 def test_main_accepts_incremental_flag_as_noop(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1120,30 +1170,47 @@ def test_run_full_extraction_persists_final_offset_not_file_size(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Offset must come from iterator, not os.path.getsize (race-safe)."""
+    """Persisted byte_offset must equal iterator.final_byte_offset (race-safe).
+
+    Race-safety means the saved offset reflects only the bytes the
+    iterator actually consumed, not whatever the filesystem reports as
+    the file size at save time. This test captures the iterator's
+    ``final_byte_offset`` directly via a wrapper around the factory and
+    asserts the saved value matches that captured value byte-for-byte,
+    even when the file grows between iterator drain and save.
+    """
     jsonl_file = tmp_path / "session.jsonl"
-    success_line_bytes = (_make_success_line() + "\n").encode("utf-8")
-    jsonl_file.write_bytes(success_line_bytes)
-    initial_byte_length = len(success_line_bytes)
+    initial_line_bytes = (_make_success_line() + "\n").encode("utf-8")
+    jsonl_file.write_bytes(initial_line_bytes)
+    initial_byte_length = len(initial_line_bytes)
 
     state_file = tmp_path / "offsets.json"
 
-    real_getsize = hook_log_extractor.os.path.getsize
+    captured_iterators: list[hook_log_extractor.AttachmentRecordIterator] = []
+    real_iterator_factory = hook_log_extractor.iter_attachment_records_from_file
 
-    def _getsize_reports_inflated_size(each_path: str) -> int:
-        if each_path == str(jsonl_file):
-            return initial_byte_length + 9999
-        return real_getsize(each_path)
+    def _capturing_iterator_factory(
+        jsonl_file_path: str,
+        start_offset: int,
+        start_line_number: int = 0,
+    ) -> hook_log_extractor.AttachmentRecordIterator:
+        produced_iterator = real_iterator_factory(
+            jsonl_file_path,
+            start_offset=start_offset,
+            start_line_number=start_line_number,
+        )
+        captured_iterators.append(produced_iterator)
+        return produced_iterator
+
+    monkeypatch.setattr(
+        hook_log_extractor,
+        "iter_attachment_records_from_file",
+        _capturing_iterator_factory,
+    )
 
     fake_cursor = MagicMock()
     fake_connection = MagicMock()
     fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
-
-    monkeypatch.setattr(
-        hook_log_extractor.os.path,
-        "getsize",
-        _getsize_reports_inflated_size,
-    )
 
     with patch.object(
         hook_log_extractor, "connect_to_neon", return_value=fake_connection
@@ -1154,8 +1221,19 @@ def test_run_full_extraction_persists_final_offset_not_file_size(
             full_rebuild=False,
         )
 
+    extra_growth_bytes = b'{"type":"user","content":"after"}\n'
+    with open(jsonl_file, "ab") as growing_file_handle:
+        growing_file_handle.write(extra_growth_bytes)
+
     saved_offsets = hook_log_extractor.load_offsets(str(state_file))
-    assert saved_offsets[str(jsonl_file)]["byte_offset"] == initial_byte_length
+    assert captured_iterators, "iterator was never produced"
+    iterator_reported_final_offset = captured_iterators[0].final_byte_offset
+    assert iterator_reported_final_offset == initial_byte_length
+    assert (
+        saved_offsets[str(jsonl_file)]["byte_offset"]
+        == iterator_reported_final_offset
+    )
+    assert jsonl_file.stat().st_size > iterator_reported_final_offset
 
 
 def test_save_offsets_is_serialized_across_threads(tmp_path: Path) -> None:

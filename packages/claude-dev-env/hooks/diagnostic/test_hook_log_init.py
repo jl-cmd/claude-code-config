@@ -38,6 +38,34 @@ def test_main_exits_1_when_neon_database_url_missing(
     assert NEON_DATABASE_URL_ENVIRONMENT_VARIABLE in captured.err
 
 
+def test_main_exits_1_when_neon_database_url_is_empty_string(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Empty NEON_HOOK_LOGS_DATABASE_URL must fire missing-env branch."""
+    monkeypatch.setenv(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE, "")
+
+    exit_code = hook_log_init.main()
+
+    assert exit_code == EXIT_CODE_ENVIRONMENT_MISSING
+    captured = capsys.readouterr()
+    assert NEON_DATABASE_URL_ENVIRONMENT_VARIABLE in captured.err
+
+
+def test_main_exits_1_when_neon_database_url_is_whitespace_only(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Whitespace-only NEON_HOOK_LOGS_DATABASE_URL must fire missing-env branch."""
+    monkeypatch.setenv(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE, "   ")
+
+    exit_code = hook_log_init.main()
+
+    assert exit_code == EXIT_CODE_ENVIRONMENT_MISSING
+    captured = capsys.readouterr()
+    assert NEON_DATABASE_URL_ENVIRONMENT_VARIABLE in captured.err
+
+
 def test_apply_schema_executes_ddl_from_schema_sql() -> None:
     fake_cursor = MagicMock()
     fake_connection = MagicMock()

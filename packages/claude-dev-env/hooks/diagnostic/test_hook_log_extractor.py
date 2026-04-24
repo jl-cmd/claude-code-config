@@ -1225,7 +1225,13 @@ def test_lock_file_handle_blocking_reraises_permanent_oserror_quickly(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Permanent OSErrors (e.g. EACCES) must not be retried — re-raise fast."""
+    """Permanent OSErrors (e.g. EBADF) must not be retried — re-raise fast.
+
+    EACCES is the documented contention errno for ``LK_NBLCK`` per the
+    Microsoft ``_locking`` spec, so this test uses ``EBADF`` (invalid
+    file descriptor) as a genuinely permanent failure that must bubble
+    up without consuming the retry budget.
+    """
     if hook_log_extractor.msvcrt is None:
         pytest.skip("msvcrt retry loop only exists on Windows runtimes")
 
@@ -1236,7 +1242,7 @@ def test_lock_file_handle_blocking_reraises_permanent_oserror_quickly(
             mode_flag: int,
             byte_count: int,
         ) -> None:
-            raise OSError(errno.EACCES, "access denied")
+            raise OSError(errno.EBADF, "invalid file descriptor")
 
         monkeypatch.setattr(
             hook_log_extractor.msvcrt, "locking", _raise_permanent_oserror
@@ -1247,7 +1253,7 @@ def test_lock_file_handle_blocking_reraises_permanent_oserror_quickly(
             hook_log_extractor._lock_file_handle_blocking(lock_file_handle)
         elapsed_seconds = time.monotonic() - started_at
 
-        assert excinfo.value.errno == errno.EACCES
+        assert excinfo.value.errno == errno.EBADF
         assert elapsed_seconds < 1.0
     finally:
         lock_file_handle.close()
@@ -1257,7 +1263,12 @@ def test_lock_file_handle_blocking_caps_retries_on_contention_errno(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Contention-errno must be retried a bounded number of times, then raise."""
+    """Contention-errno must be retried a bounded number of times, then raise.
+
+    With ``LK_NBLCK``, contention surfaces as ``EACCES`` per the
+    Microsoft ``_locking`` spec; the retry loop must bound the number
+    of attempts to ``LOCK_MAXIMUM_RETRY_COUNT`` and then re-raise.
+    """
     if hook_log_extractor.msvcrt is None:
         pytest.skip("msvcrt retry loop only exists on Windows runtimes")
 
@@ -1271,7 +1282,7 @@ def test_lock_file_handle_blocking_caps_retries_on_contention_errno(
             byte_count: int,
         ) -> None:
             attempt_count["value"] += 1
-            raise OSError(errno.EDEADLOCK, "retries exhausted")
+            raise OSError(errno.EACCES, "retries exhausted")
 
         monkeypatch.setattr(
             hook_log_extractor.msvcrt, "locking", _raise_contention_oserror
@@ -1281,11 +1292,49 @@ def test_lock_file_handle_blocking_caps_retries_on_contention_errno(
         with pytest.raises(OSError) as excinfo:
             hook_log_extractor._lock_file_handle_blocking(lock_file_handle)
 
-        assert excinfo.value.errno == errno.EDEADLOCK
+        assert excinfo.value.errno == errno.EACCES
         assert (
             attempt_count["value"]
             == hook_log_extractor.LOCK_MAXIMUM_RETRY_COUNT
         )
+    finally:
+        lock_file_handle.close()
+
+
+def test_lock_file_handle_blocking_uses_nonblocking_mode_flag(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Windows branch must call msvcrt.locking with LK_NBLCK, not LK_LOCK.
+
+    LK_LOCK blocks internally for ~10 seconds per attempt per the
+    Microsoft _locking spec, which compounded with the retry loop
+    produces a worst-case wait of ~303s under sustained contention.
+    LK_NBLCK raises OSError(EDEADLOCK) immediately, leaving the
+    Python-level ``time.sleep`` as the sole pacing mechanism so the
+    retry budget stays within its intended ~3s total.
+    """
+    if hook_log_extractor.msvcrt is None:
+        pytest.skip("msvcrt mode-flag check only applies on Windows runtimes")
+
+    lock_file_handle = (tmp_path / "offsets.json.lock").open("a+", encoding="utf-8")
+    try:
+        observed_mode_flags: list[int] = []
+
+        def _record_mode_flag(
+            file_descriptor: int,
+            mode_flag: int,
+            byte_count: int,
+        ) -> None:
+            observed_mode_flags.append(mode_flag)
+
+        monkeypatch.setattr(
+            hook_log_extractor.msvcrt, "locking", _record_mode_flag
+        )
+
+        hook_log_extractor._lock_file_handle_blocking(lock_file_handle)
+
+        assert observed_mode_flags == [hook_log_extractor.msvcrt.LK_NBLCK]
     finally:
         lock_file_handle.close()
 

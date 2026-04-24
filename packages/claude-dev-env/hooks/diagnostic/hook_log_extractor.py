@@ -474,24 +474,49 @@ def _acquire_offsets_lock(state_file_path: str) -> Iterator[None]:
 
 
 def _lock_file_handle_blocking(lock_file_handle: IO[str]) -> None:
+    """Acquire an exclusive byte-range lock with a bounded retry budget.
+
+    Both the Windows (``msvcrt.locking``) and POSIX (``fcntl.flock``)
+    branches deliberately fail fast: Windows uses ``LK_NBLCK`` instead
+    of ``LK_LOCK`` so the kernel never blocks ~10s internally, and
+    POSIX pairs ``LOCK_EX`` with ``LOCK_NB`` so ``EWOULDBLOCK`` bubbles
+    up immediately. The Python ``time.sleep(LOCK_RETRY_SLEEP_SECONDS)``
+    between attempts is the sole pacing mechanism, keeping the total
+    retry budget within the intended ``LOCK_MAXIMUM_RETRY_COUNT *
+    LOCK_RETRY_SLEEP_SECONDS`` window so the caller never exceeds the
+    30s Stop hook timeout under sustained contention.
+    """
     if msvcrt is not None:
         lock_byte_count = 1
         for _each_attempt_index in range(LOCK_MAXIMUM_RETRY_COUNT):
             try:
                 msvcrt.locking(
-                    lock_file_handle.fileno(), msvcrt.LK_LOCK, lock_byte_count
+                    lock_file_handle.fileno(), msvcrt.LK_NBLCK, lock_byte_count
                 )
                 return
             except OSError as lock_exception:
-                if lock_exception.errno != errno.EDEADLOCK:
+                if lock_exception.errno != errno.EACCES:
                     raise
                 time.sleep(LOCK_RETRY_SLEEP_SECONDS)
         raise OSError(
-            errno.EDEADLOCK,
+            errno.EACCES,
             "offsets lock retry budget exhausted",
         )
     if fcntl is not None:
-        fcntl.flock(lock_file_handle.fileno(), fcntl.LOCK_EX)
+        for _each_attempt_index in range(LOCK_MAXIMUM_RETRY_COUNT):
+            try:
+                fcntl.flock(
+                    lock_file_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB
+                )
+                return
+            except OSError as lock_exception:
+                if lock_exception.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
+                    raise
+                time.sleep(LOCK_RETRY_SLEEP_SECONDS)
+        raise OSError(
+            errno.EWOULDBLOCK,
+            "offsets lock retry budget exhausted",
+        )
 
 
 def _unlock_file_handle(lock_file_handle: IO[str]) -> None:

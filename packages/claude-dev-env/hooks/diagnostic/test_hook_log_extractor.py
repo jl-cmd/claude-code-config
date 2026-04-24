@@ -1310,7 +1310,7 @@ def test_lock_file_handle_blocking_uses_nonblocking_mode_flag(
     LK_LOCK blocks internally for ~10 seconds per attempt per the
     Microsoft _locking spec, which compounded with the retry loop
     produces a worst-case wait of ~303s under sustained contention.
-    LK_NBLCK raises OSError(EDEADLOCK) immediately, leaving the
+    LK_NBLCK raises OSError(EACCES) immediately, leaving the
     Python-level ``time.sleep`` as the sole pacing mechanism so the
     retry budget stays within its intended ~3s total.
     """

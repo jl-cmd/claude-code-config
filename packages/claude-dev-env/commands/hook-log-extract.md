@@ -3,11 +3,11 @@ description: Extract hook-firing records from session transcripts into Neon and 
 allowed-tools: Bash
 ---
 
-Scan every JSONL session transcript under
-`C:/Users/jon/.claude/projects/`, extract every `attachment` record whose
-inner type starts with `hook_`, and load one row per firing into the Neon
-`hook_events` table. The Stop hook runs this on every session end using
-the `--incremental` flag.
+Scan every JSONL session transcript under `~/.claude/projects/` (or the
+path set by the `CLAUDE_HOME` env var), extract every `attachment`
+record whose inner type starts with `hook_`, and load one row per firing
+into the Neon `hook_events` table. The Stop hook runs this on every
+session end using the `--incremental` flag.
 
 ## Run modes
 
@@ -16,8 +16,10 @@ bws run -- python packages/claude-dev-env/hooks/diagnostic/hook_log_extractor.py
 ```
 
 Full extraction using the current byte offsets in
-`C:/Users/jon/.claude/logs/hooks/.state/offsets.json`. Equivalent to the
-Stop hook's `--incremental` invocation.
+`~/.claude/logs/hooks/.state/offsets.json` (override the `~/.claude`
+root by setting `CLAUDE_HOME`). Equivalent to the Stop hook's
+`--incremental` invocation; passing `--incremental` explicitly is a
+documented no-op that selects the same default resumption path.
 
 ```
 bws run -- python packages/claude-dev-env/hooks/diagnostic/hook_log_extractor.py --full-rebuild
@@ -44,7 +46,7 @@ aligned text table. Available query names match the SQL files in
 `packages/claude-dev-env/hooks/diagnostic/queries/`:
 
 - `top_blockers_overall`
-- `top_blockers_since_last_run`
+- `top_blockers_last_24_hours`
 - `blocks_last_7_days`
 - `blocks_by_category`
 - `blocks_by_tool`
@@ -52,8 +54,12 @@ aligned text table. Available query names match the SQL files in
 
 ## Offline behavior
 
-If the psycopg connection fails with `OperationalError` or the
-5-second timeout elapses, the extractor appends one ISO-8601 line to
-`C:/Users/jon/.claude/logs/hook-extractor.log` and exits with status 0.
-Session shutdown stays fast, and the next online run backfills from
-the existing offsets.
+If the psycopg connection fails with `OperationalError`, the
+5-second timeout elapses, `NEON_HOOK_LOGS_DATABASE_URL` is unset, or
+the `psycopg` driver is not installed, the extractor appends one
+ISO-8601 line to `~/.claude/logs/hook-extractor.log` (override the
+`~/.claude` root with the `CLAUDE_HOME` env var) and exits with
+status 0. Session shutdown stays fast, and the next online run
+backfills from the existing offsets. The warning line records only
+the timestamp and the exception class name so connection URLs never
+leak into the log.

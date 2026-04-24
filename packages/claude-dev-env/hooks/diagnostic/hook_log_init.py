@@ -23,7 +23,6 @@ except ImportError:
     psycopg = None
 
 from config.hook_log_extractor_constants import (
-    BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE,
     CONNECT_TIMEOUT_SECONDS,
     EXIT_CODE_ENVIRONMENT_MISSING,
     EXIT_CODE_SUCCESS,
@@ -52,12 +51,19 @@ from config.hook_log_extractor_constants import (
 
 
 def verify_environment_variables() -> list[str]:
-    """Return names of required env vars that are unset; empty list when all present."""
+    """Return names of required env vars that are unset; empty list when all present.
+
+    Only ``NEON_HOOK_LOGS_DATABASE_URL`` is verified here. ``bws run``
+    intentionally strips ``BWS_ACCESS_TOKEN`` from the child environment
+    to prevent subprocess credential leakage; checking for it inside a
+    child process invoked via ``bws run -- python hook_log_init.py``
+    would therefore always fail even when the machine is configured
+    correctly. The one-time ``setx BWS_ACCESS_TOKEN`` prerequisite is
+    documented in ``commands/hook-log-init.md``.
+    """
     all_missing_variable_names: list[str] = []
     if NEON_DATABASE_URL_ENVIRONMENT_VARIABLE not in os.environ:
         all_missing_variable_names.append(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE)
-    if BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE not in os.environ:
-        all_missing_variable_names.append(BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE)
     return all_missing_variable_names
 
 

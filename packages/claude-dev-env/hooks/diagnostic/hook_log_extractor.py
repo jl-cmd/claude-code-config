@@ -23,6 +23,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Iterator, Optional, Sequence
 
@@ -45,6 +46,7 @@ from config.hook_log_extractor_constants import (
     CONNECT_TIMEOUT_SECONDS,
     DEFAULT_QUERY_FOR_SUMMARY,
     EMPTY_STRING,
+    EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING,
     EXIT_CODE_SUCCESS,
     FLAG_FULL_REBUILD,
     FLAG_INCREMENTAL,
@@ -59,6 +61,8 @@ from config.hook_log_extractor_constants import (
     JSONL_FILE_GLOB,
     KNOWN_HOOK_CATEGORIES,
     LINE_COUNT_CHUNK_SIZE_BYTES,
+    MISSING_NEON_DATABASE_URL_WARNING_LABEL,
+    MISSING_PSYCOPG_WARNING_LABEL,
     NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
     NEWLINE_JOINER,
     OFFLINE_WARNING_LOG,
@@ -75,9 +79,17 @@ from config.hook_log_extractor_constants import (
     SUMMARY_NO_NEW_BLOCKS_MESSAGE,
     SUMMARY_TABLE_COLUMN_GAP,
     TOP_BLOCKED_COMMAND_PREVIEW_MAX_CHARACTERS,
-    TOP_BLOCKERS_SINCE_LAST_RUN_SQL,
+    TOP_BLOCKERS_LAST_24_HOURS_SQL,
     TOP_LEVEL_ATTACHMENT_TYPE,
 )
+
+
+class MissingNeonDatabaseUrlError(RuntimeError):
+    """Raised when the Neon connection URL environment variable is unset."""
+
+
+class MissingPsycopgDependencyError(RuntimeError):
+    """Raised when the psycopg driver is not installed in the interpreter."""
 
 
 def derive_category(script_path: Optional[str]) -> str:
@@ -313,28 +325,54 @@ def load_offsets(state_file_path: str) -> dict[str, int]:
 
 
 def save_offsets(state_file_path: str, offset_by_jsonl_path: dict[str, int]) -> None:
-    """Persist per-file byte offsets atomically."""
+    """Persist per-file byte offsets atomically via tempfile + os.replace."""
     state_file_parent = os.path.dirname(state_file_path)
     if state_file_parent:
         os.makedirs(state_file_parent, exist_ok=True)
-    with io.open(state_file_path, "w", encoding="utf-8") as state_file_handle:
+    temporary_file_handle = tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=state_file_parent or None,
+        delete=False,
+    )
+    try:
         json.dump(
             offset_by_jsonl_path,
-            state_file_handle,
+            temporary_file_handle,
             indent=OFFSETS_JSON_INDENT,
             sort_keys=True,
         )
+        temporary_file_handle.flush()
+        os.fsync(temporary_file_handle.fileno())
+    finally:
+        temporary_file_handle.close()
+    os.replace(temporary_file_handle.name, state_file_path)
 
 
 def is_operational_error(exception_instance: BaseException) -> bool:
     """Return True when an exception should trigger the offline fallback."""
+    if isinstance(
+        exception_instance,
+        (MissingNeonDatabaseUrlError, MissingPsycopgDependencyError),
+    ):
+        return True
     class_name = type(exception_instance).__name__
     return class_name in {"OperationalError", "InterfaceError", "TimeoutError"}
 
 
 def connect_to_neon() -> object:
-    """Open a psycopg connection using the Neon database URL env var."""
-    database_url = os.environ[NEON_DATABASE_URL_ENVIRONMENT_VARIABLE]
+    """Open a psycopg connection using the Neon database URL env var.
+
+    Raises ``MissingNeonDatabaseUrlError`` when the URL env var is unset
+    and ``MissingPsycopgDependencyError`` when psycopg is not installed.
+    Both are treated as offline by ``is_operational_error`` so the Stop
+    hook never blocks session end on a missing environment.
+    """
+    if psycopg is None:
+        raise MissingPsycopgDependencyError(MISSING_PSYCOPG_WARNING_LABEL)
+    database_url = os.environ.get(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE)
+    if not database_url:
+        raise MissingNeonDatabaseUrlError(MISSING_NEON_DATABASE_URL_WARNING_LABEL)
     return psycopg.connect(database_url, connect_timeout=CONNECT_TIMEOUT_SECONDS)
 
 
@@ -355,7 +393,8 @@ def _append_offline_warning_line(exception_instance: BaseException) -> None:
     if warning_log_parent:
         os.makedirs(warning_log_parent, exist_ok=True)
     timestamp_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    warning_line_text = f"{timestamp_iso}\toffline\t{type(exception_instance).__name__}\t{exception_instance}"
+    exception_class_name = type(exception_instance).__name__
+    warning_line_text = f"{timestamp_iso}\toffline\t{exception_class_name}"
     with io.open(OFFLINE_WARNING_LOG, "a", encoding="utf-8") as warning_log_handle:
         warning_log_handle.write(warning_line_text + "\n")
 
@@ -374,7 +413,7 @@ def run_full_extraction(
     except BaseException as connect_exception:
         if is_operational_error(connect_exception):
             _append_offline_warning_line(connect_exception)
-            return EXIT_CODE_SUCCESS
+            return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
 
     try:
@@ -441,11 +480,11 @@ def run_summary() -> int:
     except BaseException as connect_exception:
         if is_operational_error(connect_exception):
             _append_offline_warning_line(connect_exception)
-            return EXIT_CODE_SUCCESS
+            return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
     try:
         with neon_connection.cursor() as neon_cursor:
-            neon_cursor.execute(TOP_BLOCKERS_SINCE_LAST_RUN_SQL)
+            neon_cursor.execute(TOP_BLOCKERS_LAST_24_HOURS_SQL)
             all_result_rows = neon_cursor.fetchall()
     finally:
         try:
@@ -505,7 +544,7 @@ def run_query(named_query: str) -> int:
     except BaseException as connect_exception:
         if is_operational_error(connect_exception):
             _append_offline_warning_line(connect_exception)
-            return EXIT_CODE_SUCCESS
+            return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
     try:
         with neon_connection.cursor() as neon_cursor:
@@ -534,7 +573,18 @@ def run_query(named_query: str) -> int:
 
 
 def main() -> int:
-    """Entry point for the hook-log extractor CLI."""
+    """Entry point for the hook-log extractor CLI.
+
+    Supported flags:
+
+    * ``--summary`` prints the top blockers of the last twenty-four hours.
+    * ``--query <name>`` runs a pre-baked SQL file under ``queries/``.
+    * ``--full-rebuild`` truncates ``hook_events`` and re-reads every
+      JSONL from byte zero.
+    * ``--incremental`` is a documented no-op; it selects the default
+      byte-offset resumption path that the Stop hook also uses when no
+      flags are passed.
+    """
     all_cli_arguments = list(sys.argv[1:])
     if FLAG_SUMMARY in all_cli_arguments:
         return run_summary()
@@ -543,11 +593,14 @@ def main() -> int:
         if flag_index + 1 >= len(all_cli_arguments):
             return run_query(DEFAULT_QUERY_FOR_SUMMARY)
         return run_query(all_cli_arguments[flag_index + 1])
-    full_rebuild_requested = FLAG_FULL_REBUILD in all_cli_arguments
+    is_full_rebuild_requested = FLAG_FULL_REBUILD in all_cli_arguments
+    is_incremental_requested = FLAG_INCREMENTAL in all_cli_arguments
+    if is_incremental_requested and is_full_rebuild_requested:
+        is_full_rebuild_requested = False
     return run_full_extraction(
         transcripts_root=PROJECTS_TRANSCRIPT_ROOT,
         state_file_path=OFFSET_STATE_FILE,
-        full_rebuild=full_rebuild_requested,
+        full_rebuild=is_full_rebuild_requested,
     )
 
 

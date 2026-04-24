@@ -18,7 +18,6 @@ if str(_HOOKS_ROOT) not in sys.path:
 
 from diagnostic import hook_log_init
 from config.hook_log_extractor_constants import (
-    BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE,
     EXIT_CODE_ENVIRONMENT_MISSING,
     NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
     OUTCOME_INIT_PROBE,
@@ -30,27 +29,12 @@ def test_main_exits_1_when_neon_database_url_missing(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.delenv(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE, raising=False)
-    monkeypatch.setenv(BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE, "token-xyz")
 
     exit_code = hook_log_init.main()
 
     assert exit_code == EXIT_CODE_ENVIRONMENT_MISSING
     captured = capsys.readouterr()
     assert NEON_DATABASE_URL_ENVIRONMENT_VARIABLE in captured.err
-
-
-def test_main_exits_1_when_bws_access_token_missing(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setenv(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE, "postgres://u:p@h/db")
-    monkeypatch.delenv(BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE, raising=False)
-
-    exit_code = hook_log_init.main()
-
-    assert exit_code == EXIT_CODE_ENVIRONMENT_MISSING
-    captured = capsys.readouterr()
-    assert BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE in captured.err
 
 
 def test_apply_schema_executes_ddl_from_schema_sql() -> None:
@@ -122,7 +106,6 @@ def test_main_happy_path_returns_zero(monkeypatch: pytest.MonkeyPatch) -> None:
         NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
         "postgres://u:p@ep-fake-host.aws.neon.tech/db",
     )
-    monkeypatch.setenv(BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE, "token-xyz")
 
     fake_cursor = MagicMock()
     fake_cursor.fetchone.side_effect = [(1,), (5,)]

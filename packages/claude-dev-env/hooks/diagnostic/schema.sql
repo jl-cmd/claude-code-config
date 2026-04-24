@@ -27,4 +27,25 @@ CREATE INDEX IF NOT EXISTS idx_hook_events_hook_name ON hook_events (hook_name);
 CREATE INDEX IF NOT EXISTS idx_hook_events_session ON hook_events (session_id);
 
 CREATE OR REPLACE VIEW blocked_commands AS
-SELECT * FROM hook_events WHERE outcome = 'blocked';
+SELECT
+    id,
+    event_timestamp,
+    session_id,
+    cwd,
+    git_branch,
+    hook_event,
+    hook_name,
+    hook_category,
+    script_path,
+    tool_name,
+    tool_use_id,
+    outcome,
+    exit_code,
+    duration_ms,
+    command_excerpt,
+    stdout_excerpt,
+    stderr_excerpt,
+    source_jsonl_path,
+    source_line_number
+FROM hook_events
+WHERE outcome = 'blocked';

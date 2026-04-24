@@ -16,7 +16,9 @@ One-time setup on each machine:
 
 2. **Create a Bitwarden machine account** scoped to the Neon connection
    secret, generate its access token, and export it to the current user
-   environment on Windows:
+   environment.
+
+   On Windows (PowerShell):
 
    ```powershell
    setx BWS_ACCESS_TOKEN "<machine-account-access-token>"
@@ -24,15 +26,29 @@ One-time setup on each machine:
 
    Open a new terminal so the variable takes effect.
 
+   On macOS or Linux (bash/zsh — add to `~/.bashrc`, `~/.zshrc`, or the
+   equivalent profile so new shells inherit it):
+
+   ```bash
+   export BWS_ACCESS_TOKEN="<machine-account-access-token>"
+   ```
+
 3. **Store the Neon connection string** in the Bitwarden Secrets Manager
    under the key `NEON_HOOK_LOGS_DATABASE_URL`. The value is the full
    `postgres://user:password@host/database?sslmode=require` URL that
    Neon provides on the project dashboard.
 
-4. **Install the Python dependencies** so the extractor can reach Neon:
+4. **Install the Python dependencies** so the extractor can reach Neon.
+   Production runtime:
 
    ```
    pip install -r packages/claude-dev-env/hooks/diagnostic/requirements-hook-logs.txt
+   ```
+
+   Development (adds `pytest` on top of the runtime deps):
+
+   ```
+   pip install -r packages/claude-dev-env/hooks/diagnostic/requirements-hook-logs-dev.txt
    ```
 
 ## Run the init
@@ -43,7 +59,11 @@ bws run -- python packages/claude-dev-env/hooks/diagnostic/hook_log_init.py
 
 The init script performs these steps in order:
 
-1. Verifies `NEON_HOOK_LOGS_DATABASE_URL` and `BWS_ACCESS_TOKEN` are set.
+1. Verifies `NEON_HOOK_LOGS_DATABASE_URL` is set. `BWS_ACCESS_TOKEN` is
+   consumed by the outer `bws` CLI before it spawns the Python child
+   process; `bws run` intentionally strips it from the child
+   environment to prevent subprocess credential leakage, so the Python
+   script never sees it.
 2. Connects to Neon with a 5-second timeout.
 3. Applies the DDL in `packages/claude-dev-env/hooks/diagnostic/schema.sql`
    using `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, and

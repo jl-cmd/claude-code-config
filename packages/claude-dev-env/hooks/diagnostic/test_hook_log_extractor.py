@@ -25,6 +25,7 @@ from config.hook_log_extractor_constants import (
     COMMAND_EXCERPT_MAX_CHARACTERS,
     HOOK_CATEGORY_UNCATEGORIZED,
     KNOWN_HOOK_CATEGORIES,
+    NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
     OUTCOME_ADDED_CONTEXT,
     OUTCOME_BLOCKED,
     OUTCOME_SUCCESS,
@@ -596,3 +597,119 @@ def test_run_summary_prints_table_when_rows_returned(
     assert "content_search_to_zoekt_redirector.py" in captured.out
     assert "blocking" in captured.out
     assert "7" in captured.out
+
+
+def test_run_full_extraction_returns_zero_when_database_url_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """C1: Stop-hook path must exit 0 when NEON URL env var is unset."""
+    monkeypatch.delenv(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE, raising=False)
+
+    jsonl_file = tmp_path / "session.jsonl"
+    jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
+    state_file = tmp_path / "offsets.json"
+    warning_log = tmp_path / "hook-extractor.log"
+
+    with patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG", str(warning_log)):
+        exit_code = hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    assert exit_code == 0
+    assert warning_log.exists()
+    warning_text = warning_log.read_text(encoding="utf-8")
+    assert "MissingNeonDatabaseUrlError" in warning_text
+
+
+def test_run_full_extraction_returns_zero_when_psycopg_not_installed(
+    tmp_path: Path,
+) -> None:
+    """C10: Stop-hook path must exit 0 when psycopg module is absent."""
+    jsonl_file = tmp_path / "session.jsonl"
+    jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
+    state_file = tmp_path / "offsets.json"
+    warning_log = tmp_path / "hook-extractor.log"
+
+    with (
+        patch.object(hook_log_extractor, "psycopg", None),
+        patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG", str(warning_log)),
+    ):
+        exit_code = hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    assert exit_code == 0
+    assert warning_log.exists()
+    warning_text = warning_log.read_text(encoding="utf-8")
+    assert "MissingPsycopgDependencyError" in warning_text
+
+
+def test_offline_warning_line_does_not_leak_exception_message(
+    tmp_path: Path,
+) -> None:
+    """C12: Offline warning log must record only timestamp + class name."""
+    warning_log = tmp_path / "hook-extractor.log"
+
+    class _FakeOperationalError(Exception):
+        pass
+
+    def _raise_with_sensitive_url(*_args: Any, **_kwargs: Any) -> None:
+        raise _FakeOperationalError(
+            "connection failed to postgres://user:secret@host/db",
+        )
+
+    jsonl_file = tmp_path / "session.jsonl"
+    jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
+    state_file = tmp_path / "offsets.json"
+
+    with (
+        patch.object(
+            hook_log_extractor,
+            "connect_to_neon",
+            side_effect=_raise_with_sensitive_url,
+        ),
+        patch.object(hook_log_extractor, "is_operational_error", return_value=True),
+        patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG", str(warning_log)),
+    ):
+        hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    warning_text = warning_log.read_text(encoding="utf-8")
+    assert "secret" not in warning_text
+    assert "postgres://" not in warning_text
+
+
+def test_main_accepts_incremental_flag_as_noop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """C8: ``--incremental`` must be recognized and route to default extraction."""
+    captured_arguments: dict[str, object] = {}
+
+    def _fake_run_full_extraction(
+        transcripts_root: str,
+        state_file_path: str,
+        full_rebuild: bool,
+    ) -> int:
+        captured_arguments["transcripts_root"] = transcripts_root
+        captured_arguments["state_file_path"] = state_file_path
+        captured_arguments["full_rebuild"] = full_rebuild
+        return 0
+
+    monkeypatch.setattr(sys, "argv", ["hook_log_extractor.py", "--incremental"])
+    monkeypatch.setattr(
+        hook_log_extractor, "run_full_extraction", _fake_run_full_extraction
+    )
+
+    exit_code = hook_log_extractor.main()
+
+    assert exit_code == 0
+    assert captured_arguments["full_rebuild"] is False

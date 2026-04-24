@@ -6,20 +6,34 @@ Centralizes all named values used by ``hook_log_extractor.py`` and
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 COMMAND_EXCERPT_MAX_CHARACTERS: int = 300
 STDOUT_EXCERPT_MAX_CHARACTERS: int = 500
 STDERR_EXCERPT_MAX_CHARACTERS: int = 500
 
 INSERT_BATCH_SIZE: int = 500
 CONNECT_TIMEOUT_SECONDS: int = 5
-OFFLINE_FALLBACK_WALLCLOCK_BUDGET_SECONDS: int = 10
 
-OFFSET_STATE_FILE: str = "C:/Users/jon/.claude/logs/hooks/.state/offsets.json"
-OFFLINE_WARNING_LOG: str = "C:/Users/jon/.claude/logs/hook-extractor.log"
-PROJECTS_TRANSCRIPT_ROOT: str = "C:/Users/jon/.claude/projects"
+def _resolve_claude_home_directory() -> Path:
+    """Return the root of the local ``~/.claude`` tree, honoring ``CLAUDE_HOME``."""
+    return Path(os.environ.get("CLAUDE_HOME", str(Path.home() / ".claude")))
+
+
+OFFSET_STATE_FILE: str = str(
+    _resolve_claude_home_directory()
+    / "logs"
+    / "hooks"
+    / ".state"
+    / "offsets.json"
+)
+OFFLINE_WARNING_LOG: str = str(
+    _resolve_claude_home_directory() / "logs" / "hook-extractor.log"
+)
+PROJECTS_TRANSCRIPT_ROOT: str = str(_resolve_claude_home_directory() / "projects")
 
 NEON_DATABASE_URL_ENVIRONMENT_VARIABLE: str = "NEON_HOOK_LOGS_DATABASE_URL"
-BWS_ACCESS_TOKEN_ENVIRONMENT_VARIABLE: str = "BWS_ACCESS_TOKEN"
 
 ATTACHMENT_TYPE_PREFIX: str = "hook_"
 TOP_LEVEL_ATTACHMENT_TYPE: str = "attachment"
@@ -64,15 +78,13 @@ KNOWN_HOOK_CATEGORIES: frozenset[str] = frozenset(
     },
 )
 
-HOOKS_PARENT_DIRECTORY_SEGMENT: str = "hooks"
-
 HOOK_NAME_TOOL_SEPARATOR: str = ":"
 
 SCHEMA_RELATIVE_PATH: str = "schema.sql"
 QUERIES_DIRECTORY_NAME: str = "queries"
 SQL_FILE_EXTENSION: str = ".sql"
 
-DEFAULT_QUERY_FOR_SUMMARY: str = "top_blockers_since_last_run"
+DEFAULT_QUERY_FOR_SUMMARY: str = "top_blockers_last_24_hours"
 
 JSONL_FILE_GLOB: str = "*.jsonl"
 
@@ -83,6 +95,7 @@ FLAG_QUERY: str = "--query"
 
 EXIT_CODE_SUCCESS: int = 0
 EXIT_CODE_ENVIRONMENT_MISSING: int = 1
+EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING: int = 0
 
 SENTINEL_SESSION_ID: str = "__init_probe_session__"
 SENTINEL_HOOK_EVENT: str = "InitProbe"
@@ -93,7 +106,7 @@ SENTINEL_SOURCE_LINE_NUMBER: int = 0
 SUMMARY_COLUMN_HEADINGS: tuple[str, str, str, str] = (
     "hook_name",
     "hook_category",
-    "block_count_since_last_run",
+    "block_count_last_24_hours",
     "top_blocked_command_preview",
 )
 
@@ -134,7 +147,7 @@ SENTINEL_SELECT_SQL: str = "SELECT id FROM hook_events WHERE id = %s"
 
 SENTINEL_DELETE_SQL: str = "DELETE FROM hook_events WHERE id = %s"
 
-TOP_BLOCKERS_SINCE_LAST_RUN_SQL: str = (
+TOP_BLOCKERS_LAST_24_HOURS_SQL: str = (
     "SELECT hook_name, hook_category, COUNT(*) AS block_count, "
     "MIN(COALESCE(command_excerpt, stdout_excerpt, stderr_excerpt, '')) "
     "AS top_blocked_command_preview "
@@ -166,4 +179,7 @@ TABLE_REPORT_LABEL: str = "Table:"
 ROW_COUNT_REPORT_LABEL: str = "Row count:"
 UNKNOWN_HOST_PLACEHOLDER: str = "unknown"
 SENTINEL_HOOK_CATEGORY: str = "diagnostic"
+
+MISSING_PSYCOPG_WARNING_LABEL: str = "missing_psycopg"
+MISSING_NEON_DATABASE_URL_WARNING_LABEL: str = "missing_neon_database_url"
 

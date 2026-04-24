@@ -416,21 +416,29 @@ def _command_contains_any_non_cwd_scoped_destructive_pattern(command: str) -> bo
     return False
 
 
-def _command_rm_targets_include_absolute_non_ephemeral_path(command: str) -> bool:
-    """Return True when the command contains an ``rm`` whose targets include an absolute non-ephemeral path.
+def _command_rm_targets_include_unsafe_absolute_path(command: str) -> bool:
+    """Return True when the command contains an ``rm`` whose absolute targets are unsafe.
 
     Prevents the broad ephemeral-cwd auto-allow from granting
     ``rm -rf /var/log/myapp`` just because the shell happens to be in
     ``/tmp/scratch``: the actual rm target is the absolute path, not
     anything relative to cwd, so "cwd is ephemeral" does not bound the
-    blast radius. When any absolute rm target fails
-    ``directory_is_ephemeral``, the broad gate declines and the prompt
-    fires normally.
+    blast radius. Also rejects absolute rm targets that are bare
+    ephemeral roots (``/tmp``, ``/temp``, the OS temp root,
+    ``/worktrees``, ``/worktree``) or bare worktrees-container
+    directories — ``rm -rf /tmp`` would wipe every tenant under the
+    shared scratch namespace, and the fact that the process happens to
+    be in a subfolder of ``/tmp`` does not make that safe.
+
+    Fails closed: returns True when the command cannot be tokenized
+    via shlex (ValueError from unbalanced quotes, for instance) so the
+    broad auto-allow declines rather than granting on input the hook
+    cannot conclusively parse.
     """
     try:
         all_command_tokens = shlex.split(command, posix=True)
     except ValueError:
-        return False
+        return True
     for each_token_index in range(len(all_command_tokens)):
         if all_command_tokens[each_token_index] != "rm":
             continue
@@ -440,6 +448,10 @@ def _command_rm_targets_include_absolute_non_ephemeral_path(command: str) -> boo
             each_expanded_target = os.path.expanduser(each_target_token)
             if os.path.isabs(each_expanded_target) or each_expanded_target.replace("\\", "/").startswith("/"):
                 each_resolved_target = os.path.normpath(each_expanded_target)
+                if _path_is_bare_ephemeral_root(each_resolved_target):
+                    return True
+                if _path_is_bare_named_worktrees_container(each_resolved_target):
+                    return True
                 if not directory_is_ephemeral(each_resolved_target):
                     return True
     return False
@@ -488,7 +500,7 @@ def main() -> None:
         matched_description is not None
         and _destructive_match_is_cwd_scoped(matched_description)
         and _effective_working_directory_is_ephemeral(command, tool_input)
-        and not _command_rm_targets_include_absolute_non_ephemeral_path(command)
+        and not _command_rm_targets_include_unsafe_absolute_path(command)
         and not _command_contains_any_non_cwd_scoped_destructive_pattern(command)
     ):
         sys.exit(0)

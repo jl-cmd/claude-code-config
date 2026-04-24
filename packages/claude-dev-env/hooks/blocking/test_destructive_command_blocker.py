@@ -414,6 +414,39 @@ def test_rm_rf_plus_drop_table_piggyback_asks_when_leading_cd_into_ephemeral() -
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
+def test_rm_rf_asks_when_leading_cd_into_ephemeral_but_rm_target_is_bare_tmp_root() -> None:
+    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf /tmp')
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_leading_cd_into_ephemeral_but_rm_target_is_bare_worktrees_root() -> None:
+    payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && rm -rf /worktrees')
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_asks_when_command_fails_shlex_parse_with_unbalanced_quotes() -> None:
+    payload_with_tool_input_cwd = {
+        "tool_name": "Bash",
+        "tool_input": {
+            "command": 'rm -rf "unclosed_quote',
+            "cwd": "/tmp/bugteam_scratch",
+        },
+    }
+
+    result = _run_rm_hook(payload_with_tool_input_cwd)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
 def test_rm_rf_asks_when_leading_cd_target_is_non_ephemeral_directory() -> None:
     payload = _make_bash_payload('cd "/etc" && rm -rf scratch')
 

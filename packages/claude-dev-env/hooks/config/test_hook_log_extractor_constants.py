@@ -16,6 +16,8 @@ from config.hook_log_extractor_constants import (
     EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING,
     EXIT_CODE_SUCCESS,
     EXIT_CODE_UNKNOWN_QUERY,
+    LOCK_MAXIMUM_RETRY_COUNT,
+    LOCK_RETRY_SLEEP_SECONDS,
     QUERY_NAME_PATTERN,
     SENTINEL_INSERT_FAILURE_MESSAGE,
     SENTINEL_SELECT_FAILURE_MESSAGE,
@@ -87,3 +89,8 @@ def test_resolver_falls_back_to_home_when_claude_home_is_whitespace(
         hook_log_extractor_constants._resolve_claude_home_directory()
         == Path.home() / ".claude"
     )
+
+
+def test_lock_retry_constants_are_positive_and_bounded() -> None:
+    assert LOCK_MAXIMUM_RETRY_COUNT > 0
+    assert LOCK_RETRY_SLEEP_SECONDS > 0

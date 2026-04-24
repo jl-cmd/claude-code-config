@@ -8,9 +8,12 @@ INSERT shape. psycopg is mocked at the connect boundary.
 
 from __future__ import annotations
 
+import contextlib
+import errno
 import json
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -1216,3 +1219,180 @@ def test_run_full_extraction_holds_lock_across_load_and_save(
         )
 
     assert lock_acquisition_count["count"] >= 1
+
+
+def test_lock_file_handle_blocking_reraises_permanent_oserror_quickly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Permanent OSErrors (e.g. EACCES) must not be retried — re-raise fast."""
+    if hook_log_extractor.msvcrt is None:
+        pytest.skip("msvcrt retry loop only exists on Windows runtimes")
+
+    lock_file_handle = (tmp_path / "offsets.json.lock").open("a+", encoding="utf-8")
+    try:
+        def _raise_permanent_oserror(
+            file_descriptor: int,
+            mode_flag: int,
+            byte_count: int,
+        ) -> None:
+            raise OSError(errno.EACCES, "access denied")
+
+        monkeypatch.setattr(
+            hook_log_extractor.msvcrt, "locking", _raise_permanent_oserror
+        )
+
+        started_at = time.monotonic()
+        with pytest.raises(OSError) as excinfo:
+            hook_log_extractor._lock_file_handle_blocking(lock_file_handle)
+        elapsed_seconds = time.monotonic() - started_at
+
+        assert excinfo.value.errno == errno.EACCES
+        assert elapsed_seconds < 1.0
+    finally:
+        lock_file_handle.close()
+
+
+def test_lock_file_handle_blocking_caps_retries_on_contention_errno(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Contention-errno must be retried a bounded number of times, then raise."""
+    if hook_log_extractor.msvcrt is None:
+        pytest.skip("msvcrt retry loop only exists on Windows runtimes")
+
+    lock_file_handle = (tmp_path / "offsets.json.lock").open("a+", encoding="utf-8")
+    try:
+        attempt_count = {"value": 0}
+
+        def _raise_contention_oserror(
+            file_descriptor: int,
+            mode_flag: int,
+            byte_count: int,
+        ) -> None:
+            attempt_count["value"] += 1
+            raise OSError(errno.EDEADLOCK, "retries exhausted")
+
+        monkeypatch.setattr(
+            hook_log_extractor.msvcrt, "locking", _raise_contention_oserror
+        )
+        monkeypatch.setattr(hook_log_extractor.time, "sleep", lambda _seconds: None)
+
+        with pytest.raises(OSError) as excinfo:
+            hook_log_extractor._lock_file_handle_blocking(lock_file_handle)
+
+        assert excinfo.value.errno == errno.EDEADLOCK
+        assert (
+            attempt_count["value"]
+            == hook_log_extractor.LOCK_MAXIMUM_RETRY_COUNT
+        )
+    finally:
+        lock_file_handle.close()
+
+
+def test_run_full_extraction_does_not_hold_lock_across_db_io(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DB insert must execute while the offsets lock is NOT held."""
+    jsonl_file = tmp_path / "session.jsonl"
+    jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
+    state_file = tmp_path / "offsets.json"
+
+    lock_currently_held = {"value": False}
+    lock_held_during_insert = {"value": False}
+
+    real_lock_helper = hook_log_extractor._acquire_offsets_lock
+
+    @contextlib.contextmanager
+    def _tracking_lock_helper(passed_state_file_path: str) -> Any:
+        lock_currently_held["value"] = True
+        try:
+            with real_lock_helper(passed_state_file_path):
+                yield
+        finally:
+            lock_currently_held["value"] = False
+
+    def _observe_lock_during_insert(*_args: Any, **_kwargs: Any) -> None:
+        if lock_currently_held["value"]:
+            lock_held_during_insert["value"] = True
+
+    monkeypatch.setattr(
+        hook_log_extractor, "_acquire_offsets_lock", _tracking_lock_helper
+    )
+
+    fake_cursor = MagicMock()
+    fake_cursor.executemany.side_effect = _observe_lock_during_insert
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    with patch.object(
+        hook_log_extractor, "connect_to_neon", return_value=fake_connection
+    ):
+        hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    assert fake_cursor.executemany.called, (
+        "Test setup failed: DB insert never ran"
+    )
+    assert not lock_held_during_insert["value"], (
+        "Offsets lock must not be held during DB insert calls"
+    )
+
+
+def test_run_full_extraction_preserves_external_offset_updates(
+    tmp_path: Path,
+) -> None:
+    """Narrow-scope save must merge with concurrent writers, not clobber."""
+    jsonl_file = tmp_path / "session.jsonl"
+    jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
+    state_file = tmp_path / "offsets.json"
+
+    fake_cursor = MagicMock()
+    fake_connection = MagicMock()
+    fake_connection.cursor.return_value.__enter__.return_value = fake_cursor
+
+    other_path_entry = {
+        "C:/other_session.jsonl": {"byte_offset": 777, "line_number": 9},
+    }
+
+    original_save_offsets = hook_log_extractor.save_offsets
+
+    def _save_then_inject_external_writer(
+        passed_state_file_path: str,
+        passed_offsets: dict[str, dict[str, int]],
+    ) -> None:
+        original_save_offsets(passed_state_file_path, passed_offsets)
+        if other_path_entry["C:/other_session.jsonl"][
+            "byte_offset"
+        ] == 777 and "C:/other_session.jsonl" not in passed_offsets:
+            loaded_from_disk = hook_log_extractor.load_offsets(passed_state_file_path)
+            loaded_from_disk["C:/other_session.jsonl"] = other_path_entry[
+                "C:/other_session.jsonl"
+            ]
+            original_save_offsets(passed_state_file_path, loaded_from_disk)
+
+    with (
+        patch.object(
+            hook_log_extractor, "connect_to_neon", return_value=fake_connection
+        ),
+        patch.object(
+            hook_log_extractor, "save_offsets", _save_then_inject_external_writer
+        ),
+    ):
+        hook_log_extractor.run_full_extraction(
+            transcripts_root=str(tmp_path),
+            state_file_path=str(state_file),
+            full_rebuild=False,
+        )
+
+    final_offsets = hook_log_extractor.load_offsets(str(state_file))
+    assert "C:/other_session.jsonl" in final_offsets
+    assert final_offsets["C:/other_session.jsonl"] == {
+        "byte_offset": 777,
+        "line_number": 9,
+    }
+    assert str(jsonl_file) in final_offsets

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import errno
 import glob
 import io
 import json
@@ -31,6 +32,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import IO, Iterator, Optional, Sequence
 
@@ -85,6 +87,8 @@ from config.hook_log_extractor_constants import (
     KNOWN_HOOK_CATEGORIES,
     LEGACY_OFFSETS_FORMAT_WARNING_LABEL,
     LINE_NUMBER_KEY,
+    LOCK_MAXIMUM_RETRY_COUNT,
+    LOCK_RETRY_SLEEP_SECONDS,
     MISSING_NEON_DATABASE_URL_WARNING_LABEL,
     MISSING_PSYCOPG_WARNING_LABEL,
     NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
@@ -445,6 +449,14 @@ def _acquire_offsets_lock(state_file_path: str) -> Iterator[None]:
     closing at once cannot clobber each other's offset updates. Uses
     ``msvcrt.locking`` on Windows and ``fcntl.flock`` on POSIX; falls
     back to no locking on platforms where neither module is available.
+
+    The sidecar path ``state_file_path + ".lock"`` is intentional,
+    permanent infrastructure. It is a byte-range-lockable companion to
+    the offsets file and is deliberately never unlinked. Attempting to
+    unlink it after release would open a TOCTOU window on Windows,
+    where another process may still hold it open. The stable sidecar
+    is the safer choice; reused on every run, its presence in the
+    state directory is expected and carries no other meaning.
     """
     lock_file_path = state_file_path + ".lock"
     lock_parent_directory = os.path.dirname(lock_file_path)
@@ -464,14 +476,20 @@ def _acquire_offsets_lock(state_file_path: str) -> Iterator[None]:
 def _lock_file_handle_blocking(lock_file_handle: IO[str]) -> None:
     if msvcrt is not None:
         lock_byte_count = 1
-        while True:
+        for _each_attempt_index in range(LOCK_MAXIMUM_RETRY_COUNT):
             try:
                 msvcrt.locking(
                     lock_file_handle.fileno(), msvcrt.LK_LOCK, lock_byte_count
                 )
                 return
-            except OSError:
-                continue
+            except OSError as lock_exception:
+                if lock_exception.errno != errno.EDEADLOCK:
+                    raise
+                time.sleep(LOCK_RETRY_SLEEP_SECONDS)
+        raise OSError(
+            errno.EDEADLOCK,
+            "offsets lock retry budget exhausted",
+        )
     if fcntl is not None:
         fcntl.flock(lock_file_handle.fileno(), fcntl.LOCK_EX)
 
@@ -562,6 +580,12 @@ def run_full_extraction(
 ) -> int:
     """Execute one extraction pass (incremental by default).
 
+    The offsets lock is held only around the initial offsets load and
+    around each offsets write (where the latest on-disk offsets are
+    re-read and merged with this process's pending updates via a
+    per-file max). DB I/O and JSONL iteration run without the lock so
+    concurrent Stop hooks do not serialize on each other's slow work.
+
     Returns process exit code (0 on success, 0 on offline fallback).
     """
     try:
@@ -573,67 +597,122 @@ def run_full_extraction(
         raise
 
     try:
-        with _acquire_offsets_lock(state_file_path):
-            if full_rebuild:
-                with neon_connection.cursor() as neon_cursor:
-                    neon_cursor.execute(HOOK_EVENTS_TRUNCATE_SQL)
-                neon_connection.commit()
-                offset_by_jsonl_path: dict[str, dict[str, int]] = {}
-            else:
-                offset_by_jsonl_path = load_offsets(state_file_path)
+        starting_offset_by_jsonl_path = _load_starting_offsets(
+            neon_connection=neon_connection,
+            state_file_path=state_file_path,
+            full_rebuild=full_rebuild,
+        )
 
-            all_jsonl_file_paths = _discover_jsonl_files(transcripts_root)
-            for each_jsonl_file_path in all_jsonl_file_paths:
-                previous_entry = offset_by_jsonl_path.get(each_jsonl_file_path)
-                start_offset = (
-                    previous_entry[BYTE_OFFSET_KEY]
-                    if previous_entry is not None
-                    else 0
+        all_jsonl_file_paths = _discover_jsonl_files(transcripts_root)
+        for each_jsonl_file_path in all_jsonl_file_paths:
+            previous_entry = starting_offset_by_jsonl_path.get(each_jsonl_file_path)
+            start_offset = (
+                previous_entry[BYTE_OFFSET_KEY]
+                if previous_entry is not None
+                else 0
+            )
+            start_line_number = (
+                previous_entry[LINE_NUMBER_KEY]
+                if previous_entry is not None
+                else 0
+            )
+            batch_buffer: list[dict[str, object]] = []
+            attachment_iterator = iter_attachment_records_from_file(
+                each_jsonl_file_path,
+                start_offset=start_offset,
+                start_line_number=start_line_number,
+            )
+            for (
+                parsed_record,
+                line_number,
+                byte_offset_after,
+            ) in attachment_iterator:
+                built_row = build_row_from_attachment(
+                    parsed_record=parsed_record,
+                    source_jsonl_path=each_jsonl_file_path,
+                    source_line_number=line_number,
                 )
-                start_line_number = (
-                    previous_entry[LINE_NUMBER_KEY]
-                    if previous_entry is not None
-                    else 0
-                )
-                batch_buffer: list[dict[str, object]] = []
-                attachment_iterator = iter_attachment_records_from_file(
-                    each_jsonl_file_path,
-                    start_offset=start_offset,
-                    start_line_number=start_line_number,
-                )
-                for (
-                    parsed_record,
-                    line_number,
-                    byte_offset_after,
-                ) in attachment_iterator:
-                    built_row = build_row_from_attachment(
-                        parsed_record=parsed_record,
-                        source_jsonl_path=each_jsonl_file_path,
-                        source_line_number=line_number,
-                    )
-                    batch_buffer.append(built_row)
-                    if len(batch_buffer) >= INSERT_BATCH_SIZE:
-                        insert_rows_batch(neon_connection, batch_buffer)
-                        batch_buffer.clear()
-                        offset_by_jsonl_path[each_jsonl_file_path] = {
-                            BYTE_OFFSET_KEY: byte_offset_after,
-                            LINE_NUMBER_KEY: attachment_iterator.final_line_number,
-                        }
-                        save_offsets(state_file_path, offset_by_jsonl_path)
-                if batch_buffer:
+                batch_buffer.append(built_row)
+                if len(batch_buffer) >= INSERT_BATCH_SIZE:
                     insert_rows_batch(neon_connection, batch_buffer)
-                if attachment_iterator.drained:
-                    offset_by_jsonl_path[each_jsonl_file_path] = {
-                        BYTE_OFFSET_KEY: attachment_iterator.final_byte_offset,
-                        LINE_NUMBER_KEY: attachment_iterator.final_line_number,
-                    }
-                    save_offsets(state_file_path, offset_by_jsonl_path)
+                    batch_buffer.clear()
+                    _merge_and_save_offsets_under_lock(
+                        state_file_path=state_file_path,
+                        pending_updates={
+                            each_jsonl_file_path: {
+                                BYTE_OFFSET_KEY: byte_offset_after,
+                                LINE_NUMBER_KEY: attachment_iterator.final_line_number,
+                            },
+                        },
+                    )
+            if batch_buffer:
+                insert_rows_batch(neon_connection, batch_buffer)
+            if attachment_iterator.drained:
+                _merge_and_save_offsets_under_lock(
+                    state_file_path=state_file_path,
+                    pending_updates={
+                        each_jsonl_file_path: {
+                            BYTE_OFFSET_KEY: attachment_iterator.final_byte_offset,
+                            LINE_NUMBER_KEY: attachment_iterator.final_line_number,
+                        },
+                    },
+                )
     finally:
         try:
             neon_connection.close()
         except Exception:
             pass
     return EXIT_CODE_SUCCESS
+
+
+def _load_starting_offsets(
+    neon_connection: object,
+    state_file_path: str,
+    full_rebuild: bool,
+) -> dict[str, dict[str, int]]:
+    with _acquire_offsets_lock(state_file_path):
+        if full_rebuild:
+            with neon_connection.cursor() as neon_cursor:
+                neon_cursor.execute(HOOK_EVENTS_TRUNCATE_SQL)
+            neon_connection.commit()
+            save_offsets(state_file_path, {})
+            return {}
+        return load_offsets(state_file_path)
+
+
+def _merge_and_save_offsets_under_lock(
+    state_file_path: str,
+    pending_updates: dict[str, dict[str, int]],
+) -> None:
+    with _acquire_offsets_lock(state_file_path):
+        latest_on_disk_offsets = load_offsets(state_file_path)
+        merged_offsets = _merge_offsets_taking_max(
+            latest_on_disk_offsets, pending_updates
+        )
+        save_offsets(state_file_path, merged_offsets)
+
+
+def _merge_offsets_taking_max(
+    disk_offsets: dict[str, dict[str, int]],
+    pending_updates: dict[str, dict[str, int]],
+) -> dict[str, dict[str, int]]:
+    merged: dict[str, dict[str, int]] = dict(disk_offsets)
+    for each_path, each_pending_entry in pending_updates.items():
+        existing_entry = merged.get(each_path)
+        if existing_entry is None:
+            merged[each_path] = dict(each_pending_entry)
+            continue
+        merged[each_path] = {
+            BYTE_OFFSET_KEY: max(
+                existing_entry[BYTE_OFFSET_KEY],
+                each_pending_entry[BYTE_OFFSET_KEY],
+            ),
+            LINE_NUMBER_KEY: max(
+                existing_entry[LINE_NUMBER_KEY],
+                each_pending_entry[LINE_NUMBER_KEY],
+            ),
+        }
+    return merged
 
 
 def _discover_jsonl_files(transcripts_root: str) -> list[str]:

@@ -8,22 +8,29 @@ from __future__ import annotations
 
 import importlib.util
 import pathlib
+import re
 import sys
 import urllib.error
 
-import pytest
-
-sys.path.insert(0, str(pathlib.Path(__file__).parent))
+scripts_directory = pathlib.Path(__file__).parent
+scripts_directory_string = str(scripts_directory)
+if scripts_directory_string not in sys.path:
+    sys.path.insert(0, scripts_directory_string)
 for _cached in list(sys.modules):
     if _cached == "config" or _cached.startswith("config."):
         del sys.modules[_cached]
+
+import groq_bugteam_dotenv  # noqa: E402
+import pytest  # noqa: E402
 
 from config import groq_bugteam_config  # noqa: E402
 
 
 def _load_groq_bugteam_module():
     scripts_directory = pathlib.Path(__file__).parent
-    sys.path.insert(0, str(scripts_directory))
+    scripts_directory_string = str(scripts_directory)
+    if scripts_directory_string not in sys.path:
+        sys.path.insert(0, scripts_directory_string)
     for cached_module_name in list(sys.modules):
         if cached_module_name == "config" or cached_module_name.startswith("config."):
             del sys.modules[cached_module_name]
@@ -63,6 +70,32 @@ class TestClampText:
         clamped = groq_bugteam.clamp_text(text, 100)
         assert clamped.startswith("HEAD")
         assert clamped.endswith("TAIL")
+
+    @pytest.mark.parametrize("max_characters", [50, 100, 200, 500, 1000])
+    def test_output_never_exceeds_max_characters(self, max_characters):
+        long_text = "a" * 5000
+        clamped = groq_bugteam.clamp_text(long_text, max_characters)
+        assert len(clamped) <= max_characters
+
+    def test_returns_plain_head_when_marker_does_not_fit(self):
+        long_text = "a" * 1000
+        tiny_budget = 10
+        clamped = groq_bugteam.clamp_text(long_text, tiny_budget)
+        assert len(clamped) <= tiny_budget
+        assert clamped == long_text[:tiny_budget]
+        assert "truncated" not in clamped
+
+    def test_truncation_marker_count_matches_characters_actually_dropped(self):
+        long_text = "a" * 1000
+        max_characters = 200
+        clamped = groq_bugteam.clamp_text(long_text, max_characters)
+        marker_match = re.search(r"truncated (\d+) chars", clamped)
+        assert marker_match is not None
+        reported_truncated_count = int(marker_match.group(1))
+        full_marker = f"\n\n... [truncated {reported_truncated_count} chars] ...\n\n"
+        preserved_original_length = len(clamped) - len(full_marker)
+        actually_truncated_count = len(long_text) - preserved_original_length
+        assert reported_truncated_count == actually_truncated_count
 
 
 class TestParseJsonObject:
@@ -276,6 +309,106 @@ class TestIsRecoverableHttpError:
         assert groq_bugteam.should_skip_to_next_model(self._make_error(status)) is False
 
 
+class TestCallGroqWithFallback:
+    def _install_fake_transport(self, monkeypatch, fake_post_to_groq):
+        monkeypatch.setattr(groq_bugteam, "post_to_groq", fake_post_to_groq)
+        monkeypatch.setattr(groq_bugteam.time, "sleep", lambda _seconds: None)
+
+    def test_non_recoverable_http_error_does_not_attempt_fallback_model(self, monkeypatch):
+        attempted_models: list[str] = []
+
+        def fake_post_to_groq(api_key, model, messages, temperature, max_completion_tokens):
+            attempted_models.append(model)
+            raise urllib.error.HTTPError(
+                url="x", code=401, msg="unauthorized", hdrs=None, fp=None
+            )
+
+        self._install_fake_transport(monkeypatch, fake_post_to_groq)
+        with pytest.raises(RuntimeError):
+            groq_bugteam.call_groq_with_fallback("k", [], 0.0, 100)
+        assert attempted_models == [groq_bugteam.GROQ_PRIMARY_MODEL]
+
+    def test_413_falls_back_to_secondary_model(self, monkeypatch):
+        attempted_models: list[str] = []
+
+        def fake_post_to_groq(api_key, model, messages, temperature, max_completion_tokens):
+            attempted_models.append(model)
+            if model == groq_bugteam.GROQ_PRIMARY_MODEL:
+                raise urllib.error.HTTPError(
+                    url="x", code=413, msg="payload too large", hdrs=None, fp=None
+                )
+            return "ok-content"
+
+        self._install_fake_transport(monkeypatch, fake_post_to_groq)
+        result = groq_bugteam.call_groq_with_fallback("k", [], 0.0, 100)
+        assert result.model == groq_bugteam.GROQ_FALLBACK_MODEL
+        assert attempted_models[0] == groq_bugteam.GROQ_PRIMARY_MODEL
+        assert groq_bugteam.GROQ_FALLBACK_MODEL in attempted_models
+
+    def test_recoverable_error_retries_same_model_then_falls_back(self, monkeypatch):
+        call_log: list[str] = []
+
+        def fake_post_to_groq(api_key, model, messages, temperature, max_completion_tokens):
+            call_log.append(model)
+            raise urllib.error.HTTPError(
+                url="x", code=503, msg="service unavailable", hdrs=None, fp=None
+            )
+
+        self._install_fake_transport(monkeypatch, fake_post_to_groq)
+        with pytest.raises(RuntimeError):
+            groq_bugteam.call_groq_with_fallback("k", [], 0.0, 100)
+        assert call_log.count(groq_bugteam.GROQ_PRIMARY_MODEL) > 1
+        assert groq_bugteam.GROQ_FALLBACK_MODEL in call_log
+
+
+class TestCoerceIndexesToIntSet:
+    def test_coerces_string_indexes_to_ints(self):
+        assert groq_bugteam.coerce_indexes_to_int_set(["0", "2"]) == {0, 2}
+
+    def test_drops_non_numeric_entries(self):
+        assert groq_bugteam.coerce_indexes_to_int_set(["0", "abc", None, 1]) == {0, 1}
+
+    def test_handles_none_input(self):
+        assert groq_bugteam.coerce_indexes_to_int_set(None) == set()
+
+    def test_handles_empty_list(self):
+        assert groq_bugteam.coerce_indexes_to_int_set([]) == set()
+
+    def test_accepts_already_int_values(self):
+        assert groq_bugteam.coerce_indexes_to_int_set([0, 1, 2]) == {0, 1, 2}
+
+
+class TestCoerceSkippedEntries:
+    def test_coerces_string_finding_index_to_int(self):
+        assert groq_bugteam.coerce_skipped_entries(
+            [{"finding_index": "3", "reason": "x"}]
+        ) == {3: "x"}
+
+    def test_drops_entries_without_parseable_index(self):
+        assert groq_bugteam.coerce_skipped_entries(
+            [{"finding_index": "not-a-number", "reason": "x"}]
+        ) == {}
+
+    def test_drops_entries_missing_finding_index(self):
+        assert groq_bugteam.coerce_skipped_entries([{"reason": "orphan"}]) == {}
+
+    def test_defaults_reason_to_empty_string(self):
+        assert groq_bugteam.coerce_skipped_entries([{"finding_index": 1}]) == {1: ""}
+
+    def test_handles_none_input(self):
+        assert groq_bugteam.coerce_skipped_entries(None) == {}
+
+    def test_treats_none_reason_as_empty_string(self):
+        assert groq_bugteam.coerce_skipped_entries(
+            [{"finding_index": 1, "reason": None}]
+        ) == {1: ""}
+
+    def test_stringifies_non_string_reasons(self):
+        assert groq_bugteam.coerce_skipped_entries(
+            [{"finding_index": 1, "reason": 42}]
+        ) == {1: "42"}
+
+
 class TestBuildFixUserMessage:
     def test_embeds_file_content_byte_for_byte_with_trailing_newline(self):
         original_content = "line1\nline2\n"
@@ -370,8 +503,13 @@ class TestDecodeSubprocessStderr:
 
 
 class TestRunPipelineRefusals:
-    def test_rejects_missing_api_key(self, monkeypatch):
+    def test_rejects_missing_api_key(self, monkeypatch, tmp_path):
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.setattr(
+            groq_bugteam_dotenv,
+            "claude_dev_env_dotenv_path",
+            lambda: tmp_path / "missing.env",
+        )
         result = groq_bugteam.run_pipeline({"diff": "anything"})
         assert "error" in result
         assert "GROQ_API_KEY" in result["error"]

@@ -129,6 +129,8 @@ def is_retry_limit_reached(attempt_count: int) -> bool:
 ### Design
 
 - Favor functions over classes when state is absent; favor concrete classes over abstract base classes for single implementations; flag dependency-injection frameworks, single-type factories, and multi-level inheritance hierarchies.
+- Require Single Responsibility (SOLID: **S**) for every new function, class, and module: one reason to change. Flag cohesive code split for line-count aesthetics rather than distinct change reasons (for example, a cohesive 80-line class broken into four 20-line classes "because SRP").
+- Apply Open/Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion (SOLID: **O / L / I / D**) only when two or more concrete implementations already exist or are imminent. Flag new interfaces, ABCs, abstract factories, or dependency-injection scaffolding introduced to satisfy SOLID when a single concrete implementation covers the use case (same guard as the `abstract base classes for single implementations` flag above). Full reconciliation with right-sized engineering: `~/.claude/docs/CODE_RULES.md` §7.5.
 - Add optional parameters only when a caller actually varies the value (YAGNI).
 - Require construction logic (paths, URLs, formatting, transformations) to live inside model methods; flag the same string-building pattern duplicated across call sites.
 - Require self-contained components: each component owns its own state, modals, overlays, and toasts; parents render `<Child />` alone.
@@ -159,7 +161,7 @@ Rationale (normative for tool authors, not a loophole): Anthropic’s Agent Skil
 
 **Source repository (public):** [github.com/jl-cmd/claude-code-config](https://github.com/jl-cmd/claude-code-config)
 
-1. **MUST obtain** a checkout of `packages/claude-dev-env` from that repository—clone the full repo or copy only that subtree (for example into `vendor/claude-dev-env` in your project). The gate loads `hooks/blocking/code_rules_enforcer.py` relative to the script path; **MUST** preserve this layout under one `claude-dev-env` directory: `skills/bugteam/scripts/*.py` and `hooks/blocking/` (including the enforcer and its dependencies).
+1. **MUST obtain** a checkout of `packages/claude-dev-env` from that repository—clone the full repo or copy only that subtree (for example into `vendor/claude-dev-env` in your project). The gate imports the blocking code-rules implementation from `hooks/blocking/` relative to the script path; **MUST** preserve this layout under one `claude-dev-env` directory: `skills/bugteam/scripts/*.py` and `hooks/blocking/` (including that tree and its dependencies).
 
 2. **MUST** set a root for invocations (example environment variable): `CLAUDE_DEV_ENV_ROOT=/absolute/path/to/packages/claude-dev-env` (the directory that directly contains `hooks/` and `skills/`).
 

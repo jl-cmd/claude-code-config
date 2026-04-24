@@ -70,7 +70,7 @@ def find_user_directed_question_indicators(text: str) -> list[str]:
             (r"\bwant\s+me\s+to\b", "want me to"),
         ]
     ]
-    terminal_question_mark_character = "?"
+    terminal_question_mark_pattern = re.compile(r"\?[\s\"'\)\]\}]*\Z")
     terminal_question_mark_indicator = "terminal question mark in final paragraph"
 
     final_paragraph = extract_final_paragraph(text)
@@ -79,7 +79,7 @@ def find_user_directed_question_indicators(text: str) -> list[str]:
 
     matched_indicators: list[str] = []
 
-    if final_paragraph.rstrip().endswith(terminal_question_mark_character):
+    if terminal_question_mark_pattern.search(final_paragraph.rstrip()):
         matched_indicators.append(terminal_question_mark_indicator)
 
     for each_pattern, each_display_name in all_preamble_patterns:

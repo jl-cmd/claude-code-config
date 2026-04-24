@@ -36,6 +36,21 @@ RHETORICAL_MIDDLE_MESSAGE = (
     "What happens if the queue is empty? The handler short-circuits cleanly.\n\n"
     "That covers the edge case."
 )
+QUESTION_WITH_TRAILING_DOUBLE_QUOTE_MESSAGE = (
+    'I renamed the flag.\n\nDid you mean "enable_fast_path?"'
+)
+QUESTION_WITH_TRAILING_SINGLE_QUOTE_MESSAGE = (
+    "I renamed the flag.\n\nDid you mean 'enable_fast_path?'"
+)
+QUESTION_WITH_TRAILING_PAREN_MESSAGE = (
+    "I finished the refactor.\n\nShould I also bump the version (minor or patch?)"
+)
+QUESTION_WITH_TRAILING_BRACKET_MESSAGE = (
+    "I finished the refactor.\n\nShould I also bump the version [minor or patch?]"
+)
+QUESTION_WITH_TRAILING_SPACE_MESSAGE = (
+    "I finished the refactor.\n\nShould I also bump the version? "
+)
 
 
 def run_hook_with_payload(payload: dict) -> subprocess.CompletedProcess:
@@ -111,3 +126,38 @@ def test_block_response_json_shape():
     assert "AskUserQuestion" in parsed_response["reason"]
     assert parsed_response["systemMessage"] == USER_FACING_ASKUSERQUESTION_NOTICE
     assert parsed_response["suppressOutput"] is True
+
+
+def test_question_followed_by_double_quote_emits_block():
+    completed_process = run_hook_with_message(QUESTION_WITH_TRAILING_DOUBLE_QUOTE_MESSAGE)
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+    assert parsed_response["decision"] == "block"
+
+
+def test_question_followed_by_single_quote_emits_block():
+    completed_process = run_hook_with_message(QUESTION_WITH_TRAILING_SINGLE_QUOTE_MESSAGE)
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+    assert parsed_response["decision"] == "block"
+
+
+def test_question_followed_by_closing_paren_emits_block():
+    completed_process = run_hook_with_message(QUESTION_WITH_TRAILING_PAREN_MESSAGE)
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+    assert parsed_response["decision"] == "block"
+
+
+def test_question_followed_by_closing_bracket_emits_block():
+    completed_process = run_hook_with_message(QUESTION_WITH_TRAILING_BRACKET_MESSAGE)
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+    assert parsed_response["decision"] == "block"
+
+
+def test_question_followed_by_trailing_space_emits_block():
+    completed_process = run_hook_with_message(QUESTION_WITH_TRAILING_SPACE_MESSAGE)
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+    assert parsed_response["decision"] == "block"

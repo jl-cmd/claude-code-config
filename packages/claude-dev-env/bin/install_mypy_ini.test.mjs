@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -56,6 +56,35 @@ test('installMypyIniForClaudeHooks leaves existing file untouched when already c
 
         assert.equal(installResult.action, 'already-configured');
         assert.equal(installResult.path, mypyIniPath);
+
+        const contentAfterInstall = readFileSync(mypyIniPath, 'utf8');
+        assert.equal(contentAfterInstall, preExistingContent);
+    } finally {
+        rmSync(temporaryHomeDirectory, { recursive: true, force: true });
+    }
+});
+
+
+test('installMypyIniForClaudeHooks treats an existing mypy_path that is a strict prefix of the expected path as not configured', () => {
+    const { temporaryHomeDirectory, claudeHooksDirectory } = makeTemporaryHomeWithClaudeHooks();
+    try {
+        const claudeHooksAsForwardSlashes = claudeHooksDirectory.replace(/\\/g, '/');
+        const prefixCollidingPath = `${claudeHooksAsForwardSlashes}-old`;
+        const preExistingContent = `[mypy]\nmypy_path = ${prefixCollidingPath}\nstrict = True\n`;
+        const mypyIniPath = join(temporaryHomeDirectory, '.mypy.ini');
+        writeFileSync(mypyIniPath, preExistingContent);
+
+        const installResult = installMypyIniForClaudeHooks({
+            homeDirectory: temporaryHomeDirectory,
+            claudeHooksDirectory,
+        });
+
+        assert.equal(installResult.action, 'skipped-existing');
+        assert.equal(installResult.path, mypyIniPath);
+        assert.equal(
+            installResult.expectedLine,
+            `mypy_path = ${claudeHooksAsForwardSlashes}`,
+        );
 
         const contentAfterInstall = readFileSync(mypyIniPath, 'utf8');
         assert.equal(contentAfterInstall, preExistingContent);

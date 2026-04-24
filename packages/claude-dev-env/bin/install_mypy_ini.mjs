@@ -22,13 +22,20 @@ function buildMypyIniContentForClaudeHooks(claudeHooksDirectory) {
 }
 
 
+function hasExactMatchingLine(fileContent, expectedLine) {
+    const lineBreakPattern = /\r?\n/;
+    const allLines = fileContent.split(lineBreakPattern);
+    return allLines.some((eachLine) => eachLine.trim() === expectedLine);
+}
+
+
 export function installMypyIniForClaudeHooks({ homeDirectory, claudeHooksDirectory }) {
     const mypyIniDestinationPath = join(homeDirectory, MYPY_INI_FILENAME);
     const expectedMypyPathLine = buildExpectedMypyPathLine(claudeHooksDirectory);
 
     if (existsSync(mypyIniDestinationPath)) {
         const existingMypyIniContent = readFileSync(mypyIniDestinationPath, 'utf8');
-        if (existingMypyIniContent.includes(expectedMypyPathLine)) {
+        if (hasExactMatchingLine(existingMypyIniContent, expectedMypyPathLine)) {
             return { action: 'already-configured', path: mypyIniDestinationPath };
         }
         return {

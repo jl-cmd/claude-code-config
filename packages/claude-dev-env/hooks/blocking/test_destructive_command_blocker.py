@@ -335,7 +335,7 @@ def test_rm_rf_allowed_when_leading_cd_into_ephemeral_with_dotdot_target() -> No
     assert result.returncode == 0
 
 
-def test_rm_rf_allowed_when_tool_input_cwd_is_ephemeral_subdirectory() -> None:
+def test_rm_rf_asks_when_tool_input_cwd_is_ephemeral_but_rm_target_is_absolute_non_ephemeral() -> None:
     payload_with_tool_input_cwd = {
         "tool_name": "Bash",
         "tool_input": {
@@ -346,26 +346,28 @@ def test_rm_rf_allowed_when_tool_input_cwd_is_ephemeral_subdirectory() -> None:
 
     result = _run_rm_hook(payload_with_tool_input_cwd)
 
-    assert result.stdout.strip() == ""
-    assert result.returncode == 0
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_git_push_force_allowed_when_leading_cd_into_ephemeral_subdirectory() -> None:
+def test_git_push_force_asks_when_leading_cd_into_ephemeral_subdirectory() -> None:
     payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && git push --force')
 
     result = _run_rm_hook(payload)
 
-    assert result.stdout.strip() == ""
-    assert result.returncode == 0
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "git push --force" in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_git_clean_force_recursive_allowed_when_leading_cd_into_ephemeral_subdirectory() -> None:
+def test_git_clean_force_recursive_asks_when_leading_cd_into_ephemeral_subdirectory() -> None:
     payload = _make_bash_payload('cd "/tmp/bugteam_scratch" && git clean -fd')
 
     result = _run_rm_hook(payload)
 
-    assert result.stdout.strip() == ""
-    assert result.returncode == 0
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "git clean -fd" in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_rm_rf_asks_when_leading_cd_target_is_non_ephemeral_directory() -> None:
@@ -386,7 +388,7 @@ def test_rm_rf_asks_when_leading_cd_target_is_bare_ephemeral_root() -> None:
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_rm_rf_allowed_when_leading_cd_target_named_worktrees_under_ephemeral_root() -> None:
+def test_rm_rf_allowed_when_leading_cd_target_is_git_worktrees_directory() -> None:
     payload = _make_bash_payload('cd "/Users/me/repo/worktrees" && rm -rf feature')
 
     result = _run_rm_hook(payload)

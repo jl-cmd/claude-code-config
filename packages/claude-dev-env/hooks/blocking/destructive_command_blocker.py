@@ -355,10 +355,10 @@ def _effective_working_directory_is_ephemeral(command: str, tool_input: dict) ->
     a subfolder of the OS temp root), treat that directory as a disposable
     trust boundary and skip the destructive-action prompt. Rejects bare
     ephemeral roots (``/tmp``, ``/temp``, the OS temp root, ``/worktrees``,
-    ``/worktree``) and bare ``worktrees``/``worktree`` containers so
-    auto-allow only triggers inside a named scratch area, not at the root
-    of a shared scratch namespace. Returns False when no cwd is declared;
-    the narrower target-based auto-allow still applies in that case.
+    ``/worktree``) so auto-allow only triggers inside a named scratch area,
+    not at the root of a shared scratch namespace. Returns False when no
+    cwd is declared; the narrower target-based auto-allow still applies in
+    that case.
     """
     declared_effective_cwd = _resolve_declared_effective_working_directory(command, tool_input)
     if declared_effective_cwd is None:
@@ -366,6 +366,61 @@ def _effective_working_directory_is_ephemeral(command: str, tool_input: dict) ->
     if _path_is_bare_ephemeral_root(declared_effective_cwd):
         return False
     return directory_is_ephemeral(declared_effective_cwd)
+
+
+CWD_SCOPED_DESTRUCTIVE_DESCRIPTIONS_ELIGIBLE_FOR_BROAD_EPHEMERAL_AUTO_ALLOW = (
+    "rm -rf",
+    "rm --recursive",
+    "git reset --hard",
+)
+
+
+def _destructive_match_is_cwd_scoped(matched_description: str) -> bool:
+    """Return True when the matched destructive pattern's blast radius is bounded by cwd.
+
+    ``rm -rf``, ``rm --recursive``, and ``git reset --hard`` only affect
+    files inside the working directory (or paths resolved relative to it
+    when the rm target is relative). Patterns whose blast radius is NOT
+    bounded by cwd — ``git push --force`` / ``git push -f`` (remote
+    history rewrite), ``git clean`` variants (untracked deletion outside
+    what the user can audit at the current prompt), ``mkfs`` / ``dd``
+    (raw device), ``DROP TABLE`` / ``DROP DATABASE`` / ``TRUNCATE TABLE``
+    (database) — must still prompt even when the command runs from an
+    ephemeral worktree. Being in a scratch directory is not a trust zone
+    for remote or out-of-band effects.
+    """
+    return matched_description.startswith(
+        CWD_SCOPED_DESTRUCTIVE_DESCRIPTIONS_ELIGIBLE_FOR_BROAD_EPHEMERAL_AUTO_ALLOW
+    )
+
+
+def _command_rm_targets_include_absolute_non_ephemeral_path(command: str) -> bool:
+    """Return True when the command contains an ``rm`` whose targets include an absolute non-ephemeral path.
+
+    Prevents the broad ephemeral-cwd auto-allow from granting
+    ``rm -rf /var/log/myapp`` just because the shell happens to be in
+    ``/tmp/scratch``: the actual rm target is the absolute path, not
+    anything relative to cwd, so "cwd is ephemeral" does not bound the
+    blast radius. When any absolute rm target fails
+    ``directory_is_ephemeral``, the broad gate declines and the prompt
+    fires normally.
+    """
+    try:
+        all_command_tokens = shlex.split(command, posix=True)
+    except ValueError:
+        return False
+    for each_token_index in range(len(all_command_tokens)):
+        if all_command_tokens[each_token_index] != "rm":
+            continue
+        tokens_after_rm = all_command_tokens[each_token_index + 1:]
+        all_target_tokens = _collect_rm_target_tokens(tokens_after_rm)
+        for each_target_token in all_target_tokens:
+            each_expanded_target = os.path.expanduser(each_target_token)
+            if os.path.isabs(each_expanded_target) or each_expanded_target.replace("\\", "/").startswith("/"):
+                each_resolved_target = os.path.normpath(each_expanded_target)
+                if not directory_is_ephemeral(each_resolved_target):
+                    return True
+    return False
 
 
 def _git_reset_hard_allowed_for_command(command: str, current_working_directory: str) -> bool:
@@ -407,7 +462,12 @@ def main() -> None:
     if matched_description is not None and targets_only_claude_directory(command):
         sys.exit(0)
 
-    if matched_description is not None and _effective_working_directory_is_ephemeral(command, tool_input):
+    if (
+        matched_description is not None
+        and _destructive_match_is_cwd_scoped(matched_description)
+        and _effective_working_directory_is_ephemeral(command, tool_input)
+        and not _command_rm_targets_include_absolute_non_ephemeral_path(command)
+    ):
         sys.exit(0)
 
     if matched_description is not None and _ephemeral_recursive_rm_auto_allow_granted(command, matched_description):

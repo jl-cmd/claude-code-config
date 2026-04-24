@@ -394,6 +394,28 @@ def _destructive_match_is_cwd_scoped(matched_description: str) -> bool:
     )
 
 
+def _command_contains_any_non_cwd_scoped_destructive_pattern(command: str) -> bool:
+    """Return True when the command matches any destructive pattern outside the cwd-scoped whitelist.
+
+    ``find_destructive_pattern`` returns the *first* match in the
+    ``DESTRUCTIVE_BASH_PATTERNS`` table, which puts ``rm -rf`` at index 0.
+    That means a compound like ``cd /tmp/scratch && rm -rf cache &&
+    git push --force`` reports ``rm -rf`` to the main gate, passes the
+    cwd-scoped whitelist, and ends up auto-allowing the remote
+    force-push even though the whitelist docstring says non-cwd-scoped
+    patterns must still prompt. This helper scans *every* destructive
+    pattern and returns True the moment it finds one that is not in the
+    cwd-scoped whitelist, so the broad auto-allow can decline the whole
+    command rather than trust the first-match report.
+    """
+    for each_pattern_regex, each_pattern_description in DESTRUCTIVE_BASH_PATTERNS:
+        if each_pattern_regex.search(command) and not each_pattern_description.startswith(
+            CWD_SCOPED_DESTRUCTIVE_DESCRIPTIONS_ELIGIBLE_FOR_BROAD_EPHEMERAL_AUTO_ALLOW
+        ):
+            return True
+    return False
+
+
 def _command_rm_targets_include_absolute_non_ephemeral_path(command: str) -> bool:
     """Return True when the command contains an ``rm`` whose targets include an absolute non-ephemeral path.
 
@@ -467,6 +489,7 @@ def main() -> None:
         and _destructive_match_is_cwd_scoped(matched_description)
         and _effective_working_directory_is_ephemeral(command, tool_input)
         and not _command_rm_targets_include_absolute_non_ephemeral_path(command)
+        and not _command_contains_any_non_cwd_scoped_destructive_pattern(command)
     ):
         sys.exit(0)
 

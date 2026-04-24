@@ -370,6 +370,50 @@ def test_git_clean_force_recursive_asks_when_leading_cd_into_ephemeral_subdirect
     assert "git clean -fd" in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def test_rm_rf_plus_git_push_force_piggyback_asks_when_leading_cd_into_ephemeral() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/bugteam_scratch" && rm -rf cache && git push --force'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_plus_git_clean_piggyback_asks_when_leading_cd_into_ephemeral() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/bugteam_scratch" && rm -rf cache && git clean -fd'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_plus_mkfs_piggyback_asks_when_leading_cd_into_ephemeral() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/bugteam_scratch" && rm -rf cache && mkfs.ext4 /dev/sda1'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_rm_rf_plus_drop_table_piggyback_asks_when_leading_cd_into_ephemeral() -> None:
+    payload = _make_bash_payload(
+        'cd "/tmp/bugteam_scratch" && rm -rf cache && psql -c "DROP TABLE users"'
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
 def test_rm_rf_asks_when_leading_cd_target_is_non_ephemeral_directory() -> None:
     payload = _make_bash_payload('cd "/etc" && rm -rf scratch')
 

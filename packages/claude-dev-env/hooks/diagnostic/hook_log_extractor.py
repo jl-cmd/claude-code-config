@@ -290,6 +290,8 @@ def iter_attachment_records_from_file(
                 continue
             if not attachment_type.startswith(ATTACHMENT_TYPE_PREFIX):
                 continue
+            if attachment_type not in OUTCOME_BY_ATTACHMENT_TYPE:
+                continue
             yield parsed_record, current_line_number, current_byte_offset
 
 

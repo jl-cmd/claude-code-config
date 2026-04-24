@@ -28,6 +28,7 @@ from config.hook_log_extractor_constants import (
     NEON_DATABASE_URL_ENVIRONMENT_VARIABLE,
     OUTCOME_ADDED_CONTEXT,
     OUTCOME_BLOCKED,
+    OUTCOME_NON_BLOCKING_ERROR,
     OUTCOME_SUCCESS,
     OUTCOME_SYSTEM_MESSAGE,
     STDERR_EXCERPT_MAX_CHARACTERS,
@@ -206,6 +207,44 @@ def test_derive_outcome_maps_hook_additional_context() -> None:
         hook_log_extractor.derive_outcome("hook_additional_context")
         == OUTCOME_ADDED_CONTEXT
     )
+
+
+def test_derive_outcome_maps_hook_non_blocking_error() -> None:
+    assert (
+        hook_log_extractor.derive_outcome("hook_non_blocking_error")
+        == OUTCOME_NON_BLOCKING_ERROR
+    )
+
+
+def test_iter_attachment_records_skips_unknown_hook_attachment_type(
+    tmp_path: Path,
+) -> None:
+    jsonl_path = tmp_path / "session-with-unknown-hook-type.jsonl"
+    unknown_type_record = {
+        "type": "attachment",
+        "attachment": {
+            "type": "hook_future_unknown_variant",
+            "hookName": "PreToolUse:Bash",
+            "hookEvent": "PreToolUse",
+        },
+        "timestamp": "2026-04-24T13:32:54.293Z",
+        "sessionId": "session-alpha",
+        "cwd": "Y:/Projects/repo",
+        "gitBranch": "main",
+    }
+    jsonl_path.write_text(
+        _make_success_line() + "\n" + json.dumps(unknown_type_record) + "\n",
+        encoding="utf-8",
+    )
+    all_yielded_records = list(
+        hook_log_extractor.iter_attachment_records_from_file(
+            str(jsonl_path),
+            start_offset=0,
+        ),
+    )
+    assert len(all_yielded_records) == 1
+    first_parsed_record, _line_number, _offset = all_yielded_records[0]
+    assert first_parsed_record["attachment"]["type"] == "hook_success"
 
 
 def test_derive_outcome_raises_on_unknown_type() -> None:

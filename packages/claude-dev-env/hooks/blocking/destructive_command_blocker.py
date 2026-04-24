@@ -291,6 +291,98 @@ def _ephemeral_recursive_rm_auto_allow_granted(command: str, matched_description
     return matched_description.startswith(("rm -rf", "rm --recursive")) and rm_targets_only_ephemeral_paths(command)
 
 
+CD_QUOTED_DOUBLE_THEN_RM_COMPOUND_PATTERN = re.compile(
+    r'^\s*cd\s+"([^"]+)"\s*&&\s*(rm\s+.+?)\s*$'
+)
+CD_QUOTED_SINGLE_THEN_RM_COMPOUND_PATTERN = re.compile(
+    r"^\s*cd\s+'([^']+)'\s*&&\s*(rm\s+.+?)\s*$"
+)
+CD_UNQUOTED_THEN_RM_COMPOUND_PATTERN = re.compile(
+    r"^\s*cd\s+(\S+)\s*&&\s*(rm\s+.+?)\s*$"
+)
+
+
+def _parse_cd_then_rm_compound(command: str) -> tuple[str, str] | None:
+    for pattern in (
+        CD_QUOTED_DOUBLE_THEN_RM_COMPOUND_PATTERN,
+        CD_QUOTED_SINGLE_THEN_RM_COMPOUND_PATTERN,
+        CD_UNQUOTED_THEN_RM_COMPOUND_PATTERN,
+    ):
+        match = pattern.match(command)
+        if match is not None:
+            return match.group(1), match.group(2)
+    return None
+
+
+def _path_looks_absolute_cross_platform(path: str) -> bool:
+    forward_slash_normalized_path = path.replace("\\", "/")
+    if forward_slash_normalized_path.startswith("/"):
+        return True
+    return os.path.isabs(path)
+
+
+def _cd_into_ephemeral_then_rm_rf_auto_allow_granted(command: str, matched_description: str) -> bool:
+    """Allow the narrow ``cd "<ephemeral_abs_path>" && rm -rf <targets>`` compound form.
+
+    Bugteam teammates and similar flows frequently run a single `cd` into an
+    ephemeral worktree followed by a single recursive `rm` of scratch paths
+    resolved against that worktree. The base ephemeral auto-allow rejects all
+    compounds; this narrower gate resolves each rm target against the cd
+    target and auto-allows when every resolved path is ephemeral and passes
+    the same safety checks as the non-compound case (no bare ephemeral roots,
+    no bare ``worktrees``/``worktree`` containers on the rm targets, no
+    shell-glob wildcards). The compound must contain exactly one ``cd``
+    followed by one ``rm`` joined by ``&&``; any additional ``&&``/``||``/
+    ``;``/``|`` or backtick/``$()`` substitution after the rm disqualifies
+    the command.
+    """
+    if not matched_description.startswith(("rm -rf", "rm --recursive")):
+        return False
+    parsed_cd_and_rm = _parse_cd_then_rm_compound(command)
+    if parsed_cd_and_rm is None:
+        return False
+    cd_target_raw_path, rm_sub_command = parsed_cd_and_rm
+    extra_compound_operator_pattern = re.compile(r'(?:&&|\|\||;|\||`|\$\()')
+    if extra_compound_operator_pattern.search(rm_sub_command):
+        return False
+    resolved_cd_target_path = os.path.normpath(os.path.expanduser(cd_target_raw_path))
+    if not _path_looks_absolute_cross_platform(resolved_cd_target_path):
+        return False
+    if _path_is_bare_ephemeral_root(resolved_cd_target_path):
+        return False
+    if not directory_is_ephemeral(resolved_cd_target_path):
+        return False
+    try:
+        all_rm_command_tokens = _split_command_preserving_windows_backslashes(rm_sub_command)
+    except ValueError:
+        return False
+    if len(all_rm_command_tokens) < 2 or all_rm_command_tokens[0] != "rm":
+        return False
+    tokens_after_rm = all_rm_command_tokens[1:]
+    if _rm_flags_before_double_dash_are_unsafe(tokens_after_rm):
+        return False
+    all_target_tokens = _collect_rm_target_tokens(tokens_after_rm)
+    if not all_target_tokens:
+        return False
+    for each_target_token in all_target_tokens:
+        each_expanded_target = os.path.expanduser(each_target_token)
+        if os.path.isabs(each_expanded_target):
+            each_resolved_target_path = os.path.normpath(each_expanded_target)
+        else:
+            each_resolved_target_path = os.path.normpath(
+                os.path.join(resolved_cd_target_path, each_expanded_target)
+            )
+        if _path_basename_is_shell_glob_wildcard(each_resolved_target_path):
+            return False
+        if _path_is_bare_ephemeral_root(each_resolved_target_path):
+            return False
+        if _path_is_bare_named_worktrees_container(each_resolved_target_path):
+            return False
+        if not directory_is_ephemeral(each_resolved_target_path):
+            return False
+    return True
+
+
 def _git_reset_hard_allowed_for_command(command: str, current_working_directory: str) -> bool:
     if directory_is_ephemeral(current_working_directory):
         return True
@@ -331,6 +423,9 @@ def main() -> None:
         sys.exit(0)
 
     if matched_description is not None and _ephemeral_recursive_rm_auto_allow_granted(command, matched_description):
+        sys.exit(0)
+
+    if matched_description is not None and _cd_into_ephemeral_then_rm_rf_auto_allow_granted(command, matched_description):
         sys.exit(0)
 
     if matched_description is not None and "git reset --hard" in matched_description:

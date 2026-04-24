@@ -27,44 +27,25 @@ _insert_hooks_tree_for_imports()
 
 from config.messages import USER_FACING_ASKUSERQUESTION_NOTICE
 
-ALL_PREAMBLE_PATTERNS = [
-    (re.compile(regex_text, re.IGNORECASE), display_name)
-    for regex_text, display_name in [
-        (r"\bwould\s+you\s+like\b", "would you like"),
-        (r"\bshould\s+i\b", "should i"),
-        (r"\bdo\s+you\s+want\b", "do you want"),
-        (r"\bwhich\s+would\s+you\s+prefer\b", "which would you prefer"),
-        (r"\blet\s+me\s+know\s+if\b", "let me know if"),
-        (r"\blet\s+me\s+know\s+which\b", "let me know which"),
-        (r"\blet\s+me\s+know\s+whether\b", "let me know whether"),
-        (r"\bplease\s+confirm\b", "please confirm"),
-        (r"\bplease\s+let\s+me\s+know\b", "please let me know"),
-        (r"\bwant\s+me\s+to\b", "want me to"),
-    ]
-]
-
-CODE_BLOCK_PATTERN = re.compile(r"```[\s\S]*?```", re.MULTILINE)
-INLINE_CODE_PATTERN = re.compile(r"`[^`]+`")
-QUOTED_BLOCK_PATTERN = re.compile(r"^>.*$", re.MULTILINE)
-PARAGRAPH_SPLIT_PATTERN = re.compile(r"\n\s*\n")
-TERMINAL_QUESTION_MARK_CHARACTER = "?"
-TERMINAL_QUESTION_MARK_INDICATOR = "terminal question mark in final paragraph"
-
 
 def strip_code_and_quotes(text: str) -> str:
     """Remove code blocks, inline code, and blockquotes to avoid false positives."""
-    text = CODE_BLOCK_PATTERN.sub("", text)
-    text = INLINE_CODE_PATTERN.sub("", text)
-    text = QUOTED_BLOCK_PATTERN.sub("", text)
+    code_block_pattern = re.compile(r"```[\s\S]*?```", re.MULTILINE)
+    inline_code_pattern = re.compile(r"`[^`]+`")
+    quoted_block_pattern = re.compile(r"^>.*$", re.MULTILINE)
+    text = code_block_pattern.sub("", text)
+    text = inline_code_pattern.sub("", text)
+    text = quoted_block_pattern.sub("", text)
     return text
 
 
 def extract_final_paragraph(text: str) -> str:
     """Return the last non-empty paragraph of the prose after stripping code and quotes."""
+    paragraph_split_pattern = re.compile(r"\n\s*\n")
     prose_text = strip_code_and_quotes(text)
     candidate_paragraphs = [
         each_paragraph.strip()
-        for each_paragraph in PARAGRAPH_SPLIT_PATTERN.split(prose_text)
+        for each_paragraph in paragraph_split_pattern.split(prose_text)
         if each_paragraph.strip()
     ]
     if not candidate_paragraphs:
@@ -74,16 +55,34 @@ def extract_final_paragraph(text: str) -> str:
 
 def find_user_directed_question_indicators(text: str) -> list[str]:
     """Return indicator names for every user-directed question signal in the final paragraph."""
+    all_preamble_patterns = [
+        (re.compile(regex_text, re.IGNORECASE), display_name)
+        for regex_text, display_name in [
+            (r"\bwould\s+you\s+like\b", "would you like"),
+            (r"\bshould\s+i\b", "should i"),
+            (r"\bdo\s+you\s+want\b", "do you want"),
+            (r"\bwhich\s+would\s+you\s+prefer\b", "which would you prefer"),
+            (r"\blet\s+me\s+know\s+if\b", "let me know if"),
+            (r"\blet\s+me\s+know\s+which\b", "let me know which"),
+            (r"\blet\s+me\s+know\s+whether\b", "let me know whether"),
+            (r"\bplease\s+confirm\b", "please confirm"),
+            (r"\bplease\s+let\s+me\s+know\b", "please let me know"),
+            (r"\bwant\s+me\s+to\b", "want me to"),
+        ]
+    ]
+    terminal_question_mark_character = "?"
+    terminal_question_mark_indicator = "terminal question mark in final paragraph"
+
     final_paragraph = extract_final_paragraph(text)
     if not final_paragraph:
         return []
 
     matched_indicators: list[str] = []
 
-    if final_paragraph.rstrip().endswith(TERMINAL_QUESTION_MARK_CHARACTER):
-        matched_indicators.append(TERMINAL_QUESTION_MARK_INDICATOR)
+    if final_paragraph.rstrip().endswith(terminal_question_mark_character):
+        matched_indicators.append(terminal_question_mark_indicator)
 
-    for each_pattern, each_display_name in ALL_PREAMBLE_PATTERNS:
+    for each_pattern, each_display_name in all_preamble_patterns:
         if (
             each_pattern.search(final_paragraph)
             and each_display_name not in matched_indicators

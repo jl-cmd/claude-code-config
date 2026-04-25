@@ -26,11 +26,12 @@ export function collectPackageSourceConflicts(packageDirectory) {
     const porcelainRenameOrCopyArrow = ' -> ';
     const gitNotARepoExitStatus = 128;
     const gitNotARepoStderrMarker = 'not a git repository';
+    const gitBinaryMissingErrorCode = 'ENOENT';
     let porcelainOutput;
     try {
         porcelainOutput = execFileSync(
             'git',
-            ['-c', 'core.quotepath=false', 'status', '--porcelain', '--', '.'],
+            ['status', '--porcelain', '-z', '--', '.'],
             {
                 cwd: packageDirectory,
                 encoding: 'utf8',
@@ -38,6 +39,14 @@ export function collectPackageSourceConflicts(packageDirectory) {
             },
         );
     } catch (gitInvocationError) {
+        const isGitBinaryMissing = gitInvocationError.code === gitBinaryMissingErrorCode
+            || gitInvocationError.status === null;
+        if (isGitBinaryMissing) {
+            console.error(
+                '  Note: source-state guard skipped — git binary not available on PATH.',
+            );
+            return [];
+        }
         const stderrText = gitInvocationError.stderr ? gitInvocationError.stderr.toString() : '';
         const isNotARepoFailure = gitInvocationError.status === gitNotARepoExitStatus
             && stderrText.includes(gitNotARepoStderrMarker);
@@ -47,11 +56,11 @@ export function collectPackageSourceConflicts(packageDirectory) {
         throw gitInvocationError;
     }
     const allConflicts = [];
-    for (const rawLine of porcelainOutput.split('\n')) {
-        if (rawLine.length < porcelainStatusLineMinLength) continue;
-        const statusCode = rawLine.slice(0, porcelainStatusCodeLength);
+    for (const rawRecord of porcelainOutput.split('\0')) {
+        if (rawRecord.length < porcelainStatusLineMinLength) continue;
+        const statusCode = rawRecord.slice(0, porcelainStatusCodeLength);
         if (!gitConflictStatusCodes.has(statusCode)) continue;
-        const pathField = rawLine.slice(porcelainPathOffset);
+        const pathField = rawRecord.slice(porcelainPathOffset);
         const arrowIndex = pathField.indexOf(porcelainRenameOrCopyArrow);
         const conflictPath = arrowIndex >= 0
             ? pathField.slice(arrowIndex + porcelainRenameOrCopyArrow.length)

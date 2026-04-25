@@ -100,6 +100,7 @@ from config.hook_log_extractor_constants import (
     PROJECTS_TRANSCRIPT_ROOT,
     QUERIES_DIRECTORY_NAME,
     QUERY_NAME_PATTERN,
+    QUERY_NO_ROWS_RETURNED_MESSAGE,
     SCRIPT_PATH_PYTHON_PREFIXES,
     SQL_FILE_EXTENSION,
     STDERR_EXCERPT_MAX_CHARACTERS,
@@ -559,7 +560,8 @@ def connect_to_neon() -> object:
     """
     if psycopg is None:
         raise MissingPsycopgDependencyError(MISSING_PSYCOPG_WARNING_LABEL)
-    database_url = os.environ.get(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE)
+    raw_database_url = os.environ.get(NEON_DATABASE_URL_ENVIRONMENT_VARIABLE)
+    database_url = raw_database_url.strip() if raw_database_url is not None else None
     if not database_url:
         raise MissingNeonDatabaseUrlError(MISSING_NEON_DATABASE_URL_WARNING_LABEL)
     return psycopg.connect(database_url, connect_timeout=CONNECT_TIMEOUT_SECONDS)
@@ -857,7 +859,7 @@ def run_query(named_query: str) -> int:
         except Exception:
             pass
     if not all_result_rows:
-        print(SUMMARY_NO_NEW_BLOCKS_MESSAGE)
+        print(QUERY_NO_ROWS_RETURNED_MESSAGE)
         return EXIT_CODE_SUCCESS
     print(SUMMARY_TABLE_COLUMN_GAP.join(all_column_names))
     for each_result_row in all_result_rows:

@@ -125,6 +125,8 @@ SUMMARY_COLUMN_HEADINGS: tuple[str, str, str, str] = (
 
 SUMMARY_NO_NEW_BLOCKS_MESSAGE: str = "No new blocks since last run."
 
+QUERY_NO_ROWS_RETURNED_MESSAGE: str = "No rows returned."
+
 TOP_BLOCKED_COMMAND_PREVIEW_MAX_CHARACTERS: int = 80
 
 HOOK_EVENTS_TABLE_NAME: str = "hook_events"

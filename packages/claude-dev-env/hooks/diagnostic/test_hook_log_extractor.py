@@ -754,12 +754,16 @@ def test_offline_fallback_still_exits_zero_when_warning_log_write_raises(
     and exit with the documented offline status so session shutdown
     never stalls. A read-only filesystem, a missing parent path, or an
     EACCES on the warning log itself must not propagate and must not
-    flip the exit code.
+    flip the exit code. This test patches ``io.open`` so only the
+    OFFLINE_WARNING_LOG path raises, exercising the real inner
+    ``try/except OSError`` guard inside ``_append_offline_warning_line``
+    rather than monkeypatching the function itself.
     """
     jsonl_file = tmp_path / "session.jsonl"
     jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
     state_file = tmp_path / "offsets.json"
     warning_log = tmp_path / "hook-extractor.log"
+    warning_log_path_string = str(warning_log)
 
     class _FakeOperationalError(Exception):
         pass
@@ -767,10 +771,14 @@ def test_offline_fallback_still_exits_zero_when_warning_log_write_raises(
     def _raise_connection_failure(*_args: Any, **_kwargs: Any) -> None:
         raise _FakeOperationalError("connect failed")
 
-    def _raise_warning_log_permission_error(
-        *_args: Any, **_kwargs: Any
-    ) -> None:
-        raise OSError(errno.EACCES, "permission denied")
+    real_io_open = hook_log_extractor.io.open
+
+    def _io_open_blocking_warning_log(
+        path_argument: Any, *args: Any, **kwargs: Any
+    ) -> Any:
+        if str(path_argument) == warning_log_path_string:
+            raise OSError(errno.EACCES, "permission denied")
+        return real_io_open(path_argument, *args, **kwargs)
 
     with (
         patch.object(
@@ -779,11 +787,13 @@ def test_offline_fallback_still_exits_zero_when_warning_log_write_raises(
             side_effect=_raise_connection_failure,
         ),
         patch.object(hook_log_extractor, "is_operational_error", return_value=True),
-        patch.object(hook_log_extractor, "OFFLINE_WARNING_LOG", str(warning_log)),
         patch.object(
-            hook_log_extractor,
-            "_append_offline_warning_line",
-            side_effect=_raise_warning_log_permission_error,
+            hook_log_extractor, "OFFLINE_WARNING_LOG", warning_log_path_string
+        ),
+        patch.object(
+            hook_log_extractor.io,
+            "open",
+            side_effect=_io_open_blocking_warning_log,
         ),
     ):
         exit_code = hook_log_extractor.run_full_extraction(
@@ -1170,14 +1180,15 @@ def test_run_full_extraction_persists_final_offset_not_file_size(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Persisted byte_offset must equal iterator.final_byte_offset (race-safe).
+    """Persisted byte_offset must equal iterator.final_byte_offset.
 
-    Race-safety means the saved offset reflects only the bytes the
-    iterator actually consumed, not whatever the filesystem reports as
-    the file size at save time. This test captures the iterator's
-    ``final_byte_offset`` directly via a wrapper around the factory and
-    asserts the saved value matches that captured value byte-for-byte,
-    even when the file grows between iterator drain and save.
+    Iterator-derived persistence is proven by equality between the
+    saved offset and the iterator's ``final_byte_offset`` for a
+    transcript that has been read to completion. The iterator's final
+    offset matches the known initial byte length, and the persisted
+    value matches that same iterator-reported value, so the save path
+    sources its number from the iterator rather than from
+    ``os.path.getsize`` (which the production code no longer calls).
     """
     jsonl_file = tmp_path / "session.jsonl"
     initial_line_bytes = (_make_success_line() + "\n").encode("utf-8")
@@ -1221,10 +1232,6 @@ def test_run_full_extraction_persists_final_offset_not_file_size(
             full_rebuild=False,
         )
 
-    extra_growth_bytes = b'{"type":"user","content":"after"}\n'
-    with open(jsonl_file, "ab") as growing_file_handle:
-        growing_file_handle.write(extra_growth_bytes)
-
     saved_offsets = hook_log_extractor.load_offsets(str(state_file))
     assert captured_iterators, "iterator was never produced"
     iterator_reported_final_offset = captured_iterators[0].final_byte_offset
@@ -1233,7 +1240,6 @@ def test_run_full_extraction_persists_final_offset_not_file_size(
         saved_offsets[str(jsonl_file)]["byte_offset"]
         == iterator_reported_final_offset
     )
-    assert jsonl_file.stat().st_size > iterator_reported_final_offset
 
 
 def test_save_offsets_is_serialized_across_threads(tmp_path: Path) -> None:

@@ -628,10 +628,7 @@ def run_full_extraction(
         neon_connection = connect_to_neon()
     except Exception as connect_exception:
         if is_operational_error(connect_exception):
-            try:
-                _append_offline_warning_line(connect_exception)
-            except OSError:
-                pass
+            _append_offline_warning_line(connect_exception)
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
 
@@ -768,10 +765,7 @@ def run_summary() -> int:
         neon_connection = connect_to_neon()
     except Exception as connect_exception:
         if is_operational_error(connect_exception):
-            try:
-                _append_offline_warning_line(connect_exception)
-            except OSError:
-                pass
+            _append_offline_warning_line(connect_exception)
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
     try:
@@ -841,10 +835,7 @@ def run_query(named_query: str) -> int:
         neon_connection = connect_to_neon()
     except Exception as connect_exception:
         if is_operational_error(connect_exception):
-            try:
-                _append_offline_warning_line(connect_exception)
-            except OSError:
-                pass
+            _append_offline_warning_line(connect_exception)
             return EXIT_CODE_EXTRACTOR_ENVIRONMENT_MISSING
         raise
     try:

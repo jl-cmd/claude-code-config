@@ -24,18 +24,27 @@ export function collectPackageSourceConflicts(packageDirectory) {
     const porcelainStatusCodeLength = 2;
     const porcelainPathOffset = 3;
     const porcelainRenameOrCopyArrow = ' -> ';
+    const gitNotARepoExitStatus = 128;
+    const gitNotARepoStderrMarker = 'not a git repository';
     let porcelainOutput;
     try {
         porcelainOutput = execFileSync(
-            'git', ['status', '--porcelain', '--', '.'],
+            'git',
+            ['-c', 'core.quotepath=false', 'status', '--porcelain', '--', '.'],
             {
                 cwd: packageDirectory,
                 encoding: 'utf8',
                 stdio: ['ignore', 'pipe', 'pipe'],
             },
         );
-    } catch {
-        return [];
+    } catch (gitInvocationError) {
+        const stderrText = gitInvocationError.stderr ? gitInvocationError.stderr.toString() : '';
+        const isNotARepoFailure = gitInvocationError.status === gitNotARepoExitStatus
+            && stderrText.includes(gitNotARepoStderrMarker);
+        if (isNotARepoFailure) {
+            return [];
+        }
+        throw gitInvocationError;
     }
     const allConflicts = [];
     for (const rawLine of porcelainOutput.split('\n')) {

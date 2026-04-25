@@ -18,13 +18,12 @@ const packageRequire = createRequire(import.meta.url);
 
 const CONTENT_DIRECTORIES = ['rules', 'docs', 'commands', 'agents', 'system-prompts', 'scripts'];
 
-const GIT_CONFLICT_STATUS_CODES = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
-const GIT_PORCELAIN_STATUS_LINE_MIN_LENGTH = 4;
-const GIT_PORCELAIN_STATUS_CODE_LENGTH = 2;
-const GIT_PORCELAIN_PATH_OFFSET = 3;
-const PORCELAIN_RENAME_OR_COPY_ARROW = ' -> ';
-
 export function collectPackageSourceConflicts(packageDirectory) {
+    const gitConflictStatusCodes = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
+    const porcelainStatusLineMinLength = 4;
+    const porcelainStatusCodeLength = 2;
+    const porcelainPathOffset = 3;
+    const porcelainRenameOrCopyArrow = ' -> ';
     let porcelainOutput;
     try {
         porcelainOutput = execFileSync(
@@ -40,13 +39,13 @@ export function collectPackageSourceConflicts(packageDirectory) {
     }
     const allConflicts = [];
     for (const rawLine of porcelainOutput.split('\n')) {
-        if (rawLine.length < GIT_PORCELAIN_STATUS_LINE_MIN_LENGTH) continue;
-        const statusCode = rawLine.slice(0, GIT_PORCELAIN_STATUS_CODE_LENGTH);
-        if (!GIT_CONFLICT_STATUS_CODES.has(statusCode)) continue;
-        const pathField = rawLine.slice(GIT_PORCELAIN_PATH_OFFSET);
-        const arrowIndex = pathField.indexOf(PORCELAIN_RENAME_OR_COPY_ARROW);
+        if (rawLine.length < porcelainStatusLineMinLength) continue;
+        const statusCode = rawLine.slice(0, porcelainStatusCodeLength);
+        if (!gitConflictStatusCodes.has(statusCode)) continue;
+        const pathField = rawLine.slice(porcelainPathOffset);
+        const arrowIndex = pathField.indexOf(porcelainRenameOrCopyArrow);
         const conflictPath = arrowIndex >= 0
-            ? pathField.slice(arrowIndex + PORCELAIN_RENAME_OR_COPY_ARROW.length)
+            ? pathField.slice(arrowIndex + porcelainRenameOrCopyArrow.length)
             : pathField;
         allConflicts.push({ statusCode, path: conflictPath });
     }

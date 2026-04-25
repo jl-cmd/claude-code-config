@@ -18,6 +18,59 @@ const packageRequire = createRequire(import.meta.url);
 
 const CONTENT_DIRECTORIES = ['rules', 'docs', 'commands', 'agents', 'system-prompts', 'scripts'];
 
+const GIT_CONFLICT_STATUS_CODES = new Set(['DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU']);
+const GIT_PORCELAIN_STATUS_LINE_MIN_LENGTH = 4;
+const GIT_PORCELAIN_STATUS_CODE_LENGTH = 2;
+const GIT_PORCELAIN_PATH_OFFSET = 3;
+const PORCELAIN_RENAME_OR_COPY_ARROW = ' -> ';
+
+export function collectPackageSourceConflicts(packageDirectory) {
+    let porcelainOutput;
+    try {
+        porcelainOutput = execFileSync(
+            'git', ['status', '--porcelain', '--', '.'],
+            {
+                cwd: packageDirectory,
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'pipe'],
+            },
+        );
+    } catch {
+        return [];
+    }
+    const allConflicts = [];
+    for (const rawLine of porcelainOutput.split('\n')) {
+        if (rawLine.length < GIT_PORCELAIN_STATUS_LINE_MIN_LENGTH) continue;
+        const statusCode = rawLine.slice(0, GIT_PORCELAIN_STATUS_CODE_LENGTH);
+        if (!GIT_CONFLICT_STATUS_CODES.has(statusCode)) continue;
+        const pathField = rawLine.slice(GIT_PORCELAIN_PATH_OFFSET);
+        const arrowIndex = pathField.indexOf(PORCELAIN_RENAME_OR_COPY_ARROW);
+        const conflictPath = arrowIndex >= 0
+            ? pathField.slice(arrowIndex + PORCELAIN_RENAME_OR_COPY_ARROW.length)
+            : pathField;
+        allConflicts.push({ statusCode, path: conflictPath });
+    }
+    return allConflicts;
+}
+
+function abortWhenPackageSourceHasConflicts(packageDirectory) {
+    const conflicts = collectPackageSourceConflicts(packageDirectory);
+    if (conflicts.length === 0) return;
+    console.error(
+        `\nERROR: ${PACKAGE_NAME} source has unmerged conflicts under ${packageDirectory}:\n`,
+    );
+    for (const conflict of conflicts) {
+        console.error(`  ${conflict.statusCode} ${conflict.path}`);
+    }
+    console.error(
+        '\nResolve the conflicts in the package source before running the installer.',
+    );
+    console.error(
+        'Installing from a conflicted source can copy stale or broken files into ~/.claude/.\n',
+    );
+    process.exit(1);
+}
+
 function resolveDependencyPackageRoot(dependencyPackageName) {
     const dependencyPackageJsonPath = packageRequire.resolve(
         `${dependencyPackageName}/package.json`
@@ -228,6 +281,7 @@ function writeManifest(installedFiles) {
 function install(selectedGroups) {
     const groupLabel = selectedGroups ? `groups: ${selectedGroups.join(', ')}` : 'all';
     console.log(`\nInstalling ${PACKAGE_NAME} (${groupLabel})...\n`);
+    abortWhenPackageSourceHasConflicts(PACKAGE_ROOT);
     const pythonCommand = detectPython();
     if (!pythonCommand) {
         console.error('ERROR: Python 3 not found. Install Python 3.8+ and ensure python3, python, or py is on PATH.');

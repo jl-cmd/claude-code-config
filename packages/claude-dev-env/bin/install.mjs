@@ -23,7 +23,6 @@ export function collectPackageSourceConflicts(packageDirectory) {
     const porcelainStatusLineMinLength = 4;
     const porcelainStatusCodeLength = 2;
     const porcelainPathOffset = 3;
-    const porcelainRenameOrCopyArrow = ' -> ';
     const gitNotARepoExitStatus = 128;
     const gitNotARepoStderrMarker = 'not a git repository';
     const gitBinaryMissingErrorCode = 'ENOENT';
@@ -39,8 +38,7 @@ export function collectPackageSourceConflicts(packageDirectory) {
             },
         );
     } catch (gitInvocationError) {
-        const isGitBinaryMissing = gitInvocationError.code === gitBinaryMissingErrorCode
-            || gitInvocationError.status === null;
+        const isGitBinaryMissing = gitInvocationError.code === gitBinaryMissingErrorCode;
         if (isGitBinaryMissing) {
             console.error(
                 '  Note: source-state guard skipped — git binary not available on PATH.',
@@ -60,11 +58,7 @@ export function collectPackageSourceConflicts(packageDirectory) {
         if (rawRecord.length < porcelainStatusLineMinLength) continue;
         const statusCode = rawRecord.slice(0, porcelainStatusCodeLength);
         if (!gitConflictStatusCodes.has(statusCode)) continue;
-        const pathField = rawRecord.slice(porcelainPathOffset);
-        const arrowIndex = pathField.indexOf(porcelainRenameOrCopyArrow);
-        const conflictPath = arrowIndex >= 0
-            ? pathField.slice(arrowIndex + porcelainRenameOrCopyArrow.length)
-            : pathField;
+        const conflictPath = rawRecord.slice(porcelainPathOffset);
         allConflicts.push({ statusCode, path: conflictPath });
     }
     return allConflicts;

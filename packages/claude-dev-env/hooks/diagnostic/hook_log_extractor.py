@@ -307,9 +307,14 @@ class AttachmentRecordIterator:
         self.drained = False
 
     def __iter__(self) -> Iterator[tuple[dict[str, object], int, int]]:
-        if not os.path.exists(self._jsonl_file_path):
+        try:
+            jsonl_file_handle = io.open(self._jsonl_file_path, "rb")
+        except (FileNotFoundError, OSError):
+            self.final_line_number = self._start_line_number
+            self.final_byte_offset = self._start_offset
+            self.drained = True
             return
-        with io.open(self._jsonl_file_path, "rb") as jsonl_file_handle:
+        with jsonl_file_handle:
             if self._start_offset > 0:
                 jsonl_file_handle.seek(self._start_offset)
             current_line_number = self._start_line_number

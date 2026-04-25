@@ -53,12 +53,15 @@ of `blocked_commands` or `hook_events` in the Themes project:
 SELECT table_name, view_definition
 FROM information_schema.views
 WHERE table_schema = 'public'
-  AND view_definition ILIKE '%hook_events%';
+  AND view_definition ILIKE '%hook_events%'
+  AND table_name <> 'blocked_commands';
 
 SELECT conname, conrelid::regclass
 FROM pg_constraint
 WHERE confrelid = 'hook_events'::regclass;
 ```
+
+The first query excludes `blocked_commands` itself, since that view (also dropped by this migration) references `hook_events` in its definition and would otherwise always match.
 
 Both queries should return zero rows; if either returns anything,
 investigate the dependency before running the drop.

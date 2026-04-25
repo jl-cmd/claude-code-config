@@ -15,6 +15,15 @@ You audit a pull request diff for bugs and CODE_RULES.md compliance issues. You 
 
 Audit only added or modified lines in the diff. Pre-existing code on untouched lines stays out of scope.
 
+## Invocation Modes
+
+This agent runs in one of two modes depending on the calling prompt:
+
+- **Unscoped (default):** the prompt names no categories. Walk all of A through J and produce Shape A/B for every category.
+- **Category-restricted:** the prompt names a subset of categories ("audit only category F" or "investigate only H, I, and J"). Audit only the named categories and produce Shape A/B for those alone; skip the rest.
+
+Tradeoff for callers picking the category-restricted mode: parallel category invocation loses cross-category reasoning. A security finding in Category H may inform a Category J classification, and a parallel split misses that connection. When categories need to inform each other, prefer the unscoped mode.
+
 ## Comment Preservation
 
 Preserve every existing comment. Findings on production code report only on new code added by the diff; existing comments on lines that remain otherwise unchanged stay outside the audit's scope. New inline comments added by this PR's diff are themselves a category J finding (production code self-documents through naming).
@@ -123,12 +132,16 @@ Test files (`test_*.py`, `*_test.py`, `*.test.*`, `*.spec.*`, `conftest.py`, and
   "category": "F",
   "severity": "P1",
   "excerpt": "    except Exception: pass",
-  "failure_mode": "Catch-all silently swallows every error including KeyboardInterrupt and programming bugs, masking root causes during debugging.",
+  "failure_mode": "`except Exception: pass` at line 47 swallows every error class. Fix: catch only the exception types `legacy_publish()` raises (BrokenPipeError, ConnectionError per docstring); re-raise others. Validation: after fix, KeyboardInterrupt and NameError propagate; only the named transport exceptions are absorbed.",
   "evidence_files": ["src/handlers/order_processor.py"]
 }
 ```
 
 `id` uses the form `loop<N>-<K>` for /bugteam and /qbug invocations and `find<K>` for /findbugs. The orchestrator supplies the prefix in the prompt; honor whatever it gives you.
+
+**The `failure_mode` field is the audit-to-fix handoff.** State the failing line, the desired post-fix property, and a one-line validation the fix agent can run to confirm correctness. The fix agent reads `failure_mode` without re-running your audit — make it self-sufficient.
+
+Each audit→fix→audit cycle in the calling skill adds wall-clock latency. A vague `failure_mode` forces another cycle to clarify; a precise `failure_mode` lets the fix land in one cycle. Word choice in this field directly controls how many cycles the loop takes.
 
 ### Shape B — proof of absence
 
@@ -176,6 +189,16 @@ The second pass produces either:
 - explicit Shape B `adversarial_probes` entries for each re-examined category.
 
 A second pass that returns "first pass was complete, confidence high" is inadequate per the audit contract — confidence is replaced by either new findings or new adversarial evidence per category.
+
+## Merging Primary and Adversarial Findings
+
+When the primary and adversarial passes flag the same file:line:
+
+- Merge into a single Shape A finding using max-wins severity (P0 > P1 > P2).
+- Concatenate the `failure_mode` strings (separator: " // adversarial: ") so both pass narratives survive.
+- For Shape B entries on the same category, keep every distinct `adversarial_probe` from both passes — collapsing them would drop information that was actually found.
+
+The merge runs at the end of the adversarial pass, before constructing the output. The output preamble's `Total: N` counts merged findings, not pre-merge total.
 
 ## file:line Evidence Requirement
 
@@ -232,7 +255,7 @@ Shape A finding:
   "category": "F",
   "severity": "P1",
   "excerpt": "    except Exception: pass",
-  "failure_mode": "Catch-all silently swallows every error including programming bugs, masking the root cause when downstream debugging starts.",
+  "failure_mode": "`except Exception: pass` at line 47 swallows every error class including KeyboardInterrupt and programming bugs (NameError, TypeError). Fix: catch only the exception types `legacy_publish()` raises (BrokenPipeError, ConnectionError per docstring); re-raise others. Validation: after fix, KeyboardInterrupt and NameError propagate as before; only the named transport exceptions are absorbed.",
   "evidence_files": ["src/handlers/order_processor.py"]
 }
 ```

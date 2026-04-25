@@ -1023,12 +1023,12 @@ def test_run_full_extraction_skips_transcripts_deleted_mid_run(
     jsonl_file.write_text(_make_success_line() + "\n", encoding="utf-8")
     state_file = tmp_path / "offsets.json"
 
-    real_getsize = hook_log_extractor.os.path.getsize
+    real_exists = hook_log_extractor.os.path.exists
 
-    def _raise_file_not_found_for_target(each_path: str) -> int:
+    def _return_false_for_target(each_path: str) -> bool:
         if each_path == str(jsonl_file):
-            raise FileNotFoundError(each_path)
-        return real_getsize(each_path)
+            return False
+        return real_exists(each_path)
 
     fake_connection = MagicMock()
     fake_connection.cursor.return_value.__enter__.return_value = MagicMock()
@@ -1039,8 +1039,8 @@ def test_run_full_extraction_skips_transcripts_deleted_mid_run(
         ),
         patch.object(
             hook_log_extractor.os.path,
-            "getsize",
-            side_effect=_raise_file_not_found_for_target,
+            "exists",
+            side_effect=_return_false_for_target,
         ),
     ):
         exit_code = hook_log_extractor.run_full_extraction(

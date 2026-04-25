@@ -25,7 +25,7 @@ def _resolve_claude_home_directory() -> Path:
     """
     claude_home_override = os.environ.get("CLAUDE_HOME", "").strip()
     if claude_home_override:
-        return Path(claude_home_override)
+        return Path(claude_home_override).expanduser()
     return Path.home() / ".claude"
 
 

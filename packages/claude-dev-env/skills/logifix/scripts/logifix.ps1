@@ -165,9 +165,16 @@ function Invoke-LogifixRecovery {
 
     $sessionId = Get-CurrentInteractiveSessionId
     $explorersAfterRespawn = Get-ExplorerProcessesInSession -TargetSessionId $sessionId
-    if ($explorersAfterRespawn.Count -eq 0) {
-        Write-Warning "No explorer.exe found in session $sessionId after $ExplorerAutoRespawnWaitSeconds-second wait."
-        Write-Warning "Restart Explorer manually via Task Manager (Ctrl+Shift+Esc, Windows Explorer, Restart)."
+    $explorerCountAfterRespawn = @($explorersAfterRespawn).Count
+    if ($explorerCountAfterRespawn -ne 1) {
+        if ($explorerCountAfterRespawn -eq 0) {
+            Write-Warning "No explorer.exe found in session $sessionId after $ExplorerAutoRespawnWaitSeconds-second wait."
+        } else {
+            Write-Warning "Expected exactly 1 explorer.exe in session $sessionId after shell auto-respawn, but found $explorerCountAfterRespawn."
+            Write-Warning "Multiple explorer.exe processes in the same session reproduce the Session 2 duplicate-explorer failure mode that blocks tray icon registration."
+            $explorersAfterRespawn | Format-Table ProcessId, OwnerUser, CreationDate -AutoSize | Out-String | Write-Host
+        }
+        Write-Warning "Restart Explorer manually via Task Manager (Ctrl+Shift+Esc, Windows Explorer, Restart), then re-run /logifix."
         return
     }
 

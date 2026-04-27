@@ -96,6 +96,10 @@ def _detached_spawn_keyword_arguments() -> dict[str, object]:
             WINDOWS_DETACHED_PROCESS_FLAG
             | WINDOWS_CREATE_NEW_PROCESS_GROUP_FLAG
         )
+        startup_info = subprocess.STARTUPINFO()
+        startup_info.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startup_info.wShowWindow = subprocess.SW_HIDE
+        spawn_arguments["startupinfo"] = startup_info
     else:
         spawn_arguments["start_new_session"] = True
     return spawn_arguments

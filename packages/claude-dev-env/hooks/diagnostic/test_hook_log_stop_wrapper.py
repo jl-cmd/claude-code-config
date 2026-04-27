@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -243,3 +245,30 @@ def test_main_recovers_when_timestamp_file_is_corrupted(
 
     assert exit_code == 0
     assert len(captured_commands) == 1
+
+
+def test_main_passes_hidden_startupinfo_on_windows(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _redirect_timestamp_path(monkeypatch, tmp_path)
+    monkeypatch.delenv(BWS_ACCESS_TOKEN_ENV_VAR, raising=False)
+    monkeypatch.setattr(hook_log_stop_wrapper.shutil, "which", lambda _name: None)
+
+    captured_kwargs: dict[str, object] = {}
+
+    def _fake_popen(command_list: list[str], **kwargs: object) -> object:
+        captured_kwargs.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(hook_log_stop_wrapper.subprocess, "Popen", _fake_popen)
+
+    hook_log_stop_wrapper.main()
+
+    if os.name == "nt":
+        startup_info = captured_kwargs.get("startupinfo")
+        assert startup_info is not None
+        assert startup_info.dwFlags & subprocess.STARTF_USESHOWWINDOW
+        assert startup_info.wShowWindow == subprocess.SW_HIDE
+    else:
+        assert captured_kwargs.get("start_new_session") is True

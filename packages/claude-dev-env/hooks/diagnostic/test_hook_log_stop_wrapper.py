@@ -39,7 +39,7 @@ def test_main_returns_zero_when_extractor_spawn_raises(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    _redirect_timestamp_path(monkeypatch, tmp_path)
+    timestamp_file = _redirect_timestamp_path(monkeypatch, tmp_path)
     monkeypatch.delenv(BWS_ACCESS_TOKEN_ENV_VAR, raising=False)
     monkeypatch.setattr(hook_log_stop_wrapper.shutil, "which", lambda _name: None)
 
@@ -49,6 +49,7 @@ def test_main_returns_zero_when_extractor_spawn_raises(
     monkeypatch.setattr(hook_log_stop_wrapper.subprocess, "Popen", _raise)
 
     assert hook_log_stop_wrapper.main() == 0
+    assert not timestamp_file.exists()
 
 
 def test_main_uses_bws_when_token_and_binary_present(
@@ -229,6 +230,32 @@ def test_main_recovers_when_timestamp_file_is_corrupted(
     timestamp_file = _redirect_timestamp_path(monkeypatch, tmp_path)
     timestamp_file.parent.mkdir(parents=True, exist_ok=True)
     timestamp_file.write_text("not-a-float")
+
+    monkeypatch.delenv(BWS_ACCESS_TOKEN_ENV_VAR, raising=False)
+    monkeypatch.setattr(hook_log_stop_wrapper.shutil, "which", lambda _name: None)
+
+    captured_commands: list[list[str]] = []
+
+    def _fake_popen(command_list: list[str], **_kwargs: object) -> object:
+        captured_commands.append(list(command_list))
+        return object()
+
+    monkeypatch.setattr(hook_log_stop_wrapper.subprocess, "Popen", _fake_popen)
+
+    exit_code = hook_log_stop_wrapper.main()
+
+    assert exit_code == 0
+    assert len(captured_commands) == 1
+
+
+def test_main_treats_future_timestamp_as_not_debounced(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    timestamp_file = _redirect_timestamp_path(monkeypatch, tmp_path)
+    timestamp_file.parent.mkdir(parents=True, exist_ok=True)
+    far_future_timestamp = time.time() + 3600
+    timestamp_file.write_text(str(far_future_timestamp))
 
     monkeypatch.delenv(BWS_ACCESS_TOKEN_ENV_VAR, raising=False)
     monkeypatch.setattr(hook_log_stop_wrapper.shutil, "which", lambda _name: None)

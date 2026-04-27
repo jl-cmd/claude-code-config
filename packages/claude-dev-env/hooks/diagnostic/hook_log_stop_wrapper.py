@@ -69,6 +69,8 @@ def _is_within_debounce_window() -> bool:
     except (OSError, ValueError):
         return False
     seconds_since_previous_spawn = time.time() - previous_timestamp
+    if seconds_since_previous_spawn < 0:
+        return False
     return seconds_since_previous_spawn < STOP_WRAPPER_DEBOUNCE_SECONDS
 
 
@@ -135,11 +137,11 @@ def main() -> int:
     try:
         if _is_within_debounce_window():
             return EXIT_CODE_SUCCESS
-        _record_current_timestamp()
         if _can_use_bws():
             _spawn_with_bws()
         else:
             _spawn_without_bws()
+        _record_current_timestamp()
     except Exception:
         pass
     return EXIT_CODE_SUCCESS

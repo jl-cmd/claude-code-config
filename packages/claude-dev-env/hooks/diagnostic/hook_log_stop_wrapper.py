@@ -80,6 +80,14 @@ def _record_current_timestamp() -> None:
     timestamp_path.write_text(str(time.time()))
 
 
+def _clear_recorded_timestamp() -> None:
+    timestamp_path = _last_run_timestamp_path()
+    try:
+        timestamp_path.unlink()
+    except FileNotFoundError:
+        return
+
+
 def _can_use_bws() -> bool:
     if not os.environ.get(BWS_ACCESS_TOKEN_ENV_VAR):
         return False
@@ -137,11 +145,14 @@ def main() -> int:
     try:
         if _is_within_debounce_window():
             return EXIT_CODE_SUCCESS
-        if _can_use_bws():
-            _spawn_with_bws()
-        else:
-            _spawn_without_bws()
         _record_current_timestamp()
+        try:
+            if _can_use_bws():
+                _spawn_with_bws()
+            else:
+                _spawn_without_bws()
+        except Exception:
+            _clear_recorded_timestamp()
     except Exception:
         pass
     return EXIT_CODE_SUCCESS

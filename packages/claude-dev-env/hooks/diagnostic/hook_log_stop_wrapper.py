@@ -81,11 +81,21 @@ def _record_current_timestamp() -> None:
 
 
 def _clear_recorded_timestamp() -> None:
+    """Remove the debounce timestamp regardless of which process wrote it.
+
+    The unlink is unconditional: if process A writes a timestamp, process
+    B observes it and debounces, then A's spawn fails, A's rollback here
+    deletes the timestamp B already saw. The next Stop hook then spawns
+    a fresh extractor instead of debouncing the remainder of the window.
+    Consequence is benign because the extractor's own offset-file lock
+    (LOCK_MAXIMUM_RETRY_COUNT in hook_log_extractor_constants) serializes
+    concurrent extractor runs, so at most one extra extractor briefly
+    waits on the lock. Scoping the rollback to A's own write would
+    require a per-process sentinel and tighter atomicity than the
+    benefit warrants for this Stop-hook fast path.
+    """
     timestamp_path = _last_run_timestamp_path()
-    try:
-        timestamp_path.unlink()
-    except FileNotFoundError:
-        return
+    timestamp_path.unlink(missing_ok=True)
 
 
 def _can_use_bws() -> bool:

@@ -1,0 +1,22 @@
+{
+  "deniedMcpServers": [
+    { "serverName": "booking" },
+    { "serverName": "credit-karma" },
+    { "serverName": "quickbooks" },
+    { "serverName": "kiwi" },
+    { "serverName": "lastminute" },
+    { "serverName": "mermaid" },
+    { "serverName": "resy" },
+    { "serverName": "spotify" },
+    { "serverName": "stubhub" },
+    { "serverName": "taskrabbit" },
+    { "serverName": "thumbtack" },
+    { "serverName": "tripadvisor" },
+    { "serverName": "viator" }
+  ],
+  "permissions": {
+    "allow": [
+      "PowerShell(es.exe -name \"claude-code-config\" -max-results 10)"
+    ]
+  }
+}

@@ -9,3 +9,5 @@ SESSION_ENV_DIRECTORY = os.path.join(os.path.expanduser("~"), ".claude", "sessio
 SECONDS_PER_DAY = 24 * 60 * 60
 STALE_AGE_DAYS = 7
 STALE_AGE_SECONDS = STALE_AGE_DAYS * SECONDS_PER_DAY
+
+RMTREE_ONEXC_PYTHON_VERSION = (3, 12)

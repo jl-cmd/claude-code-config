@@ -23,7 +23,7 @@ import stat
 import sys
 import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 
 def _insert_hooks_tree_for_imports() -> None:
@@ -36,13 +36,14 @@ def _insert_hooks_tree_for_imports() -> None:
 _insert_hooks_tree_for_imports()
 
 from config.session_env_cleanup_constants import (
+    RMTREE_ONEXC_PYTHON_VERSION,
     SESSION_ENV_DIRECTORY,
     STALE_AGE_SECONDS,
 )
 
 
 def _strip_read_only_and_retry(
-    removal_function: Callable[[str], Any],
+    removal_function: Callable[[str], None],
     target_path: str,
     *_unused_exception_info: object,
 ) -> None:
@@ -54,8 +55,9 @@ def _strip_read_only_and_retry(
 
 
 def _force_rmtree(target_path: str) -> None:
+    rmtree_onexc_python_version = RMTREE_ONEXC_PYTHON_VERSION
     try:
-        if sys.version_info >= (3, 12):
+        if sys.version_info >= rmtree_onexc_python_version:
             shutil.rmtree(target_path, onexc=_strip_read_only_and_retry)
         else:
             shutil.rmtree(target_path, onerror=_strip_read_only_and_retry)

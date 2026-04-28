@@ -11,8 +11,6 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 _SESSION_DIR = Path(__file__).resolve().parent
 _HOOKS_ROOT = _SESSION_DIR.parent
 for each_sys_path_entry in (str(_SESSION_DIR), str(_HOOKS_ROOT)):
@@ -121,11 +119,7 @@ class TestPrunesStaleEntries:
         assert not stale_directory.exists()
 
 
-class TestRemovesReadOnlyDirectoriesOnWindows:
-    @pytest.mark.skipif(
-        sys.platform != "win32",
-        reason="ReadOnly attribute on directories is a Windows-specific quirk",
-    )
+class TestRemovesReadOnlyDirectories:
     def test_removes_session_directory_with_read_only_contents(
         self, tmp_path: Path
     ) -> None:
@@ -142,10 +136,6 @@ class TestRemovesReadOnlyDirectoriesOnWindows:
         )
         assert not current_session_directory.exists()
 
-    @pytest.mark.skipif(
-        sys.platform != "win32",
-        reason="ReadOnly attribute on directories is a Windows-specific quirk",
-    )
     def test_prunes_stale_directory_with_read_only_contents(
         self, tmp_path: Path
     ) -> None:

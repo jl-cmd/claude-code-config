@@ -16,15 +16,19 @@ from config.session_env_cleanup_constants import SESSION_ID_PATTERN
 
 class TestSessionIdPatternAccepts:
     def test_accepts_uuid_with_hyphens(self) -> None:
-        assert (
-            SESSION_ID_PATTERN.match("5fcc01b3-138b-49e1-9976-ff1035013a4f") is not None
-        )
+        valid_uuid_input = "5fcc01b3-138b-49e1-9976-ff1035013a4f"
+        matched = SESSION_ID_PATTERN.fullmatch(valid_uuid_input)
+        assert matched.group(0) == valid_uuid_input
 
     def test_accepts_alphanumeric_only(self) -> None:
-        assert SESSION_ID_PATTERN.match("abc123XYZ") is not None
+        alphanumeric_input = "abc123XYZ"
+        matched = SESSION_ID_PATTERN.fullmatch(alphanumeric_input)
+        assert matched.group(0) == alphanumeric_input
 
     def test_accepts_underscore_separated(self) -> None:
-        assert SESSION_ID_PATTERN.match("session_42_alpha") is not None
+        underscore_input = "session_42_alpha"
+        matched = SESSION_ID_PATTERN.fullmatch(underscore_input)
+        assert matched.group(0) == underscore_input
 
 
 class TestSessionIdPatternRejects:

@@ -200,3 +200,79 @@ class TestMainReadsSessionIdFromStdin:
         ):
             cleanup.main()
         assert captured_call["session_id"] == ""
+
+    def test_main_rejects_session_id_with_path_separator(self) -> None:
+        captured_call = {}
+
+        def fake_prune(
+            session_env_directory: str,
+            session_id: str,
+            stale_age_seconds: float,
+        ) -> None:
+            captured_call["session_id"] = session_id
+
+        stdin_payload = io.StringIO(json.dumps({"session_id": "../../../etc/passwd"}))
+        with (
+            patch.object(cleanup, "prune_session_env", side_effect=fake_prune),
+            patch("sys.stdin", stdin_payload),
+            patch.object(cleanup.sys, "platform", "win32"),
+        ):
+            cleanup.main()
+        assert captured_call["session_id"] == ""
+
+    def test_main_rejects_absolute_windows_path_session_id(self) -> None:
+        captured_call = {}
+
+        def fake_prune(
+            session_env_directory: str,
+            session_id: str,
+            stale_age_seconds: float,
+        ) -> None:
+            captured_call["session_id"] = session_id
+
+        stdin_payload = io.StringIO(json.dumps({"session_id": "C:\\Windows\\Temp"}))
+        with (
+            patch.object(cleanup, "prune_session_env", side_effect=fake_prune),
+            patch("sys.stdin", stdin_payload),
+            patch.object(cleanup.sys, "platform", "win32"),
+        ):
+            cleanup.main()
+        assert captured_call["session_id"] == ""
+
+
+class TestMainPlatformGuard:
+    def test_main_no_ops_on_non_windows(self) -> None:
+        captured_call = {"called": False}
+
+        def fake_prune(
+            session_env_directory: str,
+            session_id: str,
+            stale_age_seconds: float,
+        ) -> None:
+            captured_call["called"] = True
+
+        stdin_payload = io.StringIO(json.dumps({"session_id": "abc-123"}))
+        with (
+            patch.object(cleanup, "prune_session_env", side_effect=fake_prune),
+            patch("sys.stdin", stdin_payload),
+            patch.object(cleanup.sys, "platform", "linux"),
+        ):
+            cleanup.main()
+        assert captured_call["called"] is False
+
+
+class TestPruneHandlesListdirFailure:
+    def test_prune_returns_silently_when_listdir_raises(self, tmp_path: Path) -> None:
+        existing_session_directory = tmp_path / "still-there"
+        existing_session_directory.mkdir()
+
+        def raise_oserror(path: str) -> list[str]:
+            raise OSError("simulated listdir failure")
+
+        with patch("os.listdir", side_effect=raise_oserror):
+            cleanup.prune_session_env(
+                session_env_directory=str(tmp_path),
+                session_id="",
+                stale_age_seconds=SEVEN_DAYS_IN_SECONDS,
+            )
+        assert existing_session_directory.exists()

@@ -38,7 +38,9 @@ _insert_hooks_tree_for_imports()
 from config.session_env_cleanup_constants import (
     RMTREE_ONEXC_PYTHON_VERSION,
     SESSION_ENV_DIRECTORY,
+    SESSION_ID_PATTERN,
     STALE_AGE_SECONDS,
+    WINDOWS_PLATFORM_TAG,
 )
 
 
@@ -78,7 +80,11 @@ def prune_session_env(
     if not os.path.isdir(session_env_directory):
         return
     stale_cutoff_seconds = time.time() - stale_age_seconds
-    for each_entry_name in os.listdir(session_env_directory):
+    try:
+        all_entry_names = os.listdir(session_env_directory)
+    except OSError:
+        return
+    for each_entry_name in all_entry_names:
         entry_path = os.path.join(session_env_directory, each_entry_name)
         try:
             entry_mtime_seconds = os.path.getmtime(entry_path)
@@ -90,6 +96,7 @@ def prune_session_env(
 
 
 def _read_session_id_from_stdin() -> str:
+    session_id_pattern = SESSION_ID_PATTERN
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
@@ -99,10 +106,15 @@ def _read_session_id_from_stdin() -> str:
     raw_session_id = payload.get("session_id")
     if not isinstance(raw_session_id, str):
         return ""
+    if not session_id_pattern.match(raw_session_id):
+        return ""
     return raw_session_id
 
 
 def main() -> None:
+    windows_platform_tag = WINDOWS_PLATFORM_TAG
+    if sys.platform != windows_platform_tag:
+        return
     session_env_directory = SESSION_ENV_DIRECTORY
     stale_age_seconds = STALE_AGE_SECONDS
     session_id = _read_session_id_from_stdin()

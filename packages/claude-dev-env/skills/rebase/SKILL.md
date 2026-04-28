@@ -46,7 +46,18 @@ When in doubt, ask. Both work; the choice affects history shape, not correctness
 
 3. **Fetch fresh.** `git fetch origin <base-ref> <head-ref>` before starting. Stale local refs cause false conflicts.
 
-4. **Read every rebased commit's message.** Author intent lives in commit messages ("removes orphan constants X, Y, Z"). For every named symbol mentioned as deleted or renamed, run `grep -rn '<symbol>' --include='*.py' origin/main` (or equivalent for your language) — if main has new uses of those symbols, the rebase will produce broken state without conflicting at the textual level.
+4. **Read every rebased commit's message.** Author intent lives in commit messages ("removes orphan constants X, Y, Z"). For every named symbol mentioned as deleted or renamed, scan `origin/main` for new consumers — if main has new uses of those symbols, the rebase will produce broken state without conflicting at the textual level.
+
+   **Tool preference for symbol scans** (in order):
+
+   | Tool | Use when | Example |
+   |---|---|---|
+   | `mcp__serena__find_symbol` / `find_referencing_symbols` | Symbol-aware language server is available — definition vs. reference distinction matters, and you want call-site context | `find_referencing_symbols(symbol_name)` returns every caller with file/line and surrounding code |
+   | `mcp__zoekt__search_symbols` / `search` | Cross-repo or large codebase indexed in zoekt; faster than grep on big trees | `search(query)` returns ranked matches with snippets |
+   | `Grep` tool (ripgrep) | Local single-repo plain-text scan; no symbol awareness needed | `Grep(pattern, type="py")` — much faster than shell `grep` and respects `.gitignore` |
+   | `grep -rn` | Last resort; only when the above are unavailable | — |
+
+   The Grep tool is the default for plain-text scans (faster than shell grep, respects gitignore). Reach for serena when you need to distinguish "this name is defined here" from "this name is referenced here," which catches false positives from comments, docstrings, and string literals. Reach for zoekt for cross-repo scans.
 
    This is the bug that hides best. Don't skip it.
 
@@ -86,11 +97,12 @@ When in doubt, ask. Both work; the choice affects history shape, not correctness
 
 10. **Targeted test run.** Run the test suite for every package the rebase touched. Do not push a rebase that dropped or broke test coverage that was passing pre-rebase.
 
-11. **Reference scan for removals/renames.** For every symbol the rebase deleted or renamed (per the commit messages from step 4):
+11. **Reference scan for removals/renames.** For every symbol the rebase deleted or renamed (per the commit messages from step 4), scan the post-rebase tree using the same tool-preference order as step 4:
 
-    ```
-    grep -rn "<symbol>" --include='*.py' --include='*.ts' --include='*.json' .
-    ```
+    - **Preferred:** `mcp__serena__find_referencing_symbols` (symbol-aware; ignores false matches in comments and string literals).
+    - **Fallback:** `mcp__zoekt__search` for cross-repo or large trees.
+    - **Then:** the `Grep` tool (e.g., `Grep(pattern="<symbol>", type="py")`) for fast in-repo scans.
+    - **Last resort:** `grep -rn "<symbol>" --include='*.py' --include='*.ts' --include='*.json' .`
 
     Any reference outside the rebased commits' own changes is a stale reference. Either update it (with user authorization) or surface it and refuse to push.
 
@@ -137,7 +149,7 @@ After rebase, BEFORE push:
   python -c "import …"      ──► must succeed
   pytest --collect-only     ──► must succeed
   targeted pytest run       ──► must pass
-  grep for removed symbols  ──► no stale references
+  symbol scan (serena → zoekt → Grep) ──► no stale references
 
 Push:
   not main/master/release   ──► force-with-lease, ask first

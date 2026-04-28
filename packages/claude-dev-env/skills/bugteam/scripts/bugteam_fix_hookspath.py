@@ -5,6 +5,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from config.bugteam_fix_hookspath_constants import (
     ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS,
     ALL_HOME_ENV_VAR_NAMES,

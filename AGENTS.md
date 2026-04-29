@@ -9,7 +9,7 @@ This file is the **canonical** code-rules instruction set for every AI coding ag
 
 Use these rules when writing new code, when modifying existing code, and when reviewing pull requests. Apply the rules to the **lines a change adds or modifies**; leave unrelated lines as they are.
 
-When a rule lists exemptions (test files, migrations, config files), honor them. When a rule offers an "Allow" example, treat it as a green-light pattern.
+When a rule lists exemptions (test files, migrations, config files), honor them. When a rule shows a before/after pair, treat the "after" form as the green-light pattern.
 
 ---
 
@@ -17,7 +17,7 @@ When a rule lists exemptions (test files, migrations, config files), honor them.
 
 ### Comments
 
-- Use self-documenting names instead of new inline comments. Skip new `#` and `//` comments in modified **production** code.
+- Use self-documenting names in modified **production** code so the diff carries no new `#` or `//` comments.
 - Preserve every existing comment exactly as written; treat comments in the surrounding file as sacred.
 - Use docstrings on new functions, methods, classes, and modules (including module-level docstrings).
 - **Test files (`test_*.py`, `*_test.py`, `*.test.*`, `*.spec.*`, `conftest.py`) are fully exempt** — write inline comments and docstrings inside test functions whenever they help.
@@ -53,7 +53,7 @@ For every file-global constant declared at module scope in **production code out
 Apply this decision table:
 
 - **0 references:** the constant is dead code. Remove it.
-- **1 reference:** move the value to `config/`, import it at module scope, and bind a local alias inside the consuming method (or, when the sole consumer is a class, declare it as a class attribute at class scope; or inline it as a local constant inside the consuming method; or, when the sole consumer is a module-level expression, reference the imported name directly at module scope). The local form must not reintroduce a literal that the magic-values rule would flag.
+- **1 reference:** move the value to `config/`, import it at module scope, and bind a local alias inside the consuming method (or, when the sole consumer is a class, declare it as a class attribute at class scope; or inline it as a local constant inside the consuming method; or, when the sole consumer is a module-level expression, reference the imported name directly at module scope). Source the local form's value from `config/`, a function argument, or another already-named constant so it stays free of the literals the magic-values rule covers.
 - **2+ references:** keep the constant at file scope.
 
 **Test files are exempt.** Test-file detection uses these anchored patterns against the full relative path: filename matches `test_*.py`; filename matches `*_test.py`; filename matches `*.test.*`; filename matches `*.spec.*`; filename is `conftest.py`; path contains the segment `/tests/`.
@@ -63,7 +63,7 @@ Apply this decision table:
 Move the constant into the consuming method when only one method uses it (the numeric `3` here is illustrative; production values live in `config/`):
 
 ```python
-# Before — one method uses MAXIMUM_RETRIES, so file scope is the wrong place
+# Before — one method uses MAXIMUM_RETRIES; move the value into the method's scope
 MAXIMUM_RETRIES = 3
 
 def fetch_with_retries(url: str) -> str:
@@ -97,12 +97,12 @@ def is_retry_limit_reached(attempt_count: int) -> bool:
 ### Types
 
 - Annotate every function parameter and return value with a type hint.
-- Reach for a precise type before reaching for `Any`, `any`, or `# type: ignore`. When you genuinely need one of those escape hatches, leave a one-line note in the diff explaining the constraint.
+- Reach for a precise type first. When `Any`, `any`, or `# type: ignore` is genuinely the right tool, leave a one-line note in the diff explaining the constraint.
 - Use the right concrete type instead of bare `object`.
 
 ### Structure
 
-- Treat file length as an advisory smell signal — a stderr-only note above ~400 lines and a stronger stderr-only note above ~1000 lines — never as a hard gate by itself. Long files remain acceptable when the file's role justifies it (migrations, generated code, registries, large fixtures).
+- Use file length as an advisory signal, not a hard gate by itself: emit a stderr note above ~400 lines and a stronger stderr note above ~1000 lines, while letting the file's role justify the length (migrations, generated code, registries, and large fixtures stay acceptable at any size).
 - Keep functions at 30 lines or fewer.
 - Match the language's blank-line convention between top-level functions; for Python, separate top-level functions with two blank lines. Leave 1-vs-2 blank-line differences in other languages alone unless the surrounding file clearly establishes a convention.
 - Place every `import` statement at the top of the file. Move imports out of function bodies into the module-level import block.
@@ -114,7 +114,7 @@ def is_retry_limit_reached(attempt_count: int) -> bool:
 - Reach for functions when no state is involved. Reach for concrete classes when state is involved and only one implementation exists. Reach for an abstract base class, dependency-injection framework, or factory only when two or more concrete implementations already exist or are imminent.
 - Apply Single Responsibility (SOLID **S**) per change reason: one reason to change per function, class, or module. Keep cohesive code together — a cohesive 80-line class stays as one class rather than splitting into four 20-line classes for line-count aesthetics.
 - Apply Open/Closed, Liskov Substitution, Interface Segregation, and Dependency Inversion (SOLID **O / L / I / D**) only when two or more concrete implementations already exist or are imminent. Defer new interfaces, ABCs, abstract factories, and dependency-injection scaffolding until that bar is met.
-- Add an optional parameter the moment a caller actually varies the value (YAGNI), and not before.
+- Add an optional parameter the moment a caller actually varies the value (YAGNI).
 - Place construction logic (paths, URLs, formatting, transformations) inside the model or service that owns the data. When you see the same string-building pattern at two call sites, extract it into a method on the owning model.
 - Build self-contained components: each component owns its own state, modals, overlays, and toasts; parents render `<Child />` alone.
 - Reuse data already in scope; pass the existing record to the function that needs it instead of refetching.

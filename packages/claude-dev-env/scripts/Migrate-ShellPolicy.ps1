@@ -22,9 +22,10 @@
 
 .OUTPUTS
     One line on stdout:
-        DRY RUN: would migrate <count> rules IN=<n> FILES
-        MIGRATED: <count> rules IN=<n> FILES
-        MIGRATED: 0 rules (already compliant)
+        DRY RUN: would migrate <count> rules IN=<n> FILES UNPARSEABLE=<m> FILES
+        MIGRATED: <count> rules IN=<n> FILES UNPARSEABLE=<m> FILES
+        MIGRATED: 0 rules SCANNED=<n> FILES UNPARSEABLE=<m> FILES (already compliant)
+        MIGRATED: NO FILES SCANNED UNPARSEABLE=<m> FILES
 
 .EXAMPLE
     pwsh -NoProfile -File Migrate-ShellPolicy.ps1
@@ -135,6 +136,7 @@ function Convert-PermissionsArrays {
 $totalRewrites = 0
 $filesChanged = 0
 $scannedFileCount = 0
+$unparseableFileCount = 0
 $existingRoots = $Roots | Where-Object { Test-Path $_ }
 
 foreach ($root in $existingRoots) {
@@ -146,6 +148,7 @@ foreach ($root in $existingRoots) {
         try {
             $parsed = $rawContent | ConvertFrom-Json -ErrorAction Stop
         } catch {
+            $unparseableFileCount++
             Write-Warning "Skipped (invalid JSON): $($file.FullName)"
             continue
         }
@@ -163,20 +166,27 @@ foreach ($root in $existingRoots) {
     }
 }
 
-if ($scannedFileCount -eq 0) {
+if ($scannedFileCount -eq 0 -and $unparseableFileCount -eq 0) {
     Write-Warning 'No settings files found in any of the configured roots — migration is vacuous.'
-    Write-Output 'MIGRATED: NO FILES SCANNED'
+    Write-Output 'MIGRATED: NO FILES SCANNED UNPARSEABLE=0 FILES'
+    exit 1
+}
+
+if ($scannedFileCount -eq 0 -and $unparseableFileCount -gt 0) {
+    Write-Output ('MIGRATED: NO FILES SCANNED UNPARSEABLE={0} FILES (migration unsound)' -f $unparseableFileCount)
     exit 1
 }
 
 if ($totalRewrites -eq 0) {
-    Write-Output ('MIGRATED: 0 rules SCANNED={0} FILES (already compliant)' -f $scannedFileCount)
+    Write-Output ('MIGRATED: 0 rules SCANNED={0} FILES UNPARSEABLE={1} FILES (already compliant)' -f $scannedFileCount, $unparseableFileCount)
+    if ($unparseableFileCount -gt 0) { exit 1 }
     exit 0
 }
 
 if ($Apply) {
-    Write-Output ('MIGRATED: {0} rules IN={1} FILES SCANNED={2} FILES' -f $totalRewrites, $filesChanged, $scannedFileCount)
+    Write-Output ('MIGRATED: {0} rules IN={1} FILES SCANNED={2} FILES UNPARSEABLE={3} FILES' -f $totalRewrites, $filesChanged, $scannedFileCount, $unparseableFileCount)
 } else {
-    Write-Output ('DRY RUN: would migrate {0} rules IN={1} FILES SCANNED={2} FILES' -f $totalRewrites, $filesChanged, $scannedFileCount)
+    Write-Output ('DRY RUN: would migrate {0} rules IN={1} FILES SCANNED={2} FILES UNPARSEABLE={3} FILES' -f $totalRewrites, $filesChanged, $scannedFileCount, $unparseableFileCount)
 }
+if ($unparseableFileCount -gt 0) { exit 1 }
 exit 0

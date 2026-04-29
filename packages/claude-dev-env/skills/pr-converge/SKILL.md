@@ -109,7 +109,7 @@ Pass this verbatim to the subagent (substituting the bracketed values):
 >         gh pr ready [NUMBER] --repo [OWNER]/[REPO]
 >         ```
 >         Report to the parent in one sentence: "PR #[NUMBER] converged: bugbot CLEAN at [SHA], bugteam CLEAN at [SHA]; marked ready for review." Terminate. Do not schedule another wakeup.
->       - **bugteam reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** bugteam reached zero findings without committing, but bugbot has not been re-confirmed against this HEAD. Transition `phase = BUGBOT`, schedule next wakeup, return.
+>       - **bugteam reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** Bugteam reached zero findings without committing, but bugbot has not been re-confirmed against this HEAD. This branch is reachable only when state diverged BETWEEN ticks — for example, the user pushed a manual commit between two wakeups, so the new HEAD is not the one bugbot last cleaned. Transition `phase = BUGBOT`, schedule next wakeup, return.
 >       - **bugteam reports findings without committing fixes:** apply the **Fix protocol** below, transition `phase = BUGBOT`, schedule next wakeup, return.
 >
 > 3. Re-trigger bugbot (used in step 2.c first branch). Post a literal `bugbot run` PR comment:

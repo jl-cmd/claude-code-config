@@ -1,10 +1,5 @@
 ---
-paths:
-  - "**/test_*.py"
-  - "**/*_test.py"
-  - "**/*.test.{ts,tsx,js,jsx}"
-  - "**/*.spec.*"
-  - "**/conftest.py"
+paths: "**/test_*.py,**/*_test.py,**/*.test.{ts,tsx,js,jsx},**/*.spec.*,**/conftest.py"
 ---
 
 # Testing Standards

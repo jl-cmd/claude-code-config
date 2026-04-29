@@ -1,6 +1,5 @@
 ---
-paths:
-  - "**/*.{sh,ps1,py,mjs,js,ts}"
+paths: "**/*.{sh,ps1,py,mjs,js,ts}"
 ---
 
 # gh --body-file Rule

@@ -1,7 +1,5 @@
 ---
-paths:
-  - "**/*.py"
-  - "**/*.{mjs,js,ts}"
+paths: "**/*.py,**/*.{mjs,js,ts}"
 ---
 
 # Windows Filesystem Safety

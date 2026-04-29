@@ -1,5 +1,5 @@
 ---
-paths: "**/*.py"
+paths: **/*.py
 ---
 
 # File-Global Constants

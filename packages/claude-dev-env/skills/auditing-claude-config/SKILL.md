@@ -102,26 +102,25 @@ from pathlib import Path
 
 
 def main() -> int:
-    try:
-        payload = json.load(sys.stdin)
-    except Exception as exception:
-        log_path = Path.home() / ".claude" / "logs" / "instructions_loaded.jsonl"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8") as log_file:
-            log_file.write(json.dumps({"error": str(exception)}) + "\n")
-        return 0
     log_path = Path.home() / ".claude" / "logs" / "instructions_loaded.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    record = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "file_path": payload.get("file_path"),
-        "load_reason": payload.get("load_reason"),
-        "memory_type": payload.get("memory_type"),
-        "trigger_file_path": payload.get("trigger_file_path"),
-        "parent_file_path": payload.get("parent_file_path"),
-        "globs": payload.get("globs"),
-        "session_id": payload.get("session_id"),
-    }
+    try:
+        payload = json.load(sys.stdin)
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "file_path": payload.get("file_path"),
+            "load_reason": payload.get("load_reason"),
+            "memory_type": payload.get("memory_type"),
+            "trigger_file_path": payload.get("trigger_file_path"),
+            "parent_file_path": payload.get("parent_file_path"),
+            "globs": payload.get("globs"),
+            "session_id": payload.get("session_id"),
+        }
+    except Exception as exception:
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": str(exception),
+        }
     with log_path.open("a", encoding="utf-8") as log_file:
         log_file.write(json.dumps(record) + "\n")
     return 0

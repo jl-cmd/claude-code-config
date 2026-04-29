@@ -147,7 +147,7 @@ Pass this verbatim to the subagent (substituting the bracketed values):
 >     -f body="Addressed in <new_sha>. <one-line description of the fix>."
 >   ```
 >   Use `--body-file` if the body contains backticks (per repo policy on `gh` body content).
-> - If the fix was for bugbot findings, also re-trigger bugbot (step 3 above).
+> - **Always re-trigger bugbot (step 3 above) after pushing a fix**, regardless of which phase originated the findings. Any new commit invalidates bugbot's prior clean by definition, so bugbot must re-review the new HEAD before convergence can be claimed. Re-triggering in the same tick saves a full wakeup cycle compared to deferring the trigger to the next tick — the fix protocol's last step before scheduling the wakeup is always `printf 'bugbot run\n' > /tmp/bugbot-run.md && gh pr comment ... --body-file /tmp/bugbot-run.md && rm /tmp/bugbot-run.md`.
 >
 > **Stop conditions:**
 >

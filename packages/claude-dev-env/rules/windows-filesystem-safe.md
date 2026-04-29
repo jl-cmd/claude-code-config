@@ -1,3 +1,9 @@
+---
+paths:
+  - "**/*.py"
+  - "**/*.{mjs,js,ts}"
+---
+
 # Windows Filesystem Safety
 
 **When this applies:** Any code that recursively deletes directory trees, or that creates directories on Windows where the path may already exist with a `ReadOnly` attribute set.

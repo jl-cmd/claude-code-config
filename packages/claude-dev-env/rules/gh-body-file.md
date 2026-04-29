@@ -1,3 +1,8 @@
+---
+paths:
+  - "**/*.{sh,ps1,py,mjs,js,ts}"
+---
+
 # gh --body-file Rule
 
 **Root cause:** In shell-invoked `gh` command contexts used in this repo, passing markdown body text via `--body "..."` can cause backticks to be stored as `\`` literals on GitHub instead of rendering as markdown code formatting. Quoting and escaping rules vary by execution environment (Bash, PowerShell, CMD), but the failure mode is the same: inline code and code fences can be broken in issues, PR descriptions, comments, and reviews written this way.

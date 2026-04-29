@@ -111,15 +111,19 @@ gh pr comment <NUMBER> --repo <OWNER>/<REPO> --body-file <path/to/bugbot_run.md>
 
 The body file contains exactly the literal phrase `bugbot run` followed by a newline. Use that phrase exactly — empirically the only re-trigger Cursor Bugbot recognizes; alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
 
-### Step 4: Schedule the next wakeup
+### Step 4: Schedule the next wakeup (only when invoked under `/loop`)
 
-Call `ScheduleWakeup` with:
+**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; under manual mode every such reference becomes "return" only.
+
+Detect manual mode by inspecting the conversation context: when the most recent user message that triggered this run was `/pr-converge` (no `/loop` prefix and no prior `ScheduleWakeup` chain entry that fired with `prompt: "/loop /pr-converge"`), this is manual mode. When the run was triggered by the parent's /loop wakeup chain or the user typed `/loop /pr-converge`, this is loop mode.
+
+In **loop mode**, call `ScheduleWakeup` with:
 
 - `delaySeconds: 270` whenever bugbot was just re-triggered (whether by Step 3 directly, by the Fix protocol's mandatory re-trigger, or by BUGTEAM branch 1's same-tick re-trigger). Bugbot finishes a review in 1–4 minutes, so 270s stays under the 5-minute prompt-cache TTL while giving a margin past bugbot's typical upper bound. The single exception is the BUGBOT inline-lag branch, which uses `delaySeconds: 60` because no re-trigger fired and the only thing being awaited is GitHub's inline-comments API catching up.
 - `reason`: one short sentence on what is being awaited, including the current `phase` and `bugbot_clean_at` SHA when set.
 - `prompt: "/loop /pr-converge"` — re-enters this skill via /loop on the next firing.
 
-**On convergence:** omit the ScheduleWakeup call entirely. The /loop terminates because no next wakeup was scheduled.
+**On convergence (loop mode):** omit the ScheduleWakeup call entirely. The /loop terminates because no next wakeup was scheduled.
 
 ## Fix protocol
 

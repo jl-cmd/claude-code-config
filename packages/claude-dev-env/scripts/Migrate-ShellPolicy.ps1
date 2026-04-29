@@ -96,10 +96,20 @@ function Convert-PermissionsArrays {
         $existingArray = $permissions.$key
         if ($null -eq $existingArray) { continue }
         $newArray = @()
+        $seenMigratedStrings = [System.Collections.Generic.HashSet[string]]::new()
         foreach ($rule in $existingArray) {
             if ($rule -is [string]) {
                 $migrated = Get-MigratedRule -Rule $rule
-                if ($migrated -ne $rule) {
+                $isRewrite = ($migrated -ne $rule)
+                if ($seenMigratedStrings.Contains($migrated)) {
+                    if ($isRewrite) {
+                        Write-Verbose "  dedupe-collapsed: '$rule' -> '$migrated' (duplicate of earlier rewrite)"
+                        $rewriteCount++
+                    }
+                    continue
+                }
+                [void]$seenMigratedStrings.Add($migrated)
+                if ($isRewrite) {
                     Write-Verbose "  rewrite: '$rule' -> '$migrated'"
                     $rewriteCount++
                 }

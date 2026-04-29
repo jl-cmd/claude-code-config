@@ -74,7 +74,7 @@ function Get-PermissionRuleArrays {
     $arrays = @()
     if (-not (Test-HasProperty -Target $SettingsObject -Name 'permissions')) { return $arrays }
     $permissions = $SettingsObject.permissions
-    foreach ($key in @('allow', 'ask', 'deny')) {
+    foreach ($key in @('allow', 'ask')) {
         if (-not (Test-HasProperty -Target $permissions -Name $key)) { continue }
         $maybeArray = $permissions.$key
         if ($null -ne $maybeArray) { $arrays += , $maybeArray }

@@ -91,7 +91,7 @@ function Convert-PermissionsArrays {
     $rewriteCount = 0
     if (-not (Test-HasProperty -Target $SettingsObject -Name 'permissions')) { return $rewriteCount }
     $permissions = $SettingsObject.permissions
-    foreach ($key in @('allow', 'ask', 'deny')) {
+    foreach ($key in @('allow', 'ask')) {
         if (-not (Test-HasProperty -Target $permissions -Name $key)) { continue }
         $existingArray = $permissions.$key
         if ($null -eq $existingArray) { continue }

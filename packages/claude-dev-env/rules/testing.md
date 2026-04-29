@@ -1,7 +1,3 @@
----
-paths: "**/test_*.py,**/*_test.py,**/*.test.{ts,tsx,js,jsx},**/*.spec.*,**/conftest.py"
----
-
 # Testing Standards
 
 > **Reference:** TEST_QUALITY.md - Load when writing or reviewing tests.

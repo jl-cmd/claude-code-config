@@ -151,7 +151,7 @@ Pass this verbatim to the subagent (substituting the bracketed values):
 >
 > **Stop conditions:**
 >
-> - **Convergence** (back-to-back clean as defined in step 2.c BUGTEAM first branch): mark PR ready for review, report one-sentence summary to parent, terminate.
+> - **Convergence** (back-to-back clean as defined in step 2.d BUGTEAM second branch — `bugteam reports convergence AND bugbot_clean_at == current_head` with no push during this tick): mark PR ready for review, report one-sentence summary to parent, terminate.
 > - **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection you have investigated through three commits and cannot resolve, or `/bugteam` itself reports a stuck state. Report the specific blocker and your diagnosis to the parent, then terminate without scheduling another wakeup.
 > - **Parent sends `TaskStop`:** terminate immediately.
 >

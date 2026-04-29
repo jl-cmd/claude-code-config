@@ -89,6 +89,7 @@ function Get-PermissionRuleArrays {
 $totalViolations = 0
 $filesWithViolations = 0
 $unparseableFileCount = 0
+$scannedFileCount = 0
 $existingRoots = $Roots | Where-Object { Test-Path $_ }
 
 foreach ($root in $existingRoots) {
@@ -104,6 +105,7 @@ foreach ($root in $existingRoots) {
             Write-Warning "Skipped (invalid JSON): $($file.FullName)"
             continue
         }
+        $scannedFileCount++
         $fileViolationCount = 0
         foreach ($ruleArray in (Get-PermissionRuleArrays -SettingsObject $parsed)) {
             foreach ($rule in $ruleArray) {
@@ -120,15 +122,21 @@ foreach ($root in $existingRoots) {
     }
 }
 
+if ($scannedFileCount -eq 0 -and $unparseableFileCount -eq 0) {
+    Write-Warning 'No settings files found in any of the configured roots — audit is vacuous.'
+    Write-Output 'POLICY: NO FILES SCANNED'
+    exit 1
+}
+
 if ($totalViolations -eq 0 -and $unparseableFileCount -eq 0) {
-    Write-Output 'POLICY: OK'
+    Write-Output ('POLICY: OK SCANNED={0} FILES' -f $scannedFileCount)
     exit 0
 }
 
 if ($totalViolations -eq 0 -and $unparseableFileCount -gt 0) {
-    Write-Output ('POLICY: UNPARSEABLE={0} FILES (audit unsound)' -f $unparseableFileCount)
+    Write-Output ('POLICY: UNPARSEABLE={0} FILES SCANNED={1} FILES (audit unsound)' -f $unparseableFileCount, $scannedFileCount)
     exit 1
 }
 
-Write-Output ('POLICY: VIOLATIONS={0} IN={1} FILES UNPARSEABLE={2} FILES' -f $totalViolations, $filesWithViolations, $unparseableFileCount)
+Write-Output ('POLICY: VIOLATIONS={0} IN={1} FILES UNPARSEABLE={2} FILES SCANNED={3} FILES' -f $totalViolations, $filesWithViolations, $unparseableFileCount, $scannedFileCount)
 exit 1

@@ -67,9 +67,9 @@ $ruleRewrites = @(
     @{ Pattern = [regex]::new('^Bash\(bash\s+-c\s+(.*)\)$', $caseInsensitiveOptions);                                         Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
     @{ Pattern = [regex]::new('^Bash\(cmd\.exe\s+/c\s+(.*)\)$', $caseInsensitiveOptions);                                     Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
     @{ Pattern = [regex]::new('^Bash\(cmd\s+/c\s+(.*)\)$', $caseInsensitiveOptions);                                          Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
-    @{ Pattern = [regex]::new('^Bash\(bash\s+--login\b.*\)$', $caseInsensitiveOptions);                                       Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed: $&"; exit 1'')' }
-    @{ Pattern = [regex]::new('^Bash\(bash\s+--rcfile\b.*\)$', $caseInsensitiveOptions);                                      Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed: $&"; exit 1'')' }
-    @{ Pattern = [regex]::new('^Bash\(bash\s+--init-file\b.*\)$', $caseInsensitiveOptions);                                   Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed: $&"; exit 1'')' }
+    @{ Pattern = [regex]::new('^Bash\(bash\s+--login\b.*\)$', $caseInsensitiveOptions);                                       Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed for bash --login rule"; exit 1'')' }
+    @{ Pattern = [regex]::new('^Bash\(bash\s+--rcfile\b.*\)$', $caseInsensitiveOptions);                                      Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed for bash --rcfile rule"; exit 1'')' }
+    @{ Pattern = [regex]::new('^Bash\(bash\s+--init-file\b.*\)$', $caseInsensitiveOptions);                                   Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed for bash --init-file rule"; exit 1'')' }
 )
 
 $settingsFileNames = @(

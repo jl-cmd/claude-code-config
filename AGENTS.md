@@ -25,15 +25,15 @@ When a rule lists exemptions (test files, migrations, config files), honor them.
 
 ### Naming
 
-- Use full words: `context` (not `ctx`), `configuration` (not `cfg`), `message` (not `msg`), `button` (not `btn`), `index` (not `idx`), `count` (not `cnt`), `element` (not `elem`), `value` (not `val`), `temporary_value` (not `tmp`).
+- Use full-word identifiers in place of common abbreviations: `ctx → context`, `cfg → configuration`, `msg → message`, `btn → button`, `idx → index`, `cnt → count`, `elem → element`, `val → value`, `tmp → temporary_value`.
 - Use single-letter loop variables only for `i`, `j`, `k`, and use `e` for caught exceptions; use the `each_` prefix on every other loop variable (`each_order`, `each_user`).
 - Prefix booleans with `is_`, `has_`, `should_`, or `can_` (`is_ready`, `has_payload`, `should_retry`, `can_skip`).
 - Prefix collection names with `all_` (`all_orders`, `all_pending_jobs`).
 - Name maps with the `X_by_Y` pattern (`price_by_product`, `user_by_id`).
 - Name parameters with prepositions when they describe direction or source: `from_path=`, `to=`, `into=`.
-- Replace generic placeholder identifiers with names that describe the domain meaning: instead of `result`, `data`, `output`, `response`, `value`, `item`, `temp`, use names like `parsed_invoice`, `pending_orders`, `cached_lookup`.
+- Replace generic placeholder identifiers (`result`, `data`, `output`, `response`, `value`, `item`, `temp`) with names that describe the domain meaning: `parsed_invoice`, `pending_orders`, `cached_lookup`, etc.
 - Replace generic function-name prefixes (`handle_`, `process_`, `manage_`, `do_`) with the specific verb that describes what the function does: `parse_invoice`, `dispatch_event`, `migrate_schema`.
-- Name components for what they are: `Overlay` (not `Screen`), `Validator` (not `Handler`), `InvoicePreview` (not `Wrapper`).
+- Name components for what they are — choose the descriptive name over the generic placeholder: `Overlay` over `Screen`, `Validator` over `Handler`, `InvoicePreview` over `Wrapper`.
 
 ### Magic values & configuration
 
@@ -42,13 +42,13 @@ When a rule lists exemptions (test files, migrations, config files), honor them.
 - Treat structural fragments inside f-strings (paths, URLs, query patterns, regex) as magic values in production code; extract each fragment to a named constant.
 - Place `UPPER_SNAKE_CASE` constants used in **production code** under `config/` (`config/timing.py`, `config/constants.py`, `config/selectors.py`). Honor these path exemptions: treat paths as case-insensitive, normalize backslashes to forward slashes, then check whether each pattern below appears anywhere in the path as a substring:
   - Django migrations: path contains `/migrations/`
-  - Workflow registries: path contains the substring `/workflow/`, `_tab.py`, `/states.py`, or `/modules.py` (a file named literally `states.py` at repo root is not exempt; `pkg/states.py` is)
+  - Workflow registries: path contains the substring `/workflow/`, `_tab.py`, `/states.py`, or `/modules.py` (the exemption requires the workflow segment in the path, so `pkg/states.py` qualifies while a top-level `states.py` follows the standard `config/` rule)
   - Test files: path or filename matches common test layout signals (`test_`, `_test.`, `.spec.`, `conftest`, `/tests/`); test files may define local constants without using `config/`
 - Search existing `config/` files for a reusable constant before adding a new one.
 
 #### File-global constants
 
-For every file-global constant declared at module scope in **production code outside `config/`** (for example, an `UPPER_SNAKE_CASE` value at the top of a file), count how many methods, functions, or classes in the same file actually consume it. A reference counts when the constant is compared, used in a decision, or passed into code that depends on its value; a method that only re-exports the value does not count. One class counts as a single reference regardless of how many methods inside it use the constant. A module-level expression that consumes the constant counts as one reference, and a default parameter value counts as one reference from the enclosing function.
+For every file-global constant declared at module scope in **production code outside `config/`** (for example, an `UPPER_SNAKE_CASE` value at the top of a file), count how many methods, functions, or classes in the same file actually consume it. A reference counts when the constant is compared, used in a decision, or passed into code that depends on its value; re-export references (where the method merely surfaces the value without comparing, deciding on, or passing it to dependent code) fall outside the count. One class counts as a single reference regardless of how many methods inside it use the constant. A module-level expression that consumes the constant counts as one reference, and a default parameter value counts as one reference from the enclosing function.
 
 Apply this decision table:
 
@@ -98,11 +98,11 @@ def is_retry_limit_reached(attempt_count: int) -> bool:
 
 - Annotate every function parameter and return value with a type hint.
 - Reach for a precise type first. When `Any`, `any`, or `# type: ignore` is genuinely the right tool, leave a one-line note in the diff explaining the constraint.
-- Use the right concrete type instead of bare `object`.
+- Use a concrete type that captures the value's actual shape, even when bare `object` would compile.
 
 ### Structure
 
-- Use file length as an advisory signal, not a hard gate by itself: emit a stderr note above ~400 lines and a stronger stderr note above ~1000 lines, while letting the file's role justify the length (migrations, generated code, registries, and large fixtures stay acceptable at any size).
+- Treat file length as an advisory signal: emit a stderr note above ~400 lines and a stronger stderr note above ~1000 lines, while letting the file's role justify the length (migrations, generated code, registries, and large fixtures stay acceptable at any size).
 - Keep functions at 30 lines or fewer.
 - Match the language's blank-line convention between top-level functions; for Python, separate top-level functions with two blank lines. Leave 1-vs-2 blank-line differences in other languages alone unless the surrounding file clearly establishes a convention.
 - Place every `import` statement at the top of the file. Move imports out of function bodies into the module-level import block.
@@ -117,7 +117,7 @@ def is_retry_limit_reached(attempt_count: int) -> bool:
 - Add an optional parameter the moment a caller actually varies the value (YAGNI).
 - Place construction logic (paths, URLs, formatting, transformations) inside the model or service that owns the data. When you see the same string-building pattern at two call sites, extract it into a method on the owning model.
 - Build self-contained components: each component owns its own state, modals, overlays, and toasts; parents render `<Child />` alone.
-- Reuse data already in scope; pass the existing record to the function that needs it instead of refetching.
+- Reuse data already in scope; pass the existing record to the function that needs it.
 - Mark scaffolding or placeholder code with a `TODO:` comment that names what replaces it and why.
 
 ### Tests
@@ -130,4 +130,4 @@ def is_retry_limit_reached(attempt_count: int) -> bool:
 
 - Apply every rule above to the **lines a PR adds or modifies**. Leave unrelated lines alone.
 - For new files, apply the rules to every line in the file.
-- When tooling reports a violation outside the changed lines, surface it as a non-blocking note rather than a blocking finding.
+- When tooling reports a violation outside the changed lines, surface it as a non-blocking advisory.

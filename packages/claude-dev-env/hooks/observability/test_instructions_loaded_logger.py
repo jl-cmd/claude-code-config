@@ -30,7 +30,7 @@ def test_should_write_record_with_known_payload_fields_to_jsonl_log() -> None:
         fake_home = Path(fake_home_string)
         payload = {
             "file_path": "/tmp/CLAUDE.md",
-            "load_reason": "memory",
+            "load_reason": "session_start",
             "memory_type": "User",
             "trigger_file_path": "/tmp/trigger",
             "parent_file_path": "/tmp/parent",
@@ -43,7 +43,7 @@ def test_should_write_record_with_known_payload_fields_to_jsonl_log() -> None:
         assert log_path.exists()
         record = json.loads(log_path.read_text(encoding="utf-8").strip())
         assert record["file_path"] == "/tmp/CLAUDE.md"
-        assert record["load_reason"] == "memory"
+        assert record["load_reason"] == "session_start"
         assert record["session_id"] == "abc-123"
         assert "timestamp" in record
 
@@ -74,7 +74,7 @@ def test_should_exit_zero_when_log_directory_creation_fails() -> None:
         blocking_file.write_text("not a directory", encoding="utf-8")
         payload = {
             "file_path": "/tmp/CLAUDE.md",
-            "load_reason": "memory",
+            "load_reason": "path_glob_match",
             "memory_type": "User",
             "trigger_file_path": None,
             "parent_file_path": None,

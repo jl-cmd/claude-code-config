@@ -94,16 +94,23 @@ Pass this verbatim to the subagent (substituting the bracketed values):
 >       ```
 >       (The `/bugteam` skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.)
 >
->    b. Inspect bugteam's output. Bugteam reports either `convergence (zero findings)` or a list of unfixed findings with file:line.
+>    b. **Re-resolve current HEAD now** because `/bugteam` may have pushed commits during its run. The `current_head` from step 1 is potentially stale at this point:
+>       ```bash
+>       new_head=$(gh api repos/[OWNER]/[REPO]/pulls/[NUMBER] --jq '.head.sha')
+>       ```
+>       If `new_head != current_head`, set `current_head = new_head` AND set `bugbot_clean_at = null`. The new commits from bugteam invalidate bugbot's prior clean.
 >
->    c. Decide:
->       - **bugteam reports convergence AND `bugbot_clean_at == current_head`:** This is back-to-back clean. Mark the PR ready for review:
+>    c. Inspect bugteam's output. Bugteam reports either `convergence (zero findings)` or a list of unfixed findings with file:line.
+>
+>    d. Decide based on the (post-bugteam) state — order matters; check pushed-during-bugteam FIRST so a convergence report against a stale HEAD never falsely terminates:
+>       - **bugteam pushed during this tick (i.e., `bugbot_clean_at` was just reset to `null` in step b):** transition `phase = BUGBOT`, schedule next wakeup, return. The new commit needs a fresh bugbot review before convergence can be claimed.
+>       - **bugteam reports convergence AND `bugbot_clean_at == current_head` (no push during this tick):** This is back-to-back clean. Mark the PR ready for review:
 >         ```bash
 >         gh pr ready [NUMBER] --repo [OWNER]/[REPO]
 >         ```
 >         Report to the parent in one sentence: "PR #[NUMBER] converged: bugbot CLEAN at [SHA], bugteam CLEAN at [SHA]; marked ready for review." Terminate. Do not schedule another wakeup.
->       - **bugteam reports convergence BUT `bugbot_clean_at != current_head`:** This means bugteam reached zero findings without any new commits, but bugbot has not yet been re-confirmed against the same HEAD. Transition `phase = BUGBOT` to re-confirm bugbot against this HEAD. Schedule next wakeup, return.
->       - **bugteam reports findings AND has not already pushed fixes:** bugteam itself may apply fixes during its run; if it pushed a new commit, re-resolve `current_head`, set `bugbot_clean_at = null`, transition `phase = BUGBOT` (the new commit invalidates bugbot's prior clean), schedule next wakeup, return. If bugteam reported findings without fixing them, apply the **Fix protocol** below, then transition `phase = BUGBOT`, schedule next wakeup, return.
+>       - **bugteam reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** bugteam reached zero findings without committing, but bugbot has not been re-confirmed against this HEAD. Transition `phase = BUGBOT`, schedule next wakeup, return.
+>       - **bugteam reports findings without committing fixes:** apply the **Fix protocol** below, transition `phase = BUGBOT`, schedule next wakeup, return.
 >
 > 3. Re-trigger bugbot (used in step 2.c first branch). Post a literal `bugbot run` PR comment:
 >    ```bash

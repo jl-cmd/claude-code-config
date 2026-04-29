@@ -1,0 +1,208 @@
+---
+name: pr-converge
+description: >-
+  Spawns a background subagent that drives the current PR to convergence by
+  alternating Cursor Bugbot and the in-house bugteam audit. The subagent
+  fetches each reviewer's findings, applies TDD fixes, pushes one commit per
+  tick, replies inline, and re-triggers the reviewer. Termination requires a
+  back-to-back clean cycle — bugbot CLEAN immediately followed by bugteam
+  CLEAN with no intervening fixes — at which point the subagent marks the PR
+  ready for review and terminates. Triggers: '/pr-converge', 'drive PR to
+  convergence', 'loop bugbot and bugteam', 'babysit bugbot and bugteam',
+  'until both are clean', 'converge this PR'.
+---
+
+# PR Converge
+
+Delegates the bugbot ↔ bugteam convergence loop to a background subagent so the main session stays free. The subagent owns its own cadence and self-terminates on convergence or a hard blocker.
+
+## When this skill applies
+
+The user is on a PR branch and wants both reviewers — Cursor's Bugbot AND the in-house `/bugteam` audit — to keep re-reviewing after each push, with findings auto-addressed between ticks. The PR stays in draft until convergence; on convergence the subagent flips it to ready for review.
+
+## The Process
+
+### Step 1: Gather PR context
+
+From the current repo:
+
+```bash
+gh pr view --json number,url,headRefOid,baseRefName,headRefName,isDraft
+```
+
+Capture `number`, `headRefOid`, owner/repo (from `url`), branch name, and current draft state. Pass these to the subagent so it does not rediscover them.
+
+### Step 2: Spawn the background subagent
+
+Invoke the `Agent` tool with:
+
+- `subagent_type: "general-purpose"`
+- `run_in_background: true`
+- `description: "PR convergence loop for #<N>"`
+- `prompt`: the full instructions in **Step 3 (Subagent prompt template)**, with placeholders filled in from Step 1.
+
+Record the returned agent ID. Report to the user in one or two lines:
+
+- The subagent is running in the background and will alternate bugbot ↔ bugteam.
+- It self-terminates on back-to-back clean and flips the PR ready for review.
+- To stop it early, the user says "stop the converge loop" and you call `TaskStop <agent_id>`.
+
+The skill's job in the main session ends once the subagent is spawned and reported.
+
+### Step 3: Subagent prompt template
+
+Pass this verbatim to the subagent (substituting the bracketed values):
+
+> You are driving PR **#[NUMBER]** at **[OWNER]/[REPO]** (branch `[BRANCH]`, current HEAD `[HEAD_SHA]`) to convergence by alternating Cursor Bugbot and the in-house bugteam audit. Your job: keep the loop running until BOTH reviewers return CLEAN against the same HEAD with no intervening fixes, then mark the PR ready for review and stop.
+>
+> **State you maintain across ticks** (keep it in your own working memory; you re-enter these instructions verbatim each wakeup):
+>
+> - `phase`: `BUGBOT` or `BUGTEAM`. Start in `BUGBOT`.
+> - `bugbot_clean_at`: the HEAD SHA at which bugbot last reported clean, or `null`. Reset to `null` whenever you push a new commit.
+>
+> **Per-tick work** (do this now, then on each wakeup):
+>
+> 1. Resolve current HEAD: `gh api repos/[OWNER]/[REPO]/pulls/[NUMBER] --jq '.head.sha'`. Capture it as `current_head`.
+>
+> 2. Branch on `phase`:
+>
+>    **If `phase == BUGBOT`:**
+>
+>    a. Fetch the latest Cursor Bugbot review:
+>       ```bash
+>       gh api repos/[OWNER]/[REPO]/pulls/[NUMBER]/reviews \
+>         --jq '[.[] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | last'
+>       ```
+>       Capture `commit_id`, `state`, `submitted_at`, and the body. Bugbot's body contains either `Cursor Bugbot has reviewed your changes and found <N> potential issue` (findings exist) or text indicating no issues found.
+>
+>    b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`:
+>       ```bash
+>       gh api repos/[OWNER]/[REPO]/pulls/[NUMBER]/comments \
+>         --jq "[.[] | select(.user.login==\"cursor[bot]\") | select(.commit_id==\"$current_head\")]"
+>       ```
+>
+>    c. Decide:
+>       - **No bugbot review yet, OR latest bugbot review's `commit_id` != `current_head`:** Re-trigger bugbot (step 3), set `bugbot_clean_at = null`, schedule next wakeup, return.
+>       - **Latest review's `commit_id == current_head` AND no unaddressed inline findings AND review body indicates clean:** Set `bugbot_clean_at = current_head`. Transition `phase = BUGTEAM`. Continue to bugteam branch in this same tick (do not return yet — back-to-back convergence requires bugteam to run against the same HEAD).
+>       - **Latest review's `commit_id == current_head` with unaddressed inline findings:** Apply the **Fix protocol** below to address them. The fix protocol pushes a new commit, which sets `current_head` to the new SHA, sets `bugbot_clean_at = null`, replies inline on each thread, and re-triggers bugbot. Schedule next wakeup, return.
+>
+>    **If `phase == BUGTEAM`:**
+>
+>    a. Run the in-house bugteam audit on the current PR:
+>       ```bash
+>       claude -p "/bugteam" --max-turns 200
+>       ```
+>       (The `/bugteam` skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.)
+>
+>    b. Inspect bugteam's output. Bugteam reports either `convergence (zero findings)` or a list of unfixed findings with file:line.
+>
+>    c. Decide:
+>       - **bugteam reports convergence AND `bugbot_clean_at == current_head`:** This is back-to-back clean. Mark the PR ready for review:
+>         ```bash
+>         gh pr ready [NUMBER] --repo [OWNER]/[REPO]
+>         ```
+>         Report to the parent in one sentence: "PR #[NUMBER] converged: bugbot CLEAN at [SHA], bugteam CLEAN at [SHA]; marked ready for review." Terminate. Do not schedule another wakeup.
+>       - **bugteam reports convergence BUT `bugbot_clean_at != current_head`:** This means bugteam reached zero findings without any new commits, but bugbot has not yet been re-confirmed against the same HEAD. Transition `phase = BUGBOT` to re-confirm bugbot against this HEAD. Schedule next wakeup, return.
+>       - **bugteam reports findings AND has not already pushed fixes:** bugteam itself may apply fixes during its run; if it pushed a new commit, re-resolve `current_head`, set `bugbot_clean_at = null`, transition `phase = BUGBOT` (the new commit invalidates bugbot's prior clean), schedule next wakeup, return. If bugteam reported findings without fixing them, apply the **Fix protocol** below, then transition `phase = BUGBOT`, schedule next wakeup, return.
+>
+> 3. Re-trigger bugbot (used in step 2.c first branch). Post a literal `bugbot run` PR comment:
+>    ```bash
+>    printf 'bugbot run\n' > /tmp/bugbot-run.md
+>    gh pr comment [NUMBER] --repo [OWNER]/[REPO] --body-file /tmp/bugbot-run.md
+>    rm /tmp/bugbot-run.md
+>    ```
+>    The exact body `bugbot run` is the documented re-trigger phrase for Cursor Bugbot. Do not abbreviate it.
+>
+> 4. Schedule the next wakeup with `ScheduleWakeup`:
+>    - `delaySeconds: 300` after re-triggering bugbot (it usually finishes in 1–4 minutes).
+>    - `delaySeconds: 60` after pushing a fix when bugbot was already known clean against the prior HEAD (faster bounce-back through the loop).
+>    - `reason`: one short sentence on what you are waiting for, including the current `phase` and `bugbot_clean_at` SHA if set.
+>    - `prompt`: the literal sentinel `<<autonomous-loop-dynamic>>` so the next firing re-enters these instructions.
+>
+> **Fix protocol** (used by both phases when findings exist):
+>
+> - Read each referenced file:line.
+> - Write a failing test first when the finding has behavior to test. For pure doc, comment, or naming nits with no behavior, go straight to the fix.
+> - Implement the fix.
+> - Stage the affected files and create one new commit on the existing branch:
+>   ```bash
+>   git add <files> && git commit -m "fix(review): <brief summary>"
+>   ```
+>   Honor pre-commit and pre-push hooks; if a hook rejects, read its message, fix the underlying issue, retry. Hooks exist to catch real problems.
+> - Push the new commit:
+>   ```bash
+>   git push origin [BRANCH]
+>   ```
+>   Capture the new HEAD SHA. Set `current_head` to it. Set `bugbot_clean_at = null`.
+> - Reply inline on each addressed comment thread:
+>   ```bash
+>   gh api -X POST repos/[OWNER]/[REPO]/pulls/[NUMBER]/comments/<comment_id>/replies \
+>     -f body="Addressed in <new_sha>. <one-line description of the fix>."
+>   ```
+>   Use `--body-file` if the body contains backticks (per repo policy on `gh` body content).
+> - If the fix was for bugbot findings, also re-trigger bugbot (step 3 above).
+>
+> **Stop conditions:**
+>
+> - **Convergence** (back-to-back clean as defined in step 2.c BUGTEAM first branch): mark PR ready for review, report one-sentence summary to parent, terminate.
+> - **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection you have investigated through three commits and cannot resolve, or `/bugteam` itself reports a stuck state. Report the specific blocker and your diagnosis to the parent, then terminate without scheduling another wakeup.
+> - **Parent sends `TaskStop`:** terminate immediately.
+>
+> **Safety cap:** after 30 ticks without convergence, stop and report. That many rounds means something structural is wrong with the loop. (Higher than copilot-review's 20-tick cap because two reviewers run sequentially per round.)
+
+### Step 4: Report back to the user
+
+After spawning, tell the user in one or two lines: subagent ID, PR URL, that it will alternate bugbot and bugteam and notify on convergence or blocker. Nothing else.
+
+## Stopping the subagent
+
+- Convergence → subagent stops itself, marks PR ready for review.
+- Blocker → subagent reports and stops.
+- User says stop → `TaskStop <agent_id>`.
+- User asks what loops are running → `TaskList`.
+
+## Ground rules (for the subagent)
+
+- **Append commits.** Each tick adds at most one new fix commit. Multiple findings within one tick collapse into a single commit; the next tick handles the next round.
+- **`bugbot_clean_at` resets on every push.** A new commit invalidates bugbot's prior clean by definition — bugbot must re-review the new HEAD before convergence can be claimed.
+- **Back-to-back clean is the ONLY termination criterion.** Bugbot clean alone is insufficient; bugteam clean alone is insufficient. Both must clean against the same HEAD with no intervening fixes.
+- **The `bugbot run` comment is load-bearing.** That literal phrase is how Cursor Bugbot re-triggers — empirically verified. Other phrases (`re-review`, `bugbot please`, etc.) silently no-op.
+- **`gh pr ready` is the convergence action.** Do not merge; do not request additional reviewers; do not edit the PR title or body. The user owns those decisions; the subagent's contract ends at "ready for review."
+- **Honor pre-push and pre-commit hooks.** When a hook rejects the change, read its output, fix the underlying issue (the failing test, the missing constant, the broken import), and retry.
+
+## Examples
+
+<example>
+User: `/pr-converge`
+Claude: [reads PR context, spawns background subagent with the Step 3 template, reports "subagent X driving PR #280 to convergence; will notify on back-to-back clean"]
+</example>
+
+<example>
+User: "drive this PR to convergence — bugbot and bugteam until both are clean"
+Claude: [same as above]
+</example>
+
+<example>
+Subagent tick fires in BUGBOT phase, latest bugbot review is against an older commit.
+Subagent: [posts `bugbot run` comment, sets `bugbot_clean_at = null`, schedules next wakeup at 300s, returns]
+</example>
+
+<example>
+Subagent tick fires in BUGBOT phase, bugbot has 2 unaddressed findings on HEAD.
+Subagent: [TDD-fixes both, one commit, pushes, replies inline on both threads, posts `bugbot run`, schedules next wakeup at 300s, returns]
+</example>
+
+<example>
+Subagent tick fires in BUGBOT phase, bugbot is clean against HEAD.
+Subagent: [sets `bugbot_clean_at = HEAD`, transitions `phase = BUGTEAM`, runs `/bugteam` in the same tick]
+</example>
+
+<example>
+Subagent in BUGTEAM phase, /bugteam reports convergence and `bugbot_clean_at == current_head`.
+Subagent: [runs `gh pr ready [NUMBER]`, reports "PR converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>; marked ready for review", terminates]
+</example>
+
+<example>
+Subagent in BUGTEAM phase, /bugteam pushed a fix commit during its run.
+Subagent: [re-resolves HEAD, sets `bugbot_clean_at = null`, transitions `phase = BUGBOT`, schedules next wakeup at 60s — fast bounce-back]
+</example>

@@ -56,6 +56,8 @@ $ruleRewrites = @(
     @{ Pattern = [regex]'^Bash\(powershell\s+-Command\s+(.*)\)$';                             Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
     @{ Pattern = [regex]'^Bash\(powershell\.exe\s+-NoProfile\s+-Command\s+(.*)\)$';           Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
     @{ Pattern = [regex]'^Bash\(powershell\s+-NoProfile\s+-Command\s+(.*)\)$';                Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]'^Bash\(powershell\.exe\s+-NoProfile\s+-File\s+(.*)\)$';              Replacement = 'Bash(pwsh -NoProfile -File $1)' }
+    @{ Pattern = [regex]'^Bash\(powershell\s+-NoProfile\s+-File\s+(.*)\)$';                   Replacement = 'Bash(pwsh -NoProfile -File $1)' }
     @{ Pattern = [regex]'^Bash\(powershell\.exe\s+-File\s+(.*)\)$';                           Replacement = 'Bash(pwsh -NoProfile -File $1)' }
     @{ Pattern = [regex]'^Bash\(powershell\s+-File\s+(.*)\)$';                                Replacement = 'Bash(pwsh -NoProfile -File $1)' }
     @{ Pattern = [regex]'^Bash\(bash\s+-c\s+(.*)\)$';                                         Replacement = 'Bash(pwsh -NoProfile -Command $1)' }

@@ -134,6 +134,7 @@ function Convert-PermissionsArrays {
 
 $totalRewrites = 0
 $filesChanged = 0
+$scannedFileCount = 0
 $existingRoots = $Roots | Where-Object { Test-Path $_ }
 
 foreach ($root in $existingRoots) {
@@ -148,6 +149,7 @@ foreach ($root in $existingRoots) {
             Write-Warning "Skipped (invalid JSON): $($file.FullName)"
             continue
         }
+        $scannedFileCount++
         Write-Verbose "Scanning: $($file.FullName)"
         $rewriteCount = Convert-PermissionsArrays -SettingsObject $parsed
         if ($rewriteCount -gt 0) {
@@ -161,14 +163,20 @@ foreach ($root in $existingRoots) {
     }
 }
 
+if ($scannedFileCount -eq 0) {
+    Write-Warning 'No settings files found in any of the configured roots — migration is vacuous.'
+    Write-Output 'MIGRATED: NO FILES SCANNED'
+    exit 1
+}
+
 if ($totalRewrites -eq 0) {
-    Write-Output 'MIGRATED: 0 rules (already compliant)'
+    Write-Output ('MIGRATED: 0 rules SCANNED={0} FILES (already compliant)' -f $scannedFileCount)
     exit 0
 }
 
 if ($Apply) {
-    Write-Output ('MIGRATED: {0} rules IN={1} FILES' -f $totalRewrites, $filesChanged)
+    Write-Output ('MIGRATED: {0} rules IN={1} FILES SCANNED={2} FILES' -f $totalRewrites, $filesChanged, $scannedFileCount)
 } else {
-    Write-Output ('DRY RUN: would migrate {0} rules IN={1} FILES' -f $totalRewrites, $filesChanged)
+    Write-Output ('DRY RUN: would migrate {0} rules IN={1} FILES SCANNED={2} FILES' -f $totalRewrites, $filesChanged, $scannedFileCount)
 }
 exit 0

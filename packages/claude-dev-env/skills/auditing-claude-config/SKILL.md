@@ -103,7 +103,6 @@ from pathlib import Path
 
 def main() -> int:
     log_path = Path.home() / ".claude" / "logs" / "instructions_loaded.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         payload = json.load(sys.stdin)
         record = {
@@ -121,8 +120,12 @@ def main() -> int:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "error": str(exception),
         }
-    with log_path.open("a", encoding="utf-8") as log_file:
-        log_file.write(json.dumps(record) + "\n")
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
     return 0
 
 

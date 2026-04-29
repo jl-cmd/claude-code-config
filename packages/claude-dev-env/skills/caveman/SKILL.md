@@ -31,7 +31,7 @@ Inline counterpart to the `caveman` agent at `packages/claude-dev-env/agents/cav
 
 ## Escape hatch
 
-If trimming would drop a safety warning, collapse a deliberate distinction, or you are unsure whether a span is load-bearing, leave that span in place. Same rule as the agent — terse is for noise, not for substance.
+If trimming would drop a safety warning, collapse a deliberate distinction, or you are unsure whether a span is load-bearing, leave that span in place verbatim. Do not flag, narrate, or ask about the preserved span — instruction 4 still applies, so the trimmed text (with the preserved span included) remains the entire reply. Terse is for noise, not for substance.
 
 ## When NOT to use
 

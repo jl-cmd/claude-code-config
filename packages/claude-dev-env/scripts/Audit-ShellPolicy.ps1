@@ -22,7 +22,8 @@
 .OUTPUTS
     One line on stdout:
         POLICY: OK
-        POLICY: VIOLATIONS=<count> IN=<n> FILES
+        POLICY: VIOLATIONS=<count> IN=<n> FILES UNPARSEABLE=<m> FILES
+        POLICY: UNPARSEABLE=<m> FILES (audit unsound)
 
 .EXAMPLE
     pwsh -NoProfile -File Audit-ShellPolicy.ps1
@@ -32,6 +33,7 @@
 [CmdletBinding()]
 param(
     [string[]]$Roots = @(
+        (Join-Path $env:USERPROFILE '.claude'),
         'Y:\Projects',
         'Y:\Information Technology\Scripts',
         'Y:\Python',
@@ -42,10 +44,12 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$caseInsensitive = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
 $violationPatterns = @(
-    [regex]'^Bash\(powershell(?:\.exe)?(?:[\s:].*)?\)$'
-    [regex]'^Bash\(bash\s+(?:-c|--login|--rcfile|--init-file)\b.*\)$'
-    [regex]'^Bash\(cmd(?:\.exe)?\s+/c\b.*\)$'
+    [regex]::new('^Bash\(powershell(?:\.exe)?(?:[\s:].*)?\)$', $caseInsensitive)
+    [regex]::new('^Bash\(bash\s+(?:-c|--login|--rcfile|--init-file)\b.*\)$', $caseInsensitive)
+    [regex]::new('^Bash\(cmd(?:\.exe)?\s+/c\b.*\)$', $caseInsensitive)
+    [regex]::new('^Bash\(pwsh(?:\.exe)?\s+(?:-NoProfile\s+)?-Command\s+["'']?&\s+[''"].*\)$', $caseInsensitive)
 )
 
 $settingsFileNames = @(
@@ -84,6 +88,7 @@ function Get-PermissionRuleArrays {
 
 $totalViolations = 0
 $filesWithViolations = 0
+$unparseableFileCount = 0
 $existingRoots = $Roots | Where-Object { Test-Path $_ }
 
 foreach ($root in $existingRoots) {
@@ -95,7 +100,8 @@ foreach ($root in $existingRoots) {
         try {
             $parsed = $rawContent | ConvertFrom-Json -ErrorAction Stop
         } catch {
-            Write-Verbose "Skipped (invalid JSON): $($file.FullName)"
+            $unparseableFileCount++
+            Write-Warning "Skipped (invalid JSON): $($file.FullName)"
             continue
         }
         $fileViolationCount = 0
@@ -114,10 +120,15 @@ foreach ($root in $existingRoots) {
     }
 }
 
-if ($totalViolations -eq 0) {
+if ($totalViolations -eq 0 -and $unparseableFileCount -eq 0) {
     Write-Output 'POLICY: OK'
     exit 0
 }
 
-Write-Output ('POLICY: VIOLATIONS={0} IN={1} FILES' -f $totalViolations, $filesWithViolations)
+if ($totalViolations -eq 0 -and $unparseableFileCount -gt 0) {
+    Write-Output ('POLICY: UNPARSEABLE={0} FILES (audit unsound)' -f $unparseableFileCount)
+    exit 1
+}
+
+Write-Output ('POLICY: VIOLATIONS={0} IN={1} FILES UNPARSEABLE={2} FILES' -f $totalViolations, $filesWithViolations, $unparseableFileCount)
 exit 1

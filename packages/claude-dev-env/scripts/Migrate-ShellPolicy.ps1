@@ -38,6 +38,7 @@
 [CmdletBinding()]
 param(
     [string[]]$Roots = @(
+        (Join-Path $env:USERPROFILE '.claude'),
         'Y:\Projects',
         'Y:\Information Technology\Scripts',
         'Y:\Python',
@@ -49,20 +50,26 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$caseInsensitiveOptions = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
 $ruleRewrites = @(
-    @{ Pattern = [regex]'^Bash\(powershell\.exe:\*\)$';                                       Replacement = 'Bash(pwsh:*)' }
-    @{ Pattern = [regex]'^Bash\(powershell:\*\)$';                                            Replacement = 'Bash(pwsh:*)' }
-    @{ Pattern = [regex]'^Bash\(powershell\.exe\s+-Command\s+(.*)\)$';                        Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
-    @{ Pattern = [regex]'^Bash\(powershell\s+-Command\s+(.*)\)$';                             Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
-    @{ Pattern = [regex]'^Bash\(powershell\.exe\s+-NoProfile\s+-Command\s+(.*)\)$';           Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
-    @{ Pattern = [regex]'^Bash\(powershell\s+-NoProfile\s+-Command\s+(.*)\)$';                Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
-    @{ Pattern = [regex]'^Bash\(powershell\.exe\s+-NoProfile\s+-File\s+(.*)\)$';              Replacement = 'Bash(pwsh -NoProfile -File $1)' }
-    @{ Pattern = [regex]'^Bash\(powershell\s+-NoProfile\s+-File\s+(.*)\)$';                   Replacement = 'Bash(pwsh -NoProfile -File $1)' }
-    @{ Pattern = [regex]'^Bash\(powershell\.exe\s+-File\s+(.*)\)$';                           Replacement = 'Bash(pwsh -NoProfile -File $1)' }
-    @{ Pattern = [regex]'^Bash\(powershell\s+-File\s+(.*)\)$';                                Replacement = 'Bash(pwsh -NoProfile -File $1)' }
-    @{ Pattern = [regex]'^Bash\(bash\s+-c\s+(.*)\)$';                                         Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
-    @{ Pattern = [regex]'^Bash\(cmd\.exe\s+/c\s+(.*)\)$';                                     Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
-    @{ Pattern = [regex]'^Bash\(cmd\s+/c\s+(.*)\)$';                                          Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\.exe:\*\)$', $caseInsensitiveOptions);                                       Replacement = 'Bash(pwsh:*)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell:\*\)$', $caseInsensitiveOptions);                                            Replacement = 'Bash(pwsh:*)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\.exe\s+-Command\s+(.*)\)$', $caseInsensitiveOptions);                        Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\s+-Command\s+(.*)\)$', $caseInsensitiveOptions);                             Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\.exe\s+-NoProfile\s+-Command\s+(.*)\)$', $caseInsensitiveOptions);           Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\s+-NoProfile\s+-Command\s+(.*)\)$', $caseInsensitiveOptions);                Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\.exe\s+-NoProfile\s+-File\s+(.*)\)$', $caseInsensitiveOptions);              Replacement = 'Bash(pwsh -NoProfile -File $1)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\s+-NoProfile\s+-File\s+(.*)\)$', $caseInsensitiveOptions);                   Replacement = 'Bash(pwsh -NoProfile -File $1)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\.exe\s+-File\s+(.*)\)$', $caseInsensitiveOptions);                           Replacement = 'Bash(pwsh -NoProfile -File $1)' }
+    @{ Pattern = [regex]::new('^Bash\(powershell\s+-File\s+(.*)\)$', $caseInsensitiveOptions);                                Replacement = 'Bash(pwsh -NoProfile -File $1)' }
+    @{ Pattern = [regex]::new('^Bash\(bash\s+-c\s+(.*)\)$', $caseInsensitiveOptions);                                         Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]::new('^Bash\(cmd\.exe\s+/c\s+(.*)\)$', $caseInsensitiveOptions);                                     Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]::new('^Bash\(cmd\s+/c\s+(.*)\)$', $caseInsensitiveOptions);                                          Replacement = 'Bash(pwsh -NoProfile -Command $1)' }
+    @{ Pattern = [regex]::new('^Bash\(pwsh(?:\.exe)?\s+(?:-NoProfile\s+)?-Command\s+"&\s+''([^'']+)''(.*?)"\)$', $caseInsensitiveOptions); Replacement = 'Bash(pwsh -NoProfile -File ''$1''$2)' }
+    @{ Pattern = [regex]::new('^Bash\(pwsh(?:\.exe)?\s+(?:-NoProfile\s+)?-Command\s+''&\s+"([^"]+)"(.*?)''\)$', $caseInsensitiveOptions); Replacement = 'Bash(pwsh -NoProfile -File "$1"$2)' }
+    @{ Pattern = [regex]::new('^Bash\(bash\s+--login\b.*\)$', $caseInsensitiveOptions);                                       Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed: $&"; exit 1'')' }
+    @{ Pattern = [regex]::new('^Bash\(bash\s+--rcfile\b.*\)$', $caseInsensitiveOptions);                                      Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed: $&"; exit 1'')' }
+    @{ Pattern = [regex]::new('^Bash\(bash\s+--init-file\b.*\)$', $caseInsensitiveOptions);                                   Replacement = 'Bash(pwsh -NoProfile -Command ''Write-Error "manual conversion needed: $&"; exit 1'')' }
 )
 
 $settingsFileNames = @(
@@ -138,7 +145,7 @@ foreach ($root in $existingRoots) {
         try {
             $parsed = $rawContent | ConvertFrom-Json -ErrorAction Stop
         } catch {
-            Write-Verbose "Skipped (invalid JSON): $($file.FullName)"
+            Write-Warning "Skipped (invalid JSON): $($file.FullName)"
             continue
         }
         Write-Verbose "Scanning: $($file.FullName)"

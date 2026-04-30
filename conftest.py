@@ -206,6 +206,18 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
             _evict_config_module()
         return
 
+    is_inside_shared_pr_loop_scripts = _path_is_inside_directory(
+        resolved_collected_path, resolved_shared_pr_loop_scripts_path
+    )
+    if is_inside_shared_pr_loop_scripts:
+        cached_config_binding_is_wrong_for_shared_scripts = (
+            _config_module_is_currently_cached()
+            and not _cached_config_resolves_inside_shared_pr_loop_scripts()
+        )
+        if cached_config_binding_is_wrong_for_shared_scripts:
+            _evict_config_module()
+        return
+
     any_git_hooks_entry_was_removed = _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
     any_shared_scripts_entry_was_removed = _remove_path_if_present(
         _SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH

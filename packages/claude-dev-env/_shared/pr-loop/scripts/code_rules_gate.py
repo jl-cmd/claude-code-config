@@ -6,6 +6,7 @@ import importlib.util
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 sys.modules.pop("config", None)
@@ -16,6 +17,9 @@ from config.code_rules_gate_constants import (
     EXPECTED_TUPLE_PAIR_LENGTH,
     MAX_VIOLATIONS_PER_CHECK,
 )
+
+
+ValidateContentCallable = Callable[..., list[str]]
 
 
 def hunk_header_pattern() -> re.Pattern[str]:
@@ -39,7 +43,7 @@ def resolve_claude_dev_env_root(starting_path: Path) -> Path:
     raise SystemExit(2)
 
 
-def load_validate_content():
+def load_validate_content() -> ValidateContentCallable:
     package_root = resolve_claude_dev_env_root(Path(__file__).resolve())
     enforcer_path = package_root / "hooks" / "blocking" / "code_rules_enforcer.py"
     if not enforcer_path.is_file():
@@ -338,9 +342,12 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
         for each_call in ast.walk(node):
             if not isinstance(each_call, ast.Call):
                 continue
-            if not isinstance(each_call.func, ast.Attribute):
+            if isinstance(each_call.func, ast.Name):
+                delegate_name = each_call.func.id
+            elif isinstance(each_call.func, ast.Attribute):
+                delegate_name = each_call.func.attr
+            else:
                 continue
-            delegate_name = each_call.func.attr
             delegate_kwargs = function_signatures.get(delegate_name)
             if delegate_kwargs is None:
                 continue
@@ -466,9 +473,9 @@ def extract_violation_line_number(violation_text: str) -> int | None:
 
 def split_violations_by_scope(
     all_issues: list[str],
-    added_line_numbers: set[int] | None,
+    all_added_line_numbers: set[int] | None,
 ) -> tuple[list[str], list[str]]:
-    if added_line_numbers is None:
+    if all_added_line_numbers is None:
         return list(all_issues), []
     blocking: list[str] = []
     advisory: list[str] = []
@@ -477,7 +484,7 @@ def split_violations_by_scope(
         if violation_line is None:
             blocking.append(each_issue)
             continue
-        if violation_line in added_line_numbers:
+        if violation_line in all_added_line_numbers:
             blocking.append(each_issue)
         else:
             advisory.append(each_issue)
@@ -499,10 +506,10 @@ def print_violation_section(
 
 
 def run_gate(
-    validate_content,
+    validate_content: ValidateContentCallable,
     all_file_paths: list[Path],
     repository_root: Path,
-    added_lines_map: dict[Path, set[int]] | None = None,
+    added_lines_by_path: dict[Path, set[int]] | None = None,
 ) -> int:
     blocking_by_file: dict[Path, list[str]] = {}
     advisory_by_file: dict[Path, list[str]] = {}
@@ -539,7 +546,9 @@ def run_gate(
         if not issues:
             continue
         added_for_file = (
-            None if added_lines_map is None else added_lines_map.get(resolved)
+            None
+            if added_lines_by_path is None
+            else added_lines_by_path.get(resolved)
         )
         blocking, advisory = split_violations_by_scope(issues, added_for_file)
         if blocking:
@@ -549,7 +558,7 @@ def run_gate(
     blocking_count = sum(len(each_list) for each_list in blocking_by_file.values())
     advisory_count = sum(len(each_list) for each_list in advisory_by_file.values())
     if blocking_count:
-        if added_lines_map is None:
+        if added_lines_by_path is None:
             header = f"code_rules_gate: {blocking_count} violation(s) reported."
         else:
             header = (
@@ -636,7 +645,7 @@ def main(all_arguments: list[str]) -> int:
     if arguments.paths:
         file_paths = [repository_root / path for path in arguments.paths]
         return run_gate(
-            validate_content, file_paths, repository_root, added_lines_map=None
+            validate_content, file_paths, repository_root, added_lines_by_path=None
         )
     if arguments.staged:
         staged_file_paths = paths_from_git_staged(repository_root)
@@ -654,7 +663,7 @@ def main(all_arguments: list[str]) -> int:
             validate_content,
             staged_file_paths,
             repository_root,
-            added_lines_map=staged_added_lines,
+            added_lines_by_path=staged_added_lines,
         )
     file_paths = paths_from_git_diff(repository_root, arguments.base)
     file_paths = filter_paths_under_prefixes(
@@ -671,7 +680,7 @@ def main(all_arguments: list[str]) -> int:
         validate_content,
         file_paths,
         repository_root,
-        added_lines_map=scoped_added_lines,
+        added_lines_by_path=scoped_added_lines,
     )
 
 

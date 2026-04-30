@@ -10,6 +10,7 @@ autoMode sections so repeated grant/revoke cycles leave no dead structure.
 import sys
 from pathlib import Path
 
+sys.modules.pop("config", None)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _claude_permissions_common import (  # noqa: E402
@@ -20,8 +21,18 @@ from _claude_permissions_common import (  # noqa: E402
     load_settings,
     prune_empty_list_then_empty_section,
     save_settings,
-    AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
+)
+from config.claude_permissions_constants import (  # noqa: E402
     ALL_PERMISSION_ALLOW_TOOLS,
+    AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
+    get_claude_user_settings_path,
+)
+from config.claude_settings_keys_constants import (  # noqa: E402
+    CLAUDE_SETTINGS_ADDITIONAL_DIRECTORIES_KEY,
+    CLAUDE_SETTINGS_ALLOW_KEY,
+    CLAUDE_SETTINGS_AUTO_MODE_KEY,
+    CLAUDE_SETTINGS_ENVIRONMENT_KEY,
+    CLAUDE_SETTINGS_PERMISSIONS_KEY,
 )
 
 
@@ -40,10 +51,10 @@ def remove_values_from_list(
 def remove_rules_from_allow_list(
     all_settings: dict[str, object], all_rules_to_remove: list[str]
 ) -> int:
-    permissions_section = all_settings.get("permissions")
+    permissions_section = all_settings.get(CLAUDE_SETTINGS_PERMISSIONS_KEY)
     if not isinstance(permissions_section, dict):
         return 0
-    existing_allow_list = permissions_section.get("allow")
+    existing_allow_list = permissions_section.get(CLAUDE_SETTINGS_ALLOW_KEY)
     if not isinstance(existing_allow_list, list):
         return 0
     return remove_values_from_list(existing_allow_list, set(all_rules_to_remove))
@@ -52,10 +63,12 @@ def remove_rules_from_allow_list(
 def remove_directory_from_additional_directories(
     all_settings: dict[str, object], directory_path: str
 ) -> int:
-    permissions_section = all_settings.get("permissions")
+    permissions_section = all_settings.get(CLAUDE_SETTINGS_PERMISSIONS_KEY)
     if not isinstance(permissions_section, dict):
         return 0
-    existing_directories = permissions_section.get("additionalDirectories")
+    existing_directories = permissions_section.get(
+        CLAUDE_SETTINGS_ADDITIONAL_DIRECTORIES_KEY
+    )
     if not isinstance(existing_directories, list):
         return 0
     return remove_values_from_list(existing_directories, {directory_path})
@@ -64,25 +77,35 @@ def remove_directory_from_additional_directories(
 def remove_auto_mode_environment_entry(
     all_settings: dict[str, object], entry_text: str
 ) -> int:
-    auto_mode_section = all_settings.get("autoMode")
+    auto_mode_section = all_settings.get(CLAUDE_SETTINGS_AUTO_MODE_KEY)
     if not isinstance(auto_mode_section, dict):
         return 0
-    existing_environment = auto_mode_section.get("environment")
+    existing_environment = auto_mode_section.get(CLAUDE_SETTINGS_ENVIRONMENT_KEY)
     if not isinstance(existing_environment, list):
         return 0
     return remove_values_from_list(existing_environment, {entry_text})
 
 
 def prune_settings_after_revoke(all_settings: dict[str, object]) -> None:
-    prune_empty_list_then_empty_section(all_settings, "permissions", "allow")
     prune_empty_list_then_empty_section(
-        all_settings, "permissions", "additionalDirectories"
+        all_settings,
+        CLAUDE_SETTINGS_PERMISSIONS_KEY,
+        CLAUDE_SETTINGS_ALLOW_KEY,
     )
-    prune_empty_list_then_empty_section(all_settings, "autoMode", "environment")
+    prune_empty_list_then_empty_section(
+        all_settings,
+        CLAUDE_SETTINGS_PERMISSIONS_KEY,
+        CLAUDE_SETTINGS_ADDITIONAL_DIRECTORIES_KEY,
+    )
+    prune_empty_list_then_empty_section(
+        all_settings,
+        CLAUDE_SETTINGS_AUTO_MODE_KEY,
+        CLAUDE_SETTINGS_ENVIRONMENT_KEY,
+    )
 
 
 def revoke_permissions_for_current_directory() -> None:
-    claude_user_settings_path: Path = Path.home() / ".claude" / "settings.json"
+    claude_user_settings_path: Path = get_claude_user_settings_path()
     project_root_path = Path.cwd()
     if not is_valid_project_root(project_root_path):
         print(

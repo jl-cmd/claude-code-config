@@ -6,6 +6,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.modules.pop("config", None)
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from config.fix_hookspath_constants import HOOKS_PATH_SUFFIX
+from config.preflight_constants import (
+    BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE,
+    BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME,
+)
+
 
 def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     """Check that core.hooksPath resolves to the claude-dev-env git-hooks directory.
@@ -18,7 +28,7 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     Returns zero when the configured path ends with the expected hooks suffix.
     Returns non-zero and prints a correction message when unset or pointing elsewhere.
     """
-    expected_hooks_path_suffix = "hooks/git-hooks"
+    expected_hooks_path_suffix = HOOKS_PATH_SUFFIX
     enforcement_absent_message = (
         "Git-side CODE_RULES enforcement is not active on this host.\n"
         "Run: npx claude-dev-env .\n"
@@ -163,8 +173,13 @@ def parse_arguments(all_arguments: list[str]) -> argparse.Namespace:
 
 def main(all_arguments: list[str]) -> int:
     arguments = parse_arguments(all_arguments)
-    if os.environ.get("BUGTEAM_PREFLIGHT_SKIP", "").strip() == "1":
-        print("preflight: skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
+    skip_env_var_name = BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME
+    skip_enabled_value = BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE
+    if os.environ.get(skip_env_var_name, "").strip() == skip_enabled_value:
+        print(
+            f"preflight: skipped ({skip_env_var_name}={skip_enabled_value}).",
+            file=sys.stderr,
+        )
         return 0
     start = Path.cwd()
     repository_root = (

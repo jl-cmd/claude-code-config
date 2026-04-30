@@ -338,3 +338,54 @@ def test_added_lines_for_staged_file_returns_parsed_result_when_diff_is_non_empt
     )
 
     assert added_line_numbers == set()
+
+
+def test_check_wrapper_plumb_through_flags_direct_same_file_call() -> None:
+    source = (
+        "def fetch(target, *, retries=3):\n"
+        "    return target\n"
+        "\n"
+        "def public_fetch(target):\n"
+        "    return fetch(target)\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert any(
+        "public_fetch" in each_issue and "retries" in each_issue
+        for each_issue in issues
+    ), (
+        "Direct same-file call (ast.Name) must be detected as a wrapper that "
+        "drops optional kwargs of its delegate"
+    )
+
+
+def test_check_wrapper_plumb_through_still_flags_attribute_call() -> None:
+    source = (
+        "def fetch(target, *, retries=3):\n"
+        "    return target\n"
+        "\n"
+        "def public_fetch(target):\n"
+        "    return self.fetch(target)\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert any(
+        "public_fetch" in each_issue and "retries" in each_issue
+        for each_issue in issues
+    )
+
+
+def test_split_violations_by_scope_accepts_all_added_line_numbers_param_name() -> None:
+    blocking_issues, advisory_issues = gate_module.split_violations_by_scope(
+        ["Line 5: violation"],
+        all_added_line_numbers={5},
+    )
+    assert blocking_issues == ["Line 5: violation"]
+    assert advisory_issues == []
+
+
+def test_run_gate_accepts_added_lines_by_path_param_name(tmp_path: Path) -> None:
+    gate_module.run_gate(
+        validate_content=lambda _content, _path, **_kwargs: [],
+        all_file_paths=[],
+        repository_root=tmp_path,
+        added_lines_by_path=None,
+    )

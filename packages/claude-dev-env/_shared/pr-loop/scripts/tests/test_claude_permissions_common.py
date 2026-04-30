@@ -58,3 +58,12 @@ def test_flag_glob_metacharacters_in_any_position() -> None:
     assert common.path_contains_glob_metacharacters("/home/user/[dir]/project")
     assert common.path_contains_glob_metacharacters("/home/user/project*")
     assert not common.path_contains_glob_metacharacters("/home/user/dir with spaces")
+
+
+def test_text_file_encoding_remains_local_constant() -> None:
+    assert common.TEXT_FILE_ENCODING == "utf-8"
+
+
+def test_module_no_longer_redeclares_migrated_constants() -> None:
+    assert not hasattr(common, "ALL_PERMISSION_ALLOW_TOOLS")
+    assert not hasattr(common, "AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE")

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
@@ -195,3 +196,58 @@ def test_should_exit_nonzero_when_subprocess_run_raises_os_error(
     assert "permission denied" in captured.err, (
         "Error message must include the underlying OSError detail for diagnosis"
     )
+
+
+def test_preflight_uses_shared_hooks_path_suffix_constant() -> None:
+    """Preflight's expected suffix must come from config.fix_hookspath_constants
+    so the canonical hooks directory is defined in exactly one place."""
+    scripts_directory = str(Path(__file__).parent.parent.resolve())
+    if scripts_directory not in sys.path:
+        sys.path.insert(0, scripts_directory)
+    constants_module_path = (
+        Path(__file__).parent.parent / "config" / "fix_hookspath_constants.py"
+    )
+    constants_specification = importlib.util.spec_from_file_location(
+        "config.fix_hookspath_constants",
+        constants_module_path,
+    )
+    assert constants_specification is not None
+    assert constants_specification.loader is not None
+    constants_module = importlib.util.module_from_spec(constants_specification)
+    constants_specification.loader.exec_module(constants_module)
+    expected_suffix = constants_module.HOOKS_PATH_SUFFIX
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process(
+            f"/some/where/{expected_suffix}\n", returncode=0
+        )
+        exit_code = preflight.verify_git_hooks_path()
+    assert exit_code == 0
+
+
+def test_preflight_skip_uses_shared_env_var_constant(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The preflight skip env-var name must come from config/preflight_constants.py."""
+    scripts_directory = str(Path(__file__).parent.parent.resolve())
+    if scripts_directory not in sys.path:
+        sys.path.insert(0, scripts_directory)
+    constants_module_path = (
+        Path(__file__).parent.parent / "config" / "preflight_constants.py"
+    )
+    constants_specification = importlib.util.spec_from_file_location(
+        "config.preflight_constants",
+        constants_module_path,
+    )
+    assert constants_specification is not None
+    assert constants_specification.loader is not None
+    constants_module = importlib.util.module_from_spec(constants_specification)
+    constants_specification.loader.exec_module(constants_module)
+    skip_env_var_name = constants_module.BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME
+
+    monkeypatch.setenv(skip_env_var_name, "1")
+    exit_code = preflight.main(["--no-pytest"])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert skip_env_var_name in captured.err

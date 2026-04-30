@@ -319,12 +319,20 @@ def check_database_column_string_magic(content: str, file_path: str) -> list[str
 
 
 def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
-    """Flag public wrappers that drop optional kwargs of a same-file delegate.
+    """Flag calls inside public functions that drop a same-file delegate's optional kwargs.
 
     Walks the AST. For every public function (name does not start with '_'),
-    if its body contains exactly one direct call to another same-file
-    function and that delegate's signature accepts optional kwargs that the
-    wrapper does not also accept, emit a finding with both line numbers.
+    inspects every ast.Call inside its body and emits one finding per call
+    whose target name matches a same-file function that exposes optional
+    kwargs the enclosing public function does not also accept. Emission is
+    capped at MAX_VIOLATIONS_PER_CHECK findings per call to run_gate.
+
+    Limitations:
+    - function_signatures keys on FunctionDef.name, so methods sharing a name
+      across different classes collide and the last definition wins.
+    - ast.Attribute calls match by attribute name only; the receiver type is
+      not checked, so `self.fetch(...)` and `other.fetch(...)` both match a
+      module-level `fetch` definition.
     """
     if file_path.endswith((".js", ".ts", ".tsx", ".jsx")):
         return []
@@ -440,8 +448,8 @@ def added_lines_for_file(
 
 def whole_file_line_set(file_path: Path) -> set[int]:
     try:
-        total_lines = len(file_path.read_text().splitlines())
-    except OSError:
+        total_lines = len(file_path.read_text(encoding="utf-8").splitlines())
+    except (OSError, UnicodeDecodeError):
         return set()
     if total_lines <= 0:
         return set()

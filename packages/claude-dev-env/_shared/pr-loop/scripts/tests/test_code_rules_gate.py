@@ -425,3 +425,15 @@ def test_run_gate_accepts_added_lines_by_path_param_name(tmp_path: Path) -> None
         repository_root=tmp_path,
         added_lines_by_path=None,
     )
+
+
+def test_whole_file_line_set_handles_non_cp1252_utf8(tmp_path: Path) -> None:
+    utf8_only_path = tmp_path / "utf8_only.py"
+    cp1252_invalid_codepoint = chr(0x81)
+    utf8_only_path.write_bytes(
+        f"control = '{cp1252_invalid_codepoint}'\nname = 'café'\n".encode("utf-8")
+    )
+
+    line_numbers = gate_module.whole_file_line_set(utf8_only_path)
+
+    assert line_numbers == {1, 2}

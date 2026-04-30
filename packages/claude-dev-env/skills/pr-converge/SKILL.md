@@ -77,11 +77,13 @@ c. Decide (the four branches below cover every input combination — match the f
 
 #### `phase == BUGTEAM`
 
-a. Run the in-house bugteam audit on the current PR:
-   ```bash
-   claude -p "/bugteam" --max-turns 200
+a. Run the in-house bugteam audit on the current PR by invoking the `Skill` tool in the main session:
+
    ```
-   The `/bugteam` skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.
+   Skill({skill: "bugteam", args: "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
+   ```
+
+   The main session is the team lead, so `TeamCreate` fires from the orchestrator and `/bugteam` emits its CODE_RULES gate output, teammate spawn lines, and audit progress as expected. The skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.
 
 b. **Re-resolve current HEAD now** because `/bugteam` may have pushed commits during its run. The `current_head` from Step 1 is potentially stale at this point:
    ```bash

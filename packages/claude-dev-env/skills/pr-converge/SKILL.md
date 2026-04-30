@@ -46,6 +46,8 @@ Each tick begins by reading the prior tick's state line from the most recent ass
 
 ### Step 1: Resolve current HEAD and PR context
 
+Read the prior tick's state line from the most recent assistant message (or initialize all fields if none). **Increment `tick_count` by 1.** This is the increment referenced in the **State across ticks** section; without it the safety cap (Step 3.5, §Safety cap) never fires.
+
 ```bash
 gh pr view --json number,url,headRefOid,baseRefName,headRefName,isDraft
 ```
@@ -113,6 +115,10 @@ gh pr comment <NUMBER> --repo <OWNER>/<REPO> --body-file <path/to/bugbot_run.md>
 
 The body file contains exactly the literal phrase `bugbot run` followed by a newline. Use that phrase exactly — empirically the only re-trigger Cursor Bugbot recognizes; alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
 
+### Step 3.5: Enforce the safety cap
+
+Before scheduling the next wakeup, evaluate `tick_count`. When `tick_count >= 30`, stop and report per the **Stop conditions** safety-cap branch (§Safety cap) — **omit Step 4 entirely**. Reaching this many rounds means something structural is wrong with the loop and continuing wastes work. Otherwise proceed to Step 4.
+
 ### Step 4: Schedule the next wakeup (only when invoked under `/loop`)
 
 **Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; under manual mode every such reference becomes "return" only.
@@ -156,10 +162,11 @@ Used by both phases when findings exist:
 - **Convergence** (back-to-back clean as defined in Step 2 BUGTEAM second branch — `bugteam reports convergence AND bugbot_clean_at == current_head` with no push during this tick): mark PR ready for review, report one-sentence summary, omit ScheduleWakeup.
 - **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection investigated through three commits and still unresolved, `inline_lag_streak >= 3`, or `/bugteam` itself reports a stuck state. Report the specific blocker and the diagnosis, then omit ScheduleWakeup.
 - **User stops the loop:** user says "stop the converge loop" → omit ScheduleWakeup on the next tick.
+- **Safety cap:** `tick_count >= 30` (evaluated in Step 3.5) → omit ScheduleWakeup, report the cap was hit. See §Safety cap below for rationale.
 
 ## Safety cap
 
-When `tick_count >= 30`, stop and report. That many rounds means something structural is wrong with the loop. (Higher than copilot-review's 20-tick cap because two reviewers run sequentially per round.)
+When `tick_count >= 30`, stop and report. That many rounds means something structural is wrong with the loop. (Higher than copilot-review's 20-tick cap because two reviewers run sequentially per round.) The increment lives in Step 1; the evaluation lives in Step 3.5.
 
 ## Ground rules
 

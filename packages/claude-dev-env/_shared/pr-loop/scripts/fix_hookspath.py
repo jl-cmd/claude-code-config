@@ -169,7 +169,7 @@ def rerun_preflight(
     return completed_process.returncode
 
 
-def parse_arguments(all_argv: list[str] | None) -> argparse.Namespace:
+def parse_arguments(all_arguments: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Auto-fix core.hooksPath when bugteam preflight detects a stale override. "
@@ -183,14 +183,14 @@ def parse_arguments(all_argv: list[str] | None) -> argparse.Namespace:
         default=None,
         help="Repository root (default: discover from cwd).",
     )
-    return parser.parse_args(all_argv)
+    return parser.parse_args(all_arguments)
 
 
 def main(
-    all_argv: list[str],
+    all_arguments: list[str],
     environment_overrides: dict[str, str] | None,
 ) -> int:
-    arguments = parse_arguments(all_argv)
+    arguments = parse_arguments(all_arguments)
     start_directory = Path.cwd()
     repository_root = (
         arguments.repo_root.resolve()

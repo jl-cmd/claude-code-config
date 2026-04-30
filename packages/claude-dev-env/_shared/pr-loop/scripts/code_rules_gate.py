@@ -577,7 +577,7 @@ def run_gate(
     return 0
 
 
-def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
+def parse_arguments(all_arguments: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Run CODE_RULES validators (validate_content) on files in the working tree. "
@@ -622,11 +622,11 @@ def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
         type=Path,
         help="Optional explicit files; if set, git diff is not used.",
     )
-    return parser.parse_args(all_argv)
+    return parser.parse_args(all_arguments)
 
 
-def main(all_argv: list[str]) -> int:
-    arguments = parse_arguments(all_argv)
+def main(all_arguments: list[str]) -> int:
+    arguments = parse_arguments(all_arguments)
     repository_root = (
         arguments.repo_root.resolve()
         if arguments.repo_root is not None

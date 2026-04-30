@@ -341,12 +341,16 @@ def check_database_column_string_magic(content: str, file_path: str) -> list[str
             minimum_length=MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR
         )
     )
+    seen_tuple_node_ids: set[int] = set()
     for each_node in ast.walk(tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for each_child in ast.walk(each_node):
             if not isinstance(each_child, ast.Tuple):
                 continue
+            if id(each_child) in seen_tuple_node_ids:
+                continue
+            seen_tuple_node_ids.add(id(each_child))
             if len(each_child.elts) != EXPECTED_TUPLE_PAIR_LENGTH:
                 continue
             first_element = each_child.elts[0]
@@ -402,8 +406,17 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
             ):
                 if each_default is not None:
                     optional_kwargs.add(each_kwonly.arg)
+            positional_defaults = each_node.args.defaults
+            positional_args_with_defaults = (
+                each_node.args.args[-len(positional_defaults):]
+                if positional_defaults
+                else []
+            )
+            for each_positional_arg in positional_args_with_defaults:
+                optional_kwargs.add(each_positional_arg.arg)
             function_signatures[each_node.name] = optional_kwargs
     issues: list[str] = []
+    seen_call_node_ids: set[int] = set()
     for each_node in ast.walk(tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -413,6 +426,9 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
         for each_call in ast.walk(each_node):
             if not isinstance(each_call, ast.Call):
                 continue
+            if id(each_call) in seen_call_node_ids:
+                continue
+            seen_call_node_ids.add(id(each_call))
             if isinstance(each_call.func, ast.Name):
                 delegate_name = each_call.func.id
             elif isinstance(each_call.func, ast.Attribute):
@@ -616,7 +632,7 @@ def run_gate(
             continue
         try:
             content = resolved.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError):
             print(f"code_rules_gate: skip unreadable {resolved}", file=sys.stderr)
             continue
         relative = resolved.relative_to(repository_root.resolve())

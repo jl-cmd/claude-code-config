@@ -170,6 +170,7 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         _evict_config_module()
         _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
         _remove_path_if_present(_HOOKS_ROOT_DIRECTORY_PATH)
+        _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         return
 
     _ensure_hooks_root_on_sys_path()

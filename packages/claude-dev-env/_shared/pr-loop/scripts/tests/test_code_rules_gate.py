@@ -509,3 +509,85 @@ def test_validate_content_callable_signature_is_explicit() -> None:
 def test_run_gate_uses_each_path_loop_variable() -> None:
     run_gate_source = inspect.getsource(gate_module.run_gate)
     assert "for each_path in" in run_gate_source
+
+
+def test_run_gate_skips_non_utf8_source_without_crashing(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: run_gate must skip files that fail UTF-8 decoding.
+
+    UnicodeDecodeError is a ValueError subclass, not OSError. A non-UTF-8
+    source file in the staged set must be skipped (matching whole_file_line_set
+    behavior), not crash the gate mid-audit.
+    """
+    write_file(temporary_git_repository / "anchor.py", "anchor = 1\n")
+    commit_all_files(temporary_git_repository, "baseline")
+    non_utf8_path = temporary_git_repository / "non_utf8.py"
+    non_utf8_path.parent.mkdir(parents=True, exist_ok=True)
+    non_utf8_path.write_bytes(b"name = '\xff\xfe invalid utf8 bytes'\n")
+    stage_file(temporary_git_repository, "non_utf8.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code in {0, 1}
+
+
+def test_check_wrapper_plumb_through_accepts_positional_or_keyword_forwarder() -> None:
+    """Regression: positional-or-keyword forwarders with defaults must not be flagged.
+
+    When a wrapper exposes the delegate's optional kwarg as a positional-or-keyword
+    parameter with a default value and forwards it correctly, the check must produce
+    zero findings. This mirrors the live gh_util.fetch_inline_review_comments →
+    run_gh signature pairing on this PR.
+    """
+    source = (
+        "def run_gh(all_command, *, timeout_seconds=30):\n"
+        "    return all_command\n"
+        "\n"
+        "def fetch_inline_review_comments(owner, repo, pull_number, "
+        "timeout_seconds=30):\n"
+        "    return run_gh(['gh'], timeout_seconds=timeout_seconds)\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert issues == []
+
+
+def test_check_database_column_string_magic_dedupes_nested_function_tuples() -> None:
+    """Regression: tuples inside nested FunctionDefs must produce one finding, not many.
+
+    The outer ast.walk previously enumerated every FunctionDef including nested
+    ones, then the inner ast.walk(each_node) walked the full subtree, so a tuple
+    inside a nested function was visited via every enclosing function. This must
+    surface exactly one finding per tuple site.
+    """
+    source = (
+        "def outer():\n"
+        "    def inner():\n"
+        '        x = ("some_column_name", 42)\n'
+        "        return x\n"
+        "    return inner\n"
+    )
+    issues = gate_module.check_database_column_string_magic(source, "module.py")
+    assert len(issues) == 1, f"expected 1 finding, got {len(issues)}: {issues!r}"
+
+
+def test_check_wrapper_plumb_through_dedupes_nested_public_function_calls() -> None:
+    """Regression: delegate calls inside nested public functions must produce one finding.
+
+    Same nested-walk pathology as the column-magic check: a delegate call inside
+    a nested public function was flagged once for the inner FunctionDef and again
+    for any enclosing public FunctionDef. Apply consistent de-dup strategy.
+    """
+    source = (
+        "def fetch(target, *, retries=3):\n"
+        "    return target\n"
+        "\n"
+        "def public_outer():\n"
+        "    def public_inner():\n"
+        "        return fetch(target=None)\n"
+        "    return public_inner\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert len(issues) == 1, f"expected 1 finding, got {len(issues)}: {issues!r}"

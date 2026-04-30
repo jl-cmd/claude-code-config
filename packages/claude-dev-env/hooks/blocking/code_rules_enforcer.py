@@ -807,7 +807,7 @@ def _scan_function_body_constants(content: str) -> list[str]:
     advisory_issues: list[str] = []
     lines = content.split("\n")
     function_indent_stack: list[int] = []
-    constant_pattern = re.compile(r"^([A-Z][A-Z0-9_]{2,})\s*=\s*[^=]")
+    constant_pattern = re.compile(r"^([A-Z][A-Z0-9_]{2,})(?:\s*:\s*[^=]+)?\s*=\s*[^=]")
 
     for line_number, line in enumerate(lines, 1):
         stripped = line.strip()

@@ -647,6 +647,22 @@ def test_advisory_should_still_flag_actual_method_body_constant() -> None:
     assert "MAXIMUM_RETRIES" in advisory_issues[0]
 
 
+def test_advisory_should_flag_annotated_function_body_constant() -> None:
+    source_with_annotated_function_body_constant = (
+        "def example_function() -> None:\n"
+        "    MAXIMUM_RETRIES: int = 3\n"
+        "    return None\n"
+    )
+    advisory_issues = code_rules_enforcer.check_constants_outside_config_advisory(
+        source_with_annotated_function_body_constant,
+        "example_module.py",
+    )
+    assert len(advisory_issues) == 1, (
+        "Annotated function-body UPPER_SNAKE constant (PEP 526) must surface as advisory"
+    )
+    assert "MAXIMUM_RETRIES" in advisory_issues[0]
+
+
 def test_advisory_should_flag_outer_constants_after_nested_def() -> None:
     source_with_nested_def = (
         "def outer():\n"

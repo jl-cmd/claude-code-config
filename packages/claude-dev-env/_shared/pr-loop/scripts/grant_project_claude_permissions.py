@@ -76,7 +76,7 @@ def grant_permissions_for_current_directory() -> None:
         )
         raise SystemExit(1)
     project_path = get_current_project_path()
-    all_all_permission_rules = build_permission_rules(
+    all_permission_rules = build_permission_rules(
         project_path, ALL_PERMISSION_ALLOW_TOOLS
     )
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(

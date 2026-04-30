@@ -253,5 +253,11 @@ class FetchInlineReviewCommentsPaginationTests(unittest.TestCase):
         assert fetched_comments is None
 
 
+class RunGhUnreachableAssertionRemovedTests(unittest.TestCase):
+    def test_run_gh_function_body_does_not_contain_unreachable_assertion(self) -> None:
+        run_gh_source_text = inspect.getsource(gh_util.run_gh)
+        assert "AssertionError" not in run_gh_source_text
+
+
 if __name__ == "__main__":
     unittest.main()

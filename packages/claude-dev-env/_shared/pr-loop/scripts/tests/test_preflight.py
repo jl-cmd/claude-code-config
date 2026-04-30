@@ -189,7 +189,7 @@ def test_should_exit_nonzero_when_subprocess_run_raises_os_error(
         "not a propagated traceback"
     )
     captured = capsys.readouterr()
-    assert "bugteam_preflight" in captured.err, (
+    assert "preflight" in captured.err, (
         "Error message must be prefixed with the preflight tool name for context"
     )
     assert "permission denied" in captured.err, (

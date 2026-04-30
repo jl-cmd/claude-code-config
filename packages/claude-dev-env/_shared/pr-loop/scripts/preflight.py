@@ -40,28 +40,28 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
         )
     except FileNotFoundError:
         print(
-            "bugteam_preflight: git is not installed or not available on PATH.\n"
+            "preflight: git is not installed or not available on PATH.\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     except OSError as os_error:
         print(
-            f"bugteam_preflight: failed to run git: {os_error}\n"
+            f"preflight: failed to run git: {os_error}\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     if query_result.returncode != 0:
         print(
-            f"bugteam_preflight: {enforcement_absent_message}",
+            f"preflight: {enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     configured_path = query_result.stdout.strip().replace("\\", "/").rstrip("/")
     if not configured_path.endswith(expected_hooks_path_suffix):
         print(
-            f"bugteam_preflight: core.hooksPath is '{configured_path}' — "
+            f"preflight: core.hooksPath is '{configured_path}' — "
             f"expected path ending in '{expected_hooks_path_suffix}'.\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
@@ -164,7 +164,7 @@ def parse_arguments(all_arguments: list[str]) -> argparse.Namespace:
 def main(all_arguments: list[str]) -> int:
     arguments = parse_arguments(all_arguments)
     if os.environ.get("BUGTEAM_PREFLIGHT_SKIP", "").strip() == "1":
-        print("bugteam_preflight: skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
+        print("preflight: skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
         return 0
     start = Path.cwd()
     repository_root = (
@@ -178,7 +178,7 @@ def main(all_arguments: list[str]) -> int:
     if not arguments.no_pytest and has_pytest_configuration(repository_root):
         if not has_discoverable_tests(repository_root):
             print(
-                "bugteam_preflight: pytest configured but no tests found; skipping pytest.",
+                "preflight: pytest configured but no tests found; skipping pytest.",
                 file=sys.stderr,
             )
         else:
@@ -187,7 +187,7 @@ def main(all_arguments: list[str]) -> int:
                 return exit_code
     elif not arguments.no_pytest:
         print(
-            "bugteam_preflight: no pytest configuration found; skipping pytest.",
+            "preflight: no pytest configuration found; skipping pytest.",
             file=sys.stderr,
         )
     if arguments.pre_commit and (repository_root / ".pre-commit-config.yaml").is_file():

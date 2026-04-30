@@ -12,8 +12,16 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 
 from config.fix_hookspath_constants import HOOKS_PATH_SUFFIX
 from config.preflight_constants import (
+    ALL_REPOSITORY_ROOT_MARKER_FILENAMES,
+    ALL_TEST_FILE_PATTERNS_FOR_DISCOVERY,
+    ALL_TESTS_DIRECTORY_IGNORE_PARTS,
     BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE,
     BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME,
+    GIT_DIRECTORY_NAME,
+    PYPROJECT_TOML_FILENAME,
+    PYTEST_INI_FILENAME,
+    PYTEST_TOML_TABLE_PREFIX,
+    VENV_DIRECTORY_NAME,
 )
 
 
@@ -84,31 +92,33 @@ def find_repository_root(start: Path) -> Path:
     resolved = start.resolve()
     all_candidates = [resolved, *resolved.parents]
     for each_candidate in all_candidates:
-        if (each_candidate / ".git").is_dir() or (each_candidate / ".git").is_file():
+        git_marker = each_candidate / GIT_DIRECTORY_NAME
+        if git_marker.is_dir() or git_marker.is_file():
             return each_candidate
     for each_candidate in all_candidates:
-        if (each_candidate / "pytest.ini").is_file():
+        if (each_candidate / PYTEST_INI_FILENAME).is_file():
             return each_candidate
     return resolved
 
 
 def has_pytest_configuration(root: Path) -> bool:
-    if (root / "pytest.ini").is_file():
+    if (root / PYTEST_INI_FILENAME).is_file():
         return True
-    pyproject = root / "pyproject.toml"
+    pyproject = root / PYPROJECT_TOML_FILENAME
     if not pyproject.is_file():
         return False
     text = pyproject.read_text(encoding="utf-8", errors="replace")
-    return "[tool.pytest" in text
+    return PYTEST_TOML_TABLE_PREFIX in text
 
 
 def has_discoverable_tests(root: Path) -> bool:
-    all_ignored_parts = {"site-packages", ".venv", "venv", "node_modules"}
-    for each_path in root.rglob("test_*.py"):
+    all_ignored_parts = ALL_TESTS_DIRECTORY_IGNORE_PARTS
+    test_filename_glob, test_suffix_glob = ALL_TEST_FILE_PATTERNS_FOR_DISCOVERY
+    for each_path in root.rglob(test_filename_glob):
         if any(each_part in all_ignored_parts for each_part in each_path.parts):
             continue
         return True
-    for each_path in root.rglob("*_test.py"):
+    for each_path in root.rglob(test_suffix_glob):
         if any(each_part in all_ignored_parts for each_part in each_path.parts):
             continue
         return True

@@ -54,3 +54,7 @@ def test_text_file_encoding_lives_in_config() -> None:
 def test_unique_temporary_suffix_byte_length_is_positive_integer() -> None:
     assert isinstance(constants_module.UNIQUE_TEMPORARY_SUFFIX_BYTE_LENGTH, int)
     assert constants_module.UNIQUE_TEMPORARY_SUFFIX_BYTE_LENGTH > 0
+
+
+def test_git_directory_name_lives_in_config() -> None:
+    assert constants_module.GIT_DIRECTORY_NAME == ".git"

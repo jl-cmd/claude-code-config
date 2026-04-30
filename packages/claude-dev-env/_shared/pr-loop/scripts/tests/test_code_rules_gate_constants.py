@@ -86,3 +86,7 @@ def test_column_key_pattern_template_renders_with_minimum_length() -> None:
         minimum_length=constants_module.MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR
     )
     assert rendered_pattern == r"^[a-z][a-z0-9_]{2,}$"
+
+
+def test_python_file_extension_lives_in_config() -> None:
+    assert constants_module.PYTHON_FILE_EXTENSION == ".py"

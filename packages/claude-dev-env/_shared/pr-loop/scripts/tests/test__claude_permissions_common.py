@@ -56,3 +56,19 @@ def test_path_contains_glob_metacharacters_local_tuple_uses_all_collection_prefi
     assert "glob_metacharacters_in_path:" not in source_text.replace(
         "all_glob_metacharacters_in_path", ""
     )
+
+
+def test_is_valid_project_root_uses_extracted_directory_marker_constants() -> None:
+    """is_valid_project_root must reference extracted constants, not inline string literals.
+
+    Per CODE_RULES magic-values rule, ``.git`` and ``.claude`` literals
+    inside the function body are violations. Confirm the production code
+    pulls them from config.claude_permissions_constants.
+    """
+    source_text = inspect.getsource(common.is_valid_project_root)
+    assert "GIT_DIRECTORY_NAME" in source_text
+    assert "CLAUDE_SETTINGS_DIRECTORY_NAME" in source_text
+    assert "'.git'" not in source_text
+    assert '".git"' not in source_text
+    assert "'.claude'" not in source_text
+    assert '".claude"' not in source_text

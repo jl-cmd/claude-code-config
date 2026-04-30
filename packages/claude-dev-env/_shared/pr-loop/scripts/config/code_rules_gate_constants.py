@@ -33,3 +33,5 @@ MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR: int = 2
 COLUMN_KEY_PATTERN_TEMPLATE: str = r"^[a-z][a-z0-9_]{{{minimum_length},}}$"
 
 GIT_NAME_STATUS_ADDED_PREFIX: str = "A"
+
+PYTHON_FILE_EXTENSION: str = ".py"

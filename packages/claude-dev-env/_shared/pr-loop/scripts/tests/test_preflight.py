@@ -261,3 +261,21 @@ def test_loop_variables_use_each_prefix_in_preflight_module() -> None:
     discover_tests_source = inspect.getsource(preflight.has_discoverable_tests)
     assert "for each_path in" in discover_tests_source
     assert "for each_part in" in discover_tests_source
+
+
+def test_preflight_uses_extracted_directory_marker_constants() -> None:
+    """preflight.py must reference extracted constants instead of inline string literals.
+
+    The CODE_RULES magic-values rule treats inline ``.git`` and ``.venv``
+    string literals in production function bodies as violations. Confirm
+    preflight.py imports them from config.preflight_constants instead.
+    """
+    preflight_source = inspect.getsource(preflight)
+    assert "GIT_DIRECTORY_NAME" in preflight_source
+    assert "VENV_DIRECTORY_NAME" in preflight_source
+    find_root_source = inspect.getsource(preflight.find_repository_root)
+    assert "'.git'" not in find_root_source
+    assert '".git"' not in find_root_source
+    discover_tests_source = inspect.getsource(preflight.has_discoverable_tests)
+    assert "'.venv'" not in discover_tests_source
+    assert '".venv"' not in discover_tests_source

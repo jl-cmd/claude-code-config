@@ -21,6 +21,8 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config.claude_permissions_constants import (
+    CLAUDE_SETTINGS_DIRECTORY_NAME,
+    GIT_DIRECTORY_NAME,
     TEXT_FILE_ENCODING as TEXT_FILE_ENCODING,
     UNIQUE_TEMPORARY_SUFFIX_BYTE_LENGTH,
 )
@@ -211,8 +213,8 @@ def ensure_list_entry(all_section: dict[str, object], entry_name: str) -> list[o
 
 
 def is_valid_project_root(candidate_path: Path) -> bool:
-    git_marker_path = candidate_path / ".git"
-    claude_marker_path = candidate_path / ".claude"
+    git_marker_path = candidate_path / GIT_DIRECTORY_NAME
+    claude_marker_path = candidate_path / CLAUDE_SETTINGS_DIRECTORY_NAME
     return git_marker_path.exists() or claude_marker_path.exists()
 
 

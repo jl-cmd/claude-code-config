@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import subprocess
 import sys
 import unittest.mock
@@ -437,3 +438,74 @@ def test_whole_file_line_set_handles_non_cp1252_utf8(tmp_path: Path) -> None:
     line_numbers = gate_module.whole_file_line_set(utf8_only_path)
 
     assert line_numbers == {1, 2}
+
+
+def test_run_gate_detects_new_inline_comment_in_touched_file(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: run_gate must pass prior file content as old_content.
+
+    When old_content is incorrectly set to the new content, check_comment_changes
+    reads identical sets and never flags a newly added inline comment. This test
+    proves run_gate now reads the prior content from HEAD so newly added inline
+    comments in touched files surface as violations.
+    """
+    write_file(
+        temporary_git_repository / "module.py",
+        "first_value = 1\nsecond_value = 2\n",
+    )
+    commit_all_files(temporary_git_repository, "initial")
+    write_file(
+        temporary_git_repository / "module.py",
+        "first_value = 1\nsecond_value = 2  # added inline comment\n",
+    )
+    stage_file(temporary_git_repository, "module.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1
+
+
+def test_run_gate_treats_new_files_prior_content_as_empty(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    write_file(temporary_git_repository / "existing.py", "alpha = 1\n")
+    commit_all_files(temporary_git_repository, "baseline")
+    write_file(
+        temporary_git_repository / "brand_new.py",
+        "first_value = 1\nsecond_value = 2  # comment in new file\n",
+    )
+    stage_file(temporary_git_repository, "brand_new.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1
+
+
+def test_is_test_path_helper_matches_code_rules_patterns() -> None:
+    assert gate_module.is_test_path("packages/foo/test_bar.py")
+    assert gate_module.is_test_path("packages/foo/bar_test.py")
+    assert gate_module.is_test_path("packages/foo/bar.test.ts")
+    assert gate_module.is_test_path("packages/foo/bar.spec.js")
+    assert gate_module.is_test_path("packages/foo/conftest.py")
+    assert gate_module.is_test_path("packages/foo/tests/something.py")
+    assert not gate_module.is_test_path("packages/foo/regular_module.py")
+
+
+def test_validate_content_callable_signature_is_explicit() -> None:
+    callable_alias_source = inspect.getsource(gate_module).split("\n")
+    matching_lines = [
+        each_line
+        for each_line in callable_alias_source
+        if "ValidateContentCallable" in each_line and "Callable[" in each_line
+    ]
+    assert any("[str, str, str]" in each_line for each_line in matching_lines)
+
+
+def test_run_gate_uses_each_path_loop_variable() -> None:
+    run_gate_source = inspect.getsource(gate_module.run_gate)
+    assert "for each_path in" in run_gate_source

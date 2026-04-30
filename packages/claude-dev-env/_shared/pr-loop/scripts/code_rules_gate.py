@@ -14,12 +14,23 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config.code_rules_gate_constants import (
+    ALL_CODE_FILE_EXTENSIONS,
+    ALL_LITERAL_KEYWORD_EXEMPTIONS,
+    ALL_TEST_FILENAME_GLOB_SUFFIXES,
+    ALL_TEST_FILENAME_SUFFIXES,
+    COLUMN_KEY_PATTERN_TEMPLATE,
+    CONFIG_PATH_SEGMENT,
     EXPECTED_TUPLE_PAIR_LENGTH,
+    GIT_NAME_STATUS_ADDED_PREFIX,
     MAX_VIOLATIONS_PER_CHECK,
+    MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR,
+    TEST_CONFTEST_FILENAME,
+    TEST_FILENAME_PREFIX,
+    TESTS_PATH_SEGMENT,
 )
 
 
-ValidateContentCallable = Callable[..., list[str]]
+ValidateContentCallable = Callable[[str, str, str], list[str]]
 
 
 def hunk_header_pattern() -> re.Pattern[str]:
@@ -90,9 +101,9 @@ def filter_paths_under_prefixes(
     if not all_prefixes:
         return all_file_paths
     normalized_prefixes = [
-        each.strip().replace("\\", "/").rstrip("/")
-        for each in all_prefixes
-        if each.strip()
+        each_prefix.strip().replace("\\", "/").rstrip("/")
+        for each_prefix in all_prefixes
+        if each_prefix.strip()
     ]
     if not normalized_prefixes:
         return all_file_paths
@@ -104,8 +115,9 @@ def filter_paths_under_prefixes(
         except ValueError:
             continue
         if any(
-            relative_posix == prefix or relative_posix.startswith(prefix + "/")
-            for prefix in normalized_prefixes
+            relative_posix == each_prefix
+            or relative_posix.startswith(each_prefix + "/")
+            for each_prefix in normalized_prefixes
         ):
             filtered.append(each_path)
     return filtered
@@ -191,7 +203,7 @@ def is_staged_file_newly_added(
     for each_line in status_result.stdout.splitlines():
         stripped_line = each_line.strip()
         if stripped_line:
-            return stripped_line.startswith("A")
+            return stripped_line.startswith(GIT_NAME_STATUS_ADDED_PREFIX)
     return False
 
 
@@ -263,14 +275,48 @@ def paths_from_git_diff(repository_root: Path, base_reference: str) -> list[Path
         )
         raise SystemExit(2)
     relative_paths = [
-        line.strip() for line in name_result.stdout.splitlines() if line.strip()
+        each_line.strip()
+        for each_line in name_result.stdout.splitlines()
+        if each_line.strip()
     ]
-    return [repository_root / relative_path for relative_path in relative_paths]
+    return [
+        repository_root / each_relative_path for each_relative_path in relative_paths
+    ]
 
 
 def is_code_path(file_path: Path) -> bool:
     suffix = file_path.suffix.lower()
-    return suffix in {".py", ".js", ".ts", ".tsx", ".jsx"}
+    return suffix in ALL_CODE_FILE_EXTENSIONS
+
+
+def is_test_path(file_path: str) -> bool:
+    """Return True when *file_path* matches CODE_RULES.md test-file detection patterns.
+
+    Mirrors the test-file detection rule documented in CODE_RULES.md:
+    filename matches test_*.py OR *_test.py OR *.test.* OR *.spec.* OR
+    conftest.py, OR path contains the segment /tests/.
+    """
+    normalized_posix = file_path.replace("\\", "/")
+    filename_only = normalized_posix.rsplit("/", maxsplit=1)[-1]
+    if TESTS_PATH_SEGMENT in normalized_posix:
+        return True
+    if filename_only == TEST_CONFTEST_FILENAME:
+        return True
+    if filename_only.startswith(TEST_FILENAME_PREFIX) and filename_only.endswith(
+        ".py"
+    ):
+        return True
+    if any(
+        filename_only.endswith(each_suffix)
+        for each_suffix in ALL_TEST_FILENAME_SUFFIXES
+    ):
+        return True
+    if any(
+        each_glob_suffix in filename_only
+        for each_glob_suffix in ALL_TEST_FILENAME_GLOB_SUFFIXES
+    ):
+        return True
+    return False
 
 
 def check_database_column_string_magic(content: str, file_path: str) -> list[str]:
@@ -280,22 +326,25 @@ def check_database_column_string_magic(content: str, file_path: str) -> list[str
     two-element tuple inside a function body (the characteristic column-name/value
     pair pattern). Files under ``config/`` and test files are exempt.
     """
-    if "/config/" in file_path.replace("\\", "/") or "\\config\\" in file_path:
+    normalized_path = file_path.replace("\\", "/")
+    if CONFIG_PATH_SEGMENT in normalized_path:
         return []
-    if "/tests/" in file_path.replace("\\", "/") or file_path.endswith(
-        ("_test.py", ".spec.py")
-    ):
+    if is_test_path(normalized_path):
         return []
     try:
         tree = ast.parse(content)
     except SyntaxError:
         return []
     issues: list[str] = []
-    column_key_pattern = re.compile(r"^[a-z][a-z0-9_]{2,}$")
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    column_key_pattern = re.compile(
+        COLUMN_KEY_PATTERN_TEMPLATE.format(
+            minimum_length=MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR
+        )
+    )
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for each_child in ast.walk(node):
+        for each_child in ast.walk(each_node):
             if not isinstance(each_child, ast.Tuple):
                 continue
             if len(each_child.elts) != EXPECTED_TUPLE_PAIR_LENGTH:
@@ -308,7 +357,7 @@ def check_database_column_string_magic(content: str, file_path: str) -> list[str
             literal_text = first_element.value
             if not column_key_pattern.match(literal_text):
                 continue
-            if literal_text in {"true", "false", "none", "null"}:
+            if literal_text in ALL_LITERAL_KEYWORD_EXEMPTIONS:
                 continue
             issues.append(
                 f"Line {first_element.lineno}: Column-name string magic {literal_text!r} - extract to config"
@@ -334,30 +383,34 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
       not checked, so `self.fetch(...)` and `other.fetch(...)` both match a
       module-level `fetch` definition.
     """
-    if file_path.endswith((".js", ".ts", ".tsx", ".jsx")):
+    non_python_code_extensions = ALL_CODE_FILE_EXTENSIONS - {".py"}
+    if any(
+        file_path.endswith(each_extension)
+        for each_extension in non_python_code_extensions
+    ):
         return []
     try:
         tree = ast.parse(content)
     except SyntaxError:
         return []
     function_signatures: dict[str, set[str]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for each_node in ast.walk(tree):
+        if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             optional_kwargs: set[str] = set()
             for each_kwonly, each_default in zip(
-                node.args.kwonlyargs, node.args.kw_defaults
+                each_node.args.kwonlyargs, each_node.args.kw_defaults
             ):
                 if each_default is not None:
                     optional_kwargs.add(each_kwonly.arg)
-            function_signatures[node.name] = optional_kwargs
+            function_signatures[each_node.name] = optional_kwargs
     issues: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        if node.name.startswith("_"):
+        if each_node.name.startswith("_"):
             continue
-        wrapper_kwargs = function_signatures.get(node.name, set())
-        for each_call in ast.walk(node):
+        wrapper_kwargs = function_signatures.get(each_node.name, set())
+        for each_call in ast.walk(each_node):
             if not isinstance(each_call, ast.Call):
                 continue
             if isinstance(each_call.func, ast.Name):
@@ -372,7 +425,7 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
             missing = delegate_kwargs - wrapper_kwargs
             if missing:
                 issues.append(
-                    f"Line {node.lineno}: Wrapper {node.name!r} drops optional kwargs {sorted(missing)!r} of delegate {delegate_name!r}"
+                    f"Line {each_node.lineno}: Wrapper {each_node.name!r} drops optional kwargs {sorted(missing)!r} of delegate {delegate_name!r}"
                 )
                 if len(issues) >= MAX_VIOLATIONS_PER_CHECK:
                     return issues
@@ -523,6 +576,23 @@ def print_violation_section(
             print(f"  {each_issue}", file=sys.stderr)
 
 
+def read_prior_committed_content(
+    repository_root: Path, relative_path_posix: str
+) -> str:
+    show_result = subprocess.run(
+        ["git", "show", f"HEAD:{relative_path_posix}"],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if show_result.returncode != 0:
+        return ""
+    return show_result.stdout
+
+
 def run_gate(
     validate_content: ValidateContentCallable,
     all_file_paths: list[Path],
@@ -531,9 +601,9 @@ def run_gate(
 ) -> int:
     blocking_by_file: dict[Path, list[str]] = {}
     advisory_by_file: dict[Path, list[str]] = {}
-    for file_path in sorted(set(all_file_paths)):
+    for each_path in sorted(set(all_file_paths)):
         try:
-            resolved = file_path.resolve()
+            resolved = each_path.resolve()
         except OSError:
             continue
         try:
@@ -550,17 +620,15 @@ def run_gate(
             print(f"code_rules_gate: skip unreadable {resolved}", file=sys.stderr)
             continue
         relative = resolved.relative_to(repository_root.resolve())
-        issues = validate_content(
-            content, str(relative).replace("\\", "/"), old_content=content
+        relative_posix = str(relative).replace("\\", "/")
+        prior_content = read_prior_committed_content(
+            repository_root.resolve(), relative_posix
         )
+        issues = validate_content(content, relative_posix, prior_content)
         issues.extend(
-            check_database_column_string_magic(
-                content, str(relative).replace("\\", "/")
-            )
+            check_database_column_string_magic(content, relative_posix)
         )
-        issues.extend(
-            check_wrapper_plumb_through(content, str(relative).replace("\\", "/"))
-        )
+        issues.extend(check_wrapper_plumb_through(content, relative_posix))
         if not issues:
             continue
         added_for_file = (
@@ -661,7 +729,7 @@ def main(all_arguments: list[str]) -> int:
     )
     validate_content = load_validate_content()
     if arguments.paths:
-        file_paths = [repository_root / path for path in arguments.paths]
+        file_paths = [repository_root / each_path for each_path in arguments.paths]
         return run_gate(
             validate_content, file_paths, repository_root, added_lines_by_path=None
         )

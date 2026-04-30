@@ -45,3 +45,12 @@ def test_get_claude_user_settings_path_ends_in_settings_json() -> None:
         resolved_settings_path.parent.name
         == constants_module.CLAUDE_SETTINGS_DIRECTORY_NAME
     )
+
+
+def test_text_file_encoding_lives_in_config() -> None:
+    assert constants_module.TEXT_FILE_ENCODING == "utf-8"
+
+
+def test_unique_temporary_suffix_byte_length_is_positive_integer() -> None:
+    assert isinstance(constants_module.UNIQUE_TEMPORARY_SUFFIX_BYTE_LENGTH, int)
+    assert constants_module.UNIQUE_TEMPORARY_SUFFIX_BYTE_LENGTH > 0

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import subprocess
 import sys
 import unittest
@@ -148,6 +149,12 @@ class FetchInlineReviewCommentsTests(unittest.TestCase):
         with patch.object(gh_util.subprocess, "run", return_value=success_with_object):
             result = gh_util.fetch_inline_review_comments("JonEcho", "babysit-pr", 17)
         self.assertIsNone(result)
+
+
+class RunGhUnreachableAssertionRemovedTests(unittest.TestCase):
+    def test_run_gh_function_body_does_not_contain_unreachable_assertion(self) -> None:
+        run_gh_source_text = inspect.getsource(gh_util.run_gh)
+        assert "AssertionError" not in run_gh_source_text
 
 
 if __name__ == "__main__":

@@ -10,13 +10,20 @@ settings file produces a one-time re-sort diff, subsequent writes are stable.
 
 import json
 import os
+import secrets
 import stat
 import sys
 from pathlib import Path
 from typing import NoReturn
 
+sys.modules.pop("config", None)
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-TEXT_FILE_ENCODING: str = "utf-8"
+from config.claude_permissions_constants import (
+    TEXT_FILE_ENCODING as TEXT_FILE_ENCODING,
+    UNIQUE_TEMPORARY_SUFFIX_BYTE_LENGTH,
+)
 
 
 def exit_with_error(message: str) -> NoReturn:
@@ -122,11 +129,14 @@ def write_atomically_with_mode(
 
 
 def save_settings(settings_path: Path, all_settings: dict[str, object]) -> None:
-    atomic_write_temporary_suffix: str = ".tmp"
+    unique_temporary_suffix_byte_length = UNIQUE_TEMPORARY_SUFFIX_BYTE_LENGTH
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     serialized_settings = serialize_settings_to_json_text(all_settings)
+    unique_temporary_suffix = (
+        f".tmp.{os.getpid()}.{secrets.token_hex(unique_temporary_suffix_byte_length)}"
+    )
     temporary_path = settings_path.with_suffix(
-        settings_path.suffix + atomic_write_temporary_suffix
+        settings_path.suffix + unique_temporary_suffix
     )
     mode_to_preserve = get_mode_to_preserve(settings_path)
     try:

@@ -31,6 +31,20 @@ def test_text_file_encoding_remains_local_constant_alias() -> None:
     assert common.TEXT_FILE_ENCODING == "utf-8"
 
 
+def test_text_file_encoding_sourced_from_config() -> None:
+    config_module_path = (
+        Path(__file__).parent.parent / "config" / "claude_permissions_constants.py"
+    )
+    specification = importlib.util.spec_from_file_location(
+        "config.claude_permissions_constants", config_module_path
+    )
+    assert specification is not None
+    assert specification.loader is not None
+    config_module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(config_module)
+    assert common.TEXT_FILE_ENCODING == config_module.TEXT_FILE_ENCODING
+
+
 def test_migrated_constants_no_longer_on_common_module() -> None:
     assert not hasattr(common, "ALL_PERMISSION_ALLOW_TOOLS")
     assert not hasattr(common, "AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE")

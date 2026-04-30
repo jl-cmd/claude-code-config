@@ -16,6 +16,10 @@ CLAUDE_SETTINGS_DIRECTORY_NAME: str = ".claude"
 
 CLAUDE_SETTINGS_FILENAME: str = "settings.json"
 
+TEXT_FILE_ENCODING: str = "utf-8"
+
+UNIQUE_TEMPORARY_SUFFIX_BYTE_LENGTH: int = 8
+
 
 def get_claude_user_settings_path() -> Path:
     return Path.home() / CLAUDE_SETTINGS_DIRECTORY_NAME / CLAUDE_SETTINGS_FILENAME

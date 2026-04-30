@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import subprocess
 import sys
 from pathlib import Path
@@ -251,3 +252,12 @@ def test_preflight_skip_uses_shared_env_var_constant(
     assert exit_code == 0
     captured = capsys.readouterr()
     assert skip_env_var_name in captured.err
+
+
+def test_loop_variables_use_each_prefix_in_preflight_module() -> None:
+    find_root_source = inspect.getsource(preflight.find_repository_root)
+    assert "for each_candidate in" in find_root_source
+
+    discover_tests_source = inspect.getsource(preflight.has_discoverable_tests)
+    assert "for each_path in" in discover_tests_source
+    assert "for each_part in" in discover_tests_source

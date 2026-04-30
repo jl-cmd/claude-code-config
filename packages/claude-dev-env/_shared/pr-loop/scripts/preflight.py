@@ -82,13 +82,13 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
 
 def find_repository_root(start: Path) -> Path:
     resolved = start.resolve()
-    candidates = [resolved, *resolved.parents]
-    for candidate in candidates:
-        if (candidate / ".git").is_dir() or (candidate / ".git").is_file():
-            return candidate
-    for candidate in candidates:
-        if (candidate / "pytest.ini").is_file():
-            return candidate
+    all_candidates = [resolved, *resolved.parents]
+    for each_candidate in all_candidates:
+        if (each_candidate / ".git").is_dir() or (each_candidate / ".git").is_file():
+            return each_candidate
+    for each_candidate in all_candidates:
+        if (each_candidate / "pytest.ini").is_file():
+            return each_candidate
     return resolved
 
 
@@ -103,13 +103,13 @@ def has_pytest_configuration(root: Path) -> bool:
 
 
 def has_discoverable_tests(root: Path) -> bool:
-    ignore = {"site-packages", ".venv", "venv", "node_modules"}
-    for path in root.rglob("test_*.py"):
-        if any(part in ignore for part in path.parts):
+    all_ignored_parts = {"site-packages", ".venv", "venv", "node_modules"}
+    for each_path in root.rglob("test_*.py"):
+        if any(each_part in all_ignored_parts for each_part in each_path.parts):
             continue
         return True
-    for path in root.rglob("*_test.py"):
-        if any(part in ignore for part in path.parts):
+    for each_path in root.rglob("*_test.py"):
+        if any(each_part in all_ignored_parts for each_part in each_path.parts):
             continue
         return True
     return False

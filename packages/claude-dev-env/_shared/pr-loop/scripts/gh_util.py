@@ -36,12 +36,12 @@ class GhResult:
 
 def _is_transient_error(message: str) -> bool:
     lowered = message.lower()
-    return any(marker in lowered for marker in ALL_TRANSIENT_ERROR_MARKERS)
+    return any(each_marker in lowered for each_marker in ALL_TRANSIENT_ERROR_MARKERS)
 
 
 def _is_auth_error(message: str) -> bool:
     lowered = message.lower()
-    return any(marker in lowered for marker in ALL_AUTH_ERROR_MARKERS)
+    return any(each_marker in lowered for each_marker in ALL_AUTH_ERROR_MARKERS)
 
 
 def _ensure_text(value: str | bytes | None) -> str:
@@ -65,7 +65,7 @@ def run_gh(
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
     max_attempts = DEFAULT_RETRIES + 1
-    for attempt in range(max_attempts):
+    for each_attempt in range(max_attempts):
         try:
             gh_completion = subprocess.run(
                 all_command,
@@ -86,9 +86,10 @@ def run_gh(
                 stderr=message,
                 is_timed_out=True,
             )
-            if attempt < max_attempts - 1:
+            if each_attempt < max_attempts - 1:
                 time.sleep(
-                    DEFAULT_BACKOFF_SECONDS * (EXPONENTIAL_BACKOFF_BASE**attempt)
+                    DEFAULT_BACKOFF_SECONDS
+                    * (EXPONENTIAL_BACKOFF_BASE**each_attempt)
                 )
                 continue
             return last_result
@@ -104,11 +105,18 @@ def run_gh(
         combined = f"{gh_result.stderr}\n{gh_result.stdout}".strip()
         if _is_auth_error(combined):
             return gh_result
-        if attempt < max_attempts - 1 and _is_transient_error(combined):
-            time.sleep(DEFAULT_BACKOFF_SECONDS * (EXPONENTIAL_BACKOFF_BASE**attempt))
+        if each_attempt < max_attempts - 1 and _is_transient_error(combined):
+            time.sleep(
+                DEFAULT_BACKOFF_SECONDS * (EXPONENTIAL_BACKOFF_BASE**each_attempt)
+            )
             continue
         return gh_result
-    raise AssertionError("run_gh exhausted all attempts without returning")
+    return GhResult(
+        returncode=GH_TIMEOUT_RETURN_CODE,
+        stdout="",
+        stderr="gh command exhausted all attempts",
+        is_timed_out=True,
+    )
 
 
 def fetch_inline_review_comments(

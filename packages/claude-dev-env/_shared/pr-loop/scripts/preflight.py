@@ -58,28 +58,28 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
         )
     except FileNotFoundError:
         print(
-            "bugteam_preflight: git is not installed or not available on PATH.\n"
+            "preflight: git is not installed or not available on PATH.\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     except OSError as os_error:
         print(
-            f"bugteam_preflight: failed to run git: {os_error}\n"
+            f"preflight: failed to run git: {os_error}\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     if query_result.returncode != 0:
         print(
-            f"bugteam_preflight: {enforcement_absent_message}",
+            f"preflight: {enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     configured_path = query_result.stdout.strip().replace("\\", "/").rstrip("/")
     if not configured_path.endswith(expected_hooks_path_suffix):
         print(
-            f"bugteam_preflight: core.hooksPath is '{configured_path}' — "
+            f"preflight: core.hooksPath is '{configured_path}' — "
             f"expected path ending in '{expected_hooks_path_suffix}'.\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
@@ -188,7 +188,7 @@ def main(all_arguments: list[str]) -> int:
     skip_enabled_value = BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE
     if os.environ.get(skip_env_var_name, "").strip() == skip_enabled_value:
         print(
-            f"bugteam_preflight: skipped ({skip_env_var_name}={skip_enabled_value}).",
+            f"preflight: skipped ({skip_env_var_name}={skip_enabled_value}).",
             file=sys.stderr,
         )
         return 0

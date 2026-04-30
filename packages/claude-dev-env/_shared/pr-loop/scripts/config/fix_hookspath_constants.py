@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-HOOKS_PATH_SUFFIX: str = "hooks/git-hooks"
-
 ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS: tuple[str, str, str] = (
     ".claude",
     "hooks",
     "git-hooks",
 )
+
+HOOKS_PATH_SUFFIX: str = "/".join(ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS)
 
 ALL_HOME_ENV_VAR_NAMES: tuple[str, str] = ("HOME", "USERPROFILE")
 

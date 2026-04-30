@@ -156,7 +156,12 @@ def staged_file_line_count(
         check=False,
     )
     if show_result.returncode != 0:
-        return 0
+        print(
+            f"code_rules_gate: git show :{relative_path_posix} failed:\n"
+            f"{show_result.stderr}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
     staged_content = show_result.stdout
     if not staged_content:
         return 0
@@ -177,7 +182,12 @@ def is_staged_file_newly_added(
         check=False,
     )
     if status_result.returncode != 0:
-        return False
+        print(
+            f"code_rules_gate: git diff --cached --name-status failed for "
+            f"{relative_path_posix}:\n{status_result.stderr}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
     for each_line in status_result.stdout.splitlines():
         stripped_line = each_line.strip()
         if stripped_line:

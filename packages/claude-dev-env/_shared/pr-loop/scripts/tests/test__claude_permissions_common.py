@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -33,3 +34,11 @@ def test_text_file_encoding_remains_local_constant_alias() -> None:
 def test_migrated_constants_no_longer_on_common_module() -> None:
     assert not hasattr(common, "ALL_PERMISSION_ALLOW_TOOLS")
     assert not hasattr(common, "AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE")
+
+
+def test_path_contains_glob_metacharacters_local_tuple_uses_all_collection_prefix() -> None:
+    source_text = inspect.getsource(common.path_contains_glob_metacharacters)
+    assert "all_glob_metacharacters_in_path" in source_text
+    assert "glob_metacharacters_in_path:" not in source_text.replace(
+        "all_glob_metacharacters_in_path", ""
+    )

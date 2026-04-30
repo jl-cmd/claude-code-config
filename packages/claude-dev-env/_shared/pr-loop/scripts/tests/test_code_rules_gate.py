@@ -340,6 +340,42 @@ def test_added_lines_for_staged_file_returns_parsed_result_when_diff_is_non_empt
     assert added_line_numbers == set()
 
 
+def test_staged_file_line_count_escalates_on_git_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    failing_completed = unittest.mock.MagicMock()
+    failing_completed.returncode = 128
+    failing_completed.stdout = ""
+    failing_completed.stderr = "fatal: bad object HEAD"
+
+    with unittest.mock.patch("subprocess.run", return_value=failing_completed):
+        with pytest.raises(SystemExit) as exit_info:
+            gate_module.staged_file_line_count(tmp_path, "missing.py")
+
+    assert exit_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "fatal: bad object HEAD" in captured.err
+
+
+def test_is_staged_file_newly_added_escalates_on_git_failure(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    failing_completed = unittest.mock.MagicMock()
+    failing_completed.returncode = 128
+    failing_completed.stdout = ""
+    failing_completed.stderr = "fatal: not a git repository"
+
+    with unittest.mock.patch("subprocess.run", return_value=failing_completed):
+        with pytest.raises(SystemExit) as exit_info:
+            gate_module.is_staged_file_newly_added(tmp_path, "missing.py")
+
+    assert exit_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "fatal: not a git repository" in captured.err
+
+
 def test_check_wrapper_plumb_through_flags_direct_same_file_call() -> None:
     source = (
         "def fetch(target, *, retries=3):\n"

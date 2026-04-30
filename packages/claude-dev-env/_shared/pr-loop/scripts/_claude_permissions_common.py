@@ -25,7 +25,7 @@ def exit_with_error(message: str) -> NoReturn:
 
 
 def path_contains_glob_metacharacters(candidate_path: str) -> bool:
-    glob_metacharacters_in_path: tuple[str, ...] = (
+    all_glob_metacharacters_in_path: tuple[str, ...] = (
         "*",
         "?",
         "[",
@@ -38,7 +38,7 @@ def path_contains_glob_metacharacters(candidate_path: str) -> bool:
     )
     return any(
         each_character in candidate_path
-        for each_character in glob_metacharacters_in_path
+        for each_character in all_glob_metacharacters_in_path
     )
 
 

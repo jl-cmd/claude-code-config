@@ -206,6 +206,12 @@ def ensure_list_entry(all_section: dict[str, object], entry_name: str) -> list[o
     return existing_entry
 
 
+def is_valid_project_root(candidate_path: Path) -> bool:
+    git_marker_path = candidate_path / ".git"
+    claude_marker_path = candidate_path / ".claude"
+    return git_marker_path.exists() or claude_marker_path.exists()
+
+
 def prune_empty_list_then_empty_section(
     all_settings: dict[str, object], section_key: str, list_key: str
 ) -> None:

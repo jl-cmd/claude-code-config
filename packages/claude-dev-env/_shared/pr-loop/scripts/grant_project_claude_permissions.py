@@ -18,17 +18,12 @@ from _claude_permissions_common import (  # noqa: E402
     ensure_list_entry,
     exit_with_error,
     get_current_project_path,
+    is_valid_project_root,
     load_settings,
     save_settings,
     AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
     ALL_PERMISSION_ALLOW_TOOLS,
 )
-
-
-def is_valid_project_root(candidate_path: Path) -> bool:
-    git_marker_path = candidate_path / ".git"
-    claude_marker_path = candidate_path / ".claude"
-    return git_marker_path.exists() or claude_marker_path.exists()
 
 
 def add_rules_to_allow_list(

@@ -16,18 +16,13 @@ from _claude_permissions_common import (  # noqa: E402
     build_permission_rules,
     exit_with_error,
     get_current_project_path,
+    is_valid_project_root,
     load_settings,
     prune_empty_list_then_empty_section,
     save_settings,
     AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
     ALL_PERMISSION_ALLOW_TOOLS,
 )
-
-
-def is_valid_project_root(candidate_path: Path) -> bool:
-    git_marker_path = candidate_path / ".git"
-    claude_marker_path = candidate_path / ".claude"
-    return git_marker_path.exists() or claude_marker_path.exists()
 
 
 def remove_values_from_list(

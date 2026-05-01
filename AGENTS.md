@@ -32,7 +32,7 @@ This file is **rules-only**. Repo layout, build commands, and workflow guidance 
 
 ### Comments
 
-- New production code uses self-documenting identifier names. New `#`/`//` inline comments added in production code are findings; new `#`/`//` standalone comment lines and `/* ... */` block comments (non-docblock) are advisory ONLY. Docstrings, `/** ... */` JSDoc docblocks, and the directive markers listed below are exempt.
+- New production code uses self-documenting identifier names. New `#`/`//` inline comments added in production code are findings; new `#`/`//` standalone comment lines and `/* ... */` block comments at line start (non-docblock) are advisory ONLY. Docstrings, `/** ... */` JSDoc docblocks, and standalone directive-marker lines (the markers listed below) are exempt. Python inline directive markers (`# noqa`, `# type:`, `# pylint:`, `# pragma:` mid-line) are also exempt; inline JS/TS directive markers (`// eslint-...`, `// prettier-...` mid-line) remain findings.
 - **IMPORTANT:** Existing comments remain exactly as written. Comments in the surrounding file are sacred.
 - Docstrings on new functions, methods, classes, and modules (including module-level docstrings) are welcome.
 - **Test files (`test_*.py`, `*_test.py`, `*.test.*`, `*.spec.*`, `conftest.py`) are fully exempt** — inline comments and docstrings inside test functions are welcome.

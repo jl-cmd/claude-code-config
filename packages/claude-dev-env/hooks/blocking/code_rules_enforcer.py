@@ -65,7 +65,7 @@ COLLECTION_TYPE_NAMES: frozenset[str] = frozenset({
 })
 COLLECTION_BY_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9]*_by_[a-z][a-z0-9_]*$")
 CLI_FILE_PATH_MARKERS: tuple[str, ...] = ("/scripts/", "\\scripts\\", "_cli.py", "/cli.py", "\\cli.py")
-STUTTERING_ALL_PREFIX_PATTERN: re.Pattern[str] = re.compile(r"^_?(?:all_){2,}|^(?:ALL_){2,}")
+STUTTERING_ALL_PREFIX_PATTERN: re.Pattern[str] = re.compile(r"^_?(?:all_){2,}|^_?(?:ALL_){2,}")
 MAX_STUTTERING_PREFIX_ISSUES: int = 50
 
 

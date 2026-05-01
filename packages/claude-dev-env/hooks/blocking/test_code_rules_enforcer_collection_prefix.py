@@ -221,3 +221,26 @@ def test_should_not_flag_all_all_when_used_as_substring() -> None:
     assert issues == [], (
         f"'all_all_' as substring inside install_all_users must not flag, got: {issues}"
     )
+
+
+def test_should_flag_underscore_prefixed_uppercase_double_all() -> None:
+    source = "_ALL_ALL_PROVIDERS = []\n"
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert any("_ALL_ALL_PROVIDERS" in each_issue for each_issue in issues), (
+        f"Stuttering _ALL_ALL_ private constant must be flagged (regex symmetry), got: {issues}"
+    )
+
+
+def test_should_flag_underscore_prefixed_lowercase_double_all() -> None:
+    source = (
+        "def grant() -> None:\n"
+        "    _all_all_permission_rules = []\n"
+    )
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert any("_all_all_permission_rules" in each_issue for each_issue in issues), (
+        f"Stuttering _all_all_ private local must be flagged, got: {issues}"
+    )

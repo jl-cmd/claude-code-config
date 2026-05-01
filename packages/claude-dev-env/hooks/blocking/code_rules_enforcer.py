@@ -2085,7 +2085,7 @@ def _collect_fstring_part_node_ids(tree: ast.Module) -> set[int]:
 
 
 def _walk_excluding_nested_scopes(start_node: ast.AST) -> Iterator[ast.AST]:
-    if isinstance(start_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+    if isinstance(start_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         return
     yield start_node
     for child_node in ast.iter_child_nodes(start_node):

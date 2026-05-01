@@ -185,7 +185,7 @@ def test_should_not_flag_default_arg_of_nested_function_when_scanning_outer() ->
     )
 
 
-def test_should_not_descend_into_nested_class_body() -> None:
+def test_should_flag_class_attribute_in_nested_class_body() -> None:
     source = (
         "def outer() -> str:\n"
         "    class Inner:\n"
@@ -195,8 +195,24 @@ def test_should_not_descend_into_nested_class_body() -> None:
     issues = code_rules_enforcer.check_string_literal_magic(
         source, PRODUCTION_FILE_PATH
     )
-    assert issues == [], (
-        f"Nested ClassDef body must not be walked from outer-function scan, got: {issues}"
+    assert any("STRIPE_SECRET" in each_issue for each_issue in issues), (
+        f"Nested ClassDef body executes when outer() runs; class attribute must be flagged, got: {issues}"
+    )
+
+
+def test_should_flag_class_attribute_in_nested_class_inside_function() -> None:
+    source = (
+        "def outer() -> None:\n"
+        "    class Inner:\n"
+        "        KEY: str = 'STRIPE_SECRET'\n"
+        "    return None\n"
+    )
+    issues = code_rules_enforcer.check_string_literal_magic(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert any("STRIPE_SECRET" in each_issue for each_issue in issues), (
+        f"Class-level attribute inside a nested ClassDef inside outer fn body must be flagged "
+        f"(it executes when outer() runs), got: {issues}"
     )
 
 

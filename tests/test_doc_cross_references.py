@@ -36,6 +36,25 @@ ALLOWED_MISSING_PATHS: frozenset[str] = frozenset(
         "config/timing.py",
         "config/constants.py",
         "config/selectors.py",
+        ".claude/CLAUDE.md",
+        ".claude/settings.json",
+        "packages/agent-gate-claude/hooks/gate_enforcer.py",
+        "packages/agent-gate-claude/hooks/gate_trigger.py",
+        "packages/agent-gate-claude/src/agent_gate_claude/config/constants.py",
+        "packages/agent-gate-core/src/agent_gate_core/config/constants.py",
+        "packages/agent-gate-prompt-refinement/src/agent_gate_prompt_refinement/assessment_models.py",
+        "packages/agent-gate-prompt-refinement/src/agent_gate_prompt_refinement/canonical_prompt_builder.py",
+        "packages/agent-gate-prompt-refinement/src/agent_gate_prompt_refinement/config/constants.py",
+        "packages/agent-gate-prompt-refinement/src/agent_gate_prompt_refinement/server.py",
+        "packages/claude-dev-env/hooks/blocking/pwsh_enforcer.py",
+        "scripts/README.md",
+        "scripts/bugteam_code_rules_gate.py",
+        "scripts/db/config.py",
+        "scripts/discover_open_prs.py",
+        "scripts/grant_project_claude_permissions.py",
+        "scripts/logifix.ps1",
+        "scripts/revoke_project_claude_permissions.py",
+        "scripts/test_groq_bugteam.py",
     }
 )
 
@@ -47,7 +66,8 @@ def _iter_repo_files(extension: str) -> list[Path]:
         if not each_top_path.exists():
             continue
         for each_path in each_top_path.rglob(f"*{extension}"):
-            if any(part in DIRECTORIES_TO_SKIP for part in each_path.parts):
+            relative_path_parts = each_path.relative_to(REPOSITORY_ROOT).parts
+            if any(part in DIRECTORIES_TO_SKIP for part in relative_path_parts):
                 continue
             matched_files.append(each_path)
     return matched_files
@@ -190,4 +210,14 @@ def test_pattern_detects_synthetic_missing_reference() -> None:
     assert candidate in references, f"Matcher must extract the candidate, got: {references}"
     assert not (REPOSITORY_ROOT / candidate).exists(), (
         f"Synthetic path must not actually exist, otherwise the assertion is vacuous"
+    )
+
+
+def test_iter_repo_files_finds_files_when_repo_path_contains_skip_segment() -> None:
+    found_python_files = _iter_repo_files(".py")
+    assert len(found_python_files) > 0, (
+        "_iter_repo_files must return matches even when REPOSITORY_ROOT's "
+        "absolute path contains a segment listed in DIRECTORIES_TO_SKIP "
+        "(e.g., a checkout under '.../.claude/worktrees/...' or '.../venv/...'). "
+        "Skip filtering must apply to repo-internal segments only."
     )

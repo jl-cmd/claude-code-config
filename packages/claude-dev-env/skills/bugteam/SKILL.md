@@ -209,6 +209,23 @@ Run the AUDIT-FIX cycle for each PR in all_prs, reusing the same team across PRs
 
 **Gate:** `validate_content` / `hooks/blocking/code_rules_enforcer.py` on PR-scoped files before every AUDIT (`bugteam_code_rules_gate.py`). Lead runs gate; clean-coder clears failures; then bugfind audits.
 
+**Pre-cycle: walk prior bugteam reviews end-first** (once per PR, after Step 2 and before iteration begins, when `last_action == "fresh"`). A re-invocation of `/bugteam` on a PR with prior loops carries unaddressed findings forward instead of starting blind:
+
+```bash
+dirty_reviews_path="<team_temp_dir>/pr-<N>/bugteam_dirty_reviews.jsonl"
+: > "$dirty_reviews_path"
+gh api "repos/<owner>/<repo>/pulls/<number>/reviews" \
+  --jq '[.[] | select(.body | startswith("## /bugteam loop "))] | sort_by(.submitted_at) | reverse'
+```
+
+Iterate from index 0 (most recent) toward older entries:
+
+- A bugteam review body that ends with `→ clean` is **clean**; any other `## /bugteam loop ...` body is **dirty**.
+- For a dirty review, append one JSON line to `$dirty_reviews_path` with `{review_id, commit_id, submitted_at, body}`.
+- Stop at the first clean review. Older reviews are presumed addressed at that clean checkpoint and are not re-read.
+- When index 0 is itself clean AND its `commit_id` matches `git rev-parse HEAD`, the PR is already converged on this HEAD — set `last_action="audited"`, `last_findings={total: 0}`, fall through to step 1's `converged` exit, skip Step 3 iteration entirely.
+- When `$dirty_reviews_path` is non-empty, log the dirty count and proceed into the normal iteration; the next AUDIT regenerates anchored findings against the current HEAD so `loop_comment_index` stays correct.
+
 1. From `last_action` / `last_findings`:
    - `last_action == "audited"` and `last_findings.total == 0` → exit `converged`
    - `last_action == "fixed"` and `git rev-parse HEAD` unchanged since pre-FIX → exit `stuck`

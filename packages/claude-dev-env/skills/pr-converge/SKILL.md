@@ -58,10 +58,10 @@ Capture `number` (`<NUMBER>`), `headRefOid` (`current_head`), owner/repo (from `
 
 #### `phase == BUGBOT`
 
-a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first clean review:
+a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first clean review. The `--paginate` flag is mandatory — see [`gh-paginate.md`](../../rules/gh-paginate.md); without it, PRs with more than 30 reviews silently return the OLDEST 30 and the `reverse` below picks the latest of THOSE, not the actual latest:
 
    ```bash
-   gh api repos/<OWNER>/<REPO>/pulls/<NUMBER>/reviews \
+   gh api 'repos/<OWNER>/<REPO>/pulls/<NUMBER>/reviews?per_page=100' --paginate \
      --jq '[.[] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | reverse'
    ```
 
@@ -81,9 +81,9 @@ a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first c
 
    Capture `commit_id`, `state`, `submitted_at`, and body of the index-0 review for the decision branches below. When a branch routes to the **Fix protocol**, read every entry from `$dirty_reviews_path` and address all of them — not just index 0.
 
-b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`:
+b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`. `--paginate` is mandatory here too — see [`gh-paginate.md`](../../rules/gh-paginate.md):
    ```bash
-   gh api repos/<OWNER>/<REPO>/pulls/<NUMBER>/comments \
+   gh api 'repos/<OWNER>/<REPO>/pulls/<NUMBER>/comments?per_page=100' --paginate \
      --jq "[.[] | select(.user.login==\"cursor[bot]\") | select(.commit_id==\"$current_head\")]"
    ```
 

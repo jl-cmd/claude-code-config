@@ -97,3 +97,29 @@ def test_should_flag_multiple_inline_collections_in_same_function() -> None:
         source, PRODUCTION_FILE_PATH
     )
     assert len(issues) == 2, f"Expected 2 flagged literals, got: {issues}"
+
+
+def test_should_not_flag_default_argument_set_literal() -> None:
+    source = (
+        "def consume(keys: set[str] = {'a', 'b', 'c'}) -> set[str]:\n"
+        "    return keys\n"
+    )
+    issues = code_rules_enforcer.check_inline_literal_collections(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert issues == [], (
+        f"Default argument value (signature, not body) must not be flagged, got: {issues}"
+    )
+
+
+def test_should_not_flag_default_argument_list_literal() -> None:
+    source = (
+        "def consume(suffixes: list[str] = ['.py', '.js', '.ts']) -> list[str]:\n"
+        "    return suffixes\n"
+    )
+    issues = code_rules_enforcer.check_inline_literal_collections(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert issues == [], (
+        f"Default argument list (signature, not body) must not be flagged, got: {issues}"
+    )

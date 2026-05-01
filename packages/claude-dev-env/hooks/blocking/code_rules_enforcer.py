@@ -1934,7 +1934,8 @@ def _annotation_names_collection(annotation_node: ast.expr | None) -> bool:
     if isinstance(annotation_node, ast.Subscript):
         outer_value = annotation_node.value
         is_optional_or_union_subscript = (
-            isinstance(outer_value, ast.Name) and outer_value.id in UNION_TYPING_NAMES
+            (isinstance(outer_value, ast.Name) and outer_value.id in UNION_TYPING_NAMES)
+            or (isinstance(outer_value, ast.Attribute) and outer_value.attr in UNION_TYPING_NAMES)
         )
         if is_optional_or_union_subscript:
             slice_node = annotation_node.slice
@@ -2031,7 +2032,7 @@ def check_library_print(content: str, file_path: str) -> list[str]:
 
 
 SELF_AND_CLS_PARAMETER_NAMES: frozenset[str] = frozenset({"self", "cls"})
-LOOP_INDEX_LETTER_EXEMPTIONS: frozenset[str] = frozenset({"i", "j", "k"})
+LOOP_INDEX_LETTER_EXEMPTIONS: frozenset[str] = frozenset({"i", "j", "k", "_"})
 EACH_PREFIX = "each_"
 BARE_EACH_TOKEN = "each"
 INLINE_COLLECTION_MIN_LENGTH = 3
@@ -2100,26 +2101,25 @@ def check_string_literal_magic(content: str, file_path: str) -> list[str]:
     for function_node in ast.walk(tree):
         if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for descendant in ast.walk(function_node):
-            if descendant is function_node:
-                continue
-            if not isinstance(descendant, ast.Constant):
-                continue
-            if not isinstance(descendant.value, str):
-                continue
-            if id(descendant) in flagged_node_ids:
-                continue
-            if id(descendant) in docstring_node_ids:
-                continue
-            if id(descendant) in fstring_part_node_ids:
-                continue
-            if not _is_magic_string_literal(descendant.value):
-                continue
-            flagged_node_ids.add(id(descendant))
-            issues.append(
-                f"Line {descendant.lineno}: string magic value {descendant.value!r}"
-                f" - extract to config/"
-            )
+        for body_statement in function_node.body:
+            for descendant in ast.walk(body_statement):
+                if not isinstance(descendant, ast.Constant):
+                    continue
+                if not isinstance(descendant.value, str):
+                    continue
+                if id(descendant) in flagged_node_ids:
+                    continue
+                if id(descendant) in docstring_node_ids:
+                    continue
+                if id(descendant) in fstring_part_node_ids:
+                    continue
+                if not _is_magic_string_literal(descendant.value):
+                    continue
+                flagged_node_ids.add(id(descendant))
+                issues.append(
+                    f"Line {descendant.lineno}: string magic value {descendant.value!r}"
+                    f" - extract to config/"
+                )
     return issues
 
 
@@ -2139,24 +2139,23 @@ def check_inline_literal_collections(content: str, file_path: str) -> list[str]:
     for function_node in ast.walk(tree):
         if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for descendant in ast.walk(function_node):
-            if descendant is function_node:
-                continue
-            if not isinstance(descendant, (ast.Set, ast.List)):
-                continue
-            if id(descendant) in flagged_node_ids:
-                continue
-            all_elements = descendant.elts
-            if len(all_elements) < INLINE_COLLECTION_MIN_LENGTH:
-                continue
-            if not all(isinstance(each_element, ast.Constant) for each_element in all_elements):
-                continue
-            flagged_node_ids.add(id(descendant))
-            collection_kind = "set" if isinstance(descendant, ast.Set) else "list"
-            issues.append(
-                f"Line {descendant.lineno}: inline {collection_kind} literal of {len(all_elements)}"
-                f" constants in function body - extract to config/"
-            )
+        for body_statement in function_node.body:
+            for descendant in ast.walk(body_statement):
+                if not isinstance(descendant, (ast.Set, ast.List)):
+                    continue
+                if id(descendant) in flagged_node_ids:
+                    continue
+                all_elements = descendant.elts
+                if len(all_elements) < INLINE_COLLECTION_MIN_LENGTH:
+                    continue
+                if not all(isinstance(each_element, ast.Constant) for each_element in all_elements):
+                    continue
+                flagged_node_ids.add(id(descendant))
+                collection_kind = "set" if isinstance(descendant, ast.Set) else "list"
+                issues.append(
+                    f"Line {descendant.lineno}: inline {collection_kind} literal of {len(all_elements)}"
+                    f" constants in function body - extract to config/"
+                )
     return issues
 
 

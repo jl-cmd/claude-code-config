@@ -68,7 +68,7 @@ a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first c
    Track dirty reviews in a temp file as you walk; the Fix protocol reads it back later in this tick:
 
    ```bash
-   dirty_reviews_path=$(mktemp -t pr-converge-bugbot.XXXXXX)
+   dirty_reviews_path=$(mktemp "${TMPDIR:-/tmp}/pr-converge-bugbot.XXXXXX")
    : > "$dirty_reviews_path"
    ```
 

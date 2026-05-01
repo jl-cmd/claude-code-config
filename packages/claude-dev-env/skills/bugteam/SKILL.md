@@ -141,7 +141,7 @@ TeamCreate(
 ```bash
 loop_count=0
 last_action="fresh"
-last_findings=""
+last_findings='{"total": 0}'
 audit_log=""
 starting_sha="$(git rev-parse HEAD)"
 team_name="bugteam-pr-<number>-<YYYYMMDDHHMMSS>"
@@ -223,7 +223,7 @@ Iterate from index 0 (most recent) toward older entries:
 - A bugteam review body that ends with `→ clean` is **clean**; any other `## /bugteam loop ...` body is **dirty**.
 - For a dirty review, append one JSON line to `$dirty_reviews_path` with `{review_id, commit_id, submitted_at, body}`.
 - Stop at the first clean review. Older reviews are presumed addressed at that clean checkpoint and are not re-read.
-- When index 0 is itself clean AND its `commit_id` matches `git rev-parse HEAD`, the PR is already converged on this HEAD — set `last_action="audited"`, `last_findings={total: 0}`, fall through to step 1's `converged` exit, skip Step 3 iteration entirely.
+- When index 0 is itself clean AND its `commit_id` matches `git rev-parse HEAD`, the PR is already converged on this HEAD — set `last_action="audited"`, `last_findings='{"total": 0}'`, fall through to step 1's `converged` exit, skip Step 3 iteration entirely.
 - When `$dirty_reviews_path` is non-empty, log the dirty count and proceed into the normal iteration; the next AUDIT regenerates anchored findings against the current HEAD so `loop_comment_index` stays correct.
 
 1. From `last_action` / `last_findings`:

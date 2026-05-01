@@ -863,20 +863,27 @@ BANNED_IDENTIFIER_SKIP_ADVISORY: str = (
 )
 
 
+def _collect_target_names(target: ast.expr) -> list[ast.Name]:
+    """Return every ast.Name reachable through tuple/list/starred unpacking targets."""
+    if isinstance(target, ast.Name):
+        return [target]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: list[ast.Name] = []
+        for each_element in target.elts:
+            names.extend(_collect_target_names(each_element))
+        return names
+    if isinstance(target, ast.Starred):
+        return _collect_target_names(target.value)
+    return []
+
+
 def _collect_banned_names_from_target(target: ast.expr) -> list[ast.Name]:
     """Return every banned ast.Name reachable through tuple/list unpacking or starred targets."""
-    if isinstance(target, ast.Name):
-        if target.id in BANNED_IDENTIFIERS:
-            return [target]
-        return []
-    if isinstance(target, (ast.Tuple, ast.List)):
-        banned_names: list[ast.Name] = []
-        for each_element in target.elts:
-            banned_names.extend(_collect_banned_names_from_target(each_element))
-        return banned_names
-    if isinstance(target, ast.Starred):
-        return _collect_banned_names_from_target(target.value)
-    return []
+    return [
+        each_name_node
+        for each_name_node in _collect_target_names(target)
+        if each_name_node.id in BANNED_IDENTIFIERS
+    ]
 
 
 def _collect_banned_names_from_node(node: ast.AST) -> list[ast.Name]:
@@ -2174,20 +2181,6 @@ def check_inline_literal_collections(content: str, file_path: str) -> list[str]:
     return issues
 
 
-def _collect_loop_target_names(target: ast.expr) -> list[ast.Name]:
-    """Return every ast.Name target reachable through tuple/list/starred unpacking."""
-    if isinstance(target, ast.Name):
-        return [target]
-    if isinstance(target, (ast.Tuple, ast.List)):
-        names: list[ast.Name] = []
-        for each_element in target.elts:
-            names.extend(_collect_loop_target_names(each_element))
-        return names
-    if isinstance(target, ast.Starred):
-        return _collect_loop_target_names(target.value)
-    return []
-
-
 def check_loop_variable_naming(content: str, file_path: str) -> list[str]:
     if is_test_file(file_path):
         return []
@@ -2201,7 +2194,7 @@ def check_loop_variable_naming(content: str, file_path: str) -> list[str]:
     for node in ast.walk(tree):
         if not isinstance(node, (ast.For, ast.AsyncFor)):
             continue
-        for each_name_node in _collect_loop_target_names(node.target):
+        for each_name_node in _collect_target_names(node.target):
             target_name = each_name_node.id
             if target_name in LOOP_INDEX_LETTER_EXEMPTIONS:
                 continue

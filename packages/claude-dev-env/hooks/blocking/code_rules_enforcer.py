@@ -2159,12 +2159,20 @@ def _is_sys_path_insert_call(call_node: ast.Call) -> bool:
 
 
 def _if_test_references_sys_path_membership(if_test_expression: ast.AST) -> bool:
-    """Return True when `if X (not) in sys.path:` would guard a subsequent insert."""
+    """Return True when `if X not in sys.path:` would guard a then-branch insert.
+
+    Only `ast.NotIn` is accepted: `_scope_has_guard_for_insert` walks the
+    then-branch (`each_statement.body`) for the insert, so accepting `ast.In`
+    here would silently approve `if X in sys.path: sys.path.insert(0, X)` —
+    code that always inserts a duplicate. The else-branch is intentionally not
+    inspected; a guard that places the insert in the else-branch of `if X in
+    sys.path:` is unconventional and not supported.
+    """
     if not isinstance(if_test_expression, ast.Compare):
         return False
     if len(if_test_expression.ops) != 1:
         return False
-    if not isinstance(if_test_expression.ops[0], (ast.NotIn, ast.In)):
+    if not isinstance(if_test_expression.ops[0], ast.NotIn):
         return False
     membership_target = if_test_expression.comparators[0]
     if not isinstance(membership_target, ast.Attribute) or membership_target.attr != "path":
@@ -2200,24 +2208,19 @@ def _scope_has_guard_for_insert(
     return False
 
 
-def _enclosing_scope_body(insert_call_node: ast.Call, parent_lookup: dict[int, ast.AST]) -> list[ast.stmt]:
-    parent = parent_lookup.get(id(insert_call_node))
+def _enclosing_scope_body(
+    insert_call_node: ast.Call,
+    parent_by_node_id: dict[int, ast.AST],
+) -> list[ast.stmt]:
+    parent = parent_by_node_id.get(id(insert_call_node))
     while parent is not None:
         if isinstance(parent, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef)):
             return list(parent.body)
-        parent = parent_lookup.get(id(parent))
+        parent = parent_by_node_id.get(id(parent))
     return []
 
 
-def _build_parent_lookup(tree: ast.Module) -> dict[int, ast.AST]:
-    parent_by_node_id: dict[int, ast.AST] = {}
-    for each_node in ast.walk(tree):
-        for each_child in ast.iter_child_nodes(each_node):
-            parent_by_node_id[id(each_child)] = each_node
-    return parent_by_node_id
-
-
-def check_sys_path_insert_dedup(content: str, file_path: str) -> list[str]:
+def check_sys_path_insert_deduplication_guard(content: str, file_path: str) -> list[str]:
     """Flag sys.path.insert calls that lack a `not in sys.path` guard.
 
     Repeated module reloads can push the same entry onto sys.path multiple
@@ -2234,14 +2237,14 @@ def check_sys_path_insert_dedup(content: str, file_path: str) -> list[str]:
         tree = ast.parse(content)
     except SyntaxError:
         return []
-    parent_lookup = _build_parent_lookup(tree)
+    parent_by_node_id = _build_parent_map(tree)
     issues: list[str] = []
     for each_node in ast.walk(tree):
         if not isinstance(each_node, ast.Call):
             continue
         if not _is_sys_path_insert_call(each_node):
             continue
-        scope_body = _enclosing_scope_body(each_node, parent_lookup)
+        scope_body = _enclosing_scope_body(each_node, parent_by_node_id)
         if _scope_has_guard_for_insert(scope_body, each_node):
             continue
         issues.append(
@@ -2537,7 +2540,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_collection_prefix(content, file_path))
         all_issues.extend(check_stuttering_collection_prefix(content, file_path))
         all_issues.extend(check_hardcoded_user_paths(content, file_path))
-        all_issues.extend(check_sys_path_insert_dedup(content, file_path))
+        all_issues.extend(check_sys_path_insert_deduplication_guard(content, file_path))
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))

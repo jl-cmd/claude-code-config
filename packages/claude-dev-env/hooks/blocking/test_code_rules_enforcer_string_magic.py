@@ -168,3 +168,51 @@ def test_should_not_flag_annotation_literal_type_argument() -> None:
     assert issues == [], (
         f"Literal type annotation (signature, not body) must not be flagged, got: {issues}"
     )
+
+
+def test_should_not_flag_default_arg_of_nested_function_when_scanning_outer() -> None:
+    source = (
+        "def outer() -> None:\n"
+        "    def inner(key: str = 'STRIPE_SECRET') -> str:\n"
+        "        return key\n"
+        "    return None\n"
+    )
+    issues = code_rules_enforcer.check_string_literal_magic(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert issues == [], (
+        f"Nested function's default arg (signature) must not be flagged from outer scan, got: {issues}"
+    )
+
+
+def test_should_not_descend_into_nested_class_body() -> None:
+    source = (
+        "def outer() -> str:\n"
+        "    class Inner:\n"
+        "        attribute: str = 'STRIPE_SECRET'\n"
+        "    return 'no_magic_here'\n"
+    )
+    issues = code_rules_enforcer.check_string_literal_magic(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert issues == [], (
+        f"Nested ClassDef body must not be walked from outer-function scan, got: {issues}"
+    )
+
+
+def test_should_still_flag_literal_in_nested_function_body() -> None:
+    source = (
+        "def outer() -> str:\n"
+        "    def inner() -> str:\n"
+        "        return 'STRIPE_SECRET'\n"
+        "    return inner()\n"
+    )
+    issues = code_rules_enforcer.check_string_literal_magic(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert any("STRIPE_SECRET" in each_issue for each_issue in issues), (
+        f"Inner function's body magic literal must still be flagged via inner scan, got: {issues}"
+    )
+    assert len(issues) == 1, (
+        f"Inner literal must be flagged exactly once (no duplicate from outer walk), got: {issues}"
+    )

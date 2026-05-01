@@ -28,6 +28,7 @@ import json
 import re
 import sys
 import tokenize
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
@@ -2083,6 +2084,14 @@ def _collect_fstring_part_node_ids(tree: ast.Module) -> set[int]:
     return fstring_part_ids
 
 
+def _walk_excluding_nested_scopes(start_node: ast.AST) -> Iterator[ast.AST]:
+    if isinstance(start_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return
+    yield start_node
+    for child_node in ast.iter_child_nodes(start_node):
+        yield from _walk_excluding_nested_scopes(child_node)
+
+
 def check_string_literal_magic(content: str, file_path: str) -> list[str]:
     if is_test_file(file_path):
         return []
@@ -2102,7 +2111,7 @@ def check_string_literal_magic(content: str, file_path: str) -> list[str]:
         if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for body_statement in function_node.body:
-            for descendant in ast.walk(body_statement):
+            for descendant in _walk_excluding_nested_scopes(body_statement):
                 if not isinstance(descendant, ast.Constant):
                     continue
                 if not isinstance(descendant.value, str):
@@ -2140,7 +2149,7 @@ def check_inline_literal_collections(content: str, file_path: str) -> list[str]:
         if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for body_statement in function_node.body:
-            for descendant in ast.walk(body_statement):
+            for descendant in _walk_excluding_nested_scopes(body_statement):
                 if not isinstance(descendant, (ast.Set, ast.List)):
                     continue
                 if id(descendant) in flagged_node_ids:

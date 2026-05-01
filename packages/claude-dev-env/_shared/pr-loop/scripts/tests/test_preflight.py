@@ -279,3 +279,30 @@ def test_preflight_uses_extracted_directory_marker_constants() -> None:
     discover_tests_source = inspect.getsource(preflight.has_discoverable_tests)
     assert "'.venv'" not in discover_tests_source
     assert '".venv"' not in discover_tests_source
+
+
+def test_preflight_stderr_uses_bugteam_preflight_prefix(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Preflight's stderr prefix must remain ``bugteam_preflight:`` so the bugteam
+    SKILL.md auto-remediation pattern (`bugteam_preflight: core.hooksPath is`)
+    keeps matching when Phase 2 wires bugteam to import this shared script."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process(
+            "/some/other/path/.husky\n", returncode=0
+        )
+        preflight.verify_git_hooks_path()
+    captured = capsys.readouterr()
+    assert "bugteam_preflight: core.hooksPath is" in captured.err, (
+        "Stderr prefix must preserve the bugteam SKILL.md auto-remediation contract"
+    )
+
+
+def test_preflight_does_not_import_unused_repository_root_marker_constant() -> None:
+    """The ``ALL_REPOSITORY_ROOT_MARKER_FILENAMES`` constant is not consumed by
+    preflight.py. Importing it is dead code per the unused-imports rule."""
+    preflight_source = inspect.getsource(preflight)
+    assert "ALL_REPOSITORY_ROOT_MARKER_FILENAMES" not in preflight_source, (
+        "Dead import must be removed; preflight.py uses individual marker "
+        "filename constants directly"
+    )

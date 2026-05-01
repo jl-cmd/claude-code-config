@@ -10,7 +10,8 @@ import sys
 from pathlib import Path
 
 sys.modules.pop("config", None)
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _claude_permissions_common import (  # noqa: E402
     append_if_missing,

@@ -34,3 +34,16 @@ def test_module_imports_constants_from_config_modules() -> None:
     assert grant_module.ALL_PERMISSION_ALLOW_TOOLS == ("Edit", "Write", "Read")
     assert "{project_path}" in grant_module.AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE
     assert grant_module.CLAUDE_SETTINGS_PERMISSIONS_KEY == "permissions"
+
+
+def test_grant_module_guards_sys_path_insert_against_duplicates() -> None:
+    """grant_project_claude_permissions.py must guard its sys.path.insert with a
+    membership check so re-imports under test harnesses do not push duplicate
+    entries (matching the pattern used by every other module in the directory)."""
+    module_source = (
+        Path(__file__).parent.parent / "grant_project_claude_permissions.py"
+    ).read_text(encoding="utf-8")
+    assert "if str(Path(__file__).resolve().parent) not in sys.path:" in module_source, (
+        "grant_project_claude_permissions.py must guard sys.path.insert against "
+        "duplicate entries on reload (consistent with sibling modules)"
+    )

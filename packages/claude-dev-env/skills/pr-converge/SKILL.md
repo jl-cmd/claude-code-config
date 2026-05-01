@@ -49,23 +49,23 @@ Each tick begins by reading the prior tick's state line from the most recent ass
 Read the prior tick's state line from the most recent assistant message (or initialize all fields if none). **Increment `tick_count` by 1.** This is the increment referenced in the **State across ticks** section; without it the safety cap (Step 3.5, §Safety cap) never fires.
 
 ```bash
-gh pr view --json number,url,headRefOid,baseRefName,headRefName,isDraft
+python "${CLAUDE_SKILL_DIR}/scripts/view_pr_context.py"
 ```
 
-Capture `number` (`<NUMBER>`), `headRefOid` (`current_head`), owner/repo (from `url`), branch name (`<BRANCH>`).
+Output is a JSON object with `number`, `url`, `headRefOid`, `baseRefName`, `headRefName`, `isDraft`. Capture `number` (`<NUMBER>`), `headRefOid` (`current_head`), owner/repo (from `url`), branch name (`<BRANCH>`).
 
 ### Step 2: Branch on `phase`
 
 #### `phase == BUGBOT`
 
-a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first clean review. `--paginate --slurp` plus an **external** `jq` are mandatory — see [`gh-paginate.md`](../../rules/gh-paginate.md). Without `--paginate`, PRs with more than 30 reviews silently return the OLDEST 30; with `--paginate --jq` (no `--slurp`), `gh` applies the jq filter to each page separately ([gh CLI #10459](https://github.com/cli/cli/issues/10459)) and `| reverse` operates within a single page rather than across the full result set. The pattern below pipes `--paginate --slurp` output to external `jq`, which sees one merged structure:
+a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first clean review. The script enforces the gh-paginate rule (uses `--paginate --slurp` plus Python JSON handling — see [`scripts/README.md`](scripts/README.md) and [`../../rules/gh-paginate.md`](../../rules/gh-paginate.md)) and classifies each review:
 
    ```bash
-   gh api 'repos/<OWNER>/<REPO>/pulls/<NUMBER>/reviews?per_page=100' --paginate --slurp \
-     | jq '[.[][] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | reverse'
+   python "${CLAUDE_SKILL_DIR}/scripts/fetch_bugbot_reviews.py" \
+     --owner <OWNER> --repo <REPO> --number <NUMBER>
    ```
 
-   Track dirty reviews in a temp file as you walk; the Fix protocol reads it back later in this tick:
+   Output is a JSON array of `{review_id, commit_id, submitted_at, body, classification}`, newest-first, with `classification` already set to `"dirty"` or `"clean"`. Track dirty entries in a temp file as you walk; the Fix protocol reads it back later in this tick:
 
    ```bash
    dirty_reviews_path=$(mktemp "${TMPDIR:-/tmp}/pr-converge-bugbot.XXXXXX")
@@ -74,18 +74,20 @@ a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first c
 
    Iterate from index 0 (most recent) toward older entries:
 
-   - Classify each review's body — **dirty** when it contains `Cursor Bugbot has reviewed your changes and found <N> potential issue`; **clean** otherwise.
    - For a dirty review, append one JSON line to `$dirty_reviews_path` with `{review_id, commit_id, submitted_at, body}`.
    - Stop at the first clean review. Older reviews are presumed addressed at that clean checkpoint and are not re-read.
    - When index 0 is itself clean, `$dirty_reviews_path` stays empty.
 
-   Capture `commit_id`, `state`, `submitted_at`, and body of the index-0 review for the decision branches below. When a branch routes to the **Fix protocol**, read every entry from `$dirty_reviews_path` and address all of them — not just index 0.
+   Capture `commit_id`, `submitted_at`, body, and `classification` of the index-0 review for the decision branches below. When a branch routes to the **Fix protocol**, read every entry from `$dirty_reviews_path` and address all of them — not just index 0.
 
-b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`. `--paginate --slurp` plus external `jq` are mandatory here too — see [`gh-paginate.md`](../../rules/gh-paginate.md):
+b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`. The script enforces the same `--paginate --slurp` pattern and filters by commit:
+
    ```bash
-   gh api 'repos/<OWNER>/<REPO>/pulls/<NUMBER>/comments?per_page=100' --paginate --slurp \
-     | jq "[.[][] | select(.user.login==\"cursor[bot]\") | select(.commit_id==\"$current_head\")]"
+   python "${CLAUDE_SKILL_DIR}/scripts/fetch_bugbot_inline_comments.py" \
+     --owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
    ```
+
+   Output is a JSON array of `{comment_id, commit_id, path, line, body}` for cursor[bot] comments anchored to `current_head`.
 
 c. Decide (the four branches below cover every input combination — match the first branch whose predicate holds):
    - **No bugbot review yet, OR latest bugbot review's `commit_id` differs from `current_head`:** Re-trigger bugbot (Step 3), set `bugbot_clean_at = null`, reset `inline_lag_streak = 0`, schedule next wakeup, return.
@@ -105,7 +107,8 @@ a. Run the in-house bugteam audit on the current PR by invoking the `Skill` tool
 
 b. **Re-resolve current HEAD now** because `/bugteam` may have pushed commits during its run. The `current_head` from Step 1 is potentially stale at this point:
    ```bash
-   new_head=$(gh api repos/<OWNER>/<REPO>/pulls/<NUMBER> --jq '.head.sha')
+   new_head=$(python "${CLAUDE_SKILL_DIR}/scripts/resolve_pr_head.py" \
+     --owner <OWNER> --repo <REPO> --number <NUMBER>)
    ```
    If `new_head != current_head`, set `current_head = new_head` AND set `bugbot_clean_at = null`. The new commits from bugteam invalidate bugbot's prior clean.
 
@@ -115,7 +118,8 @@ d. Decide based on the (post-bugteam) state — order matters; check pushed-duri
    - **bugteam pushed during this tick (i.e., `bugbot_clean_at` was just reset to `null` in step b):** Re-trigger bugbot in this same tick (Step 3) so the new HEAD enters bugbot's queue immediately, transition `phase = BUGBOT`, schedule next wakeup, return. The new commit needs a fresh bugbot review before convergence can be claimed.
    - **bugteam reports convergence AND `bugbot_clean_at == current_head` (no push during this tick):** This is back-to-back clean. Mark the PR ready for review:
      ```bash
-     gh pr ready <NUMBER> --repo <OWNER>/<REPO>
+     python "${CLAUDE_SKILL_DIR}/scripts/mark_pr_ready.py" \
+       --owner <OWNER> --repo <REPO> --number <NUMBER>
      ```
      Report to the user in one sentence: "PR #<NUMBER> converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>; marked ready for review." **Omit the next ScheduleWakeup call** — this terminates the /loop.
    - **bugteam reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** Bugteam reached zero findings without committing, yet bugbot still needs re-confirmation against this HEAD. This branch is reachable only when state diverged BETWEEN ticks — for example, the user pushed a manual commit between two wakeups, leaving `current_head` ahead of the SHA bugbot last cleaned. Transition `phase = BUGBOT`, schedule next wakeup, return.
@@ -123,13 +127,14 @@ d. Decide based on the (post-bugteam) state — order matters; check pushed-duri
 
 ### Step 3: Re-trigger bugbot
 
-Used in Step 2 BUGBOT branch 1, in Step 2 BUGTEAM branch 1, and in the Fix protocol. Post a literal `bugbot run` PR comment. Write the body via the Write tool to a temp file, then pass it with `--body-file` (per the gh-body-file rule):
+Used in Step 2 BUGBOT branch 1, in Step 2 BUGTEAM branch 1, and in the Fix protocol. The script writes a temp file containing the literal phrase `bugbot run\n`, posts it via `gh pr comment --body-file` (per the gh-body-file rule), and removes the temp file:
 
 ```bash
-gh pr comment <NUMBER> --repo <OWNER>/<REPO> --body-file <path/to/bugbot_run.md>
+python "${CLAUDE_SKILL_DIR}/scripts/trigger_bugbot.py" \
+  --owner <OWNER> --repo <REPO> --number <NUMBER>
 ```
 
-The body file contains exactly the literal phrase `bugbot run` followed by a newline. Use that phrase exactly — empirically the only re-trigger Cursor Bugbot recognizes; alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
+`bugbot run` is empirically the only re-trigger Cursor Bugbot recognizes; alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
 
 ### Step 3.5: Enforce the safety cap
 
@@ -166,10 +171,11 @@ Used by both phases when findings exist:
   git push origin <BRANCH>
   ```
   Capture the new HEAD SHA. Set `current_head` to it. Set `bugbot_clean_at = null`.
-- Reply inline on each addressed comment thread using `--body-file` (per gh-body-file rule):
+- Reply inline on each addressed comment thread. Write the reply to a temp file via the Write tool, then invoke:
   ```bash
-  gh api -X POST repos/<OWNER>/<REPO>/pulls/<NUMBER>/comments/<comment_id>/replies \
-    --field body=@<path/to/reply.md>
+  python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \
+    --owner <OWNER> --repo <REPO> --number <NUMBER> \
+    --comment-id <COMMENT_ID> --body-file <path/to/reply.md>
   ```
 - **Always re-trigger bugbot (Step 3 above) after pushing a fix**, regardless of which phase originated the findings. Any new commit invalidates bugbot's prior clean by definition, so bugbot must re-review the new HEAD before convergence can be claimed. Re-triggering in the same tick saves a full wakeup cycle compared to deferring the trigger to the next tick.
 

@@ -65,6 +65,8 @@ COLLECTION_TYPE_NAMES: frozenset[str] = frozenset({
 })
 COLLECTION_BY_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9]*_by_[a-z][a-z0-9_]*$")
 CLI_FILE_PATH_MARKERS: tuple[str, ...] = ("/scripts/", "\\scripts\\", "_cli.py", "/cli.py", "\\cli.py")
+STUTTERING_ALL_PREFIX_PATTERN: re.Pattern[str] = re.compile(r"^_?(?:all_){2,}|^(?:ALL_){2,}")
+MAX_STUTTERING_PREFIX_ISSUES: int = 50
 
 
 def get_file_extension(file_path: str) -> str:
@@ -1997,6 +1999,68 @@ def check_collection_prefix(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _is_stuttering_all_name(name: str) -> bool:
+    return bool(STUTTERING_ALL_PREFIX_PATTERN.match(name))
+
+
+def _walk_assignment_targets(target: ast.expr) -> list[ast.Name]:
+    """Recursively collect ast.Name targets through tuple/list/starred unpacking."""
+    if isinstance(target, ast.Name):
+        return [target]
+    if isinstance(target, (ast.Tuple, ast.List)):
+        names: list[ast.Name] = []
+        for each_element in target.elts:
+            names.extend(_walk_assignment_targets(each_element))
+        return names
+    if isinstance(target, ast.Starred):
+        return _walk_assignment_targets(target.value)
+    return []
+
+
+def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]:
+    """Return (name, line_number) for every binding whose target name starts with two or more all_/ALL_ prefixes."""
+    bindings: list[tuple[str, int]] = []
+    for each_node in ast.walk(tree):
+        if isinstance(each_node, ast.Assign):
+            for each_target in each_node.targets:
+                for each_name in _walk_assignment_targets(each_target):
+                    if _is_stuttering_all_name(each_name.id):
+                        bindings.append((each_name.id, each_name.lineno))
+        elif isinstance(each_node, ast.AnnAssign) and isinstance(each_node.target, ast.Name):
+            if _is_stuttering_all_name(each_node.target.id):
+                bindings.append((each_node.target.id, each_node.target.lineno))
+        elif isinstance(each_node, (ast.For, ast.AsyncFor)):
+            for each_name in _walk_assignment_targets(each_node.target):
+                if _is_stuttering_all_name(each_name.id):
+                    bindings.append((each_name.id, each_name.lineno))
+        elif isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for each_arg in _collect_annotated_arguments(each_node):
+                if _is_stuttering_all_name(each_arg.arg):
+                    bindings.append((each_arg.arg, each_arg.lineno))
+    return bindings
+
+
+def check_stuttering_collection_prefix(content: str, file_path: str) -> list[str]:
+    """Flag identifiers stuttering the all_/ALL_ collection prefix (e.g., all_all_users)."""
+    if is_test_file(file_path):
+        return []
+    if is_workflow_registry_file(file_path) or is_migration_file(file_path):
+        return []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    issues: list[str] = []
+    for each_name, each_line_number in _collect_stuttering_name_bindings(tree):
+        issues.append(
+            f"Line {each_line_number}: Stuttering collection prefix {each_name!r}"
+            f" - use a single all_/ALL_ prefix (CODE_RULES §5)"
+        )
+        if len(issues) >= MAX_STUTTERING_PREFIX_ISSUES:
+            break
+    return issues
+
+
 def _is_cli_entry_point(file_path: str) -> bool:
     path_lower = file_path.lower().replace("\\", "/")
     return any(marker.replace("\\", "/") in path_lower for marker in CLI_FILE_PATH_MARKERS)
@@ -2281,6 +2345,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_constant_equality_tests(content, file_path))
         all_issues.extend(check_unused_optional_parameters(content, file_path))
         all_issues.extend(check_collection_prefix(content, file_path))
+        all_issues.extend(check_stuttering_collection_prefix(content, file_path))
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))

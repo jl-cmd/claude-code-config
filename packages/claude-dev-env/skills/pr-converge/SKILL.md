@@ -359,7 +359,6 @@ a. Run **bugteam** (second audit) on the current PR.
 
    - **When `Skill` is invokable** (see [Pacing workflows](#pacing-workflows-load-exactly-one) tool-inventory rules — same session): invoke **bugteam** with the `Skill` tool. Path A vs Path B is selected **inside** bugteam per [bugteam Path routing](../bugteam/SKILL.md#path-routing-mandatory-first-branch); pr-converge does not branch on `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` here.
 
-     ```
      Skill({skill: "bugteam", args: "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
      ```
 
@@ -488,8 +487,9 @@ The fix protocol is executed by a **`clean-coder` teammate** when **`state.json`
   **Pre-push gate:** Never pass `--no-verify` or equivalent. After `git push`, confirm from the **same terminal transcript** that **pre-push** ran (when your repo defines a pre-push hook) and exited **0**. If push output shows pre-push was **skipped**, **bypassed**, or **absent** when it should have run, **full stop** — do not update `current_head`, do not reply inline, do not trigger Bugbot — and notify the user. Capture the new HEAD SHA only after both gates pass. Set `current_head` to it. Set `bugbot_clean_at = null`.
 - Reply inline on each addressed comment thread using `--body-file` (per gh-body-file rule):
   ```bash
-  gh api -X POST repos/<OWNER>/<REPO>/pulls/<NUMBER>/comments/<comment_id>/replies \
-    --field body=@<path/to/reply.md>
+  python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \
+    --owner <OWNER> --repo <REPO> --number <NUMBER> \
+    --comment-id <COMMENT_ID> --body-file <path/to/reply.md>
   ```
 - **After pushing a fix, always run Step 3 (`bugbot run`) in the same tick** when you would otherwise wait for Bugbot — regardless of which phase originated the findings. Step 3 is the **mechanism** that restarts Bugbot on the new `HEAD`, but the **meaning** is broader: a new commit **resets the full convergence cycle**. Prior bugbot clean and prior second-audit clean on an older SHA **do not** count toward convergence on the new `HEAD`. You must **again** obtain **bugbot CLEAN** on `current_head`, then **second-audit CLEAN** on that same `HEAD` with **no intervening push** (the same back-to-back rule as Step 2). Re-triggering Bugbot in the same tick after the push saves a full wakeup cycle compared to deferring Step 3 to the next tick.
 

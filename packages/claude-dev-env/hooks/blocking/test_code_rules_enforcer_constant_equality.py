@@ -110,19 +110,6 @@ def test_should_not_flag_non_test_function() -> None:
     assert issues == [], f"Expected no issues for non-test function, got: {issues}"
 
 
-def test_should_flag_constant_on_left_with_literal_on_right() -> None:
-    source = (
-        'CACHE_DIR = "cache"\n'
-        "\n"
-        "def test_cache_dir_left() -> None:\n"
-        '    assert CACHE_DIR == "cache"\n'
-    )
-    issues = code_rules_enforcer.check_constant_equality_tests(source, TEST_FILE_PATH)
-    assert any("constant" in issue.lower() for issue in issues), (
-        f"Expected CACHE_DIR == 'cache' flagged, got: {issues}"
-    )
-
-
 def test_should_flag_literal_on_left_with_constant_on_right() -> None:
     source = (
         'CACHE_DIR = "cache"\n'

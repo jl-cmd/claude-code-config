@@ -58,12 +58,12 @@ Capture `number` (`<NUMBER>`), `headRefOid` (`current_head`), owner/repo (from `
 
 #### `phase == BUGBOT`
 
-a. Fetch the latest Cursor Bugbot review:
+a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first clean review:
    ```bash
    gh api repos/<OWNER>/<REPO>/pulls/<NUMBER>/reviews \
-     --jq '[.[] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | last'
+     --jq '[.[] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | reverse'
    ```
-   Capture `commit_id`, `state`, `submitted_at`, and the body. Bugbot's body contains either `Cursor Bugbot has reviewed your changes and found <N> potential issue` (findings exist) or text indicating no issues found.
+   Iterate from index 0 (most recent) toward older entries. Classify each review's body: **dirty** when it contains `Cursor Bugbot has reviewed your changes and found <N> potential issue`; **clean** otherwise. Document every dirty review encountered (`commit_id`, body, findings) as you walk. Stop at the first clean review — older reviews are presumed addressed at that clean checkpoint and are not re-read. Capture `commit_id`, `state`, `submitted_at`, and body of the index-0 review for the decision branches below; when a branch routes to the **Fix protocol**, address every dirty review collected during the walk, not just index 0.
 
 b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`:
    ```bash

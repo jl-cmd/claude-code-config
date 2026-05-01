@@ -2143,6 +2143,92 @@ def check_hardcoded_user_paths(content: str, file_path: str) -> list[str]:
     return issues
 
 
+MAX_UNUSED_IMPORT_ISSUES: int = 25
+UNUSED_IMPORT_GUIDANCE: str = (
+    "remove unused import; if kept for side effects, mark with `# noqa: F401`"
+)
+
+
+def _import_alias_pairs(import_node: ast.Import | ast.ImportFrom) -> list[tuple[str, int]]:
+    """Return (binding_name, line_number) for each name introduced by an import statement."""
+    bindings: list[tuple[str, int]] = []
+    for each_alias in import_node.names:
+        binding_name = each_alias.asname if each_alias.asname else each_alias.name.split(".")[0]
+        bindings.append((binding_name, each_alias.lineno or import_node.lineno))
+    return bindings
+
+
+def _name_appears_outside_imports(
+    content_lines: list[str],
+    import_line_numbers: set[int],
+    name: str,
+) -> bool:
+    name_pattern = re.compile(rf"\b{re.escape(name)}\b")
+    for each_line_index, each_line in enumerate(content_lines, start=1):
+        if each_line_index in import_line_numbers:
+            continue
+        if name_pattern.search(each_line):
+            return True
+    return False
+
+
+def _line_carries_noqa_marker(line_text: str) -> bool:
+    return "# noqa" in line_text or "#noqa" in line_text
+
+
+def check_unused_module_level_imports(content: str, file_path: str) -> list[str]:
+    """Flag module-level imports that are never referenced in the rest of the file.
+
+    The rule is intentionally conservative — files declaring __all__ or
+    using TYPE_CHECKING are skipped to avoid false positives on
+    re-exports and annotation-only imports.
+    """
+    if is_test_file(file_path):
+        return []
+    if is_workflow_registry_file(file_path) or is_migration_file(file_path):
+        return []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    file_declares_dunder_all = any(
+        isinstance(each_node, ast.Assign)
+        and any(
+            isinstance(each_target, ast.Name) and each_target.id == "__all__"
+            for each_target in each_node.targets
+        )
+        for each_node in tree.body
+    )
+    if file_declares_dunder_all:
+        return []
+    if "TYPE_CHECKING" in content:
+        return []
+    content_lines = content.splitlines()
+    import_line_numbers: set[int] = set()
+    import_bindings: list[tuple[str, int]] = []
+    for each_node in tree.body:
+        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
+            import_line_numbers.add(each_node.lineno)
+            for each_alias in each_node.names:
+                import_line_numbers.add(each_alias.lineno or each_node.lineno)
+            for each_binding in _import_alias_pairs(each_node):
+                import_bindings.append(each_binding)
+    issues: list[str] = []
+    for each_name, each_line_number in import_bindings:
+        if 1 <= each_line_number <= len(content_lines):
+            if _line_carries_noqa_marker(content_lines[each_line_number - 1]):
+                continue
+        if _name_appears_outside_imports(content_lines, import_line_numbers, each_name):
+            continue
+        issues.append(
+            f"Line {each_line_number}: unused module-level import {each_name!r}"
+            f" — {UNUSED_IMPORT_GUIDANCE}"
+        )
+        if len(issues) >= MAX_UNUSED_IMPORT_ISSUES:
+            break
+    return issues
+
+
 def _is_cli_entry_point(file_path: str) -> bool:
     path_lower = file_path.lower().replace("\\", "/")
     return any(marker.replace("\\", "/") in path_lower for marker in CLI_FILE_PATH_MARKERS)
@@ -2427,6 +2513,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_collection_prefix(content, file_path))
         all_issues.extend(check_stuttering_collection_prefix(content, file_path))
         all_issues.extend(check_hardcoded_user_paths(content, file_path))
+        all_issues.extend(check_unused_module_level_imports(content, file_path))
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))

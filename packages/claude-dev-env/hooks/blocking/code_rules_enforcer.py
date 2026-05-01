@@ -2084,12 +2084,18 @@ def _collect_fstring_part_node_ids(tree: ast.Module) -> set[int]:
     return fstring_part_ids
 
 
-def _walk_excluding_nested_scopes(start_node: ast.AST) -> Iterator[ast.AST]:
+def _walk_skipping_nested_function_defs(start_node: ast.AST) -> Iterator[ast.AST]:
     if isinstance(start_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         return
-    yield start_node
-    for child_node in ast.iter_child_nodes(start_node):
-        yield from _walk_excluding_nested_scopes(child_node)
+    nodes_to_visit: list[ast.AST] = [start_node]
+    while nodes_to_visit:
+        current_node = nodes_to_visit.pop()
+        yield current_node
+        all_child_nodes = list(ast.iter_child_nodes(current_node))
+        for each_child_node in reversed(all_child_nodes):
+            if isinstance(each_child_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            nodes_to_visit.append(each_child_node)
 
 
 def check_string_literal_magic(content: str, file_path: str) -> list[str]:
@@ -2110,23 +2116,23 @@ def check_string_literal_magic(content: str, file_path: str) -> list[str]:
     for function_node in ast.walk(tree):
         if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for body_statement in function_node.body:
-            for descendant in _walk_excluding_nested_scopes(body_statement):
-                if not isinstance(descendant, ast.Constant):
+        for each_body_statement in function_node.body:
+            for each_descendant in _walk_skipping_nested_function_defs(each_body_statement):
+                if not isinstance(each_descendant, ast.Constant):
                     continue
-                if not isinstance(descendant.value, str):
+                if not isinstance(each_descendant.value, str):
                     continue
-                if id(descendant) in flagged_node_ids:
+                if id(each_descendant) in flagged_node_ids:
                     continue
-                if id(descendant) in docstring_node_ids:
+                if id(each_descendant) in docstring_node_ids:
                     continue
-                if id(descendant) in fstring_part_node_ids:
+                if id(each_descendant) in fstring_part_node_ids:
                     continue
-                if not _is_magic_string_literal(descendant.value):
+                if not _is_magic_string_literal(each_descendant.value):
                     continue
-                flagged_node_ids.add(id(descendant))
+                flagged_node_ids.add(id(each_descendant))
                 issues.append(
-                    f"Line {descendant.lineno}: string magic value {descendant.value!r}"
+                    f"Line {each_descendant.lineno}: string magic value {each_descendant.value!r}"
                     f" - extract to config/"
                 )
     return issues
@@ -2148,21 +2154,21 @@ def check_inline_literal_collections(content: str, file_path: str) -> list[str]:
     for function_node in ast.walk(tree):
         if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for body_statement in function_node.body:
-            for descendant in _walk_excluding_nested_scopes(body_statement):
-                if not isinstance(descendant, (ast.Set, ast.List)):
+        for each_body_statement in function_node.body:
+            for each_descendant in _walk_skipping_nested_function_defs(each_body_statement):
+                if not isinstance(each_descendant, (ast.Set, ast.List)):
                     continue
-                if id(descendant) in flagged_node_ids:
+                if id(each_descendant) in flagged_node_ids:
                     continue
-                all_elements = descendant.elts
+                all_elements = each_descendant.elts
                 if len(all_elements) < INLINE_COLLECTION_MIN_LENGTH:
                     continue
                 if not all(isinstance(each_element, ast.Constant) for each_element in all_elements):
                     continue
-                flagged_node_ids.add(id(descendant))
-                collection_kind = "set" if isinstance(descendant, ast.Set) else "list"
+                flagged_node_ids.add(id(each_descendant))
+                collection_kind = "set" if isinstance(each_descendant, ast.Set) else "list"
                 issues.append(
-                    f"Line {descendant.lineno}: inline {collection_kind} literal of {len(all_elements)}"
+                    f"Line {each_descendant.lineno}: inline {collection_kind} literal of {len(all_elements)}"
                     f" constants in function body - extract to config/"
                 )
     return issues

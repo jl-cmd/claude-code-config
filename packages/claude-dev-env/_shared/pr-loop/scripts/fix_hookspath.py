@@ -16,6 +16,7 @@ from config.fix_hookspath_constants import (
     PREFLIGHT_NO_PYTEST_FLAG,
     PREFLIGHT_REPO_ROOT_FLAG,
 )
+from config.preflight_constants import GIT_DIRECTORY_NAME
 
 
 def _expected_hooks_path_suffix() -> str:
@@ -143,7 +144,7 @@ def find_repository_root(start: Path) -> Path:
     resolved_start = start.resolve()
     candidate_paths = [resolved_start, *resolved_start.parents]
     for each_candidate in candidate_paths:
-        marker = each_candidate / ".git"
+        marker = each_candidate / GIT_DIRECTORY_NAME
         if marker.is_dir() or marker.is_file():
             return each_candidate
     return resolved_start

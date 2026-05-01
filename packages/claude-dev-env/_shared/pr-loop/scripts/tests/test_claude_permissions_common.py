@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -135,3 +136,36 @@ def test_save_settings_temp_suffix_includes_pid_and_random_token(
     assert all(
         each_character in "0123456789abcdef" for each_character in random_token
     )
+
+
+def test_text_file_encoding_sourced_from_config() -> None:
+    config_module_path = (
+        Path(__file__).parent.parent / "config" / "claude_permissions_constants.py"
+    )
+    specification = importlib.util.spec_from_file_location(
+        "config.claude_permissions_constants", config_module_path
+    )
+    assert specification is not None
+    assert specification.loader is not None
+    config_module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(config_module)
+    assert common.TEXT_FILE_ENCODING == config_module.TEXT_FILE_ENCODING
+
+
+def test_path_contains_glob_metacharacters_local_tuple_uses_all_collection_prefix() -> None:
+    source_text = inspect.getsource(common.path_contains_glob_metacharacters)
+    assert "all_glob_metacharacters_in_path" in source_text
+    assert "glob_metacharacters_in_path:" not in source_text.replace(
+        "all_glob_metacharacters_in_path", ""
+    )
+
+
+def test_is_valid_project_root_uses_extracted_directory_marker_constants() -> None:
+    """is_valid_project_root must reference extracted constants, not inline string literals."""
+    source_text = inspect.getsource(common.is_valid_project_root)
+    assert "GIT_DIRECTORY_NAME" in source_text
+    assert "CLAUDE_SETTINGS_DIRECTORY_NAME" in source_text
+    assert "'.git'" not in source_text
+    assert '".git"' not in source_text
+    assert "'.claude'" not in source_text
+    assert '".claude"' not in source_text

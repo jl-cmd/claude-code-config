@@ -87,6 +87,10 @@ COLLECTION_TYPE_NAMES: frozenset[str] = frozenset({
 })
 COLLECTION_BY_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9]*_by_[a-z][a-z0-9_]*$")
 CLI_FILE_PATH_MARKERS: tuple[str, ...] = ("/scripts/", "\\scripts\\", "_cli.py", "/cli.py", "\\cli.py")
+MAX_SYS_PATH_INSERT_ISSUES: int = 25
+SYS_PATH_INSERT_GUIDANCE: str = (
+    "guard with `if <path> not in sys.path:` to avoid pushing the same entry on every reload"
+)
 
 
 def get_file_extension(file_path: str) -> str:
@@ -2143,6 +2147,112 @@ def check_hardcoded_user_paths(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _is_sys_path_insert_call(call_node: ast.Call) -> bool:
+    function_reference = call_node.func
+    if not isinstance(function_reference, ast.Attribute) or function_reference.attr != "insert":
+        return False
+    receiver = function_reference.value
+    if not isinstance(receiver, ast.Attribute) or receiver.attr != "path":
+        return False
+    receiver_value = receiver.value
+    return isinstance(receiver_value, ast.Name) and receiver_value.id == "sys"
+
+
+def _if_test_references_sys_path_membership(if_test_expression: ast.AST) -> bool:
+    """Return True when `if X (not) in sys.path:` would guard a subsequent insert."""
+    if not isinstance(if_test_expression, ast.Compare):
+        return False
+    if len(if_test_expression.ops) != 1:
+        return False
+    if not isinstance(if_test_expression.ops[0], (ast.NotIn, ast.In)):
+        return False
+    membership_target = if_test_expression.comparators[0]
+    if not isinstance(membership_target, ast.Attribute) or membership_target.attr != "path":
+        return False
+    membership_receiver = membership_target.value
+    return isinstance(membership_receiver, ast.Name) and membership_receiver.id == "sys"
+
+
+def _statement_body_contains_sys_path_insert(statement_body: list[ast.stmt]) -> bool:
+    for each_statement in statement_body:
+        if not isinstance(each_statement, ast.Expr):
+            continue
+        if not isinstance(each_statement.value, ast.Call):
+            continue
+        if _is_sys_path_insert_call(each_statement.value):
+            return True
+    return False
+
+
+def _scope_has_guard_for_insert(
+    scope_body: list[ast.stmt],
+    insert_call_node: ast.Call,
+) -> bool:
+    for each_statement in scope_body:
+        if not isinstance(each_statement, ast.If):
+            continue
+        if not _if_test_references_sys_path_membership(each_statement.test):
+            continue
+        if _statement_body_contains_sys_path_insert(each_statement.body):
+            for each_inner in each_statement.body:
+                if isinstance(each_inner, ast.Expr) and each_inner.value is insert_call_node:
+                    return True
+    return False
+
+
+def _enclosing_scope_body(insert_call_node: ast.Call, parent_lookup: dict[int, ast.AST]) -> list[ast.stmt]:
+    parent = parent_lookup.get(id(insert_call_node))
+    while parent is not None:
+        if isinstance(parent, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef)):
+            return list(parent.body)
+        parent = parent_lookup.get(id(parent))
+    return []
+
+
+def _build_parent_lookup(tree: ast.Module) -> dict[int, ast.AST]:
+    parent_by_node_id: dict[int, ast.AST] = {}
+    for each_node in ast.walk(tree):
+        for each_child in ast.iter_child_nodes(each_node):
+            parent_by_node_id[id(each_child)] = each_node
+    return parent_by_node_id
+
+
+def check_sys_path_insert_dedup(content: str, file_path: str) -> list[str]:
+    """Flag sys.path.insert calls that lack a `not in sys.path` guard.
+
+    Repeated module reloads can push the same entry onto sys.path multiple
+    times when the call is unguarded. The repo convention is to wrap the
+    call with `if <path> not in sys.path:`. PR #289 surfaced two scripts
+    (grant_project_claude_permissions.py, revoke_project_claude_permissions.py)
+    that bypassed the convention.
+    """
+    if is_test_file(file_path):
+        return []
+    if is_workflow_registry_file(file_path) or is_migration_file(file_path):
+        return []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    parent_lookup = _build_parent_lookup(tree)
+    issues: list[str] = []
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, ast.Call):
+            continue
+        if not _is_sys_path_insert_call(each_node):
+            continue
+        scope_body = _enclosing_scope_body(each_node, parent_lookup)
+        if _scope_has_guard_for_insert(scope_body, each_node):
+            continue
+        issues.append(
+            f"Line {each_node.lineno}: unguarded sys.path.insert"
+            f" — {SYS_PATH_INSERT_GUIDANCE}"
+        )
+        if len(issues) >= MAX_SYS_PATH_INSERT_ISSUES:
+            break
+    return issues
+
+
 def _is_cli_entry_point(file_path: str) -> bool:
     path_lower = file_path.lower().replace("\\", "/")
     return any(marker.replace("\\", "/") in path_lower for marker in CLI_FILE_PATH_MARKERS)
@@ -2427,6 +2537,7 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_collection_prefix(content, file_path))
         all_issues.extend(check_stuttering_collection_prefix(content, file_path))
         all_issues.extend(check_hardcoded_user_paths(content, file_path))
+        all_issues.extend(check_sys_path_insert_dedup(content, file_path))
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))

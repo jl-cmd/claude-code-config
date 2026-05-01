@@ -2211,6 +2211,8 @@ def check_unused_module_level_imports(content: str, file_path: str) -> list[str]
             import_line_numbers.add(each_node.lineno)
             for each_alias in each_node.names:
                 import_line_numbers.add(each_alias.lineno or each_node.lineno)
+            if isinstance(each_node, ast.ImportFrom) and each_node.module == "__future__":
+                continue
             for each_binding in _import_alias_pairs(each_node):
                 import_bindings.append(each_binding)
     issues: list[str] = []

@@ -173,3 +173,30 @@ def test_should_skip_noqa_marked_imports() -> None:
     assert issues == [], (
         f"noqa-marked imports are deliberate side-effect imports, skip, got: {issues}"
     )
+
+
+def test_should_skip_future_annotations_import() -> None:
+    source = (
+        "from __future__ import annotations\n"
+        "\n"
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    issues = check_unused_module_level_imports(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"__future__ imports are behavior-changing side-effect imports whose "
+        f"binding name is never referenced — skip, got: {issues}"
+    )
+
+
+def test_should_skip_all_future_imports_regardless_of_name() -> None:
+    source = (
+        "from __future__ import annotations, division\n"
+        "\n"
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    issues = check_unused_module_level_imports(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"All __future__ imports must be skipped regardless of binding name, got: {issues}"
+    )

@@ -58,11 +58,11 @@ Capture `number` (`<NUMBER>`), `headRefOid` (`current_head`), owner/repo (from `
 
 #### `phase == BUGBOT`
 
-a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first clean review. The `--paginate` flag is mandatory — see [`gh-paginate.md`](../../rules/gh-paginate.md); without it, PRs with more than 30 reviews silently return the OLDEST 30 and the `reverse` below picks the latest of THOSE, not the actual latest:
+a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first clean review. `--paginate --slurp` plus an **external** `jq` are mandatory — see [`gh-paginate.md`](../../rules/gh-paginate.md). Without `--paginate`, PRs with more than 30 reviews silently return the OLDEST 30; with `--paginate --jq` (no `--slurp`), `gh` applies the jq filter to each page separately ([gh CLI #10459](https://github.com/cli/cli/issues/10459)) and `| reverse` operates within a single page rather than across the full result set. The pattern below pipes `--paginate --slurp` output to external `jq`, which sees one merged structure:
 
    ```bash
-   gh api 'repos/<OWNER>/<REPO>/pulls/<NUMBER>/reviews?per_page=100' --paginate \
-     --jq '[.[] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | reverse'
+   gh api 'repos/<OWNER>/<REPO>/pulls/<NUMBER>/reviews?per_page=100' --paginate --slurp \
+     | jq '[.[][] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | reverse'
    ```
 
    Track dirty reviews in a temp file as you walk; the Fix protocol reads it back later in this tick:
@@ -81,10 +81,10 @@ a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first c
 
    Capture `commit_id`, `state`, `submitted_at`, and body of the index-0 review for the decision branches below. When a branch routes to the **Fix protocol**, read every entry from `$dirty_reviews_path` and address all of them — not just index 0.
 
-b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`. `--paginate` is mandatory here too — see [`gh-paginate.md`](../../rules/gh-paginate.md):
+b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`. `--paginate --slurp` plus external `jq` are mandatory here too — see [`gh-paginate.md`](../../rules/gh-paginate.md):
    ```bash
-   gh api 'repos/<OWNER>/<REPO>/pulls/<NUMBER>/comments?per_page=100' --paginate \
-     --jq "[.[] | select(.user.login==\"cursor[bot]\") | select(.commit_id==\"$current_head\")]"
+   gh api 'repos/<OWNER>/<REPO>/pulls/<NUMBER>/comments?per_page=100' --paginate --slurp \
+     | jq "[.[][] | select(.user.login==\"cursor[bot]\") | select(.commit_id==\"$current_head\")]"
    ```
 
 c. Decide (the four branches below cover every input combination — match the first branch whose predicate holds):

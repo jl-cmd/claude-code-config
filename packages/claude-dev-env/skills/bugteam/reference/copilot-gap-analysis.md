@@ -1,5 +1,11 @@
 # Copilot gap analysis
 
+> **Status: HISTORICAL — patch plan partially superseded.**
+>
+> This file documents the read-only investigation that motivated the K–N rubric addendum and the Step 2.6 / Step 3.5 standards-review phases. **The audit-rubric portion of the patch plan was reverted in [PR #292](https://github.com/jl-cmd/claude-code-config/pull/292):** PROMPTS.md no longer carries the K–N addendum or the `<copilot_derived_addendum_source>` block, and SKILL.md no longer runs the Step 2.6 / Step 3.5 standards-review phases. The rationale is that judgment-heavy categories (M string-literal magic, K collection naming, L library `print`, etc.) are now covered by deterministic validators in `code_rules_enforcer.py` (see `check_string_literal_magic`, `check_collection_prefix`, `check_library_print`, `check_inline_literal_collections`, `check_loop_variable_naming`, `check_parameter_annotations`, `check_return_annotations`), which run inside `bugteam_code_rules_gate.py` on every loop and block at write time outside the loop. The deterministic-validator portion of the patch plan landed and stays in force.
+>
+> Read this file as **investigation history**: the inventory, rubric/validator coverage diffs, and root-cause statement remain useful context for future bugteam improvements. The "Patch plan" section below describes what was originally proposed, not the current state — references to category K, L, M, N or to Step 2.6 / Step 3.5 in the patch plan are historical and should not be reintroduced.
+
 This file is the reference record produced by the read-only investigation of why the `/bugteam` audit/fix loop and `bugteam_code_rules_gate.py` repeatedly miss the classes of code-quality violations that the GitHub Copilot reviewer raises on follow-up review rounds. It is written so future bugteam runs can skim the inventory, the rubric/validator coverage diffs, and the patch plan without re-deriving them.
 
 Sources of truth cited below: `~/.claude/docs/CODE_RULES.md`, `~/.claude/CLAUDE.md`, `~/.claude/rules/file-global-constants.md`, `~/.claude/skills/bugteam/SKILL.md`, `~/.claude/skills/bugteam/PROMPTS.md`, `~/.claude/skills/bugteam/CONSTRAINTS.md`, `~/.claude/skills/bugteam/scripts/bugteam_code_rules_gate.py`, `~/.claude/skills/bugteam/scripts/bugteam_preflight.py`, `~/.claude/hooks/blocking/code_rules_enforcer.py`, plus `gh api repos/JonEcho/python-automation/pulls/{70,73}/comments` filtered to author `Copilot`.
@@ -84,6 +90,8 @@ The bugteam audit rubric (PROMPTS.md §bug_categories A–J) and the determinist
 ---
 
 ## Patch plan
+
+> **Historical — the rubric/phases portion below was reverted in PR #292.** Sections (a) PROMPTS.md K–N addendum, (b) Step 2.6 INITIAL standards review, and the FINAL standards review (Step 3.5) were reverted and replaced by deterministic validators (see status banner at the top of this file). Sections that landed deterministic validators in `code_rules_enforcer.py` (collection prefix, library print, string-literal magic, inline literal collections, loop-variable naming, parameter/return annotations) remain in force. Treat the rubric/phase sections below as record-of-what-was-tried, not a current to-do list.
 
 Each section names exactly one target file, the literal text or regex to add, and a verification step that re-runs the new detection against the PR #70 / PR #73 diffs.
 

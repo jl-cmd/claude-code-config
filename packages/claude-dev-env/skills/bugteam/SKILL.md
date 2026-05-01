@@ -74,7 +74,7 @@ python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/preflight.py"
 
 Non-zero → fix before grant. `BUGTEAM_PREFLIGHT_SKIP=1` emergency only. `--pre-commit` if `.pre-commit-config.yaml` exists.
 
-**Auto-remediation for `core.hooksPath`:** when preflight fails with stderr containing `core.hooksPath` (the message starts with `preflight: core.hooksPath is`, or `Git-side CODE_RULES enforcement is not active`), Claude must auto-invoke the fix script — do not fall through to `AskUserQuestion`, do not punt to the user, do not ask for confirmation:
+**Auto-remediation for `core.hooksPath`:** when preflight fails with stderr containing `core.hooksPath` (the message starts with `bugteam_preflight: core.hooksPath is`, or `Git-side CODE_RULES enforcement is not active`), Claude must auto-invoke the fix script — do not fall through to `AskUserQuestion`, do not punt to the user, do not ask for confirmation:
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/fix_hookspath.py"

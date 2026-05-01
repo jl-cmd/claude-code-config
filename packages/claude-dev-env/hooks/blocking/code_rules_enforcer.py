@@ -2181,17 +2181,6 @@ def _if_test_references_sys_path_membership(if_test_expression: ast.AST) -> bool
     return isinstance(membership_receiver, ast.Name) and membership_receiver.id == "sys"
 
 
-def _statement_body_contains_sys_path_insert(statement_body: list[ast.stmt]) -> bool:
-    for each_statement in statement_body:
-        if not isinstance(each_statement, ast.Expr):
-            continue
-        if not isinstance(each_statement.value, ast.Call):
-            continue
-        if _is_sys_path_insert_call(each_statement.value):
-            return True
-    return False
-
-
 def _scope_has_guard_for_insert(
     scope_body: list[ast.stmt],
     insert_call_node: ast.Call,
@@ -2201,10 +2190,9 @@ def _scope_has_guard_for_insert(
             continue
         if not _if_test_references_sys_path_membership(each_statement.test):
             continue
-        if _statement_body_contains_sys_path_insert(each_statement.body):
-            for each_inner in each_statement.body:
-                if isinstance(each_inner, ast.Expr) and each_inner.value is insert_call_node:
-                    return True
+        for each_inner in each_statement.body:
+            if isinstance(each_inner, ast.Expr) and each_inner.value is insert_call_node:
+                return True
     return False
 
 

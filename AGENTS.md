@@ -74,14 +74,15 @@ This file is **rules-only**. Repo layout, build commands, and workflow guidance 
 
 #### File-global constants
 
-For every file-global constant declared at module scope in production code outside `config/`, count how many methods, functions, or classes in the same file consume it. **0 references:** dead code; the diff removes the constant. **1 reference:** the value moves to `config/`, and the consumer takes one of these green-light forms — a local alias inside the consuming method, a class attribute (when the sole consumer is a class), an inlined local constant (when the value avoids reintroducing a magic literal), or a direct module-scope reference (when the sole consumer is a module-level expression); see the linked rule for the full decision table. **2+ references:** the constant stays at file scope. Test files and `config/` files are exempt.
+For every file-global constant declared at module scope in production code outside `config/`, count how many methods, functions, classes, or module-level expressions in the same file consume it. **0 references:** dead code; the diff removes the constant. **1 reference:** the value moves to `config/`, and the consumer takes one of these green-light forms — a local alias inside the consuming method, a class attribute (when the sole consumer is a class), an inlined local constant (when the value avoids reintroducing a magic literal), or a direct module-scope reference (when the sole consumer is a module-level expression); see the linked rule for the full decision table. **2+ references:** the constant stays at file scope. Test files and `config/` files are exempt.
 
 Full rule including the decision table, examples, and reference-counting details: [`packages/claude-dev-env/rules/file-global-constants.md`](packages/claude-dev-env/rules/file-global-constants.md).
 
 ### Types
 
 - Function parameters and return values carry type annotations.
-- `Any`, `any`, and `# type: ignore` carry a trailing `# reason` comment (≥5 characters) explaining the constraint. The trailing reason is part of the directive and exempt from the comment-preservation rule.
+- Python `# type: ignore` directives carry a trailing comment with ≥5 characters of justification (any text, e.g. `# pyright thinks list[int] != Sequence[int]`). The trailing comment is part of the directive and exempt from the comment-preservation rule.
+- `Any` (Python) and `any` (TypeScript/JavaScript) annotations are findings — author should replace with an explicit type.
 - Concrete types match the value's actual shape.
 
 ### Structure

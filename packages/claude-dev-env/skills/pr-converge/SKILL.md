@@ -197,11 +197,11 @@ Create once at session start; each teammate writes its result back before going 
 
 When the orchestrator receives results from one or more PRs simultaneously (e.g. 10+ teammate idle notifications arrive together), it spawns one new agent **per PR** in a single parallel message — never processes any PR inline.
 
-#### Audit result → clean-coder per PR
+#### Audit result → fix worker per PR
 
 When a bugfind teammate reports completion (findings or clean):
 
-- Spawn **one `clean-coder` agent** per PR with findings. That agent:
+- Spawn **one fix worker per PR** with findings (Claude Code: `clean-coder` teammate / `Agent`; Cursor `Task`: `generalPurpose` + clean-coder **Read** preamble per [Fix protocol](#fix-protocol)). That worker:
   1. Reads the outcomes XML for the PR.
   2. Applies TDD fixes (test first, then production code).
   3. Commits and pushes one fix commit.
@@ -235,7 +235,7 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 
 - Orchestrator reads the updated `state.json` and spawns the appropriate next agent:
   - Result `clean` → spawn a `general-purpose` agent to run BUGTEAM phase (**bugteam** via `Skill` when available in that worker’s registry, else inline bugteam `SKILL.md` + Path B deltas per §Second-audit execution).
-  - Monitor exited on **`dirty` (step 4e)** with actionable inline threads → spawn a `clean-coder` agent (same as "audit result with findings" above). Do **not** spawn `clean-coder` when the monitor only saw **`inline_lag`** (4c retries) without reaching **4e** — that path retries or escalates via the **`inline_lag_streak` ≥ 3** hard blocker in **Stop conditions** instead of a fix pass.
+  - Monitor exited on **`dirty` (step 4e)** with actionable inline threads → spawn the same **fix worker** (same as "audit result with findings" above). Do **not** spawn `clean-coder` when the monitor only saw **`inline_lag`** (4c retries) without reaching **4e** — that path retries or escalates via the **`inline_lag_streak` ≥ 3** hard blocker in **Stop conditions** instead of a fix pass.
 
 ### What the orchestrator does per tick
 

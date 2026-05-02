@@ -58,13 +58,13 @@ The harness does not yet exist; this document defines its contract.
 1. `Bash("claude config get env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS")` → empty.
 2. `Bash("python .../grant_project_claude_permissions.py")` runs (Step 0).
 3. **No** `TeamCreate`.
-4. At least one `Task(subagent_type="code-quality-agent", ...)` or host-equivalent for AUDIT; fix rounds use `Task(subagent_type="clean-coder", ...)`.
+4. At least one `Task(subagent_type="code-quality-agent", ...)` or host-equivalent for AUDIT; fix rounds use `Task(subagent_type="clean-coder", ...)`. On Cursor, FIX may be `Task(subagent_type="generalPurpose", ...)` with the clean-coder **Read** preamble per `workflow-path-b-task-harness.md` FIX spawn (Cursor host split).
 5. `Bash("python .../revoke_project_claude_permissions.py")` on exit.
 
 **Pass criteria.**
 - **No** refusal string about missing agent teams.
 - Zero `TeamCreate`, zero `TeamDelete`, zero teammate `SendMessage` shutdowns.
-- Non-zero `Task` (or `Agent` without `team_name` only if the host maps Path B that way) carrying **`code-quality-agent`** / **`clean-coder`**.
+- Non-zero `Task` (or `Agent` without `team_name` only if the host maps Path B that way) carrying **`code-quality-agent`** / **fix worker under the clean-coder contract** (subtype `clean-coder` where accepted, else `generalPurpose` + `clean-coder.md` Read per `workflow-path-b-task-harness.md`).
 
 ---
 

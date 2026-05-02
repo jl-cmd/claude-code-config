@@ -218,7 +218,7 @@ b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`. The s
 c. Decide (the four branches below cover every input combination — match the first branch whose predicate holds):
    - **No bugbot review yet, OR latest bugbot review's `commit_id` differs from `current_head`:** Re-trigger bugbot (Step 3), set `bugbot_clean_at = null`, reset `inline_lag_streak = 0`, schedule next wakeup, return.
    - **Latest review's `commit_id == current_head` AND zero unaddressed inline findings AND review body indicates clean:** Set `bugbot_clean_at = current_head`. Reset `inline_lag_streak = 0`. Transition `phase = BUGTEAM`. Continue to bugteam branch in this same tick — back-to-back convergence requires bugteam to run against the same HEAD before the next wakeup is scheduled.
-   - **Latest review's `commit_id == current_head` with unaddressed inline findings (review body indicates findings):** Apply the **Fix protocol** below to address them. Reset `inline_lag_streak = 0`. The fix protocol pushes a new commit, which sets `current_head` to the new SHA, sets `bugbot_clean_at = null`, replies inline on each thread, and re-triggers bugbot. Schedule next wakeup, return.
+   - **Latest review's `commit_id == current_head` with unaddressed inline findings (review body indicates findings):** Apply the **Fix protocol** below to address them. Reset `inline_lag_streak = 0`. The fix protocol pushes a new commit, which sets `current_head` to the new SHA, sets `bugbot_clean_at = null`, and replies inline on each thread; **Step 3** (`trigger_bugbot.py` on the new HEAD) runs **after** the fix teammate goes idle, via the orchestrator-spawned follow-up agent (§Fix protocol). Schedule next wakeup, return.
    - **Latest review's `commit_id == current_head` AND review body indicates findings AND inline-comments API returns zero matching comments for `current_head`:** Treat as transient API propagation lag — bugbot publishes the review body and inline comments through separate API operations and the two writes can briefly desync. Increment `inline_lag_streak`. When `inline_lag_streak >= 3`, escalate as a hard blocker (bugbot review is structurally inconsistent — body claims findings while inline anchors stay empty across three consecutive ticks); report and terminate. Otherwise schedule next wakeup at `delaySeconds: 60` (lag is short-lived) and return; the inline comments should appear on the next tick.
 
 #### `phase == BUGTEAM`
@@ -253,7 +253,7 @@ d. Decide based on the (post-second-audit) state — order matters; check pushed
      ```
      Report to the user in one sentence: `PR #<NUMBER> converged: bugbot CLEAN at <SHA>, <SECOND_AUDIT_LABEL> CLEAN at <SHA>; marked ready for review` where `<SECOND_AUDIT_LABEL>` is **`bugteam`** if the team path ran or **`cursor audit`** if the background-agent path ran. **Omit the next ScheduleWakeup call** — this terminates the /loop.
    - **Second audit reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** The second audit reached zero findings without committing, yet bugbot still needs re-confirmation against this HEAD. This branch is reachable only when state diverged BETWEEN ticks — for example, the user pushed a manual commit between two wakeups, leaving `current_head` ahead of the SHA bugbot last cleaned. Transition `phase = BUGBOT`, schedule next wakeup, return.
-   - **Second audit reports findings without committing fixes:** apply the **Fix protocol** below (which always re-triggers bugbot after the push), transition `phase = BUGBOT`, schedule next wakeup, return.
+   - **Second audit reports findings without committing fixes:** apply the **Fix protocol** below; **Step 3** on the new HEAD still runs **after** the fix teammate's handoff through the follow-up agent (§Fix protocol), not inside the fix teammate. Transition `phase = BUGBOT`, schedule next wakeup, return.
 
 ### Step 3: Re-trigger bugbot
 
@@ -278,7 +278,7 @@ Detect manual mode by inspecting the conversation context: when the most recent 
 
 In **loop mode**, call `ScheduleWakeup` with:
 
-- `delaySeconds: 270` whenever bugbot was just re-triggered (whether by Step 3 directly, by the Fix protocol's mandatory re-trigger, or by BUGTEAM branch 1's same-tick re-trigger). Bugbot finishes a review in 1–4 minutes, so 270s stays under the 5-minute prompt-cache TTL while giving a margin past bugbot's typical upper bound. The single exception is the BUGBOT inline-lag branch, which uses `delaySeconds: 60` because no re-trigger fired and the only thing being awaited is GitHub's inline-comments API catching up.
+- `delaySeconds: 270` whenever bugbot was just re-triggered (whether by Step 3 directly, by **Step 3** after a fix via the follow-up agent chain, or by BUGTEAM branch 1's same-tick re-trigger). Bugbot finishes a review in 1–4 minutes, so 270s stays under the 5-minute prompt-cache TTL while giving a margin past bugbot's typical upper bound. The single exception is the BUGBOT inline-lag branch, which uses `delaySeconds: 60` because no re-trigger fired and the only thing being awaited is GitHub's inline-comments API catching up.
 - `reason`: one short sentence on what is being awaited, including the current `phase` and `bugbot_clean_at` SHA when set.
 - `prompt: "/loop /pr-converge"` — re-enters this skill via /loop on the next firing.
 

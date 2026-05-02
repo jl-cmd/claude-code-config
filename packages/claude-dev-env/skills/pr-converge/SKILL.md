@@ -26,6 +26,97 @@ Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. De
 
 The user is on a PR branch and wants both reviewers — Cursor's Bugbot AND the in-house `/bugteam` audit — to keep re-reviewing after each push, with findings auto-addressed between ticks. The PR stays in draft until convergence; on convergence the skill flips it to ready for review.
 
+## Multi-PR orchestration model
+
+### Core rule: orchestrator is a traffic controller only
+
+The orchestrator (main session) **never** reads files, writes code, audits findings, or does any per-PR work inline. It receives results, reads the state file, and spawns the correct teammate. Every unit of actual work runs inside a dedicated teammate.
+
+This is a [workflow-style skill](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#use-workflows-for-complex-tasks): the orchestrator decomposes the multi-PR problem into parallel per-PR subworkflows, each owned by a short-lived teammate. The orchestrator's only job is to keep the state file consistent and spawn the next agent in each chain.
+
+### Per-PR state file
+
+Create once at session start; each teammate writes its result back before going idle:
+
+**Path:** `<TMPDIR>/pr-converge-<session_id>/state.json`
+
+**Session ID:** `YYYYMMDDHHMMSS` captured once when the loop starts.
+
+**Barebones schema:**
+
+```json
+{
+  "session_id": "20260502050000",
+  "prs": {
+    "289": {
+      "owner": "jl-cmd",
+      "repo": "claude-code-config",
+      "branch": "feat/shared-pr-loop-extraction",
+      "phase": "BUGBOT",
+      "current_head": "f9a7d49e",
+      "bugbot_clean_at": null,
+      "inline_lag_streak": 0,
+      "tick_count": 5,
+      "last_action": "bugbot_triggered",
+      "status": "in_progress",
+      "last_updated": "2026-05-02T10:00:00Z"
+    }
+  }
+}
+```
+
+**`status` values:** `fresh` | `in_progress` | `awaiting_bugbot` | `awaiting_bugteam` | `converged` | `blocked`
+
+**Write rule:** Teammates write their result by reading the current file, merging their PR's entry, and writing the file back. Writes are keyed on `pr_number`; other PRs' entries are untouched.
+
+**Orchestrator reads this file at the start of every tick** instead of relying on conversation context for cross-PR state.
+
+### Teammate spawning rules
+
+When the orchestrator receives results from one or more PRs simultaneously (e.g. 10+ teammate idle notifications arrive together), it spawns one new agent **per PR** in a single parallel message — never processes any PR inline.
+
+#### Audit result → clean-coder per PR
+
+When a bugfind teammate reports completion (findings or clean):
+
+- Spawn **one `clean-coder` agent** per PR with findings. That agent:
+  1. Reads the outcomes XML for the PR.
+  2. Applies TDD fixes (test first, then production code).
+  3. Commits and pushes one fix commit.
+  4. Replies inline to each addressed finding comment via `reply_to_inline_comment.py`.
+  5. **Writes its result to `state.json`** (`last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`).
+  6. Goes idle.
+
+- For PRs with zero findings: spawn **one `general-purpose` agent** per PR. That agent:
+  1. Runs `mark_pr_ready.py` if `bugbot_clean_at == current_head` (back-to-back clean).
+  2. Otherwise updates `state.json` (`last_action: "audit_clean"`, `status: "awaiting_bugbot"`) and triggers bugbot via `trigger_bugbot.py`.
+  3. Goes idle.
+
+#### Fix result → general-purpose per PR
+
+When a bugfix (clean-coder) teammate goes idle after pushing a fix:
+
+- Spawn **one `general-purpose` agent** per PR. That agent:
+  1. Reads `state.json` for its PR.
+  2. Triggers bugbot via `trigger_bugbot.py`.
+  3. Polls `fetch_bugbot_reviews.py` every 60s (up to 10 polls) until a review anchored to `current_head` appears.
+  4. Fetches inline comments via `fetch_bugbot_inline_comments.py`.
+  5. Classifies result: `clean` (review body clean + zero inline) or `dirty` (findings exist).
+  6. **Writes result to `state.json`**: sets `bugbot_clean_at` (if clean) or records findings count, updates `last_action`, `status`.
+  7. Reports back to orchestrator: one-line summary of outcome.
+
+- Orchestrator reads the updated `state.json` and spawns the appropriate next agent:
+  - Result `clean` → spawn a `general-purpose` agent to run BUGTEAM phase (invokes bugteam skill or transitions per existing §BUGTEAM phase logic).
+  - Result `dirty` → spawn a `clean-coder` agent to fix the new findings (same as "audit result with findings" above).
+
+### What the orchestrator does per tick
+
+1. Read `state.json`.
+2. For each PR with new teammate results (idle notifications), spawn the next agent per the rules above — all in one parallel message.
+3. Update global tick state (`tick_count`, overall `bugbot_clean_at` per PR) from `state.json`.
+4. Call `ScheduleWakeup` with the appropriate delay.
+5. Nothing else.
+
 ## Invocation modes
 
 - **`/loop /pr-converge`** (recommended): loops automatically. The /loop skill runs each tick and uses ScheduleWakeup to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
@@ -156,28 +247,24 @@ In **loop mode**, call `ScheduleWakeup` with:
 
 ## Fix protocol
 
-Used by both phases when findings exist:
+The fix protocol is executed by a **`clean-coder` teammate**, never inline by the orchestrator. The orchestrator spawns the teammate with the findings context; the teammate:
 
-- Read each referenced file:line.
-- Write a failing test first when the finding has behavior to test. For pure doc, comment, or naming nits with no behavior, go straight to the fix.
-- Implement the fix.
-- Stage the affected files and create one new commit on the existing branch:
+- Reads each referenced file:line.
+- Writes a failing test first when the finding has behavior to test. For pure doc, comment, or naming nits, goes straight to the fix.
+- Implements the fix.
+- Stages affected files and creates one new commit:
   ```bash
   git add <files> && git commit -m "fix(review): <brief summary>"
   ```
-  Honor pre-commit and pre-push hooks; when a hook rejects, read its message, fix the underlying issue, retry. Hook rejections flag real underlying issues worth investigating.
-- Push the new commit:
+  Honours pre-commit and pre-push hooks; when a hook rejects, reads the message, fixes the issue, retries.
+- Pushes:
   ```bash
   git push origin <BRANCH>
   ```
-  Capture the new HEAD SHA. Set `current_head` to it. Set `bugbot_clean_at = null`.
-- Reply inline on each addressed comment thread. Write the reply to a temp file via the Write tool, then invoke:
-  ```bash
-  python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \
-    --owner <OWNER> --repo <REPO> --number <NUMBER> \
-    --comment-id <COMMENT_ID> --body-file <path/to/reply.md>
-  ```
-- **Always re-trigger bugbot (Step 3 above) after pushing a fix**, regardless of which phase originated the findings. Any new commit invalidates bugbot's prior clean by definition, so bugbot must re-review the new HEAD before convergence can be claimed. Re-triggering in the same tick saves a full wakeup cycle compared to deferring the trigger to the next tick.
+- Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null` to `state.json`.
+- Goes idle. The orchestrator spawns the follow-up `general-purpose` agent for bugbot trigger and monitoring.
+
+**The orchestrator does not reply to inline comments, does not trigger bugbot, and does not read file contents during the fix phase.** Those actions belong to the dedicated per-PR agents.
 
 ## Stop conditions
 

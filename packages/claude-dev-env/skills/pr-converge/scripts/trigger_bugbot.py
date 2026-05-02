@@ -31,8 +31,8 @@ def trigger_bugbot(*, owner: str, repo: str, number: int) -> str:
     )
     os.close(file_descriptor)
     body_file_path = Path(raw_path)
-    body_file_path.write_text(trigger_phrase, encoding="utf-8")
     try:
+        body_file_path.write_text(trigger_phrase, encoding="utf-8")
         gh_command: list[str] = [
             "gh",
             "pr",

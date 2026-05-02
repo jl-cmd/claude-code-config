@@ -116,9 +116,13 @@ send_continue_to_target() {
     global target_window_title
     if (!WinExist(target_window_title))
         return
-    WinActivate(target_window_title)
-    if (!WinWaitActive(target_window_title, , ACTIVATION_TIMEOUT_SECONDS))
+    try {
+        WinActivate(target_window_title)
+        if (!WinWaitActive(target_window_title, , ACTIVATION_TIMEOUT_SECONDS))
+            return
+    } catch TargetError {
         return
+    }
     Sleep FOCUS_SETTLE_SLEEP_MS
     SendText CONTINUE_PHRASE
     Sleep POST_TEXT_SLEEP_MS

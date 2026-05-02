@@ -83,7 +83,7 @@ COLLECTION_TYPE_NAMES: frozenset[str] = frozenset({
 COLLECTION_BY_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9]*_by_[a-z][a-z0-9_]*$")
 CLI_FILE_PATH_MARKERS: tuple[str, ...] = ("/scripts/", "\\scripts\\", "_cli.py", "/cli.py", "\\cli.py")
 HARDCODED_USER_PATH_PATTERN: re.Pattern[str] = re.compile(
-    r"(?:[A-Za-z]:[\\/]Users[\\/][A-Za-z0-9_.-]+|/Users/[A-Za-z0-9_.-]+|/home/[A-Za-z0-9_.-]+)"
+    r"(?:[A-Za-z]:[\\/]Users[\\/][^\\/]+(?=[\\/])|/Users/[^/]+(?=/)|/home/[^/]+(?=/))"
 )
 MAX_HARDCODED_USER_PATH_ISSUES: int = 25
 HARDCODED_USER_PATH_GUIDANCE: str = (
@@ -2106,7 +2106,8 @@ def check_hardcoded_user_paths(content: str, file_path: str) -> list[str]:
 
     Catches non-portable paths like `C:/Users/jon/...`, `/Users/alice/...`,
     and `/home/bob/...` that surface in production code (PR #257 evidence).
-    Test files and config/ files are exempt.
+    Test files, config/ files, workflow registry files, and migration files
+    are exempt.
     """
     if is_test_file(file_path):
         return []
@@ -2118,11 +2119,14 @@ def check_hardcoded_user_paths(content: str, file_path: str) -> list[str]:
         tree = ast.parse(content)
     except SyntaxError:
         return []
+    docstring_node_ids = _collect_docstring_node_ids(tree)
     issues: list[str] = []
     for each_node in ast.walk(tree):
         if not isinstance(each_node, ast.Constant):
             continue
         if not isinstance(each_node.value, str):
+            continue
+        if id(each_node) in docstring_node_ids:
             continue
         match = HARDCODED_USER_PATH_PATTERN.search(each_node.value)
         if match is None:

@@ -117,3 +117,30 @@ def test_should_suggest_path_home_or_expanduser_in_message() -> None:
     ), (
         f"Error message should suggest Path.home() or os.path.expanduser('~'), got: {issues}"
     )
+
+def test_should_not_flag_url_route_with_home_segment() -> None:
+    source = 'def route() -> str:\n    return "/home/dashboard"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"URL route '/home/dashboard' is not a user directory, got: {issues}"
+    )
+
+
+def test_should_not_flag_standalone_users_segment_without_trailing_path() -> None:
+    source = 'def system_path() -> str:\n    return "/Users/Shared"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"'/Users/Shared' without trailing path component is not navigating into a user home, got: {issues}"
+    )
+
+
+def test_should_not_flag_docstring_mentioning_user_path() -> None:
+    source = (
+        'def load_data() -> None:\n'
+        '    """Reads from /home/alice/data for testing."""\n'
+        '    pass\n'
+    )
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Docstrings are allowed to mention paths, got: {issues}"
+    )

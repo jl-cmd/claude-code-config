@@ -300,7 +300,8 @@ The fix protocol is executed by a **`clean-coder` teammate**, never inline by th
   ```bash
   git push origin <BRANCH>
   ```
-- Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null` to `state.json`.
+- Replies inline on each addressed finding thread via `reply_to_inline_comment.py` (what changed and the commit identifier), matching §Audit result → clean-coder step 4 — **before** writing `state.json` and going idle.
+- Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null` to `state.json` (per §Concurrency).
 - Goes idle. The orchestrator spawns the follow-up `general-purpose` agent for bugbot trigger and monitoring.
 
 **The orchestrator does not reply to inline comments, does not trigger bugbot, and does not read file contents during the fix phase.** Those actions belong to the dedicated per-PR agents.

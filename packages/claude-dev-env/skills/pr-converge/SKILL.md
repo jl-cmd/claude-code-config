@@ -61,7 +61,9 @@ Run **every converge tick** in the **parent harness session** (the conversation 
 This skill **complements** **bugteam** (same skill, **team** vs **background-agent** workflow per §Second-audit execution): it sequences Bugbot
   re-reviews, second-audit runs, the Fix protocol, and inline replies or teammate handoffs between pushes until back-to-back clean. On every
   BUGTEAM tick, run **bugteam** — never a hand-rolled substitute audit. **Fix protocol** production
-  edits use **`Task` + `clean-coder`** per project agent files (or the clean-coder teammate in §Multi-PR orchestration model). **Loop pacing** stays
+  edits in the **main Cursor session** use **`Task`** with **`subagent_type: "generalPurpose"`** plus the clean-coder **Read** preamble in the **`prompt`**
+  (see [Fix protocol](#fix-protocol)) - Cursor does not accept `subagent_type: "clean-coder"`. When **`state.json`** drives multi-PR orchestration,
+  the **`clean-coder` teammate** path in that model is unchanged. **Loop pacing** stays
   in the **main** session when this host exposes `ScheduleWakeup`; otherwise use the AHK workflow file row below.
 
 ## Pacing workflows (load exactly one)
@@ -349,7 +351,7 @@ c. Decide (the four branches below cover every input combination — match the f
 **Gotcha (Bugbot already clean on `HEAD`, but another `bugbot run` fires):** When the latest Bugbot review on `current_head` already indicates
   **clean / no issues** (the branch that sets `bugbot_clean_at` and transitions to **`phase = BUGTEAM`**), the next action must be the **second
   audit in the same tick** per §Second-audit execution — never a redundant `bugbot run`. If merged findings require commits, continue with **Fix
-  protocol** using **`clean-coder`**. If `clean-coder` is unavailable, STOP and notify the user.
+  protocol** per [Fix protocol](#fix-protocol) (`Task` with `generalPurpose` and the clean-coder **Read** preamble). If **`Task`** cannot be invoked, STOP and notify the user.
 
 #### `phase == BUGTEAM`
 
@@ -431,8 +433,7 @@ When **`ScheduleWakeup` is unavailable**, run **Step 4** on the AHK workflow row
 **Gotcha (Bugbot found errors, but a redundant `bugbot run` instead of a fix push):** When the latest Bugbot review on `current_head` still has
   **unaddressed findings** (inline threads and/or a non-clean review body), **do not** post another `bugbot run` on that same SHA as a
   substitute for fixing the code. A second trigger without a new commit cannot resolve the findings — it only duplicates noise and breaks tick
-  expectations. Follow the **Fix protocol** end-to-end: spawn **`Task`** with **`subagent_type: "clean-coder"`** (never `generalPurpose` for
-  production edits), **commit and push** with mandatory pre-commit and pre-push hook validation (full stop and notify the user if hooks did not
+  expectations. Follow the **Fix protocol** end-to-end: spawn **`Task`** with **`subagent_type: "generalPurpose"`** and the clean-coder **Read** preamble from [Fix protocol](#fix-protocol) (never ad-hoc shell or a bare `generalPurpose` prompt for production edits), **commit and push** with mandatory pre-commit and pre-push hook validation (full stop and notify the user if hooks did not
   run or were bypassed), reply inline on each thread, **then** Step 3 `bugbot run` against the new SHA.
 
 ### Step 4: Loop pacing
@@ -454,7 +455,13 @@ Throughout Step 2 and the Fix protocol, **schedule next wakeup, return** means: 
 
 ## Fix protocol
 
-The fix protocol is executed by a **`clean-coder` teammate** when **`state.json`** drives the session (§Multi-PR orchestration model), or by **`Task` + `clean-coder`** in the **main session** when **no** `state.json` is in use (typical single-PR Cursor). The orchestrator **never** performs production edits inline in multi-PR mode. Pre-commit and pre-push hook handling is governed by §Ground rules and the gates below.
+### Cursor `Task` registry (single-PR / Cursor host)
+
+Cursor's **`Task`** tool validates `subagent_type` against a **fixed enum**; **`"clean-coder"` is not a valid value**. When **no** `state.json` is in use
+  (typical single-PR Cursor tick), **production edits** use **`Task`** with **`subagent_type: "generalPurpose"`** and the clean-coder contract in the **`prompt`**
+  per the **Implement** bullet below - not a separate `clean-coder` spawn.
+
+The fix protocol is executed by a **`clean-coder` teammate** when **`state.json`** drives the session (§Multi-PR orchestration model), or by the **`Task` + `generalPurpose`** path in the **main session** when **no** `state.json` is in use (typical single-PR Cursor). The orchestrator **never** performs production edits inline in multi-PR mode. Pre-commit and pre-push hook handling is governed by §Ground rules and the gates below.
 
 **Multi-PR (`state.json`) teammate obligations** (in addition to TDD, commit, push):
 
@@ -468,7 +475,7 @@ The fix protocol is executed by a **`clean-coder` teammate** when **`state.json`
 
 - Read each referenced file:line.
 - Write a failing test first when the finding has behavior to test. For pure doc, comment, or naming nits with no behavior, go straight to the fix.
-- **Implement** by invoking **`Task`** with **`subagent_type: "clean-coder"`** (and the same model or harness your repo documents for that agent). Do **not** use `generalPurpose` or ad-hoc shell edits for production code in this path. If `clean-coder` is unavailable, **full stop** and tell the user — do not substitute another subagent silently.
+- **Implement** by invoking **`Task`** with **`subagent_type: "generalPurpose"`**. The **`prompt`** MUST begin by requiring the subagent to **Read** the clean-coder agent markdown **before** editing production files: on macOS/Linux `$HOME/.claude/agents/clean-coder.md`, on Windows `%USERPROFILE%\.claude\agents\clean-coder.md`. The prompt MUST state that file is binding for code generation (naming, TDD when behavior changes, hook-safe single commit, scope limited to the listed findings). Do **not** use ad-hoc shell edits for production code on this path. Do **not** emit a bare `generalPurpose` prompt that omits the clean-coder file step. If **`Task`** cannot be invoked, **full stop** and tell the user – do not substitute another subagent type for production edits.
 - Stage the affected files and create one new commit on the existing branch:
   ```bash
   git add <files> && git commit -m "fix(review): <brief summary>"

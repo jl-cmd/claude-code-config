@@ -15,12 +15,15 @@ It is not a separate "mode" the user must remember — bare `/pr-converge` alrea
   `ScheduleWakeup` re-entering the skill, an external AutoHotkey utility auto-types `continue` into the active Claude Code window every 5
   minutes, and the model treats each `continue` as the next tick trigger.
 
-**AHK is loop pacing only:** every `phase == BUGTEAM` tick still runs **bugteam** (team or background-agent workflow per §Second-audit execution in the main `SKILL.md`) —
+**AHK is loop pacing only:** every `phase == BUGTEAM` tick still runs **`/bugteam`** via the bugteam skill per Step 2 of the main skill —
   nothing here replaces that audit.
 
-**Fix protocol** commits use **`Task` + `clean-coder`** only.
+**Fix protocol** commits use **`Task`** with **`subagent_type: "generalPurpose"`** and the **clean-coder preamble** from the main
+  [`SKILL.md` Fix protocol](../SKILL.md#fix-protocol) section (same as ScheduleWakeup pacing — Cursor has no `clean-coder` `subagent_type`).
 
-If `.cursor/agents/clean-coder.md` is missing, copy from `~/.claude/agents/` into `.cursor/agents/` before spawning.
+Ensure `~/.claude/agents/clean-coder.md` exists (Windows: `%USERPROFILE%\.claude\agents\clean-coder.md`). Optionally also copy it to
+  `.cursor/agents/clean-coder.md` in the repo when you want the file co-located with the checkout; the spawn **prompt** must still name the
+  absolute path the subagent should **Read** first.
 
 ### One-time setup at the start of the loop
 
@@ -84,10 +87,13 @@ Report convergence in the same one-sentence shape as the standard flow, plus a s
   ```
 - **State-line responsibility is unchanged.** The state line (phase, bugbot_clean_at, inline_lag_streak, tick_count) is still emitted at the
   end of every tick — it's how the next tick reads prior state. The auto-typer only fires `continue`; it does not preserve state for you.
-- **Bugteam is not optional for BUGTEAM ticks.** AHK only paces **when** the next tick runs; it does not replace bugteam. Skipping the second
-  audit after a clean Bugbot review breaks the back-to-back contract.
-- **Fix protocol:** use **`Task` + `clean-coder`** for production code edits (never `generalPurpose`). Ensure `.cursor/agents/clean-coder.md`
-  exists; copy from `~/.claude/agents/` when missing.
+- **Safety cap still applies.** `tick_count >= 30` terminates the loop and kills the auto-typer in this mode just as it omits `ScheduleWakeup`
+  in primary pacing mode. The structural-failure interpretation is the same.
+- **`/bugteam` is not optional for BUGTEAM ticks.** AHK only paces **when** the next tick runs; it does not replace the bugteam skill. Skipping
+  **`/bugteam`** after a clean Bugbot review breaks the back-to-back contract.
+- **Fix protocol:** use **`Task` + `generalPurpose`** with the clean-coder **Read** preamble from the main [`SKILL.md` Fix protocol](../SKILL.md#fix-protocol)
+  (never a bare `generalPurpose` production edit). Ensure the clean-coder agent markdown exists at `~/.claude/agents/clean-coder.md` (Windows:
+  `%USERPROFILE%\.claude\agents\clean-coder.md`); copy into `.cursor/agents/` only if you want a repo-local duplicate.
 
 ## BUGBOT inline-lag (this path only)
 
@@ -100,4 +106,4 @@ On back-to-back clean: stop the auto-typer per **Convergence cleanup** above; om
 
 ## Stop / safety (this path)
 
-On hard blockers or user stop: omit loop pacing and stop the AHK auto-typer if it was started, per main skill **Stop conditions**.
+On hard blockers, user stop, or safety cap: omit loop pacing and stop the AHK auto-typer if it was started, per main skill **Stop conditions**.

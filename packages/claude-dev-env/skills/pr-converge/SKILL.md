@@ -6,8 +6,9 @@ description: >-
   a simple background agent per PR). Each invocation runs one tick of work in the main
   session: fetches the latest reviewer state, applies TDD fixes for any
   findings, pushes one commit per tick, replies inline, and re-triggers the
-  reviewer. To loop automatically, invoke as `/loop /pr-converge` — the /loop
-  skill self-paces re-entry via ScheduleWakeup. Convergence requires a
+  reviewer. To loop automatically where supported, invoke as `/loop /pr-converge`
+  (ScheduleWakeup); otherwise use §Loop cycle without `/loop` or ScheduleWakeup.
+  Convergence requires a
   back-to-back clean cycle (bugbot CLEAN immediately followed by second-audit CLEAN
   with no intervening fixes), at which point the PR is flipped to ready for
   review and the loop terminates. Triggers: '/pr-converge', 'drive PR to
@@ -17,7 +18,7 @@ description: >-
 
 # PR Converge
 
-Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup.
+Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry when that harness exists. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup. When `/loop` is unavailable, see **§Loop cycle without `/loop` or ScheduleWakeup**.
 
 ## Why the work runs in the main session, not a background subagent
 
@@ -157,6 +158,23 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 - **`/loop /pr-converge`** (recommended): loops automatically. The /loop skill runs each tick and uses ScheduleWakeup to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
 - **`/pr-converge`** (manual): runs exactly one tick and returns. Useful for ad-hoc state checks or for advancing the loop one step manually. The user re-runs the skill (or wraps it in `/loop`) to continue.
 
+## Loop cycle without `/loop` or ScheduleWakeup
+
+Some hosts (typical IDE sessions) expose **neither** a `/loop` command **nor** `ScheduleWakeup`. That is expected: there is **no in-model substitute** that can wake the same session on a timer. A converge loop is still achievable by **re-invoking the same tick contract** on a **cadence you control outside the model**.
+
+**What stays the same:** every invocation is still **one tick** — read prior state (conversation line and/or `state.json`), run §Per-tick work, emit the updated state line, obey stop conditions. Convergence and caps are unchanged.
+
+**Organic re-entry patterns (pick one host-appropriate option):**
+
+1. **Manual cadence:** After each tick, the operator sends the same trigger (`/pr-converge`, natural-language equivalent, or paste of the last state line plus “continue”) when GitHub shows Bugbot or the second audit has moved. No automation; lowest coupling.
+2. **External scheduler:** OS **Task Scheduler** / **cron** / **systemd timer** runs on a fixed interval (for example 4–6 minutes — long enough for Bugbot, short enough to converge). Each run invokes the agent with a **frozen prompt** that includes the PR URL, repo, and instruction: “Run exactly one `/pr-converge` tick; read state from …; emit state line.” The scheduler is the loop harness, not the chat product.
+3. **Repository automation:** A **GitHub Actions** `workflow_dispatch` or `schedule` workflow that calls `gh` plus a headless agent entrypoint (CLI or API) with the same one-tick prompt. Treat CI secrets and rate limits as part of the design.
+4. **Dedicated babysitter process:** A small long-lived script (compare `babysit-prs` style) polls `gh pr view` / review APIs and **only** calls into an LLM host when the PR state changes — fewer ticks than blind polling, but more implementation work.
+
+**Not viable:** asking a **background `general-purpose` agent** inside a host that already cannot schedule wakeups to “call ScheduleWakeup later” — that tool is absent by definition on those hosts (see §Why the work runs in the main session).
+
+**Step 4 in these hosts:** every bullet that says “schedule next wakeup” is a **no-op**; replace with “return and rely on §Loop cycle without `/loop` or ScheduleWakeup for the next entry.”
+
 ## State across ticks
 
 Track the following in plain text in the assistant's response so subsequent ticks can re-read it from conversation context:
@@ -272,9 +290,9 @@ Before scheduling the next wakeup, evaluate `tick_count`. When `tick_count >= 30
 
 ### Step 4: Schedule the next wakeup (only when invoked under `/loop`)
 
-**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; under manual mode every such reference becomes "return" only.
+**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). **Skip it also when the host exposes no `ScheduleWakeup` tool** (many IDE-only environments): there is nothing to call; one tick ends and §Loop cycle without `/loop` or ScheduleWakeup owns re-entry. Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue when `/loop` exists. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; when Step 4 is skipped, every such reference becomes "return" only.
 
-Detect manual mode by inspecting the conversation context: when the most recent user message that triggered this run was `/pr-converge` (no `/loop` prefix and no prior `ScheduleWakeup` chain entry that fired with `prompt: "/loop /pr-converge"`), this is manual mode. When the run was triggered by the parent's /loop wakeup chain or the user typed `/loop /pr-converge`, this is loop mode.
+Detect **loop mode** (Step 4 eligible) only when **both** hold: the host supports `ScheduleWakeup`, **and** the run was triggered by the parent's `/loop` wakeup chain or the user typed `/loop /pr-converge`. When the most recent user message was bare `/pr-converge` (no `/loop` prefix and no such wakeup chain), or when `ScheduleWakeup` is unavailable, treat as **manual / no-harness mode** for Step 4.
 
 In **loop mode**, call `ScheduleWakeup` with:
 

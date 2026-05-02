@@ -9,6 +9,7 @@ description: >-
   reviewer. To loop automatically where supported, invoke as `/loop /pr-converge`
   so ScheduleWakeup paces re-entry. When `/loop` or `ScheduleWakeup` is unavailable,
   follow §Loop cycle without `/loop` or ScheduleWakeup in this skill body.
+  Runnable helpers live under scripts/; read scripts/README.md after this file for CLI contracts.
   Convergence requires a
   back-to-back clean cycle (bugbot CLEAN immediately followed by second-audit CLEAN
   with no intervening fixes), at which point the PR is flipped to ready for
@@ -28,6 +29,26 @@ Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. De
 ## When this skill applies
 
 The user is on a PR branch and wants both reviewers — Cursor's Bugbot AND the in-house `/bugteam` audit — to keep re-reviewing after each push, with findings auto-addressed between ticks. The PR stays in draft until convergence; on convergence the skill flips it to ready for review.
+
+## Progressive disclosure (skill folder)
+
+This skill is a **folder** (`SKILL.md` plus `scripts/`), not prose alone: wrappers centralize gh pagination and body-file rules so the model composes orchestration instead of re-deriving CLI footguns. Read in this order ([Anthropic — internal patterns for Claude Code skills](https://x.com/trq212/status/2033949937936085378)):
+
+1. This `SKILL.md` — phase graph, teammate contracts, stop conditions.
+2. [`scripts/README.md`](scripts/README.md) — argv, stdout JSON shapes, pointers to `../../rules/gh-paginate.md` and `../../rules/gh-body-file.md`.
+3. Individual script source or `--help` — only when a call fails or `${CLAUDE_SKILL_DIR}` resolves unexpectedly.
+
+Taxonomy: this sits closest to **PR babysitting / CI-adjacent automation** plus **runbook** pacing. If the doc feels broad, use **§Multi-PR orchestration model** as the workflow spine and **Per-tick work** as the single-PR linearization.
+
+## Gotchas
+
+Non-default behaviors worth burning in; add a bullet here when a real run fails in a new way ([same source](https://x.com/trq212/status/2033949937936085378)):
+
+- **`ScheduleWakeup` is not in subagent tool registries** — a background `general-purpose` tick cannot schedule the next re-entry; use the main session with `/loop` or §Loop cycle without `/loop` or ScheduleWakeup.
+- **Bugbot only recognizes the literal re-trigger phrase `bugbot run`** — other comment text no-ops; always use `trigger_bugbot.py` (temp body file) so backticks in prose never corrupt the PR comment.
+- **Review body and inline comments can desync for the same `commit_id`** — “dirty body, zero inline rows at `current_head`” is **`inline_lag`**, not **`dirty`**; bump `inline_lag_streak`, wait 60s, retry fetch (Step 2 BUGBOT fourth branch; §Fix result → general-purpose steps 4c–4e).
+- **`state.json` without the §Concurrency lock loses merges** when several teammates finish in one wall-clock window.
+- **`tick_count` must not double-increment** — conversation line (Step 1) only when **no** `state.json`; with `state.json`, only the orchestrator bump in §Orchestrator `state.json` writes counts toward Step 3.5.
 
 ## Second-audit execution (team vs Cursor)
 
@@ -58,7 +79,7 @@ Reporting: when marking converged, the one-line report uses **`bugteam CLEAN`** 
 
 ### Core rule: orchestrator is a traffic controller only
 
-The orchestrator (main session) **never** reads files, writes code, audits findings, or does any per-PR work inline. It receives results, reads the state file, and spawns the correct teammate. Every unit of actual work runs inside a dedicated teammate.
+The orchestrator (main session) **never** reads **repository source files**, writes code, audits findings, or does any per-PR **codebase** work inline. It **always** reads `state.json` for traffic state and may write only the narrow fields in §Orchestrator `state.json` writes; it receives teammate handoffs and spawns the next worker. Every unit of audit/fix work runs inside a dedicated teammate.
 
 This is a [workflow-style skill](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#use-workflows-for-complex-tasks): the orchestrator decomposes the multi-PR problem into parallel per-PR subworkflows, each owned by a short-lived teammate. The orchestrator's only job is to keep the state file consistent and spawn the next agent in each chain.
 
@@ -339,7 +360,7 @@ The fix protocol is executed by a **`clean-coder` teammate**, never inline by th
 
 ## Safety cap
 
-When `tick_count >= 30`, stop and report. That many rounds means something structural is wrong with the loop. (Higher than copilot-review's 20-tick cap because two reviewers run sequentially per round.) The increment lives in Step 1; the evaluation lives in Step 3.5.
+When `tick_count >= 30`, stop and report. That many rounds means something structural is wrong with the loop. (Higher than copilot-review's 20-tick cap because two reviewers run sequentially per round.) **Increment:** Step 1 conversation line when **no** `state.json`; otherwise §Orchestrator `state.json` writes item 1 only. **Evaluation:** Step 3.5.
 
 ## Ground rules
 

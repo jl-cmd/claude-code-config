@@ -6,8 +6,10 @@ description: >-
   a simple background agent per PR). Each invocation runs one tick of work in the main
   session: fetches the latest reviewer state, applies TDD fixes for any
   findings, pushes one commit per tick, replies inline, and re-triggers the
-  reviewer. To loop automatically, invoke as `/loop /pr-converge` — the /loop
-  skill self-paces re-entry via ScheduleWakeup. Convergence requires a
+  reviewer. To loop automatically where supported, invoke as `/loop /pr-converge`
+  (ScheduleWakeup); on LLM hosts without it, set `PR_CONVERGE_AUTONOMOUS=1` and use
+  `wait_and_continue.py` per §LLM autonomic pacing (no ScheduleWakeup or /loop).
+  Convergence requires a
   back-to-back clean cycle (bugbot CLEAN immediately followed by second-audit CLEAN
   with no intervening fixes), at which point the PR is flipped to ready for
   review and the loop terminates. Triggers: '/pr-converge', 'drive PR to
@@ -17,7 +19,7 @@ description: >-
 
 # PR Converge
 
-Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup.
+Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry when that harness exists. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup. When `/loop` is unavailable, see **§Loop cycle without `/loop` or ScheduleWakeup**.
 
 ## Why the work runs in the main session, not a background subagent
 
@@ -102,7 +104,10 @@ Create once at session start; each teammate writes its result back before going 
 3. **Replace** `state.json` atomically from `state.json.tmp` (`os.replace` / same-volume rename semantics so readers never see a half-written file).
 4. **Release** the lock (`rmdir` / `Remove-Item` on the lock path).
 
-The orchestrator **does not** write `state.json`; serialization is on teammates.
+**Orchestrator `state.json` writes (traffic metadata only):** Teammates own audit/fix payloads. The orchestrator **must not** merge finding bodies, file contents, or teammate-owned fields other than the two narrow exceptions below. It **must** use the **same §Concurrency lock** for any orchestrator write.
+
+1. **Per-tick `tick_count` bump (mandatory):** At the **start** of each orchestrator tick, before spawning teammates for that tick, perform one locked read–merge–atomic publish: for **every** `prs[<pr_number>]` whose `status` is **not** `converged` or `blocked`, increment `tick_count` by **1** (initialize to `0` if missing) and refresh `last_updated`. Without this increment, **Step 3.5** never applies to `state.json` and the safety cap is dead.
+2. **`phase` when only the orchestrator decides:** If the orchestrator applies a **Step 2 §Per-tick** phase transition (including **BUGTEAM §(d)** branches that set `phase = BUGBOT` without an immediate teammate `state.json` write) and no teammate merge occurs in the same tick for that PR, the orchestrator performs one locked merge that sets only `prs[<pr_number>].phase` (and `last_updated`) for the affected PR.
 
 **Orchestrator reads this file at the start of every tick** instead of relying on conversation context for cross-PR state.
 
@@ -119,12 +124,12 @@ When a bugfind teammate reports completion (findings or clean):
   2. Applies TDD fixes (test first, then production code).
   3. Commits and pushes one fix commit.
   4. Replies inline to each addressed finding comment via `reply_to_inline_comment.py`.
-  5. **Writes its result to `state.json`** (per §Concurrency) (`last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`).
+  5. **Writes its result to `state.json`** (per §Concurrency) (`last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase: "BUGBOT"`).
   6. Goes idle.
 
 - For PRs with zero findings: spawn **one `general-purpose` agent** per PR. That agent:
-  1. If `bugbot_clean_at == current_head` (back-to-back clean): run `mark_pr_ready.py`, then **write `state.json`** (per §Concurrency) setting this PR's entry to at least `status: "converged"`, `last_action: "converged"` (or `marked_ready`), and `last_updated` to an ISO-8601 UTC timestamp — **before** going idle. Omitting this write leaves the orchestrator on later ticks with a stale `awaiting_bugteam` / `in_progress` row and risks duplicate work.
-  2. Otherwise: update `state.json` (per §Concurrency) with `last_action: "audit_clean"`, `status: "awaiting_bugbot"`, then trigger bugbot via `trigger_bugbot.py`.
+  1. If `bugbot_clean_at == current_head` (back-to-back clean): run `mark_pr_ready.py`, then **write `state.json`** (per §Concurrency) setting this PR's entry to at least `status: "converged"`, `last_action: "converged"` (or `marked_ready`), `phase: "BUGBOT"`, and `last_updated` to an ISO-8601 UTC timestamp — **before** going idle. Omitting this write leaves the orchestrator on later ticks with a stale `awaiting_bugteam` / `in_progress` row and risks duplicate work.
+  2. Otherwise: update `state.json` (per §Concurrency) with `last_action: "audit_clean"`, `status: "awaiting_bugbot"`, `phase: "BUGBOT"`, then trigger bugbot via `trigger_bugbot.py`.
   3. Goes idle.
 
 #### Fix result → general-purpose per PR
@@ -137,7 +142,7 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
   3. Polls `fetch_bugbot_reviews.py` every 60s (up to 10 polls) until a review anchored to `current_head` appears.
   4. Fetches inline comments via `fetch_bugbot_inline_comments.py`.
   5. Classifies result: `clean` (review body clean + zero inline) or `dirty` (findings exist).
-  6. **Writes result to `state.json`** (per §Concurrency): sets `bugbot_clean_at` (if clean) or records findings count, updates `last_action`, `status`.
+  6. **Writes result to `state.json`** (per §Concurrency): sets `bugbot_clean_at` (if clean) or records findings count, updates `last_action`, `status`, and **`phase`**: `BUGTEAM` when the outcome is `clean` (next work is second audit), `BUGBOT` when the outcome is `dirty` (next work is another fix pass).
   7. Reports back to orchestrator: one-line summary of outcome.
 
 - Orchestrator reads the updated `state.json` and spawns the appropriate next agent:
@@ -146,16 +151,29 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 
 ### What the orchestrator does per tick
 
-1. Read `state.json`.
-2. For each PR with new teammate results (idle notifications), spawn the next agent per the rules above — all in one parallel message.
-3. Update global tick state (`tick_count`, overall `bugbot_clean_at` per PR) from `state.json`.
-4. Call `ScheduleWakeup` with the appropriate delay.
-5. Nothing else.
+1. Perform the **per-tick `tick_count` bump** in §Orchestrator `state.json` writes (traffic metadata only) for every non-terminal PR under `prs`.
+2. Read `state.json`.
+3. For each PR with new teammate results (idle notifications), spawn the next agent per the rules above — all in one parallel message.
+4. Re-read `state.json` if needed for scheduling; **Step 3.5** uses each PR's `tick_count` from this file (or the conversation state line when no `state.json` exists — single-PR-only invocation).
+5. Call `ScheduleWakeup` with the appropriate delay.
+6. Nothing else.
 
 ## Invocation modes
 
 - **`/loop /pr-converge`** (recommended): loops automatically. The /loop skill runs each tick and uses ScheduleWakeup to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
 - **`/pr-converge`** (manual): runs exactly one tick and returns. Useful for ad-hoc state checks or for advancing the loop one step manually. The user re-runs the skill (or wraps it in `/loop`) to continue.
+
+## Loop cycle without `/loop` or ScheduleWakeup
+
+Some hosts expose **neither** `/loop` nor `ScheduleWakeup`. There is still **no in-model timer**; the **only** substitute this skill defines is an **OS-level scheduled job** the operator installs once.
+
+**Harness (normative):** use **cron** (Unix), **systemd timer** (Linux services), or **Windows Task Scheduler** to run on a **fixed wall-clock interval of 270 seconds** (same default as Step 4 `delaySeconds` — long enough for Bugbot, under typical cache TTL). Each run executes **exactly one** non-interactive agent invocation using the **product's documented** "single prompt from file / stdin" CLI or API entrypoint. The job's input is a **constant** one-tick instruction: run §Per-tick work for the target PR; read prior state from disk; write updated state to disk; exit zero on success.
+
+**State on disk (required for this harness):** prior tick output must live where the next run can read it without chat history — for multi-PR use `<TMPDIR>/pr-converge-<session_id>/state.json` (§Per-PR state file); for a single PR without that file, the operator picks **one absolute path** to a small JSON file, passes it to every run (argument or environment), creates it on the first tick, and updates it every tick. The scheduled command must wire that path into the frozen prompt or process environment the agent reads.
+
+**Enforceability:** the OS records whether each run started and its exit code (cron logs, `journalctl`, Task Scheduler **Last Run Result**). A missed tick or failing process is visible to operators; the model cannot "silently skip" the schedule.
+
+**Step 4 in these hosts:** `ScheduleWakeup` calls are **omitted**; the **next** tick is whichever **scheduled OS run** fires next. Do not delegate re-entry to a background subagent calling `ScheduleWakeup` on hosts where that tool does not exist (see §Why the work runs in the main session).
 
 ## State across ticks
 
@@ -268,13 +286,13 @@ python "${CLAUDE_SKILL_DIR}/scripts/trigger_bugbot.py" \
 
 ### Step 3.5: Enforce the safety cap
 
-Before scheduling the next wakeup, evaluate `tick_count`. When `tick_count >= 30`, stop and report per the **Stop conditions** safety-cap branch (§Safety cap) — **omit Step 4 entirely**. Reaching this many rounds means something structural is wrong with the loop and continuing wastes work. Otherwise proceed to Step 4.
+Before scheduling the next wakeup, evaluate **`tick_count`**: for multi-PR runs, when **any** `prs[<pr_number>].tick_count >= 30`; for single-PR-only runs (no `state.json`), when the conversation state line's `tick_count >= 30`. When the cap trips, stop and report per the **Stop conditions** safety-cap branch (§Safety cap) — **omit Step 4 entirely**. Reaching this many rounds means something structural is wrong with the loop and continuing wastes work. Otherwise proceed to Step 4.
 
 ### Step 4: Schedule the next wakeup (only when invoked under `/loop`)
 
-**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; under manual mode every such reference becomes "return" only.
+**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). **Skip it also when the host exposes no `ScheduleWakeup` tool** (many IDE-only environments): there is nothing to call; one tick ends and §Loop cycle without `/loop` or ScheduleWakeup owns re-entry. Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue when `/loop` exists. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; when Step 4 is skipped, every such reference becomes "return" only.
 
-Detect manual mode by inspecting the conversation context: when the most recent user message that triggered this run was `/pr-converge` (no `/loop` prefix and no prior `ScheduleWakeup` chain entry that fired with `prompt: "/loop /pr-converge"`), this is manual mode. When the run was triggered by the parent's /loop wakeup chain or the user typed `/loop /pr-converge`, this is loop mode.
+Detect **loop mode** (Step 4 eligible) only when **both** hold: the host supports `ScheduleWakeup`, **and** the run was triggered by the parent's `/loop` wakeup chain or the user typed `/loop /pr-converge`. When the most recent user message was bare `/pr-converge` (no `/loop` prefix and no such wakeup chain), or when `ScheduleWakeup` is unavailable, treat as **manual / no-harness mode** for Step 4.
 
 In **loop mode**, call `ScheduleWakeup` with:
 
@@ -301,7 +319,7 @@ The fix protocol is executed by a **`clean-coder` teammate**, never inline by th
   git push origin <BRANCH>
   ```
 - Replies inline on each addressed finding thread via `reply_to_inline_comment.py` (what changed and the commit identifier), matching §Audit result → clean-coder step 4 — **before** writing `state.json` and going idle.
-- Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null` to `state.json` (per §Concurrency).
+- Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase: "BUGBOT"` to `state.json` (per §Concurrency).
 - Goes idle. The orchestrator spawns the follow-up `general-purpose` agent for bugbot trigger and monitoring.
 
 **The orchestrator does not reply to inline comments, does not trigger bugbot, and does not read file contents during the fix phase.** Those actions belong to the dedicated per-PR agents.

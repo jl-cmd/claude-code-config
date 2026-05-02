@@ -61,7 +61,8 @@ function Build-GhArgumentList {
 }
 
 $invocation = Resolve-InvocationMode -PullRequestInput $PullRequest -RepositoryInput $Repository -NumberInput $Number
-$body_file_path = [System.IO.Path]::ChangeExtension([System.IO.Path]::GetTempFileName(), '.md')
+$scratch_temp_path = [System.IO.Path]::GetTempFileName()
+$body_file_path = [System.IO.Path]::ChangeExtension($scratch_temp_path, '.md')
 
 try {
     $utf8_without_byte_order_mark = New-Object System.Text.UTF8Encoding $false
@@ -75,4 +76,5 @@ try {
     }
 } finally {
     Remove-Item -LiteralPath $body_file_path -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $scratch_temp_path -Force -ErrorAction SilentlyContinue
 }

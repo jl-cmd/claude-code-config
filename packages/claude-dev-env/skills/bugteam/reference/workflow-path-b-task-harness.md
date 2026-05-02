@@ -32,10 +32,11 @@ Fresh **Task** each loop (clean-room intent: do not reuse prior Task transcript 
 
 ## FIX spawn (Path B)
 
-`Task` with `subagent_type="clean-coder"` (or `subagent_type="groq-coder"` when `BUGTEAM_FIX_IMPLEMENTER=groq-coder` per Path A optional Groq rules), **omit** `team_name`, same fields otherwise as Path A [`workflow-path-a-orchestrated-teams.md`](workflow-path-a-orchestrated-teams.md) § FIX spawn. Await Task completion — no `SendMessage`.
+**Hosts that accept `clean-coder` as a `Task` subtype (typical Claude Code):** `Task` with `subagent_type="clean-coder"` (or `subagent_type="groq-coder"` when `BUGTEAM_FIX_IMPLEMENTER=groq-coder` per Path A optional Groq rules), **omit** `team_name`, same fields otherwise as Path A [`workflow-path-a-orchestrated-teams.md`](workflow-path-a-orchestrated-teams.md) § FIX spawn. Await Task completion — no `SendMessage`.
+
+**Cursor and other hosts with a fixed `Task` enum (no `clean-coder` value):** use `Task` with `subagent_type: "generalPurpose"` and put the **same** FIX obligations from Path A into the **`prompt`**, after a mandatory first step to **Read** the clean-coder agent markdown: macOS/Linux `$HOME/.claude/agents/clean-coder.md`, Windows `%USERPROFILE%\.claude\agents\clean-coder.md`. State that file is binding for naming, TDD when behavior changes, hooks, one commit, and scope. Do **not** use a bare `generalPurpose` prompt without that Read. Same bundle as [`../../pr-converge/SKILL.md`](../../pr-converge/SKILL.md) Fix protocol **Implement**. If `Task` cannot run, stop and notify the user.
 
 Verify and outcome handling: unchanged from `SKILL.md` § FIX action.
-
 ## Step 4 harness — after worktree remove, before shared `rmtree`
 
 Run **after** `SKILL.md` § Step 4 step 1 (`git worktree remove` for each PR).

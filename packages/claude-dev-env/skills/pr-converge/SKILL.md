@@ -6,9 +6,8 @@ description: >-
   a simple background agent per PR). Each invocation runs one tick of work in the main
   session: fetches the latest reviewer state, applies TDD fixes for any
   findings, pushes one commit per tick, replies inline, and re-triggers the
-  reviewer. To loop automatically where supported, invoke as `/loop /pr-converge`
-  (ScheduleWakeup); otherwise install the OS scheduled job in §Loop cycle without `/loop` or ScheduleWakeup.
-  Convergence requires a
+  reviewer. To loop automatically, invoke as `/loop /pr-converge` — the /loop
+  skill self-paces re-entry via ScheduleWakeup. Convergence requires a
   back-to-back clean cycle (bugbot CLEAN immediately followed by second-audit CLEAN
   with no intervening fixes), at which point the PR is flipped to ready for
   review and the loop terminates. Triggers: '/pr-converge', 'drive PR to
@@ -18,7 +17,7 @@ description: >-
 
 # PR Converge
 
-Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry when that harness exists. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup. When `/loop` is unavailable, see **§Loop cycle without `/loop` or ScheduleWakeup**.
+Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup.
 
 ## Why the work runs in the main session, not a background subagent
 
@@ -158,18 +157,6 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 - **`/loop /pr-converge`** (recommended): loops automatically. The /loop skill runs each tick and uses ScheduleWakeup to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
 - **`/pr-converge`** (manual): runs exactly one tick and returns. Useful for ad-hoc state checks or for advancing the loop one step manually. The user re-runs the skill (or wraps it in `/loop`) to continue.
 
-## Loop cycle without `/loop` or ScheduleWakeup
-
-Some hosts expose **neither** `/loop` nor `ScheduleWakeup`. There is still **no in-model timer**; the **only** substitute this skill defines is an **OS-level scheduled job** the operator installs once.
-
-**Harness (normative):** use **cron** (Unix), **systemd timer** (Linux services), or **Windows Task Scheduler** to run on a **fixed wall-clock interval of 270 seconds** (same default as Step 4 `delaySeconds` — long enough for Bugbot, under typical cache TTL). Each run executes **exactly one** non-interactive agent invocation using the **product’s documented** “single prompt from file / stdin” CLI or API entrypoint. The job’s input is a **constant** one-tick instruction: run §Per-tick work for the target PR; read prior state from disk; write updated state to disk; exit zero on success.
-
-**State on disk (required for this harness):** prior tick output must live where the next run can read it without chat history — for multi-PR use `<TMPDIR>/pr-converge-<session_id>/state.json` (§Per-PR state file); for a single PR without that file, the operator picks **one absolute path** to a small JSON file, passes it to every run (argument or environment), creates it on the first tick, and updates it every tick. The scheduled command must wire that path into the frozen prompt or process environment the agent reads.
-
-**Enforceability:** the OS records whether each run started and its exit code (cron logs, `journalctl`, Task Scheduler **Last Run Result**). A missed tick or failing process is visible to operators; the model cannot “silently skip” the schedule.
-
-**Step 4 in these hosts:** `ScheduleWakeup` calls are **omitted**; the **next** tick is whichever **scheduled OS run** fires next. Do not delegate re-entry to a background subagent calling `ScheduleWakeup` on hosts where that tool does not exist (see §Why the work runs in the main session).
-
 ## State across ticks
 
 Track the following in plain text in the assistant's response so subsequent ticks can re-read it from conversation context:
@@ -185,7 +172,7 @@ Each tick begins by reading the prior tick's state line from the most recent ass
 
 ### Step 1: Resolve current HEAD and PR context
 
-Read the prior tick's state line from the most recent assistant message (or initialize all fields if none). **Increment `tick_count` by 1.** This is the increment referenced in the **State across ticks** section; without it the safety cap (Step 3.5, §Safety cap) never fires.
+Read the prior tick's state line from the most recent assistant message (or initialize all fields if none). **Increment `tick_count` by 1** in the **conversation state line** when **no** `state.json` is in use (single-PR-only invocation); when `state.json` exists, **do not** increment here — the orchestrator's per-tick bump in §Orchestrator `state.json` writes is the sole increment for that store. Without a bump somewhere, the safety cap (Step 3.5, §Safety cap) never fires.
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/view_pr_context.py"
@@ -285,9 +272,9 @@ Before scheduling the next wakeup, evaluate `tick_count`. When `tick_count >= 30
 
 ### Step 4: Schedule the next wakeup (only when invoked under `/loop`)
 
-**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). **Skip it also when the host exposes no `ScheduleWakeup` tool** (many IDE-only environments): there is nothing to call; one tick ends and §Loop cycle without `/loop` or ScheduleWakeup owns re-entry. Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue when `/loop` exists. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; when Step 4 is skipped, every such reference becomes "return" only.
+**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; under manual mode every such reference becomes "return" only.
 
-Detect **loop mode** (Step 4 eligible) only when **both** hold: the host supports `ScheduleWakeup`, **and** the run was triggered by the parent's `/loop` wakeup chain or the user typed `/loop /pr-converge`. When the most recent user message was bare `/pr-converge` (no `/loop` prefix and no such wakeup chain), or when `ScheduleWakeup` is unavailable, treat as **manual / no-harness mode** for Step 4.
+Detect manual mode by inspecting the conversation context: when the most recent user message that triggered this run was `/pr-converge` (no `/loop` prefix and no prior `ScheduleWakeup` chain entry that fired with `prompt: "/loop /pr-converge"`), this is manual mode. When the run was triggered by the parent's /loop wakeup chain or the user typed `/loop /pr-converge`, this is loop mode.
 
 In **loop mode**, call `ScheduleWakeup` with:
 
@@ -324,7 +311,7 @@ The fix protocol is executed by a **`clean-coder` teammate**, never inline by th
 - **Convergence** (back-to-back clean as defined in Step 2 BUGTEAM second branch — second audit reports convergence AND `bugbot_clean_at == current_head` with no push during this tick): mark PR ready for review, report one-sentence summary, omit ScheduleWakeup.
 - **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection investigated through three commits and still unresolved, `inline_lag_streak >= 3`, or the second audit (`/bugteam` or background-agent pass) reports a stuck state. Report the specific blocker and the diagnosis, then omit ScheduleWakeup.
 - **User stops the loop:** user says "stop the converge loop" → omit ScheduleWakeup on the next tick.
-- **Safety cap:** `tick_count >= 30` (evaluated in Step 3.5) → omit ScheduleWakeup, report the cap was hit. See §Safety cap below for rationale.
+- **Safety cap:** any tracked `tick_count >= 30` (evaluated in Step 3.5) → omit ScheduleWakeup, report the cap was hit. See §Safety cap below for rationale.
 
 ## Safety cap
 

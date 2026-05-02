@@ -19,7 +19,7 @@ description: >-
 
 # PR Converge
 
-Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry when that harness exists. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup. When `/loop` is unavailable, see **§Loop cycle without `/loop` or ScheduleWakeup**.
+Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry when that harness exists. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup. When the **LLM** harness has no `/loop` or `ScheduleWakeup`, see **§LLM autonomic pacing (no ScheduleWakeup or /loop)**.
 
 ## Why the work runs in the main session, not a background subagent
 
@@ -29,7 +29,7 @@ Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. De
 
 The user is on a PR branch and wants both reviewers — Cursor's Bugbot AND the in-house `/bugteam` audit — to keep re-reviewing after each push, with findings auto-addressed between ticks. The PR stays in draft until convergence; on convergence the skill flips it to ready for review.
 
-## Second-audit execution (team vs Cursor)
+## Second-audit execution (team vs LLM-hosted second audit)
 
 The **second audit** (BUGTEAM phase) is either the `/bugteam` skill (Claude Code agent teams) or **one simple background agent per PR** (no `TeamCreate`) that must produce the **same downstream contract** as `/bugteam` for Step 2 BUGTEAM §(b)–(d): optional commits on `current_head`, convergence or findings list, same fix and re-trigger behaviour.
 
@@ -38,7 +38,7 @@ The **second audit** (BUGTEAM phase) is either the `/bugteam` skill (Claude Code
 At the start of BUGTEAM step **(a)** each tick, evaluate **once**:
 
 - **Team infrastructure present** when the environment variable `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set and its value equals **`1`** after trimming leading and trailing whitespace. This matches the bugteam skill's requirement for Claude Code agent teams (`packages/claude-dev-env/skills/bugteam/CONSTRAINTS.md`).
-- **Otherwise** (unset, any other value, or host never exports this variable — typical Cursor IDE sessions): team infrastructure is **absent**. Do **not** invoke `Skill({skill: "bugteam", ...})` or rely on `TeamCreate`; use the **non-team background-agent** branch in BUGTEAM step **(a)** instead.
+- **Otherwise** (unset, any other value, or host never exports this variable — typical **LLM** agent harnesses without Claude Code agent teams): team infrastructure is **absent**. Do **not** invoke `Skill({skill: "bugteam", ...})` or rely on `TeamCreate`; use the **non-team background-agent** branch in BUGTEAM step **(a)** instead.
 
 ### Background-agent second audit (when team infrastructure is absent)
 
@@ -155,25 +155,37 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 2. Read `state.json`.
 3. For each PR with new teammate results (idle notifications), spawn the next agent per the rules above — all in one parallel message.
 4. Re-read `state.json` if needed for scheduling; **Step 3.5** uses each PR's `tick_count` from this file (or the conversation state line when no `state.json` exists — single-PR-only invocation).
-5. Call `ScheduleWakeup` with the appropriate delay.
+5. Pace the next tick per **Step 4** (`ScheduleWakeup` in loop mode, or §LLM autonomic pacing when `PR_CONVERGE_AUTONOMOUS=1` and `ScheduleWakeup` is unavailable).
 6. Nothing else.
 
 ## Invocation modes
 
-- **`/loop /pr-converge`** (recommended): loops automatically. The /loop skill runs each tick and uses ScheduleWakeup to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
-- **`/pr-converge`** (manual): runs exactly one tick and returns. Useful for ad-hoc state checks or for advancing the loop one step manually. The user re-runs the skill (or wraps it in `/loop`) to continue.
+- **`/loop /pr-converge`** (recommended where supported): loops automatically. The /loop skill runs each tick and uses ScheduleWakeup to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
+- **`PR_CONVERGE_AUTONOMOUS=1` with `/pr-converge`:** when the **LLM** harness has no `ScheduleWakeup`, run **§LLM autonomic pacing** so each tick ends by blocking on `wait_and_continue.py` and continuing from stdout — no human paste between ticks (session must stay alive for the sleep duration).
+- **`/pr-converge`** (one-shot manual): runs exactly one tick and returns. Omit Step 4 and §LLM autonomic pacing unless the operator sets `PR_CONVERGE_AUTONOMOUS=1`.
 
-## Loop cycle without `/loop` or ScheduleWakeup
+## LLM autonomic pacing (no ScheduleWakeup or /loop)
 
-Some hosts expose **neither** `/loop` nor `ScheduleWakeup`. There is still **no in-model timer**; the **only** substitute this skill defines is an **OS-level scheduled job** the operator installs once.
+When the **LLM** harness exposes neither `/loop` nor `ScheduleWakeup`, set **`PR_CONVERGE_AUTONOMOUS=1`** (environment) to run a **self-supervised** loop inside **one** long-lived session.
 
-**Harness (normative):** use **cron** (Unix), **systemd timer** (Linux services), or **Windows Task Scheduler** to run on a **fixed wall-clock interval of 270 seconds** (same default as Step 4 `delaySeconds` — long enough for Bugbot, under typical cache TTL). Each run executes **exactly one** non-interactive agent invocation using the **product's documented** "single prompt from file / stdin" CLI or API entrypoint. The job's input is a **constant** one-tick instruction: run §Per-tick work for the target PR; read prior state from disk; write updated state to disk; exit zero on success.
+**Normative pacing (`wait_and_continue.py`):** At the end of any non-terminal tick that would otherwise schedule the next wakeup in loop mode — everywhere this document says **"schedule next wakeup"**, **"schedule next wakeup, return"**, or the BUGBOT inline-lag **"schedule next wakeup at `delaySeconds: 60`"** path — perform these steps instead of calling `ScheduleWakeup`:
 
-**State on disk (required for this harness):** prior tick output must live where the next run can read it without chat history — for multi-PR use `<TMPDIR>/pr-converge-<session_id>/state.json` (§Per-PR state file); for a single PR without that file, the operator picks **one absolute path** to a small JSON file, passes it to every run (argument or environment), creates it on the first tick, and updates it every tick. The scheduled command must wire that path into the frozen prompt or process environment the agent reads.
+1. Write a UTF-8 **continuation injection** file containing complete instructions for the **next** tick: the `/pr-converge` intent, the PR URL or `owner` / `repo` / `number`, the updated §State across ticks line, and an explicit order to execute **one** pr-converge tick per this `SKILL.md`.
+2. Run **in the foreground** (blocking is intentional so the session stays the same):
 
-**Enforceability:** the OS records whether each run started and its exit code (cron logs, `journalctl`, Task Scheduler **Last Run Result**). A missed tick or failing process is visible to operators; the model cannot "silently skip" the schedule.
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/wait_and_continue.py" \
+  --delay-seconds <DELAY> \
+  --continuation-file /path/to/continuation.txt
+```
 
-**Step 4 in these hosts:** `ScheduleWakeup` calls are **omitted**; the **next** tick is whichever **scheduled OS run** fires next. Do not delegate re-entry to a background subagent calling `ScheduleWakeup` on hosts where that tool does not exist (see §Why the work runs in the main session).
+Use `<DELAY>` **270** whenever Step 4 loop-mode rules would use `delaySeconds: 270` after bugbot re-triggers; use **60** for the BUGBOT inline-lag branch only. `--delay-seconds` must be **0**–**86400** (inclusive); the script rejects out-of-range values with exit code **2**.
+
+3. When the script exits successfully, treat **stdout** exactly as the next user message: **continue** pr-converge immediately from that payload (no operator copy-paste).
+
+**Convergence and stop conditions:** omit `wait_and_continue.py` the same times you omit `ScheduleWakeup` (converged, safety cap, hard blockers, user stop).
+
+**Optional headless fallback:** automation without a long-lived LLM session may use an OS scheduler or CI job invoking a one-tick CLI with state on disk (§Per-PR state file) — orthogonal to `wait_and_continue.py`.
 
 ## State across ticks
 
@@ -286,21 +298,27 @@ python "${CLAUDE_SKILL_DIR}/scripts/trigger_bugbot.py" \
 
 ### Step 3.5: Enforce the safety cap
 
-Before scheduling the next wakeup, evaluate **`tick_count`**: for multi-PR runs, when **any** `prs[<pr_number>].tick_count >= 30`; for single-PR-only runs (no `state.json`), when the conversation state line's `tick_count >= 30`. When the cap trips, stop and report per the **Stop conditions** safety-cap branch (§Safety cap) — **omit Step 4 entirely**. Reaching this many rounds means something structural is wrong with the loop and continuing wastes work. Otherwise proceed to Step 4.
+Before Step 4 pacing, evaluate **`tick_count`**: for multi-PR runs, when **any** `prs[<pr_number>].tick_count >= 30`; for single-PR-only runs (no `state.json`), when the conversation state line's `tick_count >= 30`. When the cap trips, stop and report per the **Stop conditions** safety-cap branch (§Safety cap) — **omit Step 4 entirely**. Reaching this many rounds means something structural is wrong with the loop and continuing wastes work. Otherwise proceed to Step 4.
 
-### Step 4: Schedule the next wakeup (only when invoked under `/loop`)
+### Step 4: Pace the next tick
 
-**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). **Skip it also when the host exposes no `ScheduleWakeup` tool** (many IDE-only environments): there is nothing to call; one tick ends and §Loop cycle without `/loop` or ScheduleWakeup owns re-entry. Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue when `/loop` exists. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; when Step 4 is skipped, every such reference becomes "return" only.
+**Omit Step 4 entirely** on convergence, safety cap, hard blockers, or explicit user stop (see **Stop conditions**) — omit both `ScheduleWakeup` and `wait_and_continue.py`.
 
-Detect **loop mode** (Step 4 eligible) only when **both** hold: the host supports `ScheduleWakeup`, **and** the run was triggered by the parent's `/loop` wakeup chain or the user typed `/loop /pr-converge`. When the most recent user message was bare `/pr-converge` (no `/loop` prefix and no such wakeup chain), or when `ScheduleWakeup` is unavailable, treat as **manual / no-harness mode** for Step 4.
+**One-shot manual:** bare `/pr-converge` with **`PR_CONVERGE_AUTONOMOUS` unset or not `1`**. One tick ends; the operator re-invokes or uses `/loop` where supported. References to **"schedule next wakeup, return"** mean **return** only (no pacing).
+
+**Loop mode (Step 4a — `ScheduleWakeup`):** eligible only when **both** hold: the host exposes `ScheduleWakeup`, **and** the run was triggered by the parent's `/loop` wakeup chain or the user typed `/loop /pr-converge`. References to **"schedule next wakeup, return"** mean: call `ScheduleWakeup` as below, then **return**. **On convergence (loop mode):** omit `ScheduleWakeup`; the /loop terminates.
+
+**LLM autonomic mode (Step 4b):** when **`PR_CONVERGE_AUTONOMOUS=1`** and **`ScheduleWakeup` is unavailable**, do **not** call `ScheduleWakeup`. Every **"schedule next wakeup, return"** (including the BUGBOT inline-lag **60s** variant) maps to **§LLM autonomic pacing**: write the continuation UTF-8 file, run **`wait_and_continue.py`** in the foreground with **270** or **60** seconds per that section, then **continue** pr-converge from **stdout** as the next instruction (no human paste).
+
+When **`ScheduleWakeup` is unavailable** and **`PR_CONVERGE_AUTONOMOUS` is not `1`**, Step 4 is inapplicable after one tick; optional headless re-entry is **outside** this skill (§LLM autonomic pacing, optional headless fallback).
+
+#### Step 4a: `ScheduleWakeup` (loop mode only)
 
 In **loop mode**, call `ScheduleWakeup` with:
 
 - `delaySeconds: 270` whenever bugbot was just re-triggered (whether by Step 3 directly, by **Step 3** after a fix via the follow-up agent chain, or by BUGTEAM branch 1's same-tick re-trigger). Bugbot finishes a review in 1–4 minutes, so 270s stays under the 5-minute prompt-cache TTL while giving a margin past bugbot's typical upper bound. The single exception is the BUGBOT inline-lag branch, which uses `delaySeconds: 60` because no re-trigger fired and the only thing being awaited is GitHub's inline-comments API catching up.
 - `reason`: one short sentence on what is being awaited, including the current `phase` and `bugbot_clean_at` SHA when set.
 - `prompt: "/loop /pr-converge"` — re-enters this skill via /loop on the next firing.
-
-**On convergence (loop mode):** omit the ScheduleWakeup call entirely. The /loop terminates because no next wakeup was scheduled.
 
 ## Fix protocol
 
@@ -326,10 +344,10 @@ The fix protocol is executed by a **`clean-coder` teammate**, never inline by th
 
 ## Stop conditions
 
-- **Convergence** (back-to-back clean as defined in Step 2 BUGTEAM second branch — second audit reports convergence AND `bugbot_clean_at == current_head` with no push during this tick): mark PR ready for review, report one-sentence summary, omit ScheduleWakeup.
-- **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection investigated through three commits and still unresolved, `inline_lag_streak >= 3`, or the second audit (`/bugteam` or background-agent pass) reports a stuck state. Report the specific blocker and the diagnosis, then omit ScheduleWakeup.
-- **User stops the loop:** user says "stop the converge loop" → omit ScheduleWakeup on the next tick.
-- **Safety cap:** any tracked `tick_count >= 30` (evaluated in Step 3.5) → omit ScheduleWakeup, report the cap was hit. See §Safety cap below for rationale.
+- **Convergence** (back-to-back clean as defined in Step 2 BUGTEAM second branch — second audit reports convergence AND `bugbot_clean_at == current_head` with no push during this tick): mark PR ready for review, report one-sentence summary, omit `ScheduleWakeup` and `wait_and_continue.py`.
+- **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection investigated through three commits and still unresolved, `inline_lag_streak >= 3`, or the second audit (`/bugteam` or background-agent pass) reports a stuck state. Report the specific blocker and the diagnosis, then omit `ScheduleWakeup` and `wait_and_continue.py`.
+- **User stops the loop:** user says "stop the converge loop" → omit `ScheduleWakeup` and `wait_and_continue.py` on the next tick.
+- **Safety cap:** any tracked `tick_count >= 30` (evaluated in Step 3.5) → omit `ScheduleWakeup` and `wait_and_continue.py`, report the cap was hit. See §Safety cap below for rationale.
 
 ## Safety cap
 

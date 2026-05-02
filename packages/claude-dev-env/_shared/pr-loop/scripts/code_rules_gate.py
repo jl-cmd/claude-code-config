@@ -4,7 +4,7 @@ import importlib.util
 import re
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 sys.modules.pop("config", None)
@@ -380,6 +380,15 @@ def check_database_column_string_magic(content: str, file_path: str) -> list[str
     return issues
 
 
+def _iter_calls_excluding_nested_functions(node: ast.AST) -> Iterator[ast.Call]:
+    for each_child in ast.iter_child_nodes(node):
+        if isinstance(each_child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if isinstance(each_child, ast.Call):
+            yield each_child
+        yield from _iter_calls_excluding_nested_functions(each_child)
+
+
 def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
     """Flag calls inside public functions that drop a same-file delegate's optional kwargs.
 
@@ -426,19 +435,13 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
                 optional_kwargs.add(each_positional_arg.arg)
             function_signatures[each_node.name] = optional_kwargs
     issues: list[str] = []
-    seen_call_node_ids: set[int] = set()
     for each_node in ast.walk(tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if each_node.name.startswith("_"):
             continue
         wrapper_kwargs = function_signatures.get(each_node.name, set())
-        for each_call in ast.walk(each_node):
-            if not isinstance(each_call, ast.Call):
-                continue
-            if id(each_call) in seen_call_node_ids:
-                continue
-            seen_call_node_ids.add(id(each_call))
+        for each_call in _iter_calls_excluding_nested_functions(each_node):
             if isinstance(each_call.func, ast.Name):
                 delegate_name = each_call.func.id
             elif isinstance(each_call.func, ast.Attribute):

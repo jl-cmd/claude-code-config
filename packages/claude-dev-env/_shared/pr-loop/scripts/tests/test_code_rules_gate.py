@@ -640,3 +640,27 @@ def test_check_wrapper_plumb_through_dedupes_nested_public_function_calls() -> N
     )
     issues = gate_module.check_wrapper_plumb_through(source, "module.py")
     assert len(issues) == 1, f"expected 1 finding, got {len(issues)}: {issues!r}"
+
+
+def test_check_wrapper_plumb_through_ignores_calls_in_nested_functions() -> None:
+    """Calls inside a nested FunctionDef must not be attributed to the outer function.
+
+    The outer public function does not call the delegate itself; only its
+    private nested helper does. Because the nested call lives in a separate
+    lexical scope, the outer must NOT be flagged for missing kwargs the inner
+    drops. Walking the outer with ast.walk would incorrectly descend into the
+    nested body and produce a false positive against the outer.
+    """
+    source = (
+        "def fetch(target, *, retries=3):\n"
+        "    return target\n"
+        "\n"
+        "def public_outer(target):\n"
+        "    def _inner_helper():\n"
+        "        return fetch(target)\n"
+        "    return _inner_helper()\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert issues == [], (
+        f"outer must not be flagged for kwargs dropped by a nested helper; got {issues!r}"
+    )

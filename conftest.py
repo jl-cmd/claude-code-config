@@ -191,6 +191,7 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         )
         if collector_expects_flat_config and cached_config_binding_is_wrong_for_git_hooks:
             _evict_config_module()
+        _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         return
 
     is_inside_shared_pr_loop_scripts = _path_is_inside_directory(

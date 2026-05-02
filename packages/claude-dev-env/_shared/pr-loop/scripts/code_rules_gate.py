@@ -653,8 +653,13 @@ def added_lines_for_renamed_file(
         check=False,
     )
     if diff_result.returncode != 0:
-        destination_file = repository_root / destination_posix
-        return whole_file_line_set(destination_file)
+        print(
+            f"code_rules_gate: git diff failed for renamed file {merge_base}:{source_posix} "
+            f"vs HEAD:{destination_posix} (returncode={diff_result.returncode}); "
+            f"stderr={diff_result.stderr.strip()!r}",
+            file=sys.stderr,
+        )
+        return set()
     if not diff_result.stdout.strip():
         return set()
     return parse_added_line_numbers(diff_result.stdout)

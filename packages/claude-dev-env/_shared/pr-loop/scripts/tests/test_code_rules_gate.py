@@ -796,6 +796,37 @@ def test_added_lines_for_renamed_file_returns_empty_for_pure_rename(
     assert added == set()
 
 
+def test_added_lines_for_renamed_file_returns_empty_when_git_diff_fails(
+    temporary_git_repository: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: transient git diff failure must not treat the file as all-new lines."""
+    write_file(
+        temporary_git_repository / "old.py",
+        "a = 1\nb = 2\n",
+    )
+    commit_all_files(temporary_git_repository, "baseline")
+    run_git_in_repository(temporary_git_repository, "mv", "old.py", "new.py")
+    commit_all_files(temporary_git_repository, "rename")
+    merge_base = gate_module.resolve_merge_base(temporary_git_repository, "HEAD~1")
+
+    failing = subprocess.CompletedProcess(
+        args=["git", "diff"],
+        returncode=1,
+        stdout="",
+        stderr="simulated git failure\n",
+    )
+    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: failing)
+
+    added = gate_module.added_lines_for_renamed_file(
+        temporary_git_repository.resolve(), merge_base, "old.py", "new.py"
+    )
+    assert added == set()
+    err = capsys.readouterr().err
+    assert "simulated git failure" in err.lower()
+
+
 def test_whole_file_line_set_logs_decode_failure_to_stderr(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],

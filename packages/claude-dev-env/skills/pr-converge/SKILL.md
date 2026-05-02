@@ -83,7 +83,7 @@ Run these two commands in order (PowerShell-friendly Bash escaping):
 
 ### Per-tick behavior under this driver
 
-- Run Steps 1–3 of **Per-tick work** exactly as written.
+- Run Steps 1–3.5 of **Per-tick work** exactly as written (this explicitly includes the safety cap at Step 3.5).
 - **Skip Step 4** (`ScheduleWakeup`) entirely — the auto-typer is the pacer.
 - End every assistant response with the literal sentence `Awaiting next "continue" tick.` so the next iteration is unambiguously identifiable in the transcript.
 - When the next user message is `continue` (auto-typed by AHK) or any close paraphrase, treat it as the next tick of `/pr-converge` and re-enter from Step 1 against the freshest PR state.

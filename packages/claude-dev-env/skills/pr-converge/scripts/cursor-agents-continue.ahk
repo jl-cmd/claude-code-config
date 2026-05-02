@@ -35,6 +35,8 @@ DPI_REFERENCE := 96
 
 AUTO_START_FLAG := "--start-on"
 
+INT32_MINIMUM_VALUE := -2147483648
+
 target_argument := A_Args.Length >= 1 ? A_Args[1] : DEFAULT_TARGET_WINDOW_TITLE
 target_window_title := IsInteger(target_argument) ? "ahk_pid " target_argument : target_argument
 should_auto_start := has_auto_start_flag()
@@ -85,8 +87,7 @@ build_indicator() {
     scaled_text_height  := Round(INDICATOR_TEXT_DESIGN_HEIGHT_PX  * dpi_scale_factor)
     scaled_text_width   := scaled_width - (scaled_text_padding * 2)
 
-    rightmost_edge_px := find_rightmost_monitor_edge()
-    topmost_edge_px   := SysGet(77)
+    rightmost_monitor_bounds := find_rightmost_monitor_bounds()
 
     indicator := Gui("-Caption +AlwaysOnTop +ToolWindow -DPIScale")
     indicator.BackColor := COLOR_OFF_BACKGROUND
@@ -99,8 +100,8 @@ build_indicator() {
         LABEL_OFF
     )
 
-    indicator_x := rightmost_edge_px - scaled_width - scaled_right_offset
-    indicator_y := topmost_edge_px + scaled_top_offset
+    indicator_x := rightmost_monitor_bounds.right_edge - scaled_width - scaled_right_offset
+    indicator_y := rightmost_monitor_bounds.top_edge + scaled_top_offset
     indicator.Show("x" indicator_x " y" indicator_y " w" scaled_width " h" scaled_height " NoActivate")
 }
 
@@ -124,13 +125,16 @@ send_continue_to_target() {
     Send "{Enter}"
 }
 
-find_rightmost_monitor_edge() {
+find_rightmost_monitor_bounds() {
     monitor_count := MonitorGetCount()
-    rightmost_edge_px := -2147483648
+    rightmost_edge_px := INT32_MINIMUM_VALUE
+    rightmost_monitor_top_px := 0
     loop monitor_count {
         MonitorGet(A_Index, &monitor_left, &monitor_top, &monitor_right, &monitor_bottom)
-        if (monitor_right > rightmost_edge_px)
+        if (monitor_right > rightmost_edge_px) {
             rightmost_edge_px := monitor_right
+            rightmost_monitor_top_px := monitor_top
+        }
     }
-    return rightmost_edge_px
+    return { right_edge: rightmost_edge_px, top_edge: rightmost_monitor_top_px }
 }

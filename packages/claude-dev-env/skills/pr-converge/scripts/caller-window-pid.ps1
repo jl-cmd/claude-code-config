@@ -4,7 +4,7 @@ param()
 $DESKTOP_SHELL_TERMINATOR_NAME = 'explorer'
 $MAXIMUM_PARENT_WALK_DEPTH     = 24
 
-if (-not ('Win32ForegroundWindowQuery' -as [type])) {
+if (-not ('CallerWindowPid.Win32ForegroundWindowQuery' -as [type])) {
     Add-Type -Namespace 'CallerWindowPid' -Name 'Win32ForegroundWindowQuery' -MemberDefinition @'
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         public static extern System.IntPtr GetForegroundWindow();

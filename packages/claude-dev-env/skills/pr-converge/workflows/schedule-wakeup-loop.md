@@ -33,5 +33,5 @@ On back-to-back clean: **omit** further `ScheduleWakeup` calls. Do not start the
 
 ## Stop / safety (this path)
 
-On hard blockers, user stop, or safety cap: omit `ScheduleWakeup` per main skill **Stop conditions**. If the session never used AHK for pacing,
+On hard blockers or user stop: omit `ScheduleWakeup` per main skill **Stop conditions**. If the session never used AHK for pacing,
   skip AHK shutdown commands in the companion AHK workflow.

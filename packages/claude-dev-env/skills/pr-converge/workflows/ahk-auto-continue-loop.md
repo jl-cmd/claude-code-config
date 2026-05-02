@@ -15,7 +15,7 @@ It is not a separate "mode" the user must remember — bare `/pr-converge` alrea
   `ScheduleWakeup` re-entering the skill, an external AutoHotkey utility auto-types `continue` into the active Claude Code window every 5
   minutes, and the model treats each `continue` as the next tick trigger.
 
-**AHK is loop pacing only:** every `phase == BUGTEAM` tick still runs **`/bugteam`** via the bugteam skill per Step 2 of the main skill —
+**AHK is loop pacing only:** every `phase == BUGTEAM` tick still runs **bugteam** (team or background-agent workflow per §Second-audit execution in the main `SKILL.md`) —
   nothing here replaces that audit.
 
 **Fix protocol** commits use **`Task` + `clean-coder`** only.
@@ -84,10 +84,8 @@ Report convergence in the same one-sentence shape as the standard flow, plus a s
   ```
 - **State-line responsibility is unchanged.** The state line (phase, bugbot_clean_at, inline_lag_streak, tick_count) is still emitted at the
   end of every tick — it's how the next tick reads prior state. The auto-typer only fires `continue`; it does not preserve state for you.
-- **Safety cap still applies.** `tick_count >= 30` terminates the loop and kills the auto-typer in this mode just as it omits `ScheduleWakeup`
-  in primary pacing mode. The structural-failure interpretation is the same.
-- **`/bugteam` is not optional for BUGTEAM ticks.** AHK only paces **when** the next tick runs; it does not replace the bugteam skill. Skipping
-  **`/bugteam`** after a clean Bugbot review breaks the back-to-back contract.
+- **Bugteam is not optional for BUGTEAM ticks.** AHK only paces **when** the next tick runs; it does not replace bugteam. Skipping the second
+  audit after a clean Bugbot review breaks the back-to-back contract.
 - **Fix protocol:** use **`Task` + `clean-coder`** for production code edits (never `generalPurpose`). Ensure `.cursor/agents/clean-coder.md`
   exists; copy from `~/.claude/agents/` when missing.
 
@@ -102,4 +100,4 @@ On back-to-back clean: stop the auto-typer per **Convergence cleanup** above; om
 
 ## Stop / safety (this path)
 
-On hard blockers, user stop, or safety cap: omit loop pacing and stop the AHK auto-typer if it was started, per main skill **Stop conditions**.
+On hard blockers or user stop: omit loop pacing and stop the AHK auto-typer if it was started, per main skill **Stop conditions**.

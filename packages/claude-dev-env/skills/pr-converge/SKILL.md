@@ -98,7 +98,7 @@ Create once at session start; each teammate writes its result back before going 
 3. **Replace** `state.json` atomically from `state.json.tmp` (`os.replace` / same-volume rename semantics so readers never see a half-written file).
 4. **Release** the lock (`rmdir` / `Remove-Item` on the lock path).
 
-The orchestrator **does not** write `state.json` except where explicitly called out elsewhere in this skill; serialization is on teammates.
+The orchestrator **does not** write `state.json`; serialization is on teammates.
 
 **Orchestrator reads this file at the start of every tick** instead of relying on conversation context for cross-PR state.
 

@@ -7,7 +7,7 @@ description: >-
   session: fetches the latest reviewer state, applies TDD fixes for any
   findings, pushes one commit per tick, replies inline, and re-triggers the
   reviewer. To loop automatically where supported, invoke as `/loop /pr-converge`
-  (ScheduleWakeup); otherwise use §Loop cycle without `/loop` or ScheduleWakeup.
+  (ScheduleWakeup); otherwise install the OS scheduled job in §Loop cycle without `/loop` or ScheduleWakeup.
   Convergence requires a
   back-to-back clean cycle (bugbot CLEAN immediately followed by second-audit CLEAN
   with no intervening fixes), at which point the PR is flipped to ready for
@@ -160,20 +160,15 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 
 ## Loop cycle without `/loop` or ScheduleWakeup
 
-Some hosts (typical IDE sessions) expose **neither** a `/loop` command **nor** `ScheduleWakeup`. That is expected: there is **no in-model substitute** that can wake the same session on a timer. A converge loop is still achievable by **re-invoking the same tick contract** on a **cadence you control outside the model**.
+Some hosts expose **neither** `/loop` nor `ScheduleWakeup`. There is still **no in-model timer**; the **only** substitute this skill defines is an **OS-level scheduled job** the operator installs once.
 
-**What stays the same:** every invocation is still **one tick** — read prior state (conversation line and/or `state.json`), run §Per-tick work, emit the updated state line, obey stop conditions. Convergence and caps are unchanged.
+**Harness (normative):** use **cron** (Unix), **systemd timer** (Linux services), or **Windows Task Scheduler** to run on a **fixed wall-clock interval of 270 seconds** (same default as Step 4 `delaySeconds` — long enough for Bugbot, under typical cache TTL). Each run executes **exactly one** non-interactive agent invocation using the **product’s documented** “single prompt from file / stdin” CLI or API entrypoint. The job’s input is a **constant** one-tick instruction: run §Per-tick work for the target PR; read prior state from disk; write updated state to disk; exit zero on success.
 
-**Organic re-entry patterns (pick one host-appropriate option):**
+**State on disk (required for this harness):** prior tick output must live where the next run can read it without chat history — for multi-PR use `<TMPDIR>/pr-converge-<session_id>/state.json` (§Per-PR state file); for a single PR without that file, the operator picks **one absolute path** to a small JSON file, passes it to every run (argument or environment), creates it on the first tick, and updates it every tick. The scheduled command must wire that path into the frozen prompt or process environment the agent reads.
 
-1. **Manual cadence:** After each tick, the operator sends the same trigger (`/pr-converge`, natural-language equivalent, or paste of the last state line plus “continue”) when GitHub shows Bugbot or the second audit has moved. No automation; lowest coupling.
-2. **External scheduler:** OS **Task Scheduler** / **cron** / **systemd timer** runs on a fixed interval (for example 4–6 minutes — long enough for Bugbot, short enough to converge). Each run invokes the agent with a **frozen prompt** that includes the PR URL, repo, and instruction: “Run exactly one `/pr-converge` tick; read state from …; emit state line.” The scheduler is the loop harness, not the chat product.
-3. **Repository automation:** A **GitHub Actions** `workflow_dispatch` or `schedule` workflow that calls `gh` plus a headless agent entrypoint (CLI or API) with the same one-tick prompt. Treat CI secrets and rate limits as part of the design.
-4. **Dedicated babysitter process:** A small long-lived script (compare `babysit-prs` style) polls `gh pr view` / review APIs and **only** calls into an LLM host when the PR state changes — fewer ticks than blind polling, but more implementation work.
+**Enforceability:** the OS records whether each run started and its exit code (cron logs, `journalctl`, Task Scheduler **Last Run Result**). A missed tick or failing process is visible to operators; the model cannot “silently skip” the schedule.
 
-**Not viable:** asking a **background `general-purpose` agent** inside a host that already cannot schedule wakeups to “call ScheduleWakeup later” — that tool is absent by definition on those hosts (see §Why the work runs in the main session).
-
-**Step 4 in these hosts:** every bullet that says “schedule next wakeup” is a **no-op**; replace with “return and rely on §Loop cycle without `/loop` or ScheduleWakeup for the next entry.”
+**Step 4 in these hosts:** `ScheduleWakeup` calls are **omitted**; the **next** tick is whichever **scheduled OS run** fires next. Do not delegate re-entry to a background subagent calling `ScheduleWakeup` on hosts where that tool does not exist (see §Why the work runs in the main session).
 
 ## State across ticks
 

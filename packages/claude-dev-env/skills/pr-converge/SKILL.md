@@ -2,12 +2,13 @@
 name: pr-converge
 description: >-
   Drives the current PR to convergence by alternating Cursor Bugbot and the
-  in-house bugteam audit. Each invocation runs one tick of work in the main
+  in-house second audit (bugteam when Claude Code agent teams are enabled, else
+  an in-session Cursor workflow). Each invocation runs one tick of work in the main
   session: fetches the latest reviewer state, applies TDD fixes for any
   findings, pushes one commit per tick, replies inline, and re-triggers the
   reviewer. To loop automatically, invoke as `/loop /pr-converge` — the /loop
   skill self-paces re-entry via ScheduleWakeup. Convergence requires a
-  back-to-back clean cycle (bugbot CLEAN immediately followed by bugteam CLEAN
+  back-to-back clean cycle (bugbot CLEAN immediately followed by second-audit CLEAN
   with no intervening fixes), at which point the PR is flipped to ready for
   review and the loop terminates. Triggers: '/pr-converge', 'drive PR to
   convergence', 'loop bugbot and bugteam', 'babysit bugbot and bugteam',
@@ -25,6 +26,27 @@ Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. De
 ## When this skill applies
 
 The user is on a PR branch and wants both reviewers — Cursor's Bugbot AND the in-house `/bugteam` audit — to keep re-reviewing after each push, with findings auto-addressed between ticks. The PR stays in draft until convergence; on convergence the skill flips it to ready for review.
+
+## Second-audit execution (team vs Cursor)
+
+The **second audit** (BUGTEAM phase) is either the `/bugteam` skill (Claude Code agent teams) or an **in-session Cursor workflow** that must produce the **same downstream contract** as `/bugteam` for Step 2 BUGTEAM §(b)–(d): optional commits on `current_head`, convergence or findings list, same fix and re-trigger behaviour.
+
+### Team infrastructure detection
+
+At the start of BUGTEAM step **(a)** each tick, evaluate **once**:
+
+- **Team infrastructure present** when the environment variable `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is set and its value equals **`1`** after trimming leading and trailing whitespace. This matches the bugteam skill's requirement for Claude Code agent teams (`packages/claude-dev-env/skills/bugteam/CONSTRAINTS.md`).
+- **Otherwise** (unset, any other value, or host never exports this variable — typical Cursor IDE sessions): team infrastructure is **absent**. Do **not** invoke `Skill({skill: "bugteam", ...})` or rely on `TeamCreate`; use the **Cursor workflow** branch in BUGTEAM step **(a)** instead.
+
+### Cursor workflow (when team infrastructure is absent)
+
+In the **same session** that is executing `/pr-converge` (no `TeamCreate`):
+
+1. Run the same **preflight** and **code-rules gate** the bugteam lead runs before spawning bugfind: `bugteam_preflight.py` then `bugteam_code_rules_gate.py --base origin/<BASE>` from the packaged dev-env tree (`${CLAUDE_DEV_ENV_ROOT}` / `${CLAUDE_SKILL_DIR}` / repo docs as in bugteam `SKILL.md`). If scripts are not on disk, follow the repository's documented gate substitute (for example `.cursor/BUGBOT.md` where that file exists in the checkout).
+2. Perform **one** full second-audit pass over the PR scope: apply `CODE_RULES.md` and the bugteam audit rubric (`bugteam/reference/audit-contract.md`) as the single lead auditor, producing either **convergence (zero findings)** or a **findings list with `file:line`** in the same shape `/bugteam` uses for orchestration (so Step **(c)** can branch unchanged).
+3. Do **not** call `TeamCreate` or `Skill({skill: "bugteam", ...})`. All later steps in this tick treat this pass as **the second audit** where §(b)–(d) say **bugteam** (pushes, convergence, findings).
+
+Reporting: when marking converged, the one-line report uses **`bugteam CLEAN`** if the team path ran; use **`cursor audit CLEAN`** if the Cursor workflow ran.
 
 ## Multi-PR orchestration model
 
@@ -106,7 +128,7 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
   7. Reports back to orchestrator: one-line summary of outcome.
 
 - Orchestrator reads the updated `state.json` and spawns the appropriate next agent:
-  - Result `clean` → spawn a `general-purpose` agent to run BUGTEAM phase (invokes bugteam skill or transitions per existing §BUGTEAM phase logic).
+  - Result `clean` → spawn a `general-purpose` agent to run BUGTEAM phase (invokes bugteam skill **or** Cursor workflow per §Second-audit execution, whichever applies at runtime).
   - Result `dirty` → spawn a `clean-coder` agent to fix the new findings (same as "audit result with findings" above).
 
 ### What the orchestrator does per tick
@@ -188,33 +210,37 @@ c. Decide (the four branches below cover every input combination — match the f
 
 #### `phase == BUGTEAM`
 
-a. Run the in-house bugteam audit on the current PR by invoking the `Skill` tool in the main session:
+a. Run the **second audit** on the current PR. Branch on §Team infrastructure detection:
 
-   ```
-   Skill({skill: "bugteam", args: "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
-   ```
+   - **Team path** (team infrastructure **present**): invoke the `Skill` tool in the main session:
 
-   The main session is the team lead, so `TeamCreate` fires from the orchestrator and `/bugteam` emits its CODE_RULES gate output, teammate spawn lines, and audit progress as expected. The skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.
+     ```
+     Skill({skill: "bugteam", args: "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
+     ```
 
-b. **Re-resolve current HEAD now** because `/bugteam` may have pushed commits during its run. The `current_head` from Step 1 is potentially stale at this point:
+     The main session is the team lead, so `TeamCreate` fires from the orchestrator and `/bugteam` emits its CODE_RULES gate output, teammate spawn lines, and audit progress as expected. The skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.
+
+   - **Cursor path** (team infrastructure **absent**): execute §Cursor workflow in this session. Wait until the pass finishes; capture the same class of summary you would from `/bugteam` (convergence vs findings) for Step **(c)**.
+
+b. **Re-resolve current HEAD now** because the second audit may have pushed commits during its run. The `current_head` from Step 1 is potentially stale at this point:
    ```bash
    new_head=$(python "${CLAUDE_SKILL_DIR}/scripts/resolve_pr_head.py" \
      --owner <OWNER> --repo <REPO> --number <NUMBER>)
    ```
-   If `new_head != current_head`, set `current_head = new_head` AND set `bugbot_clean_at = null`. The new commits from bugteam invalidate bugbot's prior clean.
+   If `new_head != current_head`, set `current_head = new_head` AND set `bugbot_clean_at = null`. The new commits from the second audit invalidate bugbot's prior clean.
 
-c. Inspect bugteam's output. Bugteam reports either `convergence (zero findings)` or a list of unfixed findings with file:line.
+c. Inspect the second audit output. It reports either `convergence (zero findings)` or a list of unfixed findings with file:line (same semantics as `/bugteam`).
 
-d. Decide based on the (post-bugteam) state — order matters; check pushed-during-bugteam FIRST so a convergence report against a stale HEAD never falsely terminates:
-   - **bugteam pushed during this tick (i.e., `bugbot_clean_at` was just reset to `null` in step b):** Re-trigger bugbot in this same tick (Step 3) so the new HEAD enters bugbot's queue immediately, transition `phase = BUGBOT`, schedule next wakeup, return. The new commit needs a fresh bugbot review before convergence can be claimed.
-   - **bugteam reports convergence AND `bugbot_clean_at == current_head` (no push during this tick):** This is back-to-back clean. Mark the PR ready for review:
+d. Decide based on the (post-second-audit) state — order matters; check pushed-during-second-audit FIRST so a convergence report against a stale HEAD never falsely terminates:
+   - **Second audit pushed during this tick (i.e., `bugbot_clean_at` was just reset to `null` in step b):** Re-trigger bugbot in this same tick (Step 3) so the new HEAD enters bugbot's queue immediately, transition `phase = BUGBOT`, schedule next wakeup, return. The new commit needs a fresh bugbot review before convergence can be claimed.
+   - **Second audit reports convergence AND `bugbot_clean_at == current_head` (no push during this tick):** This is back-to-back clean. Mark the PR ready for review:
      ```bash
      python "${CLAUDE_SKILL_DIR}/scripts/mark_pr_ready.py" \
        --owner <OWNER> --repo <REPO> --number <NUMBER>
      ```
-     Report to the user in one sentence: "PR #<NUMBER> converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>; marked ready for review." **Omit the next ScheduleWakeup call** — this terminates the /loop.
-   - **bugteam reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** Bugteam reached zero findings without committing, yet bugbot still needs re-confirmation against this HEAD. This branch is reachable only when state diverged BETWEEN ticks — for example, the user pushed a manual commit between two wakeups, leaving `current_head` ahead of the SHA bugbot last cleaned. Transition `phase = BUGBOT`, schedule next wakeup, return.
-   - **bugteam reports findings without committing fixes:** apply the **Fix protocol** below (which always re-triggers bugbot after the push), transition `phase = BUGBOT`, schedule next wakeup, return.
+     Report to the user in one sentence: `PR #<NUMBER> converged: bugbot CLEAN at <SHA>, <SECOND_AUDIT_LABEL> CLEAN at <SHA>; marked ready for review` where `<SECOND_AUDIT_LABEL>` is **`bugteam`** if the team path ran or **`cursor audit`** if the Cursor workflow ran. **Omit the next ScheduleWakeup call** — this terminates the /loop.
+   - **Second audit reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** The second audit reached zero findings without committing, yet bugbot still needs re-confirmation against this HEAD. This branch is reachable only when state diverged BETWEEN ticks — for example, the user pushed a manual commit between two wakeups, leaving `current_head` ahead of the SHA bugbot last cleaned. Transition `phase = BUGBOT`, schedule next wakeup, return.
+   - **Second audit reports findings without committing fixes:** apply the **Fix protocol** below (which always re-triggers bugbot after the push), transition `phase = BUGBOT`, schedule next wakeup, return.
 
 ### Step 3: Re-trigger bugbot
 
@@ -268,8 +294,8 @@ The fix protocol is executed by a **`clean-coder` teammate**, never inline by th
 
 ## Stop conditions
 
-- **Convergence** (back-to-back clean as defined in Step 2 BUGTEAM second branch — `bugteam reports convergence AND bugbot_clean_at == current_head` with no push during this tick): mark PR ready for review, report one-sentence summary, omit ScheduleWakeup.
-- **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection investigated through three commits and still unresolved, `inline_lag_streak >= 3`, or `/bugteam` itself reports a stuck state. Report the specific blocker and the diagnosis, then omit ScheduleWakeup.
+- **Convergence** (back-to-back clean as defined in Step 2 BUGTEAM second branch — second audit reports convergence AND `bugbot_clean_at == current_head` with no push during this tick): mark PR ready for review, report one-sentence summary, omit ScheduleWakeup.
+- **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection investigated through three commits and still unresolved, `inline_lag_streak >= 3`, or the second audit (`/bugteam` or Cursor workflow) reports a stuck state. Report the specific blocker and the diagnosis, then omit ScheduleWakeup.
 - **User stops the loop:** user says "stop the converge loop" → omit ScheduleWakeup on the next tick.
 - **Safety cap:** `tick_count >= 30` (evaluated in Step 3.5) → omit ScheduleWakeup, report the cap was hit. See §Safety cap below for rationale.
 
@@ -281,7 +307,7 @@ When `tick_count >= 30`, stop and report. That many rounds means something struc
 
 - **Append commits.** Each tick adds at most one new fix commit. Multiple findings within one tick collapse into a single commit; the next tick handles the next round.
 - **`bugbot_clean_at` resets on every push.** A new commit invalidates bugbot's prior clean by definition — bugbot must re-review the new HEAD before convergence can be claimed.
-- **Back-to-back clean is the ONLY termination criterion.** Convergence requires both reviewers clean against the same HEAD with no intervening fixes; either reviewer clean alone counts as in-progress.
+- **Back-to-back clean is the ONLY termination criterion.** Convergence requires Bugbot clean and the second audit (bugteam or Cursor workflow) clean against the same HEAD with no intervening fixes; either side clean alone counts as in-progress.
 - **The `bugbot run` comment is load-bearing.** Use the literal phrase `bugbot run` exactly — empirically the only re-trigger Cursor Bugbot recognizes; alternative phrasings silently no-op.
 - **`gh pr ready` is the convergence action.** Mark the PR ready for review and stop there. Merge, additional reviewers, title, and body remain the user's decisions; the skill's contract ends at "ready for review."
 - **Honor pre-push and pre-commit hooks.** When a hook rejects the change, read its output, fix the underlying issue (the failing test, the missing constant, the broken import), and retry.
@@ -326,4 +352,9 @@ Claude: [re-resolves HEAD, sets `bugbot_clean_at = null`, posts `bugbot run` in 
 <example>
 Tick fires in BUGBOT phase, bugbot review body says "found 3 potential issues" against HEAD but the inline-comments API returns zero matching comments for `current_head`.
 Claude: [increments `inline_lag_streak` to 1, schedules next wakeup at 60s, returns; expects inline comments to appear by the next tick]
+</example>
+
+<example>
+BUGTEAM tick in Cursor IDE: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is unset; team infrastructure absent.
+Claude: [runs §Cursor workflow — preflight, code-rules gate, one in-session audit pass — then applies Step 2 §(b)–(d) unchanged against that pass's outcome]
 </example>

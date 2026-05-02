@@ -181,6 +181,20 @@ class RunGhUnreachableAssertionRemovedTests(unittest.TestCase):
         assert "AssertionError" not in run_gh_source_text
 
 
+class EnsureTextParameterNameTests(unittest.TestCase):
+    """The `_ensure_text` parameter must not use the banned name `value`.
+
+    CODE_RULES.md §5 bans generic names like `value`. The parameter must
+    describe what it carries -- a subprocess stdout/stderr field that may be
+    str, bytes, or None.
+    """
+
+    def test_ensure_text_parameter_is_not_named_value(self) -> None:
+        ensure_text_signature = inspect.signature(gh_util._ensure_text)
+        all_parameter_names = list(ensure_text_signature.parameters)
+        assert "value" not in all_parameter_names
+
+
 class FetchInlineReviewCommentsPaginationTests(unittest.TestCase):
     """Regression: gh --paginate emits one JSON document per page concatenated.
 

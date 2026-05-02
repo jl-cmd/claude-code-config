@@ -42,12 +42,12 @@ def _is_auth_error(message: str) -> bool:
     return any(each_marker in lowered for each_marker in ALL_AUTH_ERROR_MARKERS)
 
 
-def _ensure_text(value: str | bytes | None) -> str:
-    if value is None:
+def _ensure_text(text_or_bytes: str | bytes | None) -> str:
+    if text_or_bytes is None:
         return ""
-    if isinstance(value, bytes):
-        return value.decode(errors="replace")
-    return value
+    if isinstance(text_or_bytes, bytes):
+        return text_or_bytes.decode(errors="replace")
+    return text_or_bytes
 
 
 def run_gh(

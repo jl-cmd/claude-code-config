@@ -268,17 +268,29 @@ def test_preflight_uses_extracted_directory_marker_constants() -> None:
 
     The CODE_RULES magic-values rule treats inline ``.git`` and ``.venv``
     string literals in production function bodies as violations. Confirm
-    preflight.py imports them from config.preflight_constants instead.
+    preflight.py imports them (or a frozenset that contains ``.venv``) from
+    config.preflight_constants instead.
     """
     preflight_source = inspect.getsource(preflight)
     assert "GIT_DIRECTORY_NAME" in preflight_source
-    assert "VENV_DIRECTORY_NAME" in preflight_source
+    assert "ALL_TESTS_DIRECTORY_IGNORE_PARTS" in preflight_source
     find_root_source = inspect.getsource(preflight.find_repository_root)
     assert "'.git'" not in find_root_source
     assert '".git"' not in find_root_source
     discover_tests_source = inspect.getsource(preflight.has_discoverable_tests)
     assert "'.venv'" not in discover_tests_source
     assert '".venv"' not in discover_tests_source
+
+
+def test_preflight_does_not_import_unused_venv_directory_name_constant() -> None:
+    """The ``VENV_DIRECTORY_NAME`` constant is not consumed by preflight.py
+    (``.venv`` reaches the function body via ``ALL_TESTS_DIRECTORY_IGNORE_PARTS``).
+    Importing the standalone name is dead code per the unused-imports rule."""
+    preflight_source = inspect.getsource(preflight)
+    assert "VENV_DIRECTORY_NAME" not in preflight_source, (
+        "Dead import must be removed; preflight.py reaches `.venv` via "
+        "ALL_TESTS_DIRECTORY_IGNORE_PARTS instead"
+    )
 
 
 def test_preflight_stderr_uses_bugteam_preflight_prefix(

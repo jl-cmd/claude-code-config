@@ -52,6 +52,14 @@ def list_local_core_hooks_path_values(
         env=all_environment_overrides,
     )
     if completed_process.returncode != 0:
+        diagnostic_stderr = completed_process.stderr.strip()
+        if diagnostic_stderr:
+            print(
+                "fix_hookspath: git read of local core.hooksPath on "
+                f"{repository_root} exited {completed_process.returncode}: "
+                f"{diagnostic_stderr}",
+                file=sys.stderr,
+            )
         return []
     return [
         each_line.strip()
@@ -74,6 +82,13 @@ def read_global_core_hooks_path(
         env=all_environment_overrides,
     )
     if completed_process.returncode != 0:
+        diagnostic_stderr = completed_process.stderr.strip()
+        if diagnostic_stderr:
+            print(
+                "fix_hookspath: git read of global core.hooksPath exited "
+                f"{completed_process.returncode}: {diagnostic_stderr}",
+                file=sys.stderr,
+            )
         return ""
     return completed_process.stdout.strip()
 

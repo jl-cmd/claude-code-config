@@ -255,6 +255,105 @@ def test_resolve_canonical_hooks_directory_uses_home_env_overrides(
     assert resolved == fake_home / ".claude" / "hooks" / "git-hooks"
 
 
+def test_list_local_core_hooks_path_values_surfaces_git_stderr(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When git -C ... config --get-all exits non-zero with stderr, the helper
+    must print a diagnostic to sys.stderr so the failure is distinguishable from
+    "no local override exists".
+    """
+    failing_completed_process = subprocess.CompletedProcess(
+        args=["git"],
+        returncode=128,
+        stdout="",
+        stderr="fatal: not a git repository (or any parent up to mount point /)",
+    )
+    monkeypatch.setattr(
+        fix_hookspath.subprocess, "run", lambda *_args, **_kwargs: failing_completed_process
+    )
+
+    returned_values = fix_hookspath.list_local_core_hooks_path_values(
+        tmp_path / "any-repo", None
+    )
+
+    assert returned_values == []
+    captured_streams = capsys.readouterr()
+    assert "fix_hookspath" in captured_streams.err
+    assert "core.hooksPath" in captured_streams.err
+    assert "not a git repository" in captured_streams.err
+
+
+def test_list_local_core_hooks_path_values_quiet_when_stderr_empty(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`git config --get-all` exits 1 with empty stderr when the key is simply
+    unset. That is the dominant happy path and must NOT emit a diagnostic."""
+    unset_completed_process = subprocess.CompletedProcess(
+        args=["git"], returncode=1, stdout="", stderr=""
+    )
+    monkeypatch.setattr(
+        fix_hookspath.subprocess, "run", lambda *_args, **_kwargs: unset_completed_process
+    )
+
+    returned_values = fix_hookspath.list_local_core_hooks_path_values(
+        tmp_path / "any-repo", None
+    )
+
+    assert returned_values == []
+    captured_streams = capsys.readouterr()
+    assert captured_streams.err == ""
+
+
+def test_read_global_core_hooks_path_surfaces_git_stderr(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the global git-config read exits non-zero with stderr, the helper
+    must print a diagnostic so callers can distinguish "global unset" from
+    "git broken"."""
+    failing_completed_process = subprocess.CompletedProcess(
+        args=["git"],
+        returncode=128,
+        stdout="",
+        stderr="fatal: bad config line 1 in file /home/example/.gitconfig",
+    )
+    monkeypatch.setattr(
+        fix_hookspath.subprocess, "run", lambda *_args, **_kwargs: failing_completed_process
+    )
+
+    returned_value = fix_hookspath.read_global_core_hooks_path(None)
+
+    assert returned_value == ""
+    captured_streams = capsys.readouterr()
+    assert "fix_hookspath" in captured_streams.err
+    assert "core.hooksPath" in captured_streams.err
+    assert "bad config" in captured_streams.err
+
+
+def test_read_global_core_hooks_path_quiet_when_stderr_empty(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`git config --global --get` exits 1 with empty stderr when the key is
+    simply unset. That is the dominant happy path and must NOT emit a diagnostic."""
+    unset_completed_process = subprocess.CompletedProcess(
+        args=["git"], returncode=1, stdout="", stderr=""
+    )
+    monkeypatch.setattr(
+        fix_hookspath.subprocess, "run", lambda *_args, **_kwargs: unset_completed_process
+    )
+
+    returned_value = fix_hookspath.read_global_core_hooks_path(None)
+
+    assert returned_value == ""
+    captured_streams = capsys.readouterr()
+    assert captured_streams.err == ""
+
+
 def test_should_handle_paths_with_spaces(tmp_path: Path) -> None:
     home_directory = tmp_path / "home with space"
     home_directory.mkdir()

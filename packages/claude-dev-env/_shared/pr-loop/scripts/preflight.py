@@ -21,7 +21,6 @@ from config.preflight_constants import (
     PYTEST_INI_FILENAME,
     PYTEST_NO_TESTS_COLLECTED_EXIT_CODE,
     PYTEST_TOML_TABLE_PREFIX,
-    VENV_DIRECTORY_NAME,  # noqa: F401  -- referenced by test_preflight_uses_extracted_directory_marker_constants
 )
 
 

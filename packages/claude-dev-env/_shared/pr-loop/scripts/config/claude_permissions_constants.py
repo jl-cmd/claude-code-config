@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from config.preflight_constants import GIT_DIRECTORY_NAME
+
 
 ALL_PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
 
@@ -15,8 +17,6 @@ AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
 CLAUDE_SETTINGS_DIRECTORY_NAME: str = ".claude"
 
 CLAUDE_SETTINGS_FILENAME: str = "settings.json"
-
-GIT_DIRECTORY_NAME: str = ".git"
 
 TEXT_FILE_ENCODING: str = "utf-8"
 

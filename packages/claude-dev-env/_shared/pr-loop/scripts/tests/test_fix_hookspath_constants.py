@@ -38,3 +38,10 @@ def test_canonical_hooks_directory_components_remain_three_component_tuple() -> 
         "hooks",
         "git-hooks",
     )
+
+
+def test_hooks_path_verification_suffix_is_two_component_for_backward_compat() -> None:
+    assert constants_module.HOOKS_PATH_VERIFICATION_SUFFIX == "hooks/git-hooks"
+    assert constants_module.HOOKS_PATH_VERIFICATION_SUFFIX == "/".join(
+        constants_module.ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS[-2:]
+    )

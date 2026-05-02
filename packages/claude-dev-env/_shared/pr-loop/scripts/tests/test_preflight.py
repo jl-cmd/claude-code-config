@@ -216,7 +216,7 @@ def test_preflight_uses_shared_hooks_path_suffix_constant() -> None:
     assert constants_specification.loader is not None
     constants_module = importlib.util.module_from_spec(constants_specification)
     constants_specification.loader.exec_module(constants_module)
-    expected_suffix = constants_module.HOOKS_PATH_SUFFIX
+    expected_suffix = constants_module.HOOKS_PATH_VERIFICATION_SUFFIX
 
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process(

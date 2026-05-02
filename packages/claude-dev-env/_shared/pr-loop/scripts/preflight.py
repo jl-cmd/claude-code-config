@@ -8,7 +8,7 @@ sys.modules.pop("config", None)
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from config.fix_hookspath_constants import HOOKS_PATH_SUFFIX
+from config.fix_hookspath_constants import HOOKS_PATH_VERIFICATION_SUFFIX
 from config.preflight_constants import (
     ALL_GIT_CONFIG_GET_CORE_HOOKS_PATH_SUBCOMMAND,
     ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND,
@@ -36,7 +36,7 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     Returns zero when the configured path ends with the expected hooks suffix.
     Returns non-zero and prints a correction message when unset or pointing elsewhere.
     """
-    expected_hooks_path_suffix = HOOKS_PATH_SUFFIX
+    expected_hooks_path_suffix = HOOKS_PATH_VERIFICATION_SUFFIX
     enforcement_absent_message = (
         "Git-side CODE_RULES enforcement is not active on this host.\n"
         "Run: npx claude-dev-env .\n"

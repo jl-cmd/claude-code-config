@@ -72,3 +72,7 @@ def test_all_repository_root_marker_filenames() -> None:
         constants_module.GIT_DIRECTORY_NAME,
         constants_module.PYTEST_INI_FILENAME,
     )
+
+
+def test_pytest_no_tests_collected_exit_code() -> None:
+    assert constants_module.PYTEST_NO_TESTS_COLLECTED_EXIT_CODE == 5

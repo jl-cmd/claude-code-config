@@ -41,3 +41,5 @@ ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND: tuple[str, str, str] = (
     "run",
     "--all-files",
 )
+
+PYTEST_NO_TESTS_COLLECTED_EXIT_CODE: int = 5

@@ -30,6 +30,8 @@ def _load_preflight_module() -> ModuleType:
 
 preflight = _load_preflight_module()
 
+from config.preflight_constants import PYTEST_NO_TESTS_COLLECTED_EXIT_CODE  # noqa: E402
+
 
 def _make_completed_process(
     stdout: str, returncode: int
@@ -303,4 +305,17 @@ def test_preflight_does_not_import_unused_repository_root_marker_constant() -> N
     assert "ALL_REPOSITORY_ROOT_MARKER_FILENAMES" not in preflight_source, (
         "Dead import must be removed; preflight.py uses individual marker "
         "filename constants directly"
+    )
+
+
+def test_pytest_no_tests_collected_helper_returns_named_constant() -> None:
+    """The pytest "no tests collected" exit code must be sourced from the
+    named constant in config/preflight_constants.py rather than the bare
+    literal 5 inside the function body (CODE_RULES magic-values rule)."""
+    assert preflight._pytest_exit_code_no_tests_collected() == (
+        PYTEST_NO_TESTS_COLLECTED_EXIT_CODE
+    )
+    helper_source = inspect.getsource(preflight._pytest_exit_code_no_tests_collected)
+    assert "PYTEST_NO_TESTS_COLLECTED_EXIT_CODE" in helper_source, (
+        "Helper body must return the named constant, not the bare literal 5"
     )

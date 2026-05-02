@@ -19,6 +19,7 @@ from config.preflight_constants import (
     GIT_DIRECTORY_NAME,
     PYPROJECT_TOML_FILENAME,
     PYTEST_INI_FILENAME,
+    PYTEST_NO_TESTS_COLLECTED_EXIT_CODE,
     PYTEST_TOML_TABLE_PREFIX,
     VENV_DIRECTORY_NAME,  # noqa: F401  -- referenced by test_preflight_uses_extracted_directory_marker_constants
 )
@@ -125,7 +126,8 @@ def has_discoverable_tests(root: Path) -> bool:
 
 
 def _pytest_exit_code_no_tests_collected() -> int:
-    return 5
+    pytest_no_tests_collected_exit_code = PYTEST_NO_TESTS_COLLECTED_EXIT_CODE
+    return pytest_no_tests_collected_exit_code
 
 
 def run_pytest(repository_root: Path, verbose: bool) -> int:

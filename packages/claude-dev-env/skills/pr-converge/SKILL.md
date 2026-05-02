@@ -153,7 +153,7 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 
 - Orchestrator reads the updated `state.json` and spawns the appropriate next agent:
   - Result `clean` → spawn a `general-purpose` agent to run BUGTEAM phase (invokes bugteam skill **or** §Background-agent second audit per §Second-audit execution, whichever applies at runtime).
-  - Monitor exits on **`dirty` (step 4e)** — never treat **`inline_lag` (4c)** as `dirty` for this spawn → spawn a `clean-coder` agent to fix the new findings (same as "audit result with findings" above).
+  - Monitor exited on **`dirty` (step 4e)** with actionable inline threads → spawn a `clean-coder` agent (same as "audit result with findings" above). Do **not** spawn `clean-coder` when the monitor only saw **`inline_lag`** (4c retries) without reaching **4e** — that path retries or hits the §Stop conditions streak cap instead of a fix pass.
 
 ### What the orchestrator does per tick
 

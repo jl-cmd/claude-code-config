@@ -132,7 +132,7 @@ When a bugfind teammate reports completion (findings or clean):
   2. Applies TDD fixes (test first, then production code).
   3. Commits and pushes one fix commit.
   4. Replies inline to each addressed finding comment via `reply_to_inline_comment.py`.
-  5. **Writes its result to `state.json`** (per §Concurrency) (`last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase: "BUGBOT"`).
+  5. **Writes its result to `state.json`** (per §Concurrency) (`last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase: "BUGBOT"`, `status: "awaiting_bugbot"`, `last_updated` as an ISO-8601 UTC timestamp).
   6. Goes idle.
 
 - For PRs with zero findings: spawn **one `general-purpose` agent** per PR. That agent:
@@ -322,7 +322,7 @@ The fix protocol is executed by a **`clean-coder` teammate**, never inline by th
 The non-default obligations the teammate must observe (everything beyond ordinary `git add` / `git commit` / `git push`):
 
 - Replies inline on each addressed finding thread via `reply_to_inline_comment.py` (what changed and the commit identifier), matching §Audit result → clean-coder step 4 — **before** writing `state.json` and going idle.
-- Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase: "BUGBOT"` to `state.json` (per §Concurrency).
+- Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase: "BUGBOT"`, `status: "awaiting_bugbot"`, and `last_updated` (ISO-8601 UTC) to `state.json` (per §Concurrency).
 - Goes idle. The orchestrator spawns the follow-up `general-purpose` agent for bugbot trigger and monitoring.
 
 **The orchestrator does not reply to inline comments, does not trigger bugbot, and does not read file contents during the fix phase.** Those actions belong to the dedicated per-PR agents.

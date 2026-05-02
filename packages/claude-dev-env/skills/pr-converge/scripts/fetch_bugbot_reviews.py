@@ -59,6 +59,8 @@ def fetch_bugbot_reviews(
         each_review
         for each_review in flat_reviews
         if (each_review.get("user") or {}).get("login") == cursor_bot_login
+        and each_review.get("submitted_at") is not None
+        and each_review.get("id") is not None
     ]
     bugbot_reviews.sort(
         key=lambda each_review: each_review["submitted_at"], reverse=True

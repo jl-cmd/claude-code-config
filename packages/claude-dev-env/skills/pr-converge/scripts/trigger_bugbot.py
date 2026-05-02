@@ -51,9 +51,9 @@ def trigger_bugbot(*, owner: str, repo: str, number: int) -> str:
             encoding="utf-8",
             errors="replace",
         )
+        return completed.stdout.strip()
     finally:
         body_file_path.unlink(missing_ok=True)
-    return completed.stdout.strip()
 
 
 def main() -> int:

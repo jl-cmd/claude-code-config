@@ -46,7 +46,7 @@ def reply_to_inline_comment(
         encoding="utf-8",
         errors="replace",
     )
-    response_payload: dict = json.loads(completed.stdout)
+    response_payload: dict[str, object] = json.loads(completed.stdout)
     return int(response_payload["id"])
 
 

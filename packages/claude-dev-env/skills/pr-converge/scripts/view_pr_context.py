@@ -17,7 +17,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 from config.pr_converge_constants import PR_CONTEXT_FIELDS
 
 
-def view_pr_context() -> dict:
+def view_pr_context() -> dict[str, object]:
     """Return the parsed JSON object from `gh pr view --json <fields>`."""
     pr_context_fields = PR_CONTEXT_FIELDS
     gh_command: list[str] = ["gh", "pr", "view", "--json", pr_context_fields]

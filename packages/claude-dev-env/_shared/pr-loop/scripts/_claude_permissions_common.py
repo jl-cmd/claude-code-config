@@ -123,7 +123,12 @@ def write_atomically_with_mode(
         os.O_WRONLY | os.O_CREAT | os.O_EXCL,
         file_mode,
     )
-    with os.fdopen(file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as writer:
+    try:
+        writer = os.fdopen(file_descriptor, "w", encoding=TEXT_FILE_ENCODING)
+    except BaseException:
+        os.close(file_descriptor)
+        raise
+    with writer:
         writer.write(serialized_content)
 
 

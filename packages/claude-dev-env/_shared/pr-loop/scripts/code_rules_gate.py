@@ -389,6 +389,7 @@ def _iter_calls_excluding_nested_functions(node: ast.AST) -> Iterator[ast.Call]:
             continue
         if isinstance(each_child, ast.Call):
             yield each_child
+            continue
         yield from _iter_calls_excluding_nested_functions(each_child)
 
 
@@ -413,6 +414,10 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
     - ast.Attribute calls match by attribute name only; the receiver type is
       not checked, so `self.fetch(...)` and `other.fetch(...)` both match a
       module-level `fetch` definition.
+    - Nested call expressions inside another call's arguments are not treated as
+      separate call sites; only the enclosing Call is inspected. This avoids
+      false positives where a callee nested as an argument is confused with a
+      top-level delegate invocation (for example `delegate(helper(x))`).
     """
     non_python_code_extensions = ALL_CODE_FILE_EXTENSIONS - {PYTHON_FILE_EXTENSION}
     lowercase_file_path = file_path.lower()

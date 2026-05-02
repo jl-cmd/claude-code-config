@@ -642,6 +642,34 @@ def test_check_wrapper_plumb_through_dedupes_nested_public_function_calls() -> N
     assert len(issues) == 1, f"expected 1 finding, got {len(issues)}: {issues!r}"
 
 
+
+
+def test_check_wrapper_plumb_through_ignores_calls_nested_inside_delegate_arguments() -> None:
+    """Regression: nested callees inside another call's arguments are not wrapper sites.
+
+    Cursor Bugbot (review 4214887527): `_iter_calls_excluding_nested_functions`
+    used to recurse into `ast.Call` children, so `delegate(helper(x))` yielded
+    both the outer `delegate` call and the inner `helper` call. The inner call
+    must not attribute dropped optional kwargs of `helper` to the enclosing
+    public function when `helper` is only a sub-expression argument.
+    """
+    source = (
+        "def helper(x, *, opt=1):\n"
+        "    return x\n"
+        "\n"
+        "def delegate(a):\n"
+        "    return a\n"
+        "\n"
+        "def public_outer():\n"
+        "    return delegate(helper(1))\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert issues == [], (
+        "nested helper inside delegate arguments must not false-flag the outer "
+        f"public function; got {issues!r}"
+    )
+
+
 def test_check_wrapper_plumb_through_ignores_calls_in_nested_functions() -> None:
     """Calls inside a nested FunctionDef must not be attributed to the outer function.
 

@@ -88,6 +88,39 @@ def test_path_contains_glob_metacharacters_rejects_true_metacharacters() -> None
     assert common.path_contains_glob_metacharacters("C:/some/{a,b}/file") is True
 
 
+
+
+def test_write_atomically_with_mode_closes_descriptor_when_fdopen_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: if os.fdopen fails, the raw descriptor from os.open must close.
+
+    Cursor Bugbot (review 4214887527): without a failure path, the descriptor
+    leaks when fdopen raises before the file object assumes ownership.
+    """
+    closed_descriptors: list[int] = []
+    sentinel_descriptor = 91
+
+    def fake_open(_path: str, _flags: int, _mode: int = 0o777) -> int:
+        return sentinel_descriptor
+
+    def fake_fdopen(_file_descriptor: int, *_args: object, **_kwargs: object) -> object:
+        raise OSError("simulated fdopen failure")
+
+    def recording_close(file_descriptor: int) -> None:
+        closed_descriptors.append(file_descriptor)
+
+    monkeypatch.setattr(common.os, "open", fake_open)
+    monkeypatch.setattr(common.os, "fdopen", fake_fdopen)
+    monkeypatch.setattr(common.os, "close", recording_close)
+
+    temporary_path = tmp_path / "tempfile.tmp"
+    with pytest.raises(OSError, match="simulated fdopen failure"):
+        common.write_atomically_with_mode(temporary_path, "{}", 0o600)
+
+    assert closed_descriptors == [sentinel_descriptor]
+
+
 def test_path_contains_glob_metacharacters_accepts_windows_paths_with_parens() -> None:
     """Regression: Windows paths like C:/Program Files (x86)/ must not raise ValueError.
 

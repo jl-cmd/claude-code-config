@@ -5,8 +5,6 @@ is NOT paginated, so `--paginate` / `--slurp` are unnecessary and `gh`'s
 built-in `--jq` is safe to use here.
 """
 
-from __future__ import annotations
-
 import argparse
 import subprocess
 import sys
@@ -47,8 +45,8 @@ def main() -> int:
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--number", required=True, type=int)
-    args = parser.parse_args()
-    head_sha = resolve_pr_head(owner=args.owner, repo=args.repo, number=args.number)
+    parsed_arguments = parser.parse_args()
+    head_sha = resolve_pr_head(owner=parsed_arguments.owner, repo=parsed_arguments.repo, number=parsed_arguments.number)
     sys.stdout.write(f"{head_sha}\n")
     return 0
 

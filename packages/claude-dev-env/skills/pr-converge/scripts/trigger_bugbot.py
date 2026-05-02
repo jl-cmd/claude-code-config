@@ -5,8 +5,6 @@ Writes the literal trigger phrase to a temp file (per the gh-body-file rule —
 `gh pr comment --body-file`, and removes the temp file on success or failure.
 """
 
-from __future__ import annotations
-
 import argparse
 import os
 import subprocess
@@ -63,9 +61,9 @@ def main() -> int:
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--number", required=True, type=int)
-    args = parser.parse_args()
+    parsed_arguments = parser.parse_args()
     comment_url = trigger_bugbot(
-        owner=args.owner, repo=args.repo, number=args.number
+        owner=parsed_arguments.owner, repo=parsed_arguments.repo, number=parsed_arguments.number
     )
     sys.stdout.write(f"{comment_url}\n")
     return 0

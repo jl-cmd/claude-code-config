@@ -4,8 +4,6 @@ Wraps `gh pr view --json ...` so the skill body emits one script invocation
 instead of repeating the field list inline.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import subprocess

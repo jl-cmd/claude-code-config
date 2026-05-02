@@ -6,8 +6,6 @@ JSON handling (instead of `gh --jq`, which runs per-page and breaks cross-page
 operations like sort/reverse — see GitHub CLI #10459).
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import re
@@ -87,9 +85,9 @@ def main() -> int:
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--number", required=True, type=int)
-    args = parser.parse_args()
+    parsed_arguments = parser.parse_args()
     all_reviews = fetch_bugbot_reviews(
-        owner=args.owner, repo=args.repo, number=args.number
+        owner=parsed_arguments.owner, repo=parsed_arguments.repo, number=parsed_arguments.number
     )
     json.dump(all_reviews, sys.stdout)
     sys.stdout.write("\n")

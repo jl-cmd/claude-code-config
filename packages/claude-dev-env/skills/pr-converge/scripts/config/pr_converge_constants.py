@@ -4,8 +4,6 @@ Path templates accept ``str.format(**kwargs)`` substitution; bugbot strings
 match the literal phrasing the Cursor Bugbot reviewer emits.
 """
 
-from __future__ import annotations
-
 CURSOR_BOT_LOGIN: str = "cursor[bot]"
 
 BUGBOT_DIRTY_BODY_REGEX: str = (

@@ -4,8 +4,6 @@ Convergence action invoked by pr-converge when both bugbot and bugteam are
 clean against the same HEAD.
 """
 
-from __future__ import annotations
-
 import argparse
 import subprocess
 import sys
@@ -36,8 +34,8 @@ def main() -> int:
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)
     parser.add_argument("--number", required=True, type=int)
-    args = parser.parse_args()
-    mark_pr_ready(owner=args.owner, repo=args.repo, number=args.number)
+    parsed_arguments = parser.parse_args()
+    mark_pr_ready(owner=parsed_arguments.owner, repo=parsed_arguments.repo, number=parsed_arguments.number)
     return 0
 
 

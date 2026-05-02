@@ -6,8 +6,6 @@ JSON handling. Filters to cursor[bot] comments whose commit_id matches the
 caller-supplied current HEAD SHA.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import subprocess
@@ -76,12 +74,12 @@ def main() -> int:
     parser.add_argument("--repo", required=True)
     parser.add_argument("--number", required=True, type=int)
     parser.add_argument("--commit", required=True, dest="current_head")
-    args = parser.parse_args()
+    parsed_arguments = parser.parse_args()
     all_comments = fetch_bugbot_inline_comments(
-        owner=args.owner,
-        repo=args.repo,
-        number=args.number,
-        current_head=args.current_head,
+        owner=parsed_arguments.owner,
+        repo=parsed_arguments.repo,
+        number=parsed_arguments.number,
+        current_head=parsed_arguments.current_head,
     )
     json.dump(all_comments, sys.stdout)
     sys.stdout.write("\n")

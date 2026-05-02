@@ -4,8 +4,6 @@ Reply body is sourced from a file via `gh api ... -F body=@<path>` (per the
 gh-body-file rule — passing a string body to gh can corrupt backticks).
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import subprocess
@@ -59,13 +57,13 @@ def main() -> int:
     parser.add_argument("--number", required=True, type=int)
     parser.add_argument("--comment-id", required=True, type=int, dest="comment_id")
     parser.add_argument("--body-file", required=True, type=Path, dest="body_file")
-    args = parser.parse_args()
+    parsed_arguments = parser.parse_args()
     reply_id = reply_to_inline_comment(
-        owner=args.owner,
-        repo=args.repo,
-        number=args.number,
-        comment_id=args.comment_id,
-        body_file=args.body_file,
+        owner=parsed_arguments.owner,
+        repo=parsed_arguments.repo,
+        number=parsed_arguments.number,
+        comment_id=parsed_arguments.comment_id,
+        body_file=parsed_arguments.body_file,
     )
     sys.stdout.write(f"{reply_id}\n")
     return 0

@@ -5,7 +5,7 @@ Load when bugteam `SKILL.md` **Path routing** selects **Path B** (`CLAUDE_CODE_E
 | Path A | Path B |
 | --- | --- |
 | `TeamCreate(...)` | **Omit.** |
-| `Agent(..., team_name=..., ...)` | **`Task`** (or host-equivalent) with same `subagent_type`, `model`, `prompt` — **omit** `team_name`. |
+| `Agent(..., team_name=..., ...)` | **`Task`** (or host-equivalent) with the same `model` and prompt contracts as Path A — **omit** `team_name`. `subagent_type` follows this file's **AUDIT** / **FIX spawn** sections (Claude Code: `code-quality-agent` / `clean-coder`; Cursor: `code-quality-agent` / `generalPurpose` + mandatory `clean-coder.md` **Read** on FIX when the enum rejects `clean-coder`). |
 | `SendMessage` shutdown | **Omit.** Await Task completion. |
 | `TeamDelete()` | **Omit.** |
 | Three parallel `Agent` (`loop_count >= 4`) | Three parallel **`Task`** with `subagent_type="code-quality-agent"`; merge outcomes in the lead like Path A `-a`/`-b`/`-c`. |

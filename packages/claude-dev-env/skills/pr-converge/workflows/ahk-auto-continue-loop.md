@@ -63,7 +63,7 @@ On back-to-back clean (the existing convergence rule in the main skill), run `gh
   this AHK pacing path:
 
 ```bash
-pwsh -NoProfile -Command "Get-Process AutoHotkey64 -ErrorAction SilentlyContinue | Stop-Process -Force"
+pwsh -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='AutoHotkey64.exe'\" | Where-Object CommandLine -like '*cursor-agents-continue.ahk*' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
 ```
 
 Report convergence in the same one-sentence shape as the standard flow, plus a second sentence noting the auto-typer was stopped. The skill
@@ -87,8 +87,7 @@ Report convergence in the same one-sentence shape as the standard flow, plus a s
   ```
 - **State-line responsibility is unchanged.** The state line (phase, bugbot_clean_at, inline_lag_streak, tick_count) is still emitted at the
   end of every tick — it's how the next tick reads prior state. The auto-typer only fires `continue`; it does not preserve state for you.
-- **Safety cap still applies.** `tick_count >= 30` terminates the loop and kills the auto-typer in this mode just as it omits `ScheduleWakeup`
-  in primary pacing mode. The structural-failure interpretation is the same.
+- **No `tick_count` ceiling.** `tick_count` is observability-only (same as the main skill and `state-schema.md`). This path ends on convergence or **Stop conditions** in `SKILL.md`, not on a tick counter.
 - **`/bugteam` is not optional for BUGTEAM ticks.** AHK only paces **when** the next tick runs; it does not replace the bugteam skill. Skipping
   **`/bugteam`** after a clean Bugbot review breaks the back-to-back contract.
 - **Fix protocol:** use **`Task` + `generalPurpose`** with the clean-coder **Read** preamble from the main [`SKILL.md` Fix protocol](../SKILL.md#fix-protocol)

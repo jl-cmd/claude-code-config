@@ -8,8 +8,9 @@ description: >-
   reviewer. Default behavior loops until back-to-back clean: pace the next tick
   with ScheduleWakeup when the harness exposes it, otherwise use the AHK
   auto-continue driver (see §Alternative loop driver in the Table of Contents).
-  `/loop /pr-converge` is an equivalent explicit wrapper when the user prefers
-  /loop. Opt out of looping with `/pr-converge once` for a single tick.
+  `/loop /pr-converge` is the same loop with an explicit /loop wrapper when the
+  harness or habit calls for it — not required for looping. Opt out of looping
+  with `/pr-converge once` for a single tick.
   Convergence requires a back-to-back clean cycle (bugbot CLEAN immediately
   followed by bugteam CLEAN with no intervening fixes), at which point the PR
   is flipped to ready for review and the loop terminates. Triggers:

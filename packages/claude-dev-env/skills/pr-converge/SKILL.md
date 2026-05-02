@@ -1,21 +1,15 @@
 ---
 name: pr-converge
 description: >-
-  Drives the current PR to convergence by alternating Cursor Bugbot and the
-  in-house second audit (bugteam when Claude Code agent teams are enabled, else
-  a simple background agent per PR). Each invocation runs one tick of work in the main
-  session: fetches the latest reviewer state, applies TDD fixes for any
-  findings, pushes one commit per tick, replies inline, and re-triggers the
-  reviewer. To loop automatically where supported, invoke as `/loop /pr-converge`
-  so ScheduleWakeup paces re-entry. When `/loop` or `ScheduleWakeup` is unavailable,
-  follow §Loop cycle without `/loop` or ScheduleWakeup in this skill body.
-  Runnable helpers live under scripts/; read scripts/README.md after this file for CLI contracts.
-  Convergence requires a
-  back-to-back clean cycle (bugbot CLEAN immediately followed by second-audit CLEAN
-  with no intervening fixes), at which point the PR is flipped to ready for
-  review and the loop terminates. Triggers: '/pr-converge', 'drive PR to
-  convergence', 'loop bugbot and bugteam', 'babysit bugbot and bugteam',
-  'until both are clean', 'converge this PR'.
+  Use when the user is on a draft PR and wants Cursor Bugbot AND a second audit
+  (bugteam when agent teams are available, else one background agent per PR) to
+  keep re-reviewing after every push, with findings auto-addressed between ticks
+  and the PR auto-flipped to ready for review on convergence. Also use when the
+  user asks to "babysit" reviewers, drive a PR to convergence, or loop until
+  both reviewers are clean. Not for one-shot reviews (use `/bugteam` or
+  `/findbugs` for that) or for non-PR work. Triggers: '/pr-converge',
+  '/loop /pr-converge', 'drive PR to convergence', 'loop bugbot and bugteam',
+  'babysit bugbot and bugteam', 'until both are clean', 'converge this PR'.
 ---
 
 # PR Converge
@@ -32,13 +26,16 @@ The user is on a PR branch and wants both reviewers — Cursor's Bugbot AND the 
 
 ## Progressive disclosure (skill folder)
 
-This skill is a **folder** (`SKILL.md` plus `scripts/`), not prose alone: wrappers centralize gh pagination and body-file rules so the model composes orchestration instead of re-deriving CLI footguns. Read in this order ([Anthropic — internal patterns for Claude Code skills](https://x.com/trq212/status/2033949937936085378)):
+This skill is a **folder** (`SKILL.md` plus `scripts/` plus `references/`), not prose alone: wrappers centralize gh pagination and body-file rules so the model composes orchestration instead of re-deriving CLI footguns. Read in this order ([Anthropic — internal patterns for Claude Code skills](https://x.com/trq212/status/2033949937936085378)):
 
 1. This `SKILL.md` — phase graph, teammate contracts, stop conditions.
 2. [`scripts/README.md`](scripts/README.md) — argv, stdout JSON shapes, pointers to `../../rules/gh-paginate.md` and `../../rules/gh-body-file.md`.
-3. Individual script source or `--help` — only when a call fails or `${CLAUDE_SKILL_DIR}` resolves unexpectedly.
+3. `references/*.md` **on demand** — load only when the corresponding branch fires:
+   - [`references/background-agent-second-audit.md`](references/background-agent-second-audit.md) when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS != 1` and the BUGTEAM tick takes the non-team path.
+   - [`references/os-scheduled-loop.md`](references/os-scheduled-loop.md) when the host exposes neither `/loop` nor `ScheduleWakeup`.
+4. Individual script source or `--help` — only when a call fails or `${CLAUDE_SKILL_DIR}` resolves unexpectedly.
 
-Taxonomy: this sits closest to **PR babysitting / CI-adjacent automation** plus **runbook** pacing. If the doc feels broad, use **§Multi-PR orchestration model** as the workflow spine and **Per-tick work** as the single-PR linearization.
+Taxonomy: **CI/CD & Deployment** in the [`babysit-pr` archetype](https://x.com/trq212/status/2033949937936085378) — monitors a PR, applies fixes between reviewer ticks, and flips it ready-for-review on convergence. If the doc feels broad, use **§Multi-PR orchestration model** as the workflow spine and **§Per-tick work** as the single-PR linearization.
 
 ## Gotchas
 
@@ -63,17 +60,9 @@ At the start of BUGTEAM step **(a)** each tick, evaluate **once**:
 
 ### Background-agent second audit (when team infrastructure is absent)
 
-This path **replaces** agent teams with **simple background agents** — ordinary delegated workers (for example `general-purpose` with `run_in_background: true` where the host exposes that), **not** `TeamCreate` bugfind/bugfix teammates. The orchestrator **only spawns and waits**; it does **not** substitute for those agents by reading the diff, auditing files, or editing code inline.
+When the team-infrastructure check above fails, **one** simple background `general-purpose` agent per PR runs the equivalent of `/bugteam` inside its own session and returns the same outcome shape (convergence vs findings list with `file:line`). The orchestrator only spawns and waits.
 
-Each background agent runs, inside its own session:
-
-1. The same **preflight** and **code-rules gate** the bugteam lead runs before spawning bugfind: `bugteam_preflight.py` then `bugteam_code_rules_gate.py --base origin/<BASE>` from the packaged dev-env tree (`${CLAUDE_DEV_ENV_ROOT}` / `${CLAUDE_SKILL_DIR}` / repo docs as in bugteam `SKILL.md`). If scripts are not on disk, follow the repository's documented gate substitute (for example `.cursor/BUGBOT.md` where that file exists in the checkout).
-2. **One** full second-audit pass over the PR scope: apply `CODE_RULES.md` and the bugteam audit rubric (`bugteam/reference/audit-contract.md`), producing either **convergence (zero findings)** or a **findings list with `file:line`** in the same shape `/bugteam` uses so Step **(c)** can branch unchanged.
-3. Returns that outcome to the orchestrator as the handoff payload (the agent does **not** call `TeamCreate` or `Skill({skill: "bugteam", ...})`; it performs the equivalent work itself).
-
-All later steps in this tick treat that outcome as **the second audit** where §(b)–(d) reference **bugteam** semantics (pushes, convergence, findings).
-
-Reporting: when marking converged, the one-line report uses **`bugteam CLEAN`** if the team path ran; use **`cursor audit CLEAN`** if the background-agent path ran.
+Detail (preflight, gate, rubric, convergence reporting label) lives in [`references/background-agent-second-audit.md`](references/background-agent-second-audit.md). Read that file when this branch fires; do not paraphrase it from memory.
 
 ## Multi-PR orchestration model
 
@@ -149,7 +138,7 @@ When a bugfind teammate reports completion (findings or clean):
   6. Goes idle.
 
 - For PRs with zero findings: spawn **one `general-purpose` agent** per PR. That agent:
-  1. If `bugbot_clean_at == current_head` (back-to-back clean): run `mark_pr_ready.py`, then **write `state.json`** (per §Concurrency) setting this PR's entry to at least `status: "converged"`, `last_action: "converged"` (or `marked_ready`), `phase: "BUGBOT"`, and `last_updated` to an ISO-8601 UTC timestamp — **before** going idle. Omitting this write leaves the orchestrator on later ticks with a stale `awaiting_bugteam` / `in_progress` row and risks duplicate work.
+  1. If `bugbot_clean_at == current_head` (back-to-back clean): run `mark_pr_ready.py`, append one convergence row to the §Memory log at `${CLAUDE_PLUGIN_DATA}/pr-converge/converged.log`, then **write `state.json`** (per §Concurrency) setting this PR's entry to at least `status: "converged"`, `last_action: "converged"` (or `marked_ready`), `phase: "BUGBOT"`, and `last_updated` to an ISO-8601 UTC timestamp — **before** going idle. Omitting this write leaves the orchestrator on later ticks with a stale `awaiting_bugteam` / `in_progress` row and risks duplicate work.
   2. Otherwise: update `state.json` (per §Concurrency) with `last_action: "audit_clean"`, `status: "awaiting_bugbot"`, `phase: "BUGBOT"`, then trigger bugbot via `trigger_bugbot.py`.
   3. Goes idle.
 
@@ -185,6 +174,17 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 5. Call `ScheduleWakeup` with the appropriate delay.
 6. Nothing else.
 
+## Memory
+
+`state.json` is **session-scoped** (under `<TMPDIR>` and tied to a `session_id`); it is intentionally wiped between sessions and may be lost on plugin upgrade. For **cross-session history** of which PRs this skill has converged, append one line per convergence to a stable, plugin-scoped log per [Anthropic's recommendation to use `${CLAUDE_PLUGIN_DATA}` for durable skill data](https://x.com/trq212/status/2033949937936085378):
+
+- **Path:** `${CLAUDE_PLUGIN_DATA}/pr-converge/converged.log`
+- **Format:** one tab-separated row per converged PR — `<ISO8601_UTC>\t<owner>/<repo>#<number>\tbugbot=<SHA>\t<SECOND_AUDIT_LABEL>=<SHA>` where `<SECOND_AUDIT_LABEL>` is `bugteam` or `cursor_audit` per §Second-audit execution.
+- **Append site:** the agent that runs `mark_pr_ready.py` (see §Audit result → general-purpose convergence branch and Step 2 BUGTEAM second branch). Append **before** `state.json` is written so the log row is durable even if the locked `state.json` write retries or fails.
+- **Never read inside the loop.** This log exists for the user (and follow-up tooling) to inspect history; the orchestrator and teammates never gate behavior on its contents.
+
+When `${CLAUDE_PLUGIN_DATA}` is unset (skill not installed via a plugin), skip the append silently — convergence still completes via `mark_pr_ready.py` and the conversation-line summary.
+
 ## Invocation modes
 
 - **`/loop /pr-converge`** (recommended): loops automatically. The /loop skill runs each tick and uses ScheduleWakeup to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
@@ -192,15 +192,9 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 
 ## Loop cycle without `/loop` or ScheduleWakeup
 
-Some hosts expose **neither** `/loop` nor `ScheduleWakeup`. There is still **no in-model timer**; the **only** substitute this skill defines is an **OS-level scheduled job** the operator installs once.
+Some hosts expose **neither** `/loop` nor `ScheduleWakeup`. There is still **no in-model timer**; the **only** substitute this skill defines is an **OS-level scheduled job** (cron / systemd timer / Task Scheduler) the operator installs once at a 270s interval. Each run executes exactly one non-interactive tick that reads prior state from disk and writes updated state to disk.
 
-**Harness (normative):** use **cron** (Unix), **systemd timer** (Linux services), or **Windows Task Scheduler** to run on a **fixed wall-clock interval of 270 seconds** (same default as Step 4 `delaySeconds` — long enough for Bugbot, under typical cache TTL). Each run executes **exactly one** non-interactive agent invocation using the **product's documented** "single prompt from file / stdin" CLI or API entrypoint. The job's input is a **constant** one-tick instruction: run §Per-tick work for the target PR; read prior state from disk; write updated state to disk; exit zero on success.
-
-**State on disk (required for this harness):** prior tick output must live where the next run can read it without chat history — for multi-PR use `<TMPDIR>/pr-converge-<session_id>/state.json` (§Per-PR state file); for a single PR without that file, the operator picks **one absolute path** to a small JSON file, passes it to every run (argument or environment), creates it on the first tick, and updates it every tick. The scheduled command must wire that path into the frozen prompt or process environment the agent reads.
-
-**Enforceability:** the OS records whether each run started and its exit code (cron logs, `journalctl`, Task Scheduler **Last Run Result**). A missed tick or failing process is visible to operators; the model cannot "silently skip" the schedule.
-
-**Step 4 in these hosts:** `ScheduleWakeup` calls are **omitted**; the **next** tick is whichever **scheduled OS run** fires next. Do not delegate re-entry to a background subagent calling `ScheduleWakeup` on hosts where that tool does not exist (see §Why the work runs in the main session).
+Harness, state-on-disk path conventions, enforceability via OS logs, and the Step 4 omission rule live in [`references/os-scheduled-loop.md`](references/os-scheduled-loop.md). Read that file when the host has neither primitive; do not improvise an in-model sleep loop.
 
 ## State across ticks
 
@@ -278,7 +272,7 @@ a. Run the **second audit** on the current PR. Branch on §Team infrastructure d
 
      The main session is the team lead, so `TeamCreate` fires from the orchestrator and `/bugteam` emits its CODE_RULES gate output, teammate spawn lines, and audit progress as expected. The skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.
 
-   - **Non-team path** (team infrastructure **absent**): spawn **one** simple **background** `general-purpose` agent per PR whose sole job is §Background-agent second audit. Wait until it completes (join or completion notification, per host). Capture the same class of summary you would from `/bugteam` (convergence vs findings) for Step **(c)**. The orchestrator does not perform that audit inline.
+   - **Non-team path** (team infrastructure **absent**): spawn **one** simple **background** `general-purpose` agent per PR whose prompt is the contract in [`references/background-agent-second-audit.md`](references/background-agent-second-audit.md) (loaded on-demand for this branch). Wait until it completes (join or completion notification, per host). Capture the same class of summary you would from `/bugteam` (convergence vs findings) for Step **(c)**. The orchestrator does not perform that audit inline.
 
 b. **Re-resolve current HEAD now** because the second audit may have pushed commits during its run. The `current_head` from Step 1 is potentially stale at this point:
    ```bash
@@ -296,7 +290,7 @@ d. Decide based on the (post-second-audit) state — order matters; check pushed
      python "${CLAUDE_SKILL_DIR}/scripts/mark_pr_ready.py" \
        --owner <OWNER> --repo <REPO> --number <NUMBER>
      ```
-     Report to the user in one sentence: `PR #<NUMBER> converged: bugbot CLEAN at <SHA>, <SECOND_AUDIT_LABEL> CLEAN at <SHA>; marked ready for review` where `<SECOND_AUDIT_LABEL>` is **`bugteam`** if the team path ran or **`cursor audit`** if the background-agent path ran. **Omit the next ScheduleWakeup call** — this terminates the /loop.
+     Append the convergence row to `${CLAUDE_PLUGIN_DATA}/pr-converge/converged.log` per §Memory. Report to the user in one sentence: `PR #<NUMBER> converged: bugbot CLEAN at <SHA>, <SECOND_AUDIT_LABEL> CLEAN at <SHA>; marked ready for review` where `<SECOND_AUDIT_LABEL>` is **`bugteam`** if the team path ran or **`cursor audit`** if the background-agent path ran. **Omit the next ScheduleWakeup call** — this terminates the /loop.
    - **Second audit reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** The second audit reached zero findings without committing, yet bugbot still needs re-confirmation against this HEAD. This branch is reachable only when state diverged BETWEEN ticks — for example, the user pushed a manual commit between two wakeups, leaving `current_head` ahead of the SHA bugbot last cleaned. Transition `phase = BUGBOT`, schedule next wakeup, return.
    - **Second audit reports findings without committing fixes:** apply the **Fix protocol** below; **Step 3** on the new HEAD still runs **after** the fix teammate's handoff through the follow-up agent (§Fix protocol), not inside the fix teammate. Transition `phase = BUGBOT`, schedule next wakeup, return.
 
@@ -331,20 +325,10 @@ In **loop mode**, call `ScheduleWakeup` with:
 
 ## Fix protocol
 
-The fix protocol is executed by a **`clean-coder` teammate**, never inline by the orchestrator. The orchestrator spawns the teammate with the findings context; the teammate:
+The fix protocol is executed by a **`clean-coder` teammate**, never inline by the orchestrator. The orchestrator spawns the teammate with the findings context; the teammate then performs TDD fixes (failing test first, except for doc / comment / naming nits) and produces **one** new commit per tick whose subject follows `fix(review): <brief summary>`. Pre-commit and pre-push hook handling is governed by §Ground rules.
 
-- Reads each referenced file:line.
-- Writes a failing test first when the finding has behavior to test. For pure doc, comment, or naming nits, goes straight to the fix.
-- Implements the fix.
-- Stages affected files and creates one new commit:
-  ```bash
-  git add <files> && git commit -m "fix(review): <brief summary>"
-  ```
-  Honours pre-commit and pre-push hooks; when a hook rejects, reads the message, fixes the issue, retries.
-- Pushes:
-  ```bash
-  git push origin <BRANCH>
-  ```
+The non-default obligations the teammate must observe (everything beyond ordinary `git add` / `git commit` / `git push`):
+
 - Replies inline on each addressed finding thread via `reply_to_inline_comment.py` (what changed and the commit identifier), matching §Audit result → clean-coder step 4 — **before** writing `state.json` and going idle.
 - Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase: "BUGBOT"` to `state.json` (per §Concurrency).
 - Goes idle. The orchestrator spawns the follow-up `general-purpose` agent for bugbot trigger and monitoring.
@@ -370,6 +354,7 @@ When `tick_count >= 30`, stop and report. That many rounds means something struc
 - **The `bugbot run` comment is load-bearing.** Use the literal phrase `bugbot run` exactly — empirically the only re-trigger Cursor Bugbot recognizes; alternative phrasings silently no-op.
 - **`gh pr ready` is the convergence action.** Mark the PR ready for review and stop there. Merge, additional reviewers, title, and body remain the user's decisions; the skill's contract ends at "ready for review."
 - **Honor pre-push and pre-commit hooks.** When a hook rejects the change, read its output, fix the underlying issue (the failing test, the missing constant, the broken import), and retry.
+- **Adapt when reality contradicts on-disk state.** This skill is a state machine, but the spec assumes `state.json` and `git`/`gh` agree with the live PR. When they diverge — the user pushed manually between ticks (HEAD ahead of `current_head` and not from a tracked teammate), the branch was force-reset (commit chain incompatible with the prior `current_head`), the worktree moved, the PR was closed/merged externally, or `gh` auth dropped mid-tick — **do not execute the spec literally against stale state**. Report the specific drift and escalate as a hard blocker per §Stop conditions; let the user decide whether to reset the loop, refresh credentials, or stop.
 
 ## Examples
 
@@ -415,5 +400,5 @@ Claude: [increments `inline_lag_streak` to 1, schedules next wakeup at 60s, retu
 
 <example>
 BUGTEAM tick with no agent teams: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is unset; team infrastructure absent.
-Claude: [spawns one background `general-purpose` agent whose prompt is §Background-agent second audit; waits for handoff; applies Step 2 §(b)–(d) unchanged against that agent's outcome]
+Claude: [loads `references/background-agent-second-audit.md`, spawns one background `general-purpose` agent with that file as the prompt, waits for handoff, applies Step 2 §(b)–(d) unchanged against that agent's outcome]
 </example>

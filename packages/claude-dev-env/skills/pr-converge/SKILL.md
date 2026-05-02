@@ -59,7 +59,7 @@ The user is on a PR branch and wants both reviewers — Cursor's Bugbot AND the 
 
 ## Alternative loop driver: AHK auto-continue
 
-Use this when `/loop` + ScheduleWakeup is not in scope (orchestrated teams disabled, restricted tool registry, or the user wants a visibly-running pacer pinned to their session). The per-tick work is unchanged; what changes is who fires the next tick. Instead of ScheduleWakeup re-entering the skill, an external AutoHotkey utility auto-types `continue` into the active Claude Code window every 5 minutes, and the model treats each `continue` as the next tick trigger.
+Use this when `/loop` + ScheduleWakeup is not in scope (orchestrated teams disabled, restricted tool registry, or the user wants a visibly-running pacer pinned to their session). The per-tick work is unchanged; what changes is who fires the next tick. Instead of ScheduleWakeup re-entering the skill, an external AutoHotkey utility auto-types `continue` into the active Claude Code window every 5 minutes, and the model treats each `continue` as the next tick trigger. The same **alternative-mode** harness constraint applies to **BUGTEAM** (see Step 2 `phase == BUGTEAM` and **Gotchas** below): there is no `Skill({skill: "bugteam"})` in this session — substitute the **read-only audit** with **parallel `Task` + `code-quality-agent`** (`readonly: true`), never `generalPurpose`. Treat merged output as the bugteam audit verdict; **implementation** and **Fix protocol** commits use **`Task` + `clean-coder`** only. If `.cursor/agents/code-quality-agent.md` or `.cursor/agents/clean-coder.md` is missing, copy from `~/.claude/agents/` into `.cursor/agents/` before spawning.
 
 ### One-time setup at the start of the loop
 
@@ -83,14 +83,14 @@ Run these two commands in order (PowerShell-friendly Bash escaping):
 
 ### Per-tick behavior under this driver
 
-- Run Steps 1–3.5 of **Per-tick work** exactly as written (this explicitly includes the safety cap at Step 3.5).
+- Run Steps 1–3 of **Per-tick work** exactly as written.
 - **Skip Step 4** (`ScheduleWakeup`) entirely — the auto-typer is the pacer.
 - End every assistant response with the literal sentence `Awaiting next "continue" tick.` so the next iteration is unambiguously identifiable in the transcript.
 - When the next user message is `continue` (auto-typed by AHK) or any close paraphrase, treat it as the next tick of `/pr-converge` and re-enter from Step 1 against the freshest PR state.
 
 ### Convergence cleanup
 
-On back-to-back clean (the existing convergence rule), after `gh pr ready`, kill the auto-typer:
+On back-to-back clean (the existing convergence rule), ensure the **BUGTEAM substitute audit** is already posted as a **`gh pr comment --body-file`** on the PR **before** `gh pr ready` when using [alternative mode](#alternative-loop-driver-ahk-auto-continue) — then run `gh pr ready`, then kill the auto-typer:
 
 ```bash
 pwsh -NoProfile -Command "Get-Process AutoHotkey64 -ErrorAction SilentlyContinue | Stop-Process -Force"
@@ -109,6 +109,9 @@ Report convergence in the same one-sentence shape as the standard flow, plus a s
   ```
 - **State-line responsibility is unchanged.** The state line (phase, bugbot_clean_at, inline_lag_streak, tick_count) is still emitted at the end of every tick — it's how the next tick reads prior state. The auto-typer only fires `continue`; it does not preserve state for you.
 - **Safety cap still applies.** `tick_count >= 30` terminates the loop and kills the auto-typer in this mode just as it omits ScheduleWakeup in `/loop` mode. The structural-failure interpretation is the same.
+- **BUGTEAM runs in-session, not via `Skill({skill: "bugteam"})`.** Alternative mode means Claude Code orchestration (including `TeamCreate` and the `bugteam` skill) is out of scope. After Bugbot is clean on `current_head`, the BUGTEAM **audit** must be satisfied by spawning **parallel background `Task` + `code-quality-agent`** runs (`readonly: true`) in **this** Cursor assistant session, awaiting every completion, then merging into one verdict for Step 2 branches b–d. Waiting on a `Skill` tool that the harness cannot invoke stalls the loop.
+- **Cursor: `code-quality-agent` for read-only audit; `clean-coder` for code changes.** Parallel PR/diff **audits** (including the BUGTEAM substitute and multi-PR status ticks) use `Task` with `subagent_type: "code-quality-agent"` and `readonly: true`. **Fix protocol** and any commit that changes production code use `Task` with `subagent_type: "clean-coder"`. Do **not** use `generalPurpose` for audit or fix work — wrong tool class. Ensure `.cursor/agents/code-quality-agent.md` and `.cursor/agents/clean-coder.md` exist; copy from `~/.claude/agents/` when missing.
+- **BUGTEAM substitute must leave a PR comment before `gh pr ready`.** In alternative mode, the merged `code-quality-agent` verdict exists only in chat until you **`gh pr comment --body-file`** it. Skipping that step means the PR shows Bugbot clean + ready flip with **no** in-house audit mirror — a converge gotcha.
 
 ## State across ticks
 
@@ -172,15 +175,21 @@ c. Decide (the four branches below cover every input combination — match the f
    - **Latest review's `commit_id == current_head` with unaddressed inline findings (review body indicates findings):** Apply the **Fix protocol** below to address them. Reset `inline_lag_streak = 0`. The fix protocol pushes a new commit, which sets `current_head` to the new SHA, sets `bugbot_clean_at = null`, replies inline on each thread, and re-triggers bugbot. Schedule next wakeup, return.
    - **Latest review's `commit_id == current_head` AND review body indicates findings AND inline-comments API returns zero matching comments for `current_head`:** Treat as transient API propagation lag — bugbot publishes the review body and inline comments through separate API operations and the two writes can briefly desync. Increment `inline_lag_streak`. When `inline_lag_streak >= 3`, escalate as a hard blocker (bugbot review is structurally inconsistent — body claims findings while inline anchors stay empty across three consecutive ticks); report and terminate. Otherwise schedule next wakeup at `delaySeconds: 60` (lag is short-lived) and return; the inline comments should appear on the next tick.
 
+**Gotcha (Bugbot already clean on `HEAD`, but another `bugbot run` fires):** When the latest Bugbot review on `current_head` already indicates **clean / no issues** (the branch above that sets `bugbot_clean_at` and transitions to **`phase = BUGTEAM`**), the next action must be the **BUGTEAM audit in the same tick** — **not** another `bugbot run`. In **Claude Code**, that is **`/bugteam`** via `Skill({skill: "bugteam", ...})` when the tool exists. In **alternative mode** (AHK driver / Cursor session without that skill), run **parallel background `Task` + `code-quality-agent`** (`readonly: true`) against the PR as the bugteam **audit** substitute (not `generalPurpose`). If merged findings require commits, continue with **Fix protocol** using **`clean-coder`**. Posting `bugbot run` again after a clean review skips the mandated bugteam pass.
+
 #### `phase == BUGTEAM`
 
-a. Run the in-house bugteam audit on the current PR by invoking the `Skill` tool in the main session:
+a. Run the in-house bugteam audit on the current PR — **pick the harness that matches the session:**
 
-   ```
-   Skill({skill: "bugteam", args: "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
-   ```
+   - **Claude Code (standard):** invoke the `Skill` tool in the main session:
 
-   The main session is the team lead, so `TeamCreate` fires from the orchestrator and `/bugteam` emits its CODE_RULES gate output, teammate spawn lines, and audit progress as expected. The skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.
+     ```
+     Skill({skill: "bugteam", args: "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
+     ```
+
+     The main session is the team lead, so `TeamCreate` fires from the orchestrator and `/bugteam` emits its CODE_RULES gate output, teammate spawn lines, and audit progress as expected. The skill audits the current PR against CODE_RULES, posts review threads, and converges or stops at its own internal cap. Wait for it to complete; capture exit and final summary.
+
+   - **Alternative mode** (same constraints as [Alternative loop driver: AHK auto-continue](#alternative-loop-driver-ahk-auto-continue) — no `bugteam` skill / no `TeamCreate` in this session): spawn **parallel background `Task` runs with `subagent_type: "code-quality-agent"`** and **`readonly: true`** (confirm `.cursor/agents/code-quality-agent.md` exists — copy from `~/.claude/agents/code-quality-agent.md` if missing) against the current PR scope (full diff or project-defined slices), await every completion, then merge into one **read-only audit** summary equivalent to bugteam output (convergence with zero findings vs list of file:line findings). **Persist that merged verdict on GitHub** before any convergence `gh pr ready`: `gh pr comment <NUMBER> --repo <OWNER>/<REPO> --body-file <path/to/bugteam_substitute_audit.md>` where the body names `current_head`, P0/P1/P2 counts, and convergence YES/NO (per gh-body-file rule). In-session transcript alone is **not** sufficient — reviewers must see the audit on the PR timeline. Do **not** substitute `generalPurpose` for audit work. If the audit implies code fixes, run **Fix protocol** with **`clean-coder`** (not `code-quality-agent`). Use the merged audit summary for steps b–d below. Do not invoke `Skill({skill: "bugteam"})` when the harness cannot satisfy it.
 
 b. **Re-resolve current HEAD now** because `/bugteam` may have pushed commits during its run. The `current_head` from Step 1 is potentially stale at this point:
    ```bash
@@ -192,11 +201,12 @@ c. Inspect bugteam's output. Bugteam reports either `convergence (zero findings)
 
 d. Decide based on the (post-bugteam) state — order matters; check pushed-during-bugteam FIRST so a convergence report against a stale HEAD never falsely terminates:
    - **bugteam pushed during this tick (i.e., `bugbot_clean_at` was just reset to `null` in step b):** Re-trigger bugbot in this same tick (Step 3) so the new HEAD enters bugbot's queue immediately, transition `phase = BUGBOT`, schedule next wakeup, return. The new commit needs a fresh bugbot review before convergence can be claimed.
-   - **bugteam reports convergence AND `bugbot_clean_at == current_head` (no push during this tick):** This is back-to-back clean. Mark the PR ready for review:
+   - **bugteam reports convergence AND `bugbot_clean_at == current_head` (no push during this tick):** This is back-to-back clean. In **alternative mode**, post the **BUGTEAM substitute audit digest** to the PR first (`gh pr comment … --body-file`, same fields as Step 2 alternative branch — **never** skip this: without it, `gh pr ready` leaves no auditor paper trail on GitHub). Then mark the PR ready for review:
      ```bash
+     gh pr comment <NUMBER> --repo <OWNER>/<REPO> --body-file <path/to/bugteam_substitute_audit.md>
      gh pr ready <NUMBER> --repo <OWNER>/<REPO>
      ```
-     Report to the user in one sentence: "PR #<NUMBER> converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>; marked ready for review." **Omit the next ScheduleWakeup call** — this terminates the /loop.
+     In **Claude Code** (`/bugteam` via `Skill`), the skill's review threads already create GitHub-visible output — the `gh pr comment` audit digest step is **alternative mode only**. Report to the user in one sentence: "PR #<NUMBER> converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>; marked ready for review." **Omit the next ScheduleWakeup call** — this terminates the /loop.
    - **bugteam reports convergence BUT `bugbot_clean_at != current_head` (no push during this tick):** Bugteam reached zero findings without committing, yet bugbot still needs re-confirmation against this HEAD. This branch is reachable only when state diverged BETWEEN ticks — for example, the user pushed a manual commit between two wakeups, leaving `current_head` ahead of the SHA bugbot last cleaned. Transition `phase = BUGBOT`, schedule next wakeup, return.
    - **bugteam reports findings without committing fixes:** apply the **Fix protocol** below (which always re-triggers bugbot after the push), transition `phase = BUGBOT`, schedule next wakeup, return.
 
@@ -209,6 +219,10 @@ gh pr comment <NUMBER> --repo <OWNER>/<REPO> --body-file <path/to/bugbot_run.md>
 ```
 
 The body file contains exactly the literal phrase `bugbot run` followed by a newline. Use that phrase exactly — empirically the only re-trigger Cursor Bugbot recognizes; alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
+
+**Gotcha (duplicate `bugbot run` while a review is already queued):** Do not post another `bugbot run` when Bugbot has already picked up the latest trigger. On GitHub, the signal is an **eyes** (`:eyes:`) reaction on the **most recent** `bugbot run` PR comment (Bugbot acknowledging the job). When that reaction is present, skip Step 3 for this wait cycle - a second comment spams the PR and can confuse tick logic; wait for the review to finish or for `HEAD` to change before re-triggering per Step 2.
+
+**Gotcha (Bugbot found errors, but a redundant `bugbot run` instead of a fix push):** When the latest Bugbot review on `current_head` still has **unaddressed findings** (inline threads and/or a non-clean review body), **do not** post another `bugbot run` on that same SHA as a substitute for fixing the code. A second trigger without a new commit cannot resolve the findings — it only duplicates noise and breaks tick expectations. Follow the **Fix protocol** end-to-end: implement fixes via **`Task` + `clean-coder`** in Cursor (never `generalPurpose` for code changes), **commit and push** so `HEAD` advances, reply inline on each thread, **then** Step 3 `bugbot run` against the new SHA.
 
 ### Step 3.5: Enforce the safety cap
 
@@ -254,7 +268,7 @@ Used by both phases when findings exist:
 
 ## Stop conditions
 
-- **Convergence** (back-to-back clean as defined in Step 2 BUGTEAM second branch — `bugteam reports convergence AND bugbot_clean_at == current_head` with no push during this tick): mark PR ready for review, report one-sentence summary, omit ScheduleWakeup.
+- **Convergence** (back-to-back clean as defined in Step 2 BUGTEAM second branch — `bugteam reports convergence AND bugbot_clean_at == current_head` with no push during this tick): in **alternative mode**, post the BUGTEAM substitute audit to the PR (`gh pr comment --body-file`) **before** `gh pr ready`; then mark PR ready for review, report one-sentence summary, omit ScheduleWakeup.
 - **Hard blocker:** API auth failure persists across two ticks, a CI regression whose root cause falls outside this PR, a hook rejection investigated through three commits and still unresolved, `inline_lag_streak >= 3`, or `/bugteam` itself reports a stuck state. Report the specific blocker and the diagnosis, then omit ScheduleWakeup.
 - **User stops the loop:** user says "stop the converge loop" → omit ScheduleWakeup on the next tick.
 - **Safety cap:** `tick_count >= 30` (evaluated in Step 3.5) → omit ScheduleWakeup, report the cap was hit. See §Safety cap below for rationale.
@@ -266,10 +280,12 @@ When `tick_count >= 30`, stop and report. That many rounds means something struc
 ## Ground rules
 
 - **Append commits.** Each tick adds at most one new fix commit. Multiple findings within one tick collapse into a single commit; the next tick handles the next round.
+- **Bugbot findings on the current SHA mean fix-then-push-then-`bugbot run`, not another naked `bugbot run`.** Unaddressed Bugbot errors require the Fix protocol (implement, push, inline replies) before Step 3; posting `bugbot run` again without a new commit does not clear the review state.
 - **`bugbot_clean_at` resets on every push.** A new commit invalidates bugbot's prior clean by definition — bugbot must re-review the new HEAD before convergence can be claimed.
 - **Back-to-back clean is the ONLY termination criterion.** Convergence requires both reviewers clean against the same HEAD with no intervening fixes; either reviewer clean alone counts as in-progress.
+- **Clean Bugbot on `HEAD` means advance to bugteam, not another `bugbot run`.** After Bugbot reports clean on the current SHA, the orchestrator must set `bugbot_clean_at` and run the **BUGTEAM** audit per Step 2 — never post `bugbot run` as a substitute. In Claude Code that is **`/bugteam`** via the skill tool; in **alternative mode** it is **parallel in-session `Task` + `code-quality-agent`** (`readonly: true`) for the audit (never `generalPurpose`), not a second Bugbot trigger.
 - **The `bugbot run` comment is load-bearing.** Use the literal phrase `bugbot run` exactly — empirically the only re-trigger Cursor Bugbot recognizes; alternative phrasings silently no-op.
-- **`gh pr ready` is the convergence action.** Mark the PR ready for review and stop there. Merge, additional reviewers, title, and body remain the user's decisions; the skill's contract ends at "ready for review."
+- **`gh pr ready` is the convergence action.** Mark the PR ready for review and stop there. In **alternative mode**, post the **BUGTEAM substitute audit digest** with **`gh pr comment --body-file`** on the PR **before** `gh pr ready` (see Step 2 branch d and [Gotchas](#gotchas)). Merge, additional reviewers, title, and body remain the user's decisions; the skill's contract ends at "ready for review."
 - **Honor pre-push and pre-commit hooks.** When a hook rejects the change, read its output, fix the underlying issue (the failing test, the missing constant, the broken import), and retry.
 
 ## Examples

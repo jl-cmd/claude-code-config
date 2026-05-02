@@ -140,14 +140,20 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
   1. Reads `state.json` for its PR.
   2. Triggers bugbot via `trigger_bugbot.py`.
   3. Polls `fetch_bugbot_reviews.py` every 60s (up to 10 polls) until a review anchored to `current_head` appears.
-  4. Fetches inline comments via `fetch_bugbot_inline_comments.py`.
-  5. Classifies result: `clean` (review body clean + zero inline) or `dirty` (findings exist).
-  6. **Writes result to `state.json`** (per §Concurrency): sets `bugbot_clean_at` (if clean) or records findings count, updates `last_action`, `status`, and **`phase`**: `BUGTEAM` when the outcome is `clean` (next work is second audit), `BUGBOT` when the outcome is `dirty` (next work is another fix pass).
-  7. Reports back to orchestrator: one-line summary of outcome.
+  4. **Poll / classify loop** (repeat from **4a** whenever **4c** schedules a retry):
+     - **4a.** Fetches inline comments via `fetch_bugbot_inline_comments.py`.
+     - **4b.** Classify — same three outcomes as Step 2 BUGBOT once a review exists at `current_head`:
+       - **`clean`:** Review body indicates clean against `current_head` and zero unaddressed inline findings.
+       - **`dirty`:** At least one unaddressed inline finding for `current_head` (actionable for the Fix protocol / `clean-coder`).
+       - **`inline_lag`:** Review body indicates findings against `current_head`, but the inline-comments API returns zero matching comments for `current_head` (transient desync between review body and inline API — Step 2 BUGBOT fourth bullet).
+     - **4c.** **If `inline_lag`:** Locked merge to `state.json` (per §Concurrency): increment `inline_lag_streak` (treat missing as `0` before increment); set `last_action: "inline_lag_wait"`, `phase: "BUGBOT"`, `last_updated`, and keep `status` consistent with monitoring (for example `awaiting_bugbot`). If `inline_lag_streak >= 3`, **hard blocker** per §Stop conditions (structurally inconsistent review); report and go idle **without** classifying as `dirty`. Otherwise sleep **60 seconds** and repeat from **4a** (re-fetch inline only — do not re-run step 2 or step 3).
+     - **4d.** **If `clean`:** Exit the loop. Locked merge: set `bugbot_clean_at` to `current_head`, reset `inline_lag_streak` to `0`, update `last_action`, `status`, and **`phase`: `BUGTEAM`** (next work is second audit).
+     - **4e.** **If `dirty`:** Exit the loop. Locked merge: reset `inline_lag_streak` to `0`, record findings count, update `last_action`, `status`, and **`phase`: `BUGBOT`** (next work is another fix pass).
+  5. Reports back to orchestrator: one-line summary of outcome.
 
 - Orchestrator reads the updated `state.json` and spawns the appropriate next agent:
   - Result `clean` → spawn a `general-purpose` agent to run BUGTEAM phase (invokes bugteam skill **or** §Background-agent second audit per §Second-audit execution, whichever applies at runtime).
-  - Result `dirty` → spawn a `clean-coder` agent to fix the new findings (same as "audit result with findings" above).
+  - Monitor exits on **`dirty` (step 4e)** — never treat **`inline_lag` (4c)** as `dirty` for this spawn → spawn a `clean-coder` agent to fix the new findings (same as "audit result with findings" above).
 
 ### What the orchestrator does per tick
 

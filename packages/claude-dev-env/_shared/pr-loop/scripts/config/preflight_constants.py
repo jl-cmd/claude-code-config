@@ -1,7 +1,5 @@
 """Configuration constants for the bugteam preflight script."""
 
-from __future__ import annotations
-
 BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME: str = "BUGTEAM_PREFLIGHT_SKIP"
 
 BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE: str = "1"
@@ -30,4 +28,16 @@ ALL_TESTS_DIRECTORY_IGNORE_PARTS: frozenset[str] = frozenset(
 ALL_REPOSITORY_ROOT_MARKER_FILENAMES: tuple[str, str] = (
     GIT_DIRECTORY_NAME,
     PYTEST_INI_FILENAME,
+)
+
+ALL_GIT_CONFIG_GET_CORE_HOOKS_PATH_SUBCOMMAND: tuple[str, str, str] = (
+    "config",
+    "--get",
+    "core.hooksPath",
+)
+
+ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND: tuple[str, str, str] = (
+    "pre-commit",
+    "run",
+    "--all-files",
 )

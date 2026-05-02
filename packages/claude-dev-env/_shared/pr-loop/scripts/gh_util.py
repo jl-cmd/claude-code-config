@@ -1,7 +1,5 @@
 """Shared helpers for invoking GitHub CLI with basic resiliency."""
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys

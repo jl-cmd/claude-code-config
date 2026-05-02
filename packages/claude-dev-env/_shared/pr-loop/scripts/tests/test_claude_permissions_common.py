@@ -1,7 +1,5 @@
 """Tests for _shared permission helpers extracted from skills/bugteam/scripts/."""
 
-from __future__ import annotations
-
 import importlib.util
 import inspect
 import json

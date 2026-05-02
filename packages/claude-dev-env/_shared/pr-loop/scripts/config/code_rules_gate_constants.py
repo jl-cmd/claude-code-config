@@ -1,7 +1,5 @@
 """Constants for code_rules_gate.py per CODE_RULES centralized-config rule."""
 
-from __future__ import annotations
-
 MAX_VIOLATIONS_PER_CHECK: int = 3
 EXPECTED_TUPLE_PAIR_LENGTH: int = 2
 
@@ -33,3 +31,13 @@ MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR: int = 2
 COLUMN_KEY_PATTERN_TEMPLATE: str = r"^[a-z][a-z0-9_]{{{minimum_length},}}$"
 
 GIT_NAME_STATUS_ADDED_PREFIX: str = "A"
+
+PYTHON_FILE_EXTENSION: str = ".py"
+
+ALL_GIT_DIFF_CACHED_NAME_ONLY_NULL_TERMINATED_COMMAND: tuple[str, ...] = (
+    "git",
+    "diff",
+    "--cached",
+    "--name-only",
+    "-z",
+)

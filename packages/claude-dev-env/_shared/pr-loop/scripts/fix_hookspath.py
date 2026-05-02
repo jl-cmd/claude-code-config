@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import subprocess
 import sys
@@ -11,6 +9,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 
 from config.fix_hookspath_constants import (
     ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS,
+    ALL_GIT_GLOBAL_GET_CORE_HOOKS_PATH_COMMAND,
     ALL_HOME_ENV_VAR_NAMES,
     HOOKS_PATH_SUFFIX,
     PREFLIGHT_NO_PYTEST_FLAG,
@@ -32,12 +31,12 @@ def _home_env_var_names() -> tuple[str, str]:
 
 
 def resolve_canonical_hooks_directory(
-    environment_overrides: dict[str, str] | None,
+    all_environment_overrides: dict[str, str] | None,
 ) -> Path:
     components = _canonical_hooks_directory_components()
-    if environment_overrides is not None:
+    if all_environment_overrides is not None:
         for each_env_var_name in _home_env_var_names():
-            home_value = environment_overrides.get(each_env_var_name)
+            home_value = all_environment_overrides.get(each_env_var_name)
             if home_value:
                 return Path(home_value).joinpath(*components)
     return Path.home().joinpath(*components)
@@ -45,7 +44,7 @@ def resolve_canonical_hooks_directory(
 
 def list_local_core_hooks_path_values(
     repository_root: Path,
-    environment_overrides: dict[str, str] | None,
+    all_environment_overrides: dict[str, str] | None,
 ) -> list[str]:
     git_command = [
         "git",
@@ -63,7 +62,7 @@ def list_local_core_hooks_path_values(
         encoding="utf-8",
         errors="replace",
         check=False,
-        env=environment_overrides,
+        env=all_environment_overrides,
     )
     if completed_process.returncode != 0:
         return []
@@ -75,9 +74,9 @@ def list_local_core_hooks_path_values(
 
 
 def read_global_core_hooks_path(
-    environment_overrides: dict[str, str] | None,
+    all_environment_overrides: dict[str, str] | None,
 ) -> str:
-    git_command = ["git", "config", "--global", "--get", "core.hooksPath"]
+    git_command = list(ALL_GIT_GLOBAL_GET_CORE_HOOKS_PATH_COMMAND)
     completed_process = subprocess.run(
         git_command,
         capture_output=True,
@@ -85,7 +84,7 @@ def read_global_core_hooks_path(
         encoding="utf-8",
         errors="replace",
         check=False,
-        env=environment_overrides,
+        env=all_environment_overrides,
     )
     if completed_process.returncode != 0:
         return ""
@@ -94,7 +93,7 @@ def read_global_core_hooks_path(
 
 def unset_local_core_hooks_path(
     repository_root: Path,
-    environment_overrides: dict[str, str] | None,
+    all_environment_overrides: dict[str, str] | None,
 ) -> int:
     git_command = [
         "git",
@@ -110,14 +109,14 @@ def unset_local_core_hooks_path(
         capture_output=True,
         text=True,
         check=False,
-        env=environment_overrides,
+        env=all_environment_overrides,
     )
     return completed_process.returncode
 
 
 def set_global_core_hooks_path(
     target_value: str,
-    environment_overrides: dict[str, str] | None,
+    all_environment_overrides: dict[str, str] | None,
 ) -> int:
     git_command = ["git", "config", "--global", "core.hooksPath", target_value]
     completed_process = subprocess.run(
@@ -125,7 +124,7 @@ def set_global_core_hooks_path(
         capture_output=True,
         text=True,
         check=False,
-        env=environment_overrides,
+        env=all_environment_overrides,
     )
     return completed_process.returncode
 
@@ -152,7 +151,7 @@ def find_repository_root(start: Path) -> Path:
 
 def rerun_preflight(
     repository_root: Path,
-    environment_overrides: dict[str, str] | None,
+    all_environment_overrides: dict[str, str] | None,
 ) -> int:
     preflight_script_path = Path(__file__).resolve().parent / "preflight.py"
     rerun_command = [
@@ -165,7 +164,7 @@ def rerun_preflight(
     completed_process = subprocess.run(
         rerun_command,
         check=False,
-        env=environment_overrides,
+        env=all_environment_overrides,
     )
     return completed_process.returncode
 
@@ -189,7 +188,7 @@ def parse_arguments(all_arguments: list[str] | None) -> argparse.Namespace:
 
 def main(
     all_arguments: list[str],
-    environment_overrides: dict[str, str] | None,
+    all_environment_overrides: dict[str, str] | None,
 ) -> int:
     arguments = parse_arguments(all_arguments)
     start_directory = Path.cwd()
@@ -198,7 +197,7 @@ def main(
         if arguments.repo_root is not None
         else find_repository_root(start_directory)
     )
-    canonical_hooks_directory = resolve_canonical_hooks_directory(environment_overrides)
+    canonical_hooks_directory = resolve_canonical_hooks_directory(all_environment_overrides)
     expected_suffix = _expected_hooks_path_suffix()
     if not canonical_hooks_directory.is_dir():
         print(
@@ -212,7 +211,7 @@ def main(
         return 1
     local_hooks_path_values = list_local_core_hooks_path_values(
         repository_root,
-        environment_overrides,
+        all_environment_overrides,
     )
     has_non_canonical_local_override = any(
         not is_canonical_hooks_path(each_value)
@@ -220,7 +219,7 @@ def main(
     )
     if has_non_canonical_local_override:
         unset_local_returncode = unset_local_core_hooks_path(
-            repository_root, environment_overrides
+            repository_root, all_environment_overrides
         )
         if unset_local_returncode != 0:
             print(
@@ -234,12 +233,12 @@ def main(
             f"{repository_root}",
             file=sys.stderr,
         )
-    current_global_value = read_global_core_hooks_path(environment_overrides)
+    current_global_value = read_global_core_hooks_path(all_environment_overrides)
     if not is_canonical_hooks_path(current_global_value):
         canonical_target_value = str(canonical_hooks_directory).replace("\\", "/")
         global_set_exit_code = set_global_core_hooks_path(
             canonical_target_value,
-            environment_overrides,
+            all_environment_overrides,
         )
         if global_set_exit_code != 0:
             print(
@@ -252,7 +251,7 @@ def main(
             f"fix_hookspath: set global core.hooksPath to {canonical_target_value}",
             file=sys.stderr,
         )
-    return rerun_preflight(repository_root, environment_overrides)
+    return rerun_preflight(repository_root, all_environment_overrides)
 
 
 if __name__ == "__main__":

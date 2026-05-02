@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import ast
 import importlib.util
@@ -15,6 +13,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 
 from config.code_rules_gate_constants import (
     ALL_CODE_FILE_EXTENSIONS,
+    ALL_GIT_DIFF_CACHED_NAME_ONLY_NULL_TERMINATED_COMMAND,
     ALL_LITERAL_KEYWORD_EXEMPTIONS,
     ALL_TEST_FILENAME_GLOB_SUFFIXES,
     ALL_TEST_FILENAME_SUFFIXES,
@@ -24,6 +23,7 @@ from config.code_rules_gate_constants import (
     GIT_NAME_STATUS_ADDED_PREFIX,
     MAX_VIOLATIONS_PER_CHECK,
     MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR,
+    PYTHON_FILE_EXTENSION,
     TEST_CONFTEST_FILENAME,
     TEST_FILENAME_PREFIX,
     TESTS_PATH_SEGMENT,
@@ -44,9 +44,9 @@ def violation_line_pattern() -> re.Pattern[str]:
 def resolve_claude_dev_env_root(starting_path: Path) -> Path:
     starting = Path(starting_path).resolve()
     enforcer_relative = Path("hooks") / "blocking" / "code_rules_enforcer.py"
-    for candidate in [starting, *starting.parents]:
-        if (candidate / enforcer_relative).is_file():
-            return candidate
+    for each_candidate in [starting, *starting.parents]:
+        if (each_candidate / enforcer_relative).is_file():
+            return each_candidate
     print(
         f"code_rules_gate: could not locate {enforcer_relative} above {starting}",
         file=sys.stderr,
@@ -125,7 +125,7 @@ def filter_paths_under_prefixes(
 
 def paths_from_git_staged(repository_root: Path) -> list[Path]:
     name_result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "-z"],
+        list(ALL_GIT_DIFF_CACHED_NAME_ONLY_NULL_TERMINATED_COMMAND),
         cwd=str(repository_root),
         capture_output=True,
         check=False,
@@ -303,7 +303,7 @@ def is_test_path(file_path: str) -> bool:
     if filename_only == TEST_CONFTEST_FILENAME:
         return True
     if filename_only.startswith(TEST_FILENAME_PREFIX) and filename_only.endswith(
-        ".py"
+        PYTHON_FILE_EXTENSION
     ):
         return True
     if any(
@@ -387,7 +387,7 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
       not checked, so `self.fetch(...)` and `other.fetch(...)` both match a
       module-level `fetch` definition.
     """
-    non_python_code_extensions = ALL_CODE_FILE_EXTENSIONS - {".py"}
+    non_python_code_extensions = ALL_CODE_FILE_EXTENSIONS - {PYTHON_FILE_EXTENSION}
     if any(
         file_path.endswith(each_extension)
         for each_extension in non_python_code_extensions
@@ -613,7 +613,7 @@ def run_gate(
     validate_content: ValidateContentCallable,
     all_file_paths: list[Path],
     repository_root: Path,
-    added_lines_by_path: dict[Path, set[int]] | None = None,
+    all_added_lines_by_path: dict[Path, set[int]] | None = None,
 ) -> int:
     blocking_by_file: dict[Path, list[str]] = {}
     advisory_by_file: dict[Path, list[str]] = {}
@@ -649,8 +649,8 @@ def run_gate(
             continue
         added_for_file = (
             None
-            if added_lines_by_path is None
-            else added_lines_by_path.get(resolved)
+            if all_added_lines_by_path is None
+            else all_added_lines_by_path.get(resolved)
         )
         blocking, advisory = split_violations_by_scope(issues, added_for_file)
         if blocking:
@@ -660,7 +660,7 @@ def run_gate(
     blocking_count = sum(len(each_list) for each_list in blocking_by_file.values())
     advisory_count = sum(len(each_list) for each_list in advisory_by_file.values())
     if blocking_count:
-        if added_lines_by_path is None:
+        if all_added_lines_by_path is None:
             header = f"code_rules_gate: {blocking_count} violation(s) reported."
         else:
             header = (
@@ -747,7 +747,7 @@ def main(all_arguments: list[str]) -> int:
     if arguments.paths:
         file_paths = [repository_root / each_path for each_path in arguments.paths]
         return run_gate(
-            validate_content, file_paths, repository_root, added_lines_by_path=None
+            validate_content, file_paths, repository_root, all_added_lines_by_path=None
         )
     if arguments.staged:
         staged_file_paths = paths_from_git_staged(repository_root)
@@ -765,7 +765,7 @@ def main(all_arguments: list[str]) -> int:
             validate_content,
             staged_file_paths,
             repository_root,
-            added_lines_by_path=staged_added_lines,
+            all_added_lines_by_path=staged_added_lines,
         )
     file_paths = paths_from_git_diff(repository_root, arguments.base)
     file_paths = filter_paths_under_prefixes(
@@ -782,7 +782,7 @@ def main(all_arguments: list[str]) -> int:
         validate_content,
         file_paths,
         repository_root,
-        added_lines_by_path=scoped_added_lines,
+        all_added_lines_by_path=scoped_added_lines,
     )
 
 

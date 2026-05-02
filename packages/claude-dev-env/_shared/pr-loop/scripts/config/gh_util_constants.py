@@ -1,7 +1,5 @@
 """Constants for gh_util.py per CODE_RULES centralized-config rule."""
 
-from __future__ import annotations
-
 DEFAULT_TIMEOUT_SECONDS: int = 30
 DEFAULT_RETRIES: int = 2
 DEFAULT_BACKOFF_SECONDS: float = 1.0

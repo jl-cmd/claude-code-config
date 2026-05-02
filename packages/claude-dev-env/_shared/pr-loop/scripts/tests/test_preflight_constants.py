@@ -1,7 +1,5 @@
 """Tests for preflight_constants.py extracted constant set."""
 
-from __future__ import annotations
-
 import importlib.util
 from pathlib import Path
 from types import ModuleType

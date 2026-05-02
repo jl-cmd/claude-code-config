@@ -1,7 +1,5 @@
 """Tests for code_rules_gate_constants.py extracted constant set."""
 
-from __future__ import annotations
-
 import importlib.util
 from pathlib import Path
 from types import ModuleType

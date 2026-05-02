@@ -1,7 +1,5 @@
 """JSON key names for ~/.claude/settings.json sections used by grant/revoke."""
 
-from __future__ import annotations
-
 CLAUDE_SETTINGS_PERMISSIONS_KEY: str = "permissions"
 
 CLAUDE_SETTINGS_ALLOW_KEY: str = "allow"

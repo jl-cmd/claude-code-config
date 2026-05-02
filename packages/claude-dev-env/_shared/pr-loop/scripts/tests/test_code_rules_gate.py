@@ -7,8 +7,6 @@ Covers:
 - Behavioral parity with the bugteam source: staged paths, added line maps, gate exit codes
 """
 
-from __future__ import annotations
-
 import importlib.util
 import inspect
 import subprocess
@@ -419,12 +417,12 @@ def test_split_violations_by_scope_accepts_all_added_line_numbers_param_name() -
     assert advisory_issues == []
 
 
-def test_run_gate_accepts_added_lines_by_path_param_name(tmp_path: Path) -> None:
+def test_run_gate_accepts_all_added_lines_by_path_param_name(tmp_path: Path) -> None:
     gate_module.run_gate(
         validate_content=lambda _content, _path, **_kwargs: [],
         all_file_paths=[],
         repository_root=tmp_path,
-        added_lines_by_path=None,
+        all_added_lines_by_path=None,
     )
 
 

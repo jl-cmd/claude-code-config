@@ -9,8 +9,6 @@ Covers:
 - handles paths with spaces
 """
 
-from __future__ import annotations
-
 import importlib.util
 import os
 import subprocess
@@ -129,7 +127,7 @@ def test_should_remove_local_override_and_pass_preflight(tmp_path: Path) -> None
 
     exit_code = fix_hookspath.main(
         ["--repo-root", str(repository_path)],
-        environment_overrides=environment,
+        all_environment_overrides=environment,
     )
 
     assert exit_code == 0
@@ -148,7 +146,7 @@ def test_should_set_global_hooks_path_when_missing(tmp_path: Path) -> None:
 
     exit_code = fix_hookspath.main(
         ["--repo-root", str(repository_path)],
-        environment_overrides=environment,
+        all_environment_overrides=environment,
     )
 
     assert exit_code == 0
@@ -173,11 +171,11 @@ def test_should_be_idempotent(tmp_path: Path) -> None:
 
     first_exit_code = fix_hookspath.main(
         ["--repo-root", str(repository_path)],
-        environment_overrides=environment,
+        all_environment_overrides=environment,
     )
     second_exit_code = fix_hookspath.main(
         ["--repo-root", str(repository_path)],
-        environment_overrides=environment,
+        all_environment_overrides=environment,
     )
 
     assert first_exit_code == 0
@@ -196,7 +194,7 @@ def test_should_no_op_when_already_clean(tmp_path: Path) -> None:
 
     exit_code = fix_hookspath.main(
         ["--repo-root", str(repository_path)],
-        environment_overrides=environment,
+        all_environment_overrides=environment,
     )
 
     assert exit_code == 0
@@ -223,7 +221,7 @@ def test_should_exit_nonzero_when_canonical_hooks_directory_missing(
 
     exit_code = fix_hookspath.main(
         ["--repo-root", str(repository_path)],
-        environment_overrides=environment,
+        all_environment_overrides=environment,
     )
 
     assert exit_code != 0
@@ -244,7 +242,7 @@ def test_should_handle_paths_with_spaces(tmp_path: Path) -> None:
 
     exit_code = fix_hookspath.main(
         ["--repo-root", str(repository_path)],
-        environment_overrides=environment,
+        all_environment_overrides=environment,
     )
 
     assert exit_code == 0

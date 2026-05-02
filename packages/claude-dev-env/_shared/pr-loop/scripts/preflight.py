@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import argparse
 import os
 import subprocess
@@ -12,6 +10,8 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 
 from config.fix_hookspath_constants import HOOKS_PATH_SUFFIX
 from config.preflight_constants import (
+    ALL_GIT_CONFIG_GET_CORE_HOOKS_PATH_SUBCOMMAND,
+    ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND,
     ALL_TEST_FILE_PATTERNS_FOR_DISCOVERY,
     ALL_TESTS_DIRECTORY_IGNORE_PARTS,
     BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE,
@@ -45,7 +45,7 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     git_command: list[str] = ["git"]
     if repository_root is not None:
         git_command.extend(["-C", str(repository_root)])
-    git_command.extend(["config", "--get", "core.hooksPath"])
+    git_command.extend(list(ALL_GIT_CONFIG_GET_CORE_HOOKS_PATH_SUBCOMMAND))
     try:
         query_result = subprocess.run(
             git_command,
@@ -144,7 +144,7 @@ def run_pytest(repository_root: Path, verbose: bool) -> int:
 
 def run_pre_commit(repository_root: Path) -> int:
     completed = subprocess.run(
-        ["pre-commit", "run", "--all-files"],
+        list(ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND),
         cwd=str(repository_root),
         check=False,
     )

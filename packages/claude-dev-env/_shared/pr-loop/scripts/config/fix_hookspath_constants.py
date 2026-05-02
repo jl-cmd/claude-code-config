@@ -1,7 +1,5 @@
 """Configuration constants for fix_hookspath auto-remediation script."""
 
-from __future__ import annotations
-
 ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS: tuple[str, str, str] = (
     ".claude",
     "hooks",
@@ -15,3 +13,11 @@ ALL_HOME_ENV_VAR_NAMES: tuple[str, str] = ("HOME", "USERPROFILE")
 PREFLIGHT_NO_PYTEST_FLAG: str = "--no-pytest"
 
 PREFLIGHT_REPO_ROOT_FLAG: str = "--repo-root"
+
+ALL_GIT_GLOBAL_GET_CORE_HOOKS_PATH_COMMAND: tuple[str, ...] = (
+    "git",
+    "config",
+    "--global",
+    "--get",
+    "core.hooksPath",
+)

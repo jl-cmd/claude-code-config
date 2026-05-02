@@ -1,7 +1,5 @@
 """Tests for shared gh_util.py promoted from babysit-pr/skills/babysit-prs/scripts/."""
 
-from __future__ import annotations
-
 import importlib.util
 import inspect
 import subprocess

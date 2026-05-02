@@ -2153,6 +2153,8 @@ def _import_alias_pairs(import_node: ast.Import | ast.ImportFrom) -> list[tuple[
     """Return (binding_name, line_number) for each name introduced by an import statement."""
     bindings: list[tuple[str, int]] = []
     for each_alias in import_node.names:
+        if each_alias.name == "*":
+            continue
         binding_name = each_alias.asname if each_alias.asname else each_alias.name.split(".")[0]
         bindings.append((binding_name, each_alias.lineno or import_node.lineno))
     return bindings

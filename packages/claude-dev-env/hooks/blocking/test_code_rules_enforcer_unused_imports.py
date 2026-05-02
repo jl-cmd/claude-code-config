@@ -200,3 +200,16 @@ def test_should_skip_all_future_imports_regardless_of_name() -> None:
     assert issues == [], (
         f"All __future__ imports must be skipped regardless of binding name, got: {issues}"
     )
+
+
+def test_should_skip_star_import() -> None:
+    source = (
+        "from os.path import *\n"
+        "\n"
+        "def run() -> str:\n"
+        "    return join('a', 'b')\n"
+    )
+    issues = check_unused_module_level_imports(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Star imports cannot be meaningfully tracked - skip to avoid false positives, got: {issues}"
+    )

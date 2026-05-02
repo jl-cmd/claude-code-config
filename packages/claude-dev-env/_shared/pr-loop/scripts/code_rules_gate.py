@@ -20,6 +20,7 @@ from config.code_rules_gate_constants import (
     ALL_TEST_FILENAME_SUFFIXES,
     COLUMN_KEY_PATTERN_TEMPLATE,
     CONFIG_PATH_SEGMENT,
+    EXPECTED_NON_RENAME_COLUMN_COUNT,
     EXPECTED_RENAME_COLUMN_COUNT,
     EXPECTED_TUPLE_PAIR_LENGTH,
     GIT_NAME_STATUS_ADDED_PREFIX,
@@ -404,6 +405,11 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
     - Only module-level FunctionDef nodes contribute signatures. Methods
       defined inside ClassDef bodies are ignored so cross-class same-name
       methods cannot overwrite a module-level delegate's signature index.
+    - Methods defined inside ClassDef bodies are also skipped as wrapper
+      candidates. A class method that calls a module-level delegate has a
+      signature unrelated to that delegate's keyword-argument surface, so
+      treating it as a wrapper produces false positives that flag every
+      class method calling a free-function delegate with optional kwargs.
     - ast.Attribute calls match by attribute name only; the receiver type is
       not checked, so `self.fetch(...)` and `other.fetch(...)` both match a
       module-level `fetch` definition.
@@ -437,9 +443,20 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
             for each_positional_arg in positional_args_with_defaults:
                 optional_kwargs.add(each_positional_arg.arg)
             function_signatures[each_node.name] = optional_kwargs
+    class_method_node_ids: set[int] = set()
+    for each_class_def in ast.walk(tree):
+        if not isinstance(each_class_def, ast.ClassDef):
+            continue
+        for each_class_body_node in each_class_def.body:
+            if isinstance(
+                each_class_body_node, (ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                class_method_node_ids.add(id(each_class_body_node))
     issues: list[str] = []
     for each_node in ast.walk(tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if id(each_node) in class_method_node_ids:
             continue
         if each_node.name.startswith("_"):
             continue
@@ -551,39 +568,53 @@ def renamed_file_source_map_since(
 ) -> dict[str, str]:
     """Return a mapping from rename-destination path to rename-source path.
 
-    Runs `git diff --name-status -M merge_base..HEAD` and collects both
+    Runs `git diff --name-status -M -z merge_base..HEAD` and collects both
     paths of every rename entry (status code starting with R, e.g. `R100`).
-    Keys are destination posix paths; values are source posix paths.
+    Keys are destination posix paths; values are source posix paths. The
+    -z flag asks git for null-terminated, unquoted output so paths
+    containing tab or newline bytes are not misparsed by column or line
+    splitting; rename records emit three null-terminated tokens in
+    sequence (status, source, destination), other status records emit
+    two (status, path).
     """
     name_status_result = subprocess.run(
-        ["git", "diff", "--name-status", "-M", f"{merge_base}..HEAD"],
+        ["git", "diff", "--name-status", "-M", "-z", f"{merge_base}..HEAD"],
         cwd=str(repository_root),
         capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         check=False,
     )
     if name_status_result.returncode != 0:
+        stderr_text = name_status_result.stderr.decode("utf-8", errors="replace")
         print(
-            f"code_rules_gate: git diff --name-status -M failed:\n"
-            f"{name_status_result.stderr}",
+            f"code_rules_gate: git diff --name-status -M -z failed:\n"
+            f"{stderr_text}",
             file=sys.stderr,
         )
         raise SystemExit(2)
+    null_separated_tokens = [
+        each_token.decode("utf-8", errors="replace")
+        for each_token in name_status_result.stdout.split(b"\x00")
+        if each_token
+    ]
     rename_source_by_destination: dict[str, str] = {}
-    for each_line in name_status_result.stdout.splitlines():
-        if not each_line.strip():
+    next_token_index = 0
+    while next_token_index < len(null_separated_tokens):
+        status_code = null_separated_tokens[next_token_index]
+        if status_code.startswith(GIT_NAME_STATUS_RENAMED_PREFIX):
+            if next_token_index + EXPECTED_RENAME_COLUMN_COUNT > len(
+                null_separated_tokens
+            ):
+                break
+            source_path = null_separated_tokens[next_token_index + 1].replace(
+                "\\", "/"
+            )
+            destination_path = null_separated_tokens[next_token_index + 2].replace(
+                "\\", "/"
+            )
+            rename_source_by_destination[destination_path] = source_path
+            next_token_index += EXPECTED_RENAME_COLUMN_COUNT
             continue
-        all_columns = each_line.split("\t")
-        status_code = all_columns[0]
-        if not status_code.startswith(GIT_NAME_STATUS_RENAMED_PREFIX):
-            continue
-        if len(all_columns) < EXPECTED_RENAME_COLUMN_COUNT:
-            continue
-        source_path = all_columns[1].replace("\\", "/")
-        destination_path = all_columns[2].replace("\\", "/")
-        rename_source_by_destination[destination_path] = source_path
+        next_token_index += EXPECTED_NON_RENAME_COLUMN_COUNT
     return rename_source_by_destination
 
 

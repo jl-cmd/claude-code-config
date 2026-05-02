@@ -787,3 +787,72 @@ def test_whole_file_line_set_logs_decode_failure_to_stderr(
     captured = capsys.readouterr()
     assert "non_utf8.py" in captured.err
     assert "decode" in captured.err.lower() or "utf" in captured.err.lower()
+
+
+def test_check_wrapper_plumb_through_skips_class_methods_calling_module_delegate() -> None:
+    """Regression: class methods must not be wrongly flagged as wrappers.
+
+    Wrapper detection walked every FunctionDef including methods inside a
+    ClassDef body, but the signature index only contained module-level
+    functions. A class method calling a module-level delegate with optional
+    kwargs received an empty wrapper_kwargs set and was flagged as dropping
+    the delegate's optional kwargs even though the class method's signature
+    is unrelated to wrapper-style forwarding. Class methods must be ignored
+    by wrapper-candidate enumeration.
+    """
+    source = (
+        "def fetch(target, *, retries=3):\n"
+        "    return target\n"
+        "\n"
+        "class MyService:\n"
+        "    def public_method(self, target):\n"
+        "        return fetch(target)\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert issues == [], (
+        f"class methods must not be treated as module-level wrappers; got {issues!r}"
+    )
+
+
+def test_renamed_file_source_map_since_uses_null_byte_separator(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: rename parsing must invoke git diff with -z.
+
+    `git diff --name-status -M` without -z separates columns with tab and
+    rows with newline. Filenames containing a literal tab or newline byte
+    break column detection and silently misclassify the rename. The -z
+    flag asks git for null-terminated, unquoted output so embedded tabs
+    and newlines round-trip correctly. This test asserts the function
+    invokes git with -z and parses the null-terminated stream emitted by
+    that flag.
+    """
+    captured_arguments: dict[str, list[str]] = {}
+
+    null_terminated_stream = (
+        "R100\x00source_with\ttab.py\x00destination_with\ttab.py\x00"
+    ).encode("utf-8")
+
+    class _FakeCompletedProcess:
+        returncode = 0
+        stdout = null_terminated_stream
+        stderr = b""
+
+    def _fake_subprocess_run(all_command, **_keyword_arguments):
+        captured_arguments["all_command"] = list(all_command)
+        return _FakeCompletedProcess()
+
+    monkeypatch.setattr(gate_module.subprocess, "run", _fake_subprocess_run)
+
+    rename_map = gate_module.renamed_file_source_map_since(
+        temporary_git_repository.resolve(), "deadbeef"
+    )
+
+    assert "-z" in captured_arguments["all_command"], (
+        "git diff --name-status -M must include -z so embedded tabs/newlines "
+        "in filenames are not misparsed as column or row separators"
+    )
+    assert rename_map == {
+        "destination_with\ttab.py": "source_with\ttab.py",
+    }

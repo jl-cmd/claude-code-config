@@ -95,7 +95,7 @@ def test_write_atomically_with_mode_closes_descriptor_when_fdopen_raises(
 ) -> None:
     """Regression: if os.fdopen fails, the raw descriptor from os.open must close.
 
-    Cursor Bugbot (review 4214887527): without a failure path, the descriptor
+    Cursor Bugbot: without a failure path, the descriptor
     leaks when fdopen raises before the file object assumes ownership.
     """
     closed_descriptors: list[int] = []
@@ -132,3 +132,4 @@ def test_path_contains_glob_metacharacters_accepts_windows_paths_with_parens() -
     assert common.path_contains_glob_metacharacters("C:/Program Files (x86)/app") is False
     assert common.path_contains_glob_metacharacters("C:/Users/Jon (Admin)/project") is False
     assert common.path_contains_glob_metacharacters("C:/Projects/a,b/file.py") is False
+

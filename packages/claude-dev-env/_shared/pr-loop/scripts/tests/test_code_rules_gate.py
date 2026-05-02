@@ -647,7 +647,7 @@ def test_check_wrapper_plumb_through_dedupes_nested_public_function_calls() -> N
 def test_check_wrapper_plumb_through_ignores_calls_nested_inside_delegate_arguments() -> None:
     """Regression: nested callees inside another call's arguments are not wrapper sites.
 
-    Cursor Bugbot (review 4214887527): `_iter_calls_excluding_nested_functions`
+    Cursor Bugbot: `_iter_calls_excluding_nested_functions`
     used to recurse into `ast.Call` children, so `delegate(helper(x))` yielded
     both the outer `delegate` call and the inner `helper` call. The inner call
     must not attribute dropped optional kwargs of `helper` to the enclosing

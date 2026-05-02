@@ -12,9 +12,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.modules.pop("config", None)
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from evict_cached_config_modules import evict_cached_config_modules
+
+evict_cached_config_modules()
 
 from config.pr_converge_constants import (
     BUGBOT_RUN_TEMPFILE_PREFIX,

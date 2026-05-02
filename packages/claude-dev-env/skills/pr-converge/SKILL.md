@@ -93,11 +93,11 @@ All pacing-specific instructions for that route — delays, prompts, AHK setup, 
 
 ## Progressive disclosure (skill folder)
 
-This skill is a **folder** (`SKILL.md` plus `scripts/` plus `references/`): wrappers centralize gh pagination and body-file rules so the model composes orchestration instead of re-deriving CLI footguns. Read in this order ([Anthropic — internal patterns for Claude Code skills](https://x.com/trq212/status/2033949937936085378)):
+This skill is a **folder** (`SKILL.md` plus `scripts/` plus `workflows/`): wrappers centralize gh pagination and body-file rules so the model composes orchestration instead of re-deriving CLI footguns. Read in this order ([Anthropic — internal patterns for Claude Code skills](https://x.com/trq212/status/2033949937936085378)):
 
 1. This `SKILL.md` — phase graph, teammate contracts, stop conditions.
 2. [`scripts/README.md`](scripts/README.md) — argv, stdout JSON shapes, pointers to `../../rules/gh-paginate.md` and `../../rules/gh-body-file.md`.
-3. [`../../bugteam/reference/workflow-path-b-task-harness.md`](../../bugteam/reference/workflow-path-b-task-harness.md) **on demand** — bugteam **Path B** harness only (read after bugteam `SKILL.md` **Path routing** selects Path B). Path A harness: [`../../bugteam/reference/workflow-path-a-orchestrated-teams.md`](../../bugteam/reference/workflow-path-a-orchestrated-teams.md).
+3. [`../bugteam/reference/workflow-path-b-task-harness.md`](../bugteam/reference/workflow-path-b-task-harness.md) **on demand** — bugteam **Path B** harness only (read after bugteam `SKILL.md` **Path routing** selects Path B). Path A harness: [`../bugteam/reference/workflow-path-a-orchestrated-teams.md`](../bugteam/reference/workflow-path-a-orchestrated-teams.md).
 4. Individual script source or `--help` — only when a call fails or `${CLAUDE_SKILL_DIR}` resolves unexpectedly.
 
 Taxonomy: **CI/CD & Deployment** in the [`babysit-pr` archetype](https://x.com/trq212/status/2033949937936085378) — monitors a PR, applies fixes between reviewer ticks, and flips it ready-for-review on convergence. If the doc feels broad, use **§Multi-PR orchestration model** as the workflow spine and **§Per-tick work** as the single-PR linearization.
@@ -116,12 +116,12 @@ Non-default behaviors worth burning in; add a bullet here when a real run fails 
 ## Second-audit execution (bugteam — Path A vs Path B)
 
 The **second audit** (BUGTEAM phase) is **always** the **bugteam** skill: preflight, CODE_RULES gate, **`code-quality-agent`** / **`clean-coder`** loop,
-  audit rubric, outcome shape, and Step 2 BUGTEAM §(b)–(d) contract all live in [`../../bugteam/SKILL.md`](../../bugteam/SKILL.md) plus `PROMPTS.md` /
+  audit rubric, outcome shape, and Step 2 BUGTEAM §(b)–(d) contract all live in [`../bugteam/SKILL.md`](../bugteam/SKILL.md) plus `PROMPTS.md` /
   `EXAMPLES.md` / `CONSTRAINTS.md` — do not re-spec them here.
 
-**Path routing is bugteam-internal:** [bugteam `SKILL.md` — Path routing](../../bugteam/SKILL.md#path-routing-mandatory-first-branch) (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` equals **`1`** → Path A orchestrated teams; otherwise → Path B Task harness). **Harness-only** execution: Path A — [`../../bugteam/reference/workflow-path-a-orchestrated-teams.md`](../../bugteam/reference/workflow-path-a-orchestrated-teams.md); Path B — [`../../bugteam/reference/workflow-path-b-task-harness.md`](../../bugteam/reference/workflow-path-b-task-harness.md).
+**Path routing is bugteam-internal:** [bugteam `SKILL.md` — Path routing](../bugteam/SKILL.md#path-routing-mandatory-first-branch) (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` equals **`1`** → Path A orchestrated teams; otherwise → Path B Task harness). **Harness-only** execution: Path A — [`../bugteam/reference/workflow-path-a-orchestrated-teams.md`](../bugteam/reference/workflow-path-a-orchestrated-teams.md); Path B — [`../bugteam/reference/workflow-path-b-task-harness.md`](../bugteam/reference/workflow-path-b-task-harness.md).
 
-**pr-converge rule:** Prefer **`Skill({skill: "bugteam", args: "<PR URL or args>"})`** wherever the tool registry exposes `Skill` — bugteam executes the correct path. When **`Skill` is not invokable** (typical delegated teammate), that worker still runs **bugteam** by loading **`../../bugteam/SKILL.md`** from the same checkout and following **Path routing** plus [`../../bugteam/reference/workflow-path-b-task-harness.md`](../../bugteam/reference/workflow-path-b-task-harness.md) when Path B applies; never replace bugteam with a hand-rolled audit.
+**pr-converge rule:** Prefer **`Skill({skill: "bugteam", args: "<PR URL or args>"})`** wherever the tool registry exposes `Skill` — bugteam executes the correct path. When **`Skill` is not invokable** (typical delegated teammate), that worker still runs **bugteam** by loading **`../bugteam/SKILL.md`** from the same checkout and following **Path routing** plus [`../bugteam/reference/workflow-path-b-task-harness.md`](../bugteam/reference/workflow-path-b-task-harness.md) when Path B applies; never replace bugteam with a hand-rolled audit.
 
 ### Team infrastructure detection (for pr-converge pacing and docs cross-links only)
 
@@ -256,7 +256,7 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
 **`converged.log` (multi-PR only — requires `state.json`):**
 
 - **Path:** `<TMPDIR>/pr-converge-<session_id>/converged.log` (sibling of `state.json`).
-- **Format:** one tab-separated row per converged PR — `<ISO8601_UTC>\t<owner>/<repo>#<number>\tbugbot=<SHA>\t<SECOND_AUDIT_LABEL>=<SHA>` where `<SECOND_AUDIT_LABEL>` is `bugteam` or `cursor_audit` per §Second-audit execution.
+- **Format:** one tab-separated row per converged PR — `<ISO8601_UTC>\t<owner>/<repo>#<number>\tbugbot=<SHA>\t<SECOND_AUDIT_LABEL>=<SHA>` where `<SECOND_AUDIT_LABEL>` is always `bugteam` (second audit is the bugteam skill) per §Second-audit execution.
 - **Append site:** the agent that runs `mark_pr_ready.py` (see §Audit result → general-purpose convergence branch and Step 2 BUGTEAM second branch). Append **before** the locked `state.json` publish so the log row survives a failed or retried merge.
 - **Never read inside the loop.** The orchestrator and teammates never gate behavior on this file; it is for the user and follow-up tooling only.
 
@@ -355,7 +355,7 @@ c. Decide (the four branches below cover every input combination — match the f
 
 a. Run **bugteam** (second audit) on the current PR.
 
-   - **When `Skill` is invokable** (see [Pacing workflows](#pacing-workflows-load-exactly-one) tool-inventory rules — same session): invoke **bugteam** with the `Skill` tool. Path A vs Path B is selected **inside** bugteam per [bugteam Path routing](../../bugteam/SKILL.md#path-routing-mandatory-first-branch); pr-converge does not branch on `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` here.
+   - **When `Skill` is invokable** (see [Pacing workflows](#pacing-workflows-load-exactly-one) tool-inventory rules — same session): invoke **bugteam** with the `Skill` tool. Path A vs Path B is selected **inside** bugteam per [bugteam Path routing](../bugteam/SKILL.md#path-routing-mandatory-first-branch); pr-converge does not branch on `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` here.
 
      ```
      Skill({skill: "bugteam", args: "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
@@ -363,7 +363,7 @@ a. Run **bugteam** (second audit) on the current PR.
 
      Wait for completion; capture exit and final summary (convergence vs findings) for Step **(c)**.
 
-   - **When `Skill` is not invokable** (typical `Task` teammate): that worker executes **bugteam** by reading [`../../bugteam/SKILL.md`](../../bugteam/SKILL.md) and, if Path B applies, [`../../bugteam/reference/workflow-path-b-task-harness.md`](../../bugteam/reference/workflow-path-b-task-harness.md) — same **`code-quality-agent`** / **`clean-coder`** loop and gates as Path A; only harness steps differ per that workflow file.
+   - **When `Skill` is not invokable** (typical `Task` teammate): that worker executes **bugteam** by reading [`../bugteam/SKILL.md`](../bugteam/SKILL.md) and, if Path B applies, [`../bugteam/reference/workflow-path-b-task-harness.md`](../bugteam/reference/workflow-path-b-task-harness.md) — same **`code-quality-agent`** / **`clean-coder`** loop and gates as Path A; only harness steps differ per that workflow file.
 
 b. **Re-resolve current HEAD now** because the second audit may have pushed commits during its run. The `current_head` from Step 1 is potentially
   stale at this point:

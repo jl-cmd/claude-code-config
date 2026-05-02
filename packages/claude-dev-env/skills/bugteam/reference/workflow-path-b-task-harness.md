@@ -12,7 +12,7 @@ Load when bugteam `SKILL.md` **Path routing** selects **Path B** (`CLAUDE_CODE_E
 
 ## Step 2 harness — Path B
 
-No `TeamCreate`. Use the same `team_name` string only as a **logical label** for `team_temp_dir` paths if `SKILL.md` Step 1 already created `<team_temp_dir>` using that convention; do not pass `team_name` into spawns.
+No `TeamCreate`. After shared `SKILL.md` **Step 1** completes (PR scope **and** `<team_temp_dir>/pr-<N>/` per Step 1 items 1–3 there), use the same `team_name` string only as a **logical label** for paths under that `<team_temp_dir>`; do not pass `team_name` into spawns.
 
 **`--bugbot-retrigger` flag:** same as Path A [`workflow-path-a-orchestrated-teams.md`](workflow-path-a-orchestrated-teams.md) § Step 2 harness — the **lead** posts the issue comment after each successful FIX push when the flag is present.
 

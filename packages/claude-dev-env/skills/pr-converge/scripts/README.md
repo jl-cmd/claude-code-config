@@ -2,7 +2,7 @@
 
 Thin Python wrappers around the gh CLI calls the skill makes per tick. Centralizing them lets the skill body reference one script path per action and keeps the gh-paginate and gh-body-file rules enforced in one place.
 
-All scripts are invoked with `python "${CLAUDE_SKILL_DIR}/scripts/<name>.py" --owner OWNER --repo REPO --number NUMBER ...`. They return non-zero on subprocess failure and surface gh's stderr through `subprocess.CalledProcessError`.
+Scripts that target a specific repository are invoked as `python "${CLAUDE_SKILL_DIR}/scripts/<name>.py" --owner OWNER --repo REPO --number NUMBER ...`. `view_pr_context.py` relies on `gh`'s default repository context and takes no `--owner` / `--repo` / `--number` flags. Scripts return non-zero on subprocess failure and surface gh's stderr through `subprocess.CalledProcessError`.
 
 ## Scripts
 

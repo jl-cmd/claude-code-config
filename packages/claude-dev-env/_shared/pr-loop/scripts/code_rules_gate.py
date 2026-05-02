@@ -14,6 +14,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 from config.code_rules_gate_constants import (
     ALL_CODE_FILE_EXTENSIONS,
     ALL_GIT_DIFF_CACHED_NAME_ONLY_NULL_TERMINATED_COMMAND,
+    ALL_GIT_DIFF_NAME_ONLY_NULL_TERMINATED_COMMAND_PREFIX,
     ALL_LITERAL_KEYWORD_EXEMPTIONS,
     ALL_TEST_FILENAME_GLOB_SUFFIXES,
     ALL_TEST_FILENAME_SUFFIXES,
@@ -259,29 +260,37 @@ def added_lines_by_file_staged(
 
 def paths_from_git_diff(repository_root: Path, base_reference: str) -> list[Path]:
     merge_base = resolve_merge_base(repository_root, base_reference)
+    diff_command = list(ALL_GIT_DIFF_NAME_ONLY_NULL_TERMINATED_COMMAND_PREFIX) + [
+        f"{merge_base}..HEAD"
+    ]
     name_result = subprocess.run(
-        ["git", "diff", "--name-only", f"{merge_base}..HEAD"],
+        diff_command,
         cwd=str(repository_root),
         capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
         check=False,
     )
     if name_result.returncode != 0:
+        stderr_text = name_result.stderr.decode("utf-8", errors="replace")
         print(
-            f"code_rules_gate: git diff --name-only failed:\n{name_result.stderr}",
+            f"code_rules_gate: git diff --name-only -z failed:\n{stderr_text}",
             file=sys.stderr,
         )
         raise SystemExit(2)
-    relative_paths = [
-        each_line.strip()
-        for each_line in name_result.stdout.splitlines()
-        if each_line.strip()
-    ]
-    return [
-        repository_root / each_relative_path for each_relative_path in relative_paths
-    ]
+    raw_paths = name_result.stdout.split(b"\x00")
+    resolved_paths: list[Path] = []
+    for each_raw_path in raw_paths:
+        if not each_raw_path:
+            continue
+        try:
+            relative_path = each_raw_path.decode("utf-8")
+        except UnicodeDecodeError:
+            print(
+                f"code_rules_gate: skipping diff path with non-UTF-8 filename: {each_raw_path!r}",
+                file=sys.stderr,
+            )
+            continue
+        resolved_paths.append(repository_root / relative_path)
+    return resolved_paths
 
 
 def is_code_path(file_path: Path) -> bool:
@@ -388,8 +397,9 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
       module-level `fetch` definition.
     """
     non_python_code_extensions = ALL_CODE_FILE_EXTENSIONS - {PYTHON_FILE_EXTENSION}
+    lowercase_file_path = file_path.lower()
     if any(
-        file_path.endswith(each_extension)
+        lowercase_file_path.endswith(each_extension)
         for each_extension in non_python_code_extensions
     ):
         return []

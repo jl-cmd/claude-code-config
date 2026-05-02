@@ -571,6 +571,57 @@ def test_check_database_column_string_magic_dedupes_nested_function_tuples() -> 
     assert len(issues) == 1, f"expected 1 finding, got {len(issues)}: {issues!r}"
 
 
+def test_check_wrapper_plumb_through_skips_uppercase_js_extension() -> None:
+    """Regression: case-insensitive filesystem (Windows, macOS) can yield
+    file paths like 'Foo.JS'. The skip predicate must normalize case so
+    files matching the non-Python extension set are skipped and never
+    fed to the Python AST analyzer.
+    """
+    valid_python_with_wrapper_violation = (
+        "def fetch(target, *, retries=3):\n"
+        "    return target\n"
+        "\n"
+        "def public_fetch(target):\n"
+        "    return fetch(target)\n"
+    )
+    issues_for_uppercase_js = gate_module.check_wrapper_plumb_through(
+        valid_python_with_wrapper_violation, "Foo.JS"
+    )
+    issues_for_lowercase_js = gate_module.check_wrapper_plumb_through(
+        valid_python_with_wrapper_violation, "foo.js"
+    )
+    assert issues_for_uppercase_js == issues_for_lowercase_js
+    assert issues_for_uppercase_js == []
+
+
+def test_paths_from_git_diff_uses_null_delimiter(
+    tmp_path: Path,
+) -> None:
+    """Regression: paths_from_git_diff must use -z + null-byte split.
+
+    Mirrors paths_from_git_staged semantics so filenames containing newlines
+    or special characters are not silently mangled.
+    """
+    null_terminated_stdout = b"first.py\x00second.py\x00name with\nnewline.py\x00"
+    mock_completed_run = unittest.mock.MagicMock()
+    mock_completed_run.returncode = 0
+    mock_completed_run.stdout = null_terminated_stdout
+
+    with unittest.mock.patch.object(
+        gate_module, "resolve_merge_base", return_value="abcdef0"
+    ):
+        with unittest.mock.patch("subprocess.run", return_value=mock_completed_run) as mocked_run:
+            resolved_paths = gate_module.paths_from_git_diff(tmp_path, "origin/main")
+
+    invocation_arguments = mocked_run.call_args.args[0]
+    assert "-z" in invocation_arguments
+
+    resolved_names = {each_path.name for each_path in resolved_paths}
+    assert "first.py" in resolved_names
+    assert "second.py" in resolved_names
+    assert "name with\nnewline.py" in resolved_names
+
+
 def test_check_wrapper_plumb_through_dedupes_nested_public_function_calls() -> None:
     """Regression: delegate calls inside nested public functions must produce one finding.
 

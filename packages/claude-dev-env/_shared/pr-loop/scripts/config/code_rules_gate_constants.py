@@ -41,3 +41,10 @@ ALL_GIT_DIFF_CACHED_NAME_ONLY_NULL_TERMINATED_COMMAND: tuple[str, ...] = (
     "--name-only",
     "-z",
 )
+
+ALL_GIT_DIFF_NAME_ONLY_NULL_TERMINATED_COMMAND_PREFIX: tuple[str, ...] = (
+    "git",
+    "diff",
+    "--name-only",
+    "-z",
+)

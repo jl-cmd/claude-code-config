@@ -148,6 +148,32 @@ class FetchInlineReviewCommentsTests(unittest.TestCase):
             result = gh_util.fetch_inline_review_comments("JonEcho", "babysit-pr", 17)
         self.assertIsNone(result)
 
+    def test_returns_none_when_inner_items_are_not_dicts(self) -> None:
+        success_with_non_dict_items = subprocess.CompletedProcess(
+            args=("gh",),
+            returncode=0,
+            stdout="[1, 2, 3]",
+            stderr="",
+        )
+        with patch.object(
+            gh_util.subprocess, "run", return_value=success_with_non_dict_items
+        ):
+            result = gh_util.fetch_inline_review_comments("JonEcho", "babysit-pr", 17)
+        self.assertIsNone(result)
+
+    def test_returns_none_when_inner_items_mix_dict_and_string(self) -> None:
+        success_with_mixed_items = subprocess.CompletedProcess(
+            args=("gh",),
+            returncode=0,
+            stdout='[{"id": 1, "path": "a.py"}, "stray string"]',
+            stderr="",
+        )
+        with patch.object(
+            gh_util.subprocess, "run", return_value=success_with_mixed_items
+        ):
+            result = gh_util.fetch_inline_review_comments("JonEcho", "babysit-pr", 17)
+        self.assertIsNone(result)
+
 
 class RunGhUnreachableAssertionRemovedTests(unittest.TestCase):
     def test_run_gh_function_body_does_not_contain_unreachable_assertion(self) -> None:

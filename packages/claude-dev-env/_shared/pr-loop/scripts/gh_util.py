@@ -152,6 +152,8 @@ def fetch_inline_review_comments(
         return None
     if not isinstance(parsed, list):
         return None
+    if not all(isinstance(each_item, dict) for each_item in parsed):
+        return None
     return parsed
 
 

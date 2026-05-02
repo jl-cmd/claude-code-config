@@ -229,6 +229,32 @@ def test_should_exit_nonzero_when_canonical_hooks_directory_missing(
     assert "hooks/git-hooks" in captured_streams.err.replace("\\", "/")
 
 
+def test_constant_wrapper_functions_have_been_removed() -> None:
+    """The three wrappers returned an already-imported module-level constant
+    unchanged. They added a layer of indirection with no transformation,
+    validation, or test seam, so they were inlined at every call site
+    and removed.
+    """
+    assert not hasattr(fix_hookspath, "_expected_hooks_path_suffix")
+    assert not hasattr(fix_hookspath, "_canonical_hooks_directory_components")
+    assert not hasattr(fix_hookspath, "_home_env_var_names")
+
+
+def test_is_canonical_hooks_path_still_recognizes_canonical_suffix() -> None:
+    canonical_value_with_suffix = "/home/example/.claude/hooks/git-hooks"
+    assert fix_hookspath.is_canonical_hooks_path(canonical_value_with_suffix)
+
+
+def test_resolve_canonical_hooks_directory_uses_home_env_overrides(
+    tmp_path: Path,
+) -> None:
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
+    overrides = {"HOME": str(fake_home), "USERPROFILE": str(fake_home)}
+    resolved = fix_hookspath.resolve_canonical_hooks_directory(overrides)
+    assert resolved == fake_home / ".claude" / "hooks" / "git-hooks"
+
+
 def test_should_handle_paths_with_spaces(tmp_path: Path) -> None:
     home_directory = tmp_path / "home with space"
     home_directory.mkdir()

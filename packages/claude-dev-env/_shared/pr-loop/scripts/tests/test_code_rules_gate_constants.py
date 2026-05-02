@@ -85,3 +85,10 @@ def test_column_key_pattern_template_renders_with_minimum_length() -> None:
     )
     assert rendered_pattern == r"^[a-z][a-z0-9_]{2,}$"
 
+
+def test_git_diff_name_only_null_terminated_command_prefix_includes_dash_z() -> None:
+    command_prefix = (
+        constants_module.ALL_GIT_DIFF_NAME_ONLY_NULL_TERMINATED_COMMAND_PREFIX
+    )
+    assert command_prefix == ("git", "diff", "--name-only", "-z")
+

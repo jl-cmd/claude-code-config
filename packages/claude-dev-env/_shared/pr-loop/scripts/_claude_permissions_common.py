@@ -147,6 +147,7 @@ def save_settings(settings_path: Path, all_settings: dict[str, object]) -> None:
                 temporary_path, serialized_settings, mode_to_preserve
             )
             os.replace(str(temporary_path), str(settings_path))
+            os.chmod(str(settings_path), mode_to_preserve)
         except OSError as os_error:
             exit_with_error(
                 f"Failed to write settings atomically to {settings_path}: {os_error}"

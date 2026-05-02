@@ -18,28 +18,15 @@ from config.fix_hookspath_constants import (
 from config.preflight_constants import GIT_DIRECTORY_NAME
 
 
-def _expected_hooks_path_suffix() -> str:
-    return HOOKS_PATH_SUFFIX
-
-
-def _canonical_hooks_directory_components() -> tuple[str, str, str]:
-    return ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS
-
-
-def _home_env_var_names() -> tuple[str, str]:
-    return ALL_HOME_ENV_VAR_NAMES
-
-
 def resolve_canonical_hooks_directory(
     all_environment_overrides: dict[str, str] | None,
 ) -> Path:
-    components = _canonical_hooks_directory_components()
     if all_environment_overrides is not None:
-        for each_env_var_name in _home_env_var_names():
+        for each_env_var_name in ALL_HOME_ENV_VAR_NAMES:
             home_value = all_environment_overrides.get(each_env_var_name)
             if home_value:
-                return Path(home_value).joinpath(*components)
-    return Path.home().joinpath(*components)
+                return Path(home_value).joinpath(*ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS)
+    return Path.home().joinpath(*ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS)
 
 
 def list_local_core_hooks_path_values(
@@ -136,7 +123,7 @@ def normalize_hooks_path(raw_value: str) -> str:
 def is_canonical_hooks_path(raw_value: str) -> bool:
     if not raw_value:
         return False
-    return normalize_hooks_path(raw_value).endswith(_expected_hooks_path_suffix())
+    return normalize_hooks_path(raw_value).endswith(HOOKS_PATH_SUFFIX)
 
 
 def find_repository_root(start: Path) -> Path:
@@ -198,7 +185,7 @@ def main(
         else find_repository_root(start_directory)
     )
     canonical_hooks_directory = resolve_canonical_hooks_directory(all_environment_overrides)
-    expected_suffix = _expected_hooks_path_suffix()
+    expected_suffix = HOOKS_PATH_SUFFIX
     if not canonical_hooks_directory.is_dir():
         print(
             "fix_hookspath: canonical hooks directory does not exist: "

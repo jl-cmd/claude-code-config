@@ -181,6 +181,20 @@ class RunGhUnreachableAssertionRemovedTests(unittest.TestCase):
         assert "AssertionError" not in run_gh_source_text
 
 
+class RunGhUnreachableTrailingReturnRemovedTests(unittest.TestCase):
+    """Regression: every for-loop branch in run_gh returns a GhResult, so the
+    trailing `return GhResult(...)` block after the loop is unreachable. The
+    body must terminate with the for-loop's own returns, not a fallback block
+    referencing 'exhausted all attempts'.
+    """
+
+    def test_run_gh_function_body_does_not_contain_unreachable_trailing_return(
+        self,
+    ) -> None:
+        run_gh_source_text = inspect.getsource(gh_util.run_gh)
+        assert "exhausted all attempts" not in run_gh_source_text
+
+
 class EnsureTextParameterNameTests(unittest.TestCase):
     """The `_ensure_text` parameter must not use the banned name `value`.
 

@@ -63,7 +63,8 @@ def run_gh(
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
     max_attempts = DEFAULT_RETRIES + 1
-    for each_attempt in range(max_attempts):
+    each_attempt = 0
+    while True:
         try:
             gh_completion = subprocess.run(
                 all_command,
@@ -89,6 +90,7 @@ def run_gh(
                     DEFAULT_BACKOFF_SECONDS
                     * (EXPONENTIAL_BACKOFF_BASE**each_attempt)
                 )
+                each_attempt += 1
                 continue
             return last_result
 
@@ -107,14 +109,9 @@ def run_gh(
             time.sleep(
                 DEFAULT_BACKOFF_SECONDS * (EXPONENTIAL_BACKOFF_BASE**each_attempt)
             )
+            each_attempt += 1
             continue
         return gh_result
-    return GhResult(
-        returncode=GH_TIMEOUT_RETURN_CODE,
-        stdout="",
-        stderr="gh command exhausted all attempts",
-        is_timed_out=True,
-    )
 
 
 def fetch_inline_review_comments(

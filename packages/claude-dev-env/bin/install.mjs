@@ -587,6 +587,7 @@ ${PACKAGE_NAME} - Claude Code development standards installer
 
 Usage:
   npx ${PACKAGE_NAME}              Install everything
+  npx ${PACKAGE_NAME} --update     Re-run full install (refresh ~/.claude/ from package)
   npx ${PACKAGE_NAME} --only X     Install specific groups
   npx ${PACKAGE_NAME} --uninstall  Remove installed files
   npx ${PACKAGE_NAME} --help       Show this help
@@ -608,7 +609,12 @@ writes the previous contents to ~/.claude/backups/CLAUDE.md.<timestamp>.bak firs
 `);
 }
 
-const args = process.argv.slice(2);
+const rawArgs = process.argv.slice(2);
+const args = rawArgs.filter((flag) => flag !== '--update');
+const isUpdateRefresh = rawArgs.includes('--update');
+if (isUpdateRefresh) {
+    console.log(`${PACKAGE_NAME}: --update — re-running full install into ${CLAUDE_HOME}\n`);
+}
 if (args.includes('--help') || args.includes('-h')) {
     printHelp();
 } else if (args.includes('--uninstall')) {

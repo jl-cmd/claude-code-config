@@ -14,7 +14,7 @@ description: >-
 
 # PR Converge
 
-Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's ScheduleWakeup paces re-entry when that harness exists. Self-terminates the loop on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next ScheduleWakeup. When `/loop` is unavailable, see **§Loop cycle without `/loop` or ScheduleWakeup**.
+Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. Designed to be invoked under `/loop /pr-converge` so the parent's `ScheduleWakeup` paces re-entry. Self-terminates on convergence (back-to-back clean) by flipping the PR to ready for review and omitting the next `ScheduleWakeup`.
 
 ## Why the work runs in the main session, not a background subagent
 
@@ -30,9 +30,7 @@ This skill is a **folder** (`SKILL.md` plus `scripts/` plus `references/`), not 
 
 1. This `SKILL.md` — phase graph, teammate contracts, stop conditions.
 2. [`scripts/README.md`](scripts/README.md) — argv, stdout JSON shapes, pointers to `../../rules/gh-paginate.md` and `../../rules/gh-body-file.md`.
-3. `references/*.md` **on demand** — load only when the corresponding branch fires:
-   - [`references/background-agent-second-audit.md`](references/background-agent-second-audit.md) when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS != 1` and the BUGTEAM tick takes the non-team path.
-   - [`references/os-scheduled-loop.md`](references/os-scheduled-loop.md) when the host exposes neither `/loop` nor `ScheduleWakeup`.
+3. [`references/background-agent-second-audit.md`](references/background-agent-second-audit.md) **on demand** — load only when `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS != 1` and the BUGTEAM tick takes the non-team path.
 4. Individual script source or `--help` — only when a call fails or `${CLAUDE_SKILL_DIR}` resolves unexpectedly.
 
 Taxonomy: **CI/CD & Deployment** in the [`babysit-pr` archetype](https://x.com/trq212/status/2033949937936085378) — monitors a PR, applies fixes between reviewer ticks, and flips it ready-for-review on convergence. If the doc feels broad, use **§Multi-PR orchestration model** as the workflow spine and **§Per-tick work** as the single-PR linearization.
@@ -41,7 +39,7 @@ Taxonomy: **CI/CD & Deployment** in the [`babysit-pr` archetype](https://x.com/t
 
 Non-default behaviors worth burning in; add a bullet here when a real run fails in a new way ([same source](https://x.com/trq212/status/2033949937936085378)):
 
-- **`ScheduleWakeup` is not in subagent tool registries** — a background `general-purpose` tick cannot schedule the next re-entry; use the main session with `/loop` or §Loop cycle without `/loop` or ScheduleWakeup.
+- **`ScheduleWakeup` is not in subagent tool registries** — a background `general-purpose` tick cannot schedule the next re-entry; only the main session under `/loop /pr-converge` owns `ScheduleWakeup`.
 - **Bugbot only recognizes the literal re-trigger phrase `bugbot run`** — other comment text no-ops; always use `trigger_bugbot.py` (temp body file) so backticks in prose never corrupt the PR comment.
 - **Review body and inline comments can desync for the same `commit_id`** — “dirty body, zero inline rows at `current_head`” is **`inline_lag`**, not **`dirty`**; bump `inline_lag_streak`, wait 60s, retry fetch (Step 2 BUGBOT fourth branch; §Fix result → general-purpose steps 4c–4e).
 - **`state.json` without the §Concurrency lock loses merges** when several teammates finish in one wall-clock window.
@@ -187,14 +185,8 @@ When `${CLAUDE_PLUGIN_DATA}` is unset (skill not installed via a plugin), skip t
 
 ## Invocation modes
 
-- **`/loop /pr-converge`** (recommended): loops automatically. The /loop skill runs each tick and uses ScheduleWakeup to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
-- **`/pr-converge`** (manual): runs exactly one tick and returns. Useful for ad-hoc state checks or for advancing the loop one step manually. The user re-runs the skill (or wraps it in `/loop`) to continue.
-
-## Loop cycle without `/loop` or ScheduleWakeup
-
-Some hosts expose **neither** `/loop` nor `ScheduleWakeup`. There is still **no in-model timer**; the **only** substitute this skill defines is an **OS-level scheduled job** (cron / systemd timer / Task Scheduler) the operator installs once at a 270s interval. Each run executes exactly one non-interactive tick that reads prior state from disk and writes updated state to disk.
-
-Harness, state-on-disk path conventions, enforceability via OS logs, and the Step 4 omission rule live in [`references/os-scheduled-loop.md`](references/os-scheduled-loop.md). Read that file when the host has neither primitive; do not improvise an in-model sleep loop.
+- **`/loop /pr-converge`** (recommended): loops automatically. The /loop skill runs each tick and uses `ScheduleWakeup` to pace re-entry. Termination on convergence is automatic; the skill omits the next wakeup at the convergence tick.
+- **`/pr-converge`** (manual): runs exactly one tick and returns. Useful for ad-hoc state checks or for advancing the loop one step manually. To continue automatically, invoke `/loop /pr-converge` in Claude Code.
 
 ## State across ticks
 
@@ -311,9 +303,9 @@ Before scheduling the next wakeup, evaluate **`tick_count`**: for multi-PR runs,
 
 ### Step 4: Schedule the next wakeup (only when invoked under `/loop`)
 
-**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). **Skip it also when the host exposes no `ScheduleWakeup` tool** (many IDE-only environments): there is nothing to call; one tick ends and §Loop cycle without `/loop` or ScheduleWakeup owns re-entry. Manual mode runs exactly one tick and returns without scheduling — the user re-runs the skill or wraps it in `/loop` to continue when `/loop` exists. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; when Step 4 is skipped, every such reference becomes "return" only.
+**Skip this step entirely when the skill was invoked as bare `/pr-converge`** (manual mode). **Skip it also when the host exposes no `ScheduleWakeup` tool** (outside Claude Code): there is nothing to call; one tick ends without automatic re-entry. References elsewhere in this document to "schedule next wakeup, return" mean Step 4 below; when Step 4 is skipped, every such reference becomes "return" only.
 
-Detect **loop mode** (Step 4 eligible) only when **both** hold: the host supports `ScheduleWakeup`, **and** the run was triggered by the parent's `/loop` wakeup chain or the user typed `/loop /pr-converge`. When the most recent user message was bare `/pr-converge` (no `/loop` prefix and no such wakeup chain), or when `ScheduleWakeup` is unavailable, treat as **manual / no-harness mode** for Step 4.
+Detect **loop mode** (Step 4 eligible) only when **both** hold: the host supports `ScheduleWakeup`, **and** the run was triggered by the parent's `/loop` wakeup chain or the user typed `/loop /pr-converge`. When the most recent user message was bare `/pr-converge` (no `/loop` prefix and no such wakeup chain), or when `ScheduleWakeup` is unavailable, treat as **manual mode** for Step 4.
 
 In **loop mode**, call `ScheduleWakeup` with:
 

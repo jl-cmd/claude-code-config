@@ -89,7 +89,16 @@ Create once at session start; each teammate writes its result back before going 
 
 **`status` values:** `fresh` | `in_progress` | `awaiting_bugbot` | `awaiting_bugteam` | `converged` | `blocked`
 
-**Write rule:** Teammates write their result by reading the current file, merging their PR's entry, and writing the file back. Writes are keyed on `pr_number`; other PRs' entries are untouched.
+**Write rule:** Teammates write their result by reading the current file, merging **only** their PR's keyed entry under `prs`, and persisting the merged document back. Writes are keyed on `pr_number`; other PRs' entries are untouched in the merge logic — **but** see **Concurrency** below so parallel teammates never clobber each other.
+
+**Concurrency (mandatory):** When multiple teammates can finish in the same wall-clock window (including the case where **10+** idle notifications arrive together), a naive read–modify–write on `state.json` **loses updates** (two writers read the same revision; the second `write` overwrites the first). Every `state.json` update from a teammate **must** use **serialized access** plus **atomic publish**:
+
+1. **Acquire** an exclusive lock in the same directory as `state.json`, for example a sibling path `state.json.lock` created with an **atomic create-only** primitive (`mkdir` on Unix when the path does not exist; on Windows `New-Item` / `md` guarded so only one creator succeeds, or a host file lock API). If acquisition fails because the lock exists, sleep with jitter and **retry** until held (cap retries and escalate per **Stop conditions** if the lock never clears — indicates a stuck teammate).
+2. **Read** `state.json`, merge this teammate's `prs[<pr_number>]` object only, then **write** the full merged JSON to `state.json.tmp` in that directory.
+3. **Replace** `state.json` atomically from `state.json.tmp` (`os.replace` / same-volume rename semantics so readers never see a half-written file).
+4. **Release** the lock (`rmdir` / `Remove-Item` on the lock path).
+
+The orchestrator **does not** write `state.json` except where explicitly called out elsewhere in this skill; serialization is on teammates.
 
 **Orchestrator reads this file at the start of every tick** instead of relying on conversation context for cross-PR state.
 
@@ -106,12 +115,12 @@ When a bugfind teammate reports completion (findings or clean):
   2. Applies TDD fixes (test first, then production code).
   3. Commits and pushes one fix commit.
   4. Replies inline to each addressed finding comment via `reply_to_inline_comment.py`.
-  5. **Writes its result to `state.json`** (`last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`).
+  5. **Writes its result to `state.json`** (per §Concurrency) (`last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`).
   6. Goes idle.
 
 - For PRs with zero findings: spawn **one `general-purpose` agent** per PR. That agent:
-  1. Runs `mark_pr_ready.py` if `bugbot_clean_at == current_head` (back-to-back clean).
-  2. Otherwise updates `state.json` (`last_action: "audit_clean"`, `status: "awaiting_bugbot"`) and triggers bugbot via `trigger_bugbot.py`.
+  1. If `bugbot_clean_at == current_head` (back-to-back clean): run `mark_pr_ready.py`, then **write `state.json`** (per §Concurrency) setting this PR's entry to at least `status: "converged"`, `last_action: "converged"` (or `marked_ready`), and `last_updated` to an ISO-8601 UTC timestamp — **before** going idle. Omitting this write leaves the orchestrator on later ticks with a stale `awaiting_bugteam` / `in_progress` row and risks duplicate work.
+  2. Otherwise: update `state.json` (per §Concurrency) with `last_action: "audit_clean"`, `status: "awaiting_bugbot"`, then trigger bugbot via `trigger_bugbot.py`.
   3. Goes idle.
 
 #### Fix result → general-purpose per PR
@@ -124,7 +133,7 @@ When a bugfix (clean-coder) teammate goes idle after pushing a fix:
   3. Polls `fetch_bugbot_reviews.py` every 60s (up to 10 polls) until a review anchored to `current_head` appears.
   4. Fetches inline comments via `fetch_bugbot_inline_comments.py`.
   5. Classifies result: `clean` (review body clean + zero inline) or `dirty` (findings exist).
-  6. **Writes result to `state.json`**: sets `bugbot_clean_at` (if clean) or records findings count, updates `last_action`, `status`.
+  6. **Writes result to `state.json`** (per §Concurrency): sets `bugbot_clean_at` (if clean) or records findings count, updates `last_action`, `status`.
   7. Reports back to orchestrator: one-line summary of outcome.
 
 - Orchestrator reads the updated `state.json` and spawns the appropriate next agent:

@@ -106,7 +106,7 @@ def test_is_safe_regular_file_accepts_exact_override_path(
     assert is_safe
 
 
-def test_is_safe_regular_file_rejects_claude_home_override_outside_home_dot_claude(
+def test_is_safe_regular_file_rejects_gate_outside_home_dot_claude_tree(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -226,7 +226,7 @@ Iterate from index 0 (most recent) toward older entries:
    python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/code_rules_gate.py" --base origin/<baseRefName>
    ```
 
-   Lead only; merge-base / diff details in the script source. Non-zero → spawn **clean-coder** standards-fix (read stderr, edit, re-run **this same** command, one commit, `git push`, shutdown) until exit **0** or **5** failed gate rounds → `error: code rules gate failed pre-audit`. After **0**: `loop_count += 1`; if `loop_count > 10` → `cap reached`. Then **AUDIT** (bugfind); print `Loop <N> audit: ...`.
+   Lead only; merge-base / diff semantics: [`../../_shared/pr-loop/code-rules-gate.md`](../../_shared/pr-loop/code-rules-gate.md); shared script inventory: [`../../_shared/pr-loop/scripts/README.md`](../../_shared/pr-loop/scripts/README.md). Non-zero → spawn **clean-coder** standards-fix (read stderr, edit, re-run **this same** command, one commit, `git push`, shutdown) until exit **0** or **5** failed gate rounds → `error: code rules gate failed pre-audit`. After **0**: `loop_count += 1`; if `loop_count > 10` → `cap reached`. Then **AUDIT** (bugfind); print `Loop <N> audit: ...`.
 
 3. **FIX** (`last_action == "audited"` and `last_findings.total > 0`): `loop_count += 1`; if `loop_count > 10` → `cap reached`; **FIX** (bugfix); print `Loop <N> fix: ...`; `last_action = "fixed"`, update `audit_log`; loop to step 1.
 

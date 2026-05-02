@@ -664,3 +664,126 @@ def test_check_wrapper_plumb_through_ignores_calls_in_nested_functions() -> None
     assert issues == [], (
         f"outer must not be flagged for kwargs dropped by a nested helper; got {issues!r}"
     )
+
+
+def test_check_wrapper_plumb_through_ignores_class_method_signatures() -> None:
+    """Regression: methods sharing a name across classes must not collide.
+
+    `function_signatures` previously keyed on `each_node.name` regardless of
+    enclosing class, so `Foo.serialize(*, indent=2)` and `Bar.serialize(target)`
+    both became dict entry `"serialize"` and the second overwrote the first.
+    A module-level wrapper that calls `serialize(...)` was then incorrectly
+    matched against whichever class won the race. Restrict signature
+    collection to module-level functions so cross-class same-name methods
+    cannot pollute the wrapper-detection index.
+    """
+    source = (
+        "class Foo:\n"
+        "    def serialize(self, target, *, indent=2):\n"
+        "        return target\n"
+        "\n"
+        "class Bar:\n"
+        "    def serialize(self, target):\n"
+        "        return target\n"
+        "\n"
+        "def public_serialize(target):\n"
+        "    return serialize(target)\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert issues == [], (
+        f"class-method same-name collision must not pollute the signature index; got {issues!r}"
+    )
+
+
+def test_added_lines_by_file_does_not_flag_pure_rename_as_whole_file_added(
+    temporary_git_repository: Path,
+) -> None:
+    """Regression: a file renamed without content edits must not appear as
+    a whole-file add. `git diff --unified=0 base..HEAD -- <newpath>` returns
+    an empty diff for the new path, and the absent-at-base check would
+    misclassify the renamed file as new and flag every line.
+    """
+    write_file(
+        temporary_git_repository / "original_name.py",
+        "alpha = 1\nbeta = 2\ngamma = 3\n",
+    )
+    commit_all_files(temporary_git_repository, "baseline")
+    run_git_in_repository(
+        temporary_git_repository,
+        "mv",
+        "original_name.py",
+        "new_name.py",
+    )
+    commit_all_files(temporary_git_repository, "rename only")
+
+    renamed_path = temporary_git_repository / "new_name.py"
+    added_lines_map = gate_module.added_lines_by_file(
+        temporary_git_repository,
+        "HEAD~1",
+        [renamed_path],
+    )
+    assert added_lines_map[renamed_path.resolve()] == set()
+
+
+def test_renamed_file_source_map_since_maps_destination_to_source(
+    temporary_git_repository: Path,
+) -> None:
+    """renamed_file_source_map_since returns dest->source dict for renamed files."""
+    write_file(
+        temporary_git_repository / "source_file.py",
+        "x = 1\n",
+    )
+    commit_all_files(temporary_git_repository, "baseline")
+    run_git_in_repository(
+        temporary_git_repository,
+        "mv",
+        "source_file.py",
+        "dest_file.py",
+    )
+    commit_all_files(temporary_git_repository, "rename")
+
+    merge_base = gate_module.resolve_merge_base(temporary_git_repository, "HEAD~1")
+    rename_map = gate_module.renamed_file_source_map_since(
+        temporary_git_repository.resolve(), merge_base
+    )
+    assert rename_map == {"dest_file.py": "source_file.py"}
+
+
+def test_added_lines_for_renamed_file_returns_empty_for_pure_rename(
+    temporary_git_repository: Path,
+) -> None:
+    """Blob comparison of a pure rename yields zero added lines."""
+    write_file(
+        temporary_git_repository / "old.py",
+        "a = 1\nb = 2\n",
+    )
+    commit_all_files(temporary_git_repository, "baseline")
+    run_git_in_repository(temporary_git_repository, "mv", "old.py", "new.py")
+    commit_all_files(temporary_git_repository, "rename")
+
+    merge_base = gate_module.resolve_merge_base(temporary_git_repository, "HEAD~1")
+    added = gate_module.added_lines_for_renamed_file(
+        temporary_git_repository.resolve(), merge_base, "old.py", "new.py"
+    )
+    assert added == set()
+
+
+def test_whole_file_line_set_logs_decode_failure_to_stderr(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Regression: silent UnicodeDecodeError swallow loses scope.
+
+    A non-UTF-8 newly-added file would return an empty set with no signal
+    to the operator. The function must emit a stderr line naming the file
+    and the decode error so the operator knows scope was lost.
+    """
+    non_utf8_path = tmp_path / "non_utf8.py"
+    non_utf8_path.write_bytes(b"name = '\xff\xfe invalid utf8 bytes'\n")
+
+    line_numbers = gate_module.whole_file_line_set(non_utf8_path)
+
+    assert line_numbers == set()
+    captured = capsys.readouterr()
+    assert "non_utf8.py" in captured.err
+    assert "decode" in captured.err.lower() or "utf" in captured.err.lower()

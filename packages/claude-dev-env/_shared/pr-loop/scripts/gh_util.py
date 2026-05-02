@@ -146,15 +146,43 @@ def fetch_inline_review_comments(
     )
     if fetch_result.returncode != 0:
         return None
-    try:
-        parsed = json.loads(fetch_result.stdout)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(parsed, list):
+    parsed = _parse_paginated_json_array_documents(fetch_result.stdout)
+    if parsed is None:
         return None
     if not all(isinstance(each_item, dict) for each_item in parsed):
         return None
     return parsed
+
+
+def _parse_paginated_json_array_documents(
+    raw_output: str,
+) -> list[dict[str, object]] | None:
+    """Parse gh --paginate output that emits one JSON array per page.
+
+    Concatenated array documents (`[...][...]`) are decoded one at a time
+    using json.JSONDecoder.raw_decode and merged into a single flat list.
+    Returns None when any decoded document is not a JSON array.
+    """
+    decoder = json.JSONDecoder()
+    cursor_index = 0
+    output_length = len(raw_output)
+    flattened: list[dict[str, object]] = []
+    while cursor_index < output_length:
+        while cursor_index < output_length and raw_output[cursor_index].isspace():
+            cursor_index += 1
+        if cursor_index >= output_length:
+            break
+        try:
+            decoded_document, end_index = decoder.raw_decode(
+                raw_output, cursor_index
+            )
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(decoded_document, list):
+            return None
+        flattened.extend(decoded_document)
+        cursor_index = end_index
+    return flattened
 
 
 def parse_owner_repo(repository: str) -> tuple[str, str]:

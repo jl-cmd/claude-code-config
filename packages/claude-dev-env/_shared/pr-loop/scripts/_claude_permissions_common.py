@@ -39,11 +39,8 @@ def path_contains_glob_metacharacters(candidate_path: str) -> bool:
         "?",
         "[",
         "]",
-        "(",
-        ")",
         "{",
         "}",
-        ",",
     )
     return any(
         each_character in candidate_path

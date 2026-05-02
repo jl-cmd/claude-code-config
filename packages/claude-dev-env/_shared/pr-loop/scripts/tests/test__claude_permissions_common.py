@@ -80,3 +80,22 @@ def test_save_settings_chmods_after_replace_to_defeat_umask(
     )
     assert final_chmod_index is not None
     assert final_replace_index < final_chmod_index
+
+
+def test_path_contains_glob_metacharacters_rejects_true_metacharacters() -> None:
+    assert common.path_contains_glob_metacharacters("C:/some/path/*.py") is True
+    assert common.path_contains_glob_metacharacters("C:/some/path/[abc].py") is True
+    assert common.path_contains_glob_metacharacters("C:/some/{a,b}/file") is True
+
+
+def test_path_contains_glob_metacharacters_accepts_windows_paths_with_parens() -> None:
+    """Regression: Windows paths like C:/Program Files (x86)/ must not raise ValueError.
+
+    `(`, `)`, and `,` are not glob metacharacters in Claude Code's permission
+    rule matching. Including them in the metacharacter set causes
+    get_current_project_path to raise ValueError for any user whose home
+    directory contains parentheses (e.g. `C:/Users/Jon (Admin)/...`).
+    """
+    assert common.path_contains_glob_metacharacters("C:/Program Files (x86)/app") is False
+    assert common.path_contains_glob_metacharacters("C:/Users/Jon (Admin)/project") is False
+    assert common.path_contains_glob_metacharacters("C:/Projects/a,b/file.py") is False

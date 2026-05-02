@@ -20,8 +20,10 @@ from config.code_rules_gate_constants import (
     ALL_TEST_FILENAME_SUFFIXES,
     COLUMN_KEY_PATTERN_TEMPLATE,
     CONFIG_PATH_SEGMENT,
+    EXPECTED_RENAME_COLUMN_COUNT,
     EXPECTED_TUPLE_PAIR_LENGTH,
     GIT_NAME_STATUS_ADDED_PREFIX,
+    GIT_NAME_STATUS_RENAMED_PREFIX,
     MAX_VIOLATIONS_PER_CHECK,
     MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR,
     PYTHON_FILE_EXTENSION,
@@ -399,8 +401,9 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
     capped at MAX_VIOLATIONS_PER_CHECK findings per call to run_gate.
 
     Limitations:
-    - function_signatures keys on FunctionDef.name, so methods sharing a name
-      across different classes collide and the last definition wins.
+    - Only module-level FunctionDef nodes contribute signatures. Methods
+      defined inside ClassDef bodies are ignored so cross-class same-name
+      methods cannot overwrite a module-level delegate's signature index.
     - ast.Attribute calls match by attribute name only; the receiver type is
       not checked, so `self.fetch(...)` and `other.fetch(...)` both match a
       module-level `fetch` definition.
@@ -417,7 +420,7 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
     function_signatures: dict[str, set[str]] = {}
-    for each_node in ast.walk(tree):
+    for each_node in ast.iter_child_nodes(tree):
         if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             optional_kwargs: set[str] = set()
             for each_kwonly, each_default in zip(
@@ -531,11 +534,94 @@ def added_lines_for_file(
 def whole_file_line_set(file_path: Path) -> set[int]:
     try:
         total_lines = len(file_path.read_text(encoding="utf-8").splitlines())
-    except (OSError, UnicodeDecodeError):
+    except (OSError, UnicodeDecodeError) as read_error:
+        print(
+            f"code_rules_gate: skipping unreadable file {file_path}: {read_error}",
+            file=sys.stderr,
+        )
         return set()
     if total_lines <= 0:
         return set()
     return set(range(1, total_lines + 1))
+
+
+def renamed_file_source_map_since(
+    repository_root: Path,
+    merge_base: str,
+) -> dict[str, str]:
+    """Return a mapping from rename-destination path to rename-source path.
+
+    Runs `git diff --name-status -M merge_base..HEAD` and collects both
+    paths of every rename entry (status code starting with R, e.g. `R100`).
+    Keys are destination posix paths; values are source posix paths.
+    """
+    name_status_result = subprocess.run(
+        ["git", "diff", "--name-status", "-M", f"{merge_base}..HEAD"],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if name_status_result.returncode != 0:
+        print(
+            f"code_rules_gate: git diff --name-status -M failed:\n"
+            f"{name_status_result.stderr}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    rename_source_by_destination: dict[str, str] = {}
+    for each_line in name_status_result.stdout.splitlines():
+        if not each_line.strip():
+            continue
+        all_columns = each_line.split("\t")
+        status_code = all_columns[0]
+        if not status_code.startswith(GIT_NAME_STATUS_RENAMED_PREFIX):
+            continue
+        if len(all_columns) < EXPECTED_RENAME_COLUMN_COUNT:
+            continue
+        source_path = all_columns[1].replace("\\", "/")
+        destination_path = all_columns[2].replace("\\", "/")
+        rename_source_by_destination[destination_path] = source_path
+    return rename_source_by_destination
+
+
+def added_lines_for_renamed_file(
+    repository_root: Path,
+    merge_base: str,
+    source_posix: str,
+    destination_posix: str,
+) -> set[int]:
+    """Return added line numbers for a renamed file via blob comparison.
+
+    Compares `merge_base:source_posix` against `HEAD:destination_posix`
+    to surface only truly added lines, ignoring lines that already existed
+    in the source file before the rename. Falls back to whole-file coverage
+    when the source blob is absent at the merge base (i.e. the source was
+    itself a new or renamed file that landed earlier in the branch).
+    """
+    diff_result = subprocess.run(
+        [
+            "git",
+            "diff",
+            "--unified=0",
+            f"{merge_base}:{source_posix}",
+            f"HEAD:{destination_posix}",
+        ],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if diff_result.returncode != 0:
+        destination_file = repository_root / destination_posix
+        return whole_file_line_set(destination_file)
+    if not diff_result.stdout.strip():
+        return set()
+    return parse_added_line_numbers(diff_result.stdout)
 
 
 def added_lines_by_file(
@@ -545,6 +631,7 @@ def added_lines_by_file(
 ) -> dict[Path, set[int]]:
     merge_base = resolve_merge_base(repository_root, base_reference)
     resolved_root = repository_root.resolve()
+    rename_source_map = renamed_file_source_map_since(resolved_root, merge_base)
     added_by_path: dict[Path, set[int]] = {}
     for each_path in all_file_paths:
         try:
@@ -556,10 +643,20 @@ def added_lines_by_file(
         except ValueError:
             continue
         relative_posix = str(relative).replace("\\", "/")
-        added_numbers = added_lines_for_file(resolved_root, merge_base, relative_posix)
-        if not added_numbers and resolved.is_file():
-            if is_file_new_at_base(resolved_root, merge_base, relative_posix):
-                added_numbers = whole_file_line_set(resolved)
+        if relative_posix in rename_source_map:
+            added_numbers = added_lines_for_renamed_file(
+                resolved_root,
+                merge_base,
+                rename_source_map[relative_posix],
+                relative_posix,
+            )
+        else:
+            added_numbers = added_lines_for_file(
+                resolved_root, merge_base, relative_posix
+            )
+            if not added_numbers and resolved.is_file():
+                if is_file_new_at_base(resolved_root, merge_base, relative_posix):
+                    added_numbers = whole_file_line_set(resolved)
         added_by_path[resolved] = added_numbers
     return added_by_path
 

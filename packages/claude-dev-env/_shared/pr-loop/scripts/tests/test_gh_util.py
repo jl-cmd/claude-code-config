@@ -181,5 +181,49 @@ class RunGhUnreachableAssertionRemovedTests(unittest.TestCase):
         assert "AssertionError" not in run_gh_source_text
 
 
+class FetchInlineReviewCommentsPaginationTests(unittest.TestCase):
+    """Regression: gh --paginate emits one JSON document per page concatenated.
+
+    Per the project's gh-paginate rule, --paginate for a list endpoint emits
+    one JSON array per page (e.g. `[...]\\n[...]\\n[...]`), and json.loads
+    fails on the second `[`. fetch_inline_review_comments must merge those
+    documents and return the flattened list rather than returning None.
+    """
+
+    def test_returns_flattened_list_for_concatenated_pages(self) -> None:
+        page_one_body = '[{"id": 1, "path": "a.py"}, {"id": 2, "path": "b.py"}]'
+        page_two_body = '[{"id": 3, "path": "c.py"}]'
+        concatenated_pages = f"{page_one_body}\n{page_two_body}\n"
+        success = subprocess.CompletedProcess(
+            args=("gh",),
+            returncode=0,
+            stdout=concatenated_pages,
+            stderr="",
+        )
+        with patch.object(gh_util.subprocess, "run", return_value=success):
+            fetched_comments = gh_util.fetch_inline_review_comments(
+                "JonEcho", "babysit-pr", 17
+            )
+        assert fetched_comments == [
+            {"id": 1, "path": "a.py"},
+            {"id": 2, "path": "b.py"},
+            {"id": 3, "path": "c.py"},
+        ]
+
+    def test_returns_none_when_concatenated_page_is_not_a_list(self) -> None:
+        concatenated_with_object = '[{"id": 1}]\n{"message": "oops"}\n'
+        success = subprocess.CompletedProcess(
+            args=("gh",),
+            returncode=0,
+            stdout=concatenated_with_object,
+            stderr="",
+        )
+        with patch.object(gh_util.subprocess, "run", return_value=success):
+            fetched_comments = gh_util.fetch_inline_review_comments(
+                "JonEcho", "babysit-pr", 17
+            )
+        assert fetched_comments is None
+
+
 if __name__ == "__main__":
     unittest.main()

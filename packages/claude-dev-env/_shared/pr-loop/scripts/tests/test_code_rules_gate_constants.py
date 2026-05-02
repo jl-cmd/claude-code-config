@@ -79,6 +79,14 @@ def test_git_name_status_added_prefix() -> None:
     assert constants_module.GIT_NAME_STATUS_ADDED_PREFIX == "A"
 
 
+def test_git_name_status_renamed_prefix() -> None:
+    assert constants_module.GIT_NAME_STATUS_RENAMED_PREFIX == "R"
+
+
+def test_expected_rename_column_count() -> None:
+    assert constants_module.EXPECTED_RENAME_COLUMN_COUNT == 3
+
+
 def test_column_key_pattern_template_renders_with_minimum_length() -> None:
     rendered_pattern = constants_module.COLUMN_KEY_PATTERN_TEMPLATE.format(
         minimum_length=constants_module.MINIMUM_COLUMN_NAME_LENGTH_AFTER_FIRST_CHAR

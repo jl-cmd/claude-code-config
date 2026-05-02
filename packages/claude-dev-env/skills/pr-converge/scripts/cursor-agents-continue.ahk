@@ -37,8 +37,7 @@ AUTO_START_FLAG := "--start-on"
 
 INT32_MINIMUM_VALUE := -2147483648
 
-target_argument := A_Args.Length >= 1 ? A_Args[1] : DEFAULT_TARGET_WINDOW_TITLE
-target_window_title := IsInteger(target_argument) ? "ahk_pid " target_argument : target_argument
+target_window_title := resolve_target_window_title_from_arguments()
 should_auto_start := has_auto_start_flag()
 is_enabled := false
 
@@ -75,6 +74,26 @@ has_auto_start_flag() {
     }
     return false
 }
+
+resolve_target_window_title_from_arguments() {
+    candidate := ""
+    each_arg_index := 1
+    while (each_arg_index <= A_Args.Length) {
+        arg_value := A_Args[each_arg_index]
+        if (arg_value = AUTO_START_FLAG) {
+            each_arg_index++
+            continue
+        }
+        if (candidate = "") {
+            candidate := arg_value
+        }
+        each_arg_index++
+    }
+    if (candidate = "")
+        return DEFAULT_TARGET_WINDOW_TITLE
+    return IsInteger(candidate) ? "ahk_pid " candidate : candidate
+}
+
 
 build_indicator() {
     global indicator, indicator_label

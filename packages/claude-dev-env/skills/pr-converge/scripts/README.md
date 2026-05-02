@@ -69,18 +69,6 @@ python "${CLAUDE_SKILL_DIR}/scripts/mark_pr_ready.py" \
   --owner <OWNER> --repo <REPO> --number <NUMBER>
 ```
 
-### `wait_and_continue.py`
-
-Foreground **LLM autonomic pacing** helper used when `PR_CONVERGE_AUTONOMOUS=1` and the harness has no `ScheduleWakeup`. Sleeps for `--delay-seconds` (0–86400 inclusive), then prints the UTF-8 contents of `--continuation-file` to stdout, appending a trailing newline if the file does not end with one. Exit code **2** if the file is missing or if the delay is negative or above the cap. Does not call `gh`.
-
-```bash
-python "${CLAUDE_SKILL_DIR}/scripts/wait_and_continue.py" \
-  --delay-seconds 270 \
-  --continuation-file /path/to/continuation.txt
-```
-
-See `SKILL.md` §LLM autonomic pacing (no ScheduleWakeup or /loop).
-
 ### `reply_to_inline_comment.py`
 
 Posts an inline reply to a PR review comment. Reply body is sourced from a caller-supplied file via `gh api ... -F body=@<path>` (per `rules/gh-body-file.md`).

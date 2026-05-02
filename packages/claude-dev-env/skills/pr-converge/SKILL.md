@@ -46,7 +46,12 @@ Runs one tick of the bugbot ↔ bugteam convergence loop in the main session. **
 
 ## Why the work runs in the main session, not a background subagent
 
-`ScheduleWakeup` is a primitive of the parent harness; it is not exposed to `general-purpose` subagents. A prior version of this skill spawned a background subagent and instructed it to call `ScheduleWakeup` at the end of each tick. The subagent's tool registry returned "No matching deferred tools found" for `ScheduleWakeup`, so the loop could never self-perpetuate — it ran exactly one tick and stalled. Running converge ticks in the main session via `/pr-converge` or `/loop /pr-converge` puts the work on the harness that owns `ScheduleWakeup` when it exists; when it does not, the AHK driver re-enters the same session with `continue`, preserving default loop behavior.
+Run **every converge tick** in the **parent harness session** (the conversation where the user invoked `/pr-converge` or `/loop /pr-converge`):
+
+- **`ScheduleWakeup` path:** Call `ScheduleWakeup` from this same session so the next tick fires back into **this** transcript with the prior tick’s state line and PR context still addressable.
+- **AHK path:** Keep ticks in the **same** window the auto-typer targets so each `continue` re-enters here and reads the same state line and `gh` context.
+
+Delegate **audits and fixes** to background `Task` / subagents **only** where this skill already specifies that pattern (for example read-only audit or fix-protocol workers). **Loop pacing** (`ScheduleWakeup` scheduling or AHK handoff) stays in the **main** session.
 
 ## When this skill applies
 

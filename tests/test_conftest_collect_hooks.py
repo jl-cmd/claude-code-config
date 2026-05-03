@@ -155,3 +155,28 @@ class TestCollectHookSymmetry:
             "so `from config import ...` resolves to the repository's top-level "
             "config/ package, not _shared/pr-loop/scripts/config/"
         )
+
+    def should_remove_pr_converge_scripts_from_sys_path_for_git_hooks_collection(
+        self, isolated_collect_hook_state: None
+    ) -> None:
+        leaked_pr_converge_entry = str(
+            conftest._PR_CONVERGE_SCRIPTS_DIRECTORY_PATH.resolve()
+        )
+        sys.path.insert(0, leaked_pr_converge_entry)
+
+        git_hooks_test_file_path = (
+            conftest._GIT_HOOKS_DIRECTORY_PATH / "test_example_hook.py"
+        )
+        fake_git_hooks_collector = MagicMock(spec=pytest.Module)
+        fake_git_hooks_collector.nodeid = (
+            "packages/claude-dev-env/hooks/git-hooks/test_example_hook.py"
+        )
+        fake_git_hooks_collector.path = git_hooks_test_file_path
+
+        conftest.pytest_collectstart(fake_git_hooks_collector)
+
+        assert leaked_pr_converge_entry not in sys.path, (
+            "git-hooks collection must evict the pr-converge scripts sys.path entry "
+            "so `from config import ...` resolves to the flat git-hooks config, not "
+            "skills/pr-converge/scripts/config/"
+        )

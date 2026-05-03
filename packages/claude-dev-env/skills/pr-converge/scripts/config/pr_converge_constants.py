@@ -8,7 +8,7 @@ CURSOR_BOT_LOGIN: str = "cursor[bot]"
 
 COPILOT_REVIEWER_LOGIN: str = "copilot-pull-request-reviewer[bot]"
 
-COPILOT_REVIEWER_REQUEST_ID: str = "copilot-pull-request-reviewer[bot]"
+COPILOT_REVIEWER_REQUEST_ID: str = COPILOT_REVIEWER_LOGIN
 
 COPILOT_CLEAN_REVIEW_STATE: str = "APPROVED"
 

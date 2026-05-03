@@ -105,11 +105,11 @@ def test_copilot_reviewer_login_carries_bot_suffix() -> None:
     )
 
 
-def test_copilot_reviewer_request_id_matches_login_string() -> None:
-    assert (
-        pr_converge_constants_module.COPILOT_REVIEWER_REQUEST_ID
-        == "copilot-pull-request-reviewer[bot]"
-    )
+def test_copilot_reviewer_request_id_reuses_login_constant() -> None:
+    request_id = pr_converge_constants_module.COPILOT_REVIEWER_REQUEST_ID
+    login = pr_converge_constants_module.COPILOT_REVIEWER_LOGIN
+    assert request_id == login
+    assert request_id is login
 
 
 def test_copilot_clean_review_state_is_approved() -> None:

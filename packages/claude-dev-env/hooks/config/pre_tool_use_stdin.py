@@ -5,6 +5,12 @@ from __future__ import annotations
 import json
 import sys
 
+from config.stdin_parse_constants import (
+    DECODE_ERRORS_POLICY,
+    UTF8_BOM,
+    UTF_8_ENCODING,
+)
+
 
 def _read_stdin_text() -> str | None:
     try:
@@ -17,7 +23,7 @@ def _read_stdin_text() -> str | None:
         if decoded_text is None:
             return None
         return decoded_text
-    return raw_bytes.decode("utf-8", errors="replace")
+    return raw_bytes.decode(UTF_8_ENCODING, errors=DECODE_ERRORS_POLICY)
 
 
 def read_hook_input_dictionary_from_stdin() -> dict[str, object] | None:
@@ -30,7 +36,7 @@ def read_hook_input_dictionary_from_stdin() -> dict[str, object] | None:
     decoded_text = _read_stdin_text()
     if decoded_text is None:
         return None
-    normalized_text = decoded_text.strip().removeprefix("\ufeff").strip()
+    normalized_text = decoded_text.strip().removeprefix(UTF8_BOM).strip()
     if not normalized_text:
         return None
     try:

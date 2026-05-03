@@ -50,14 +50,6 @@ PR_CONTEXT_FIELDS: str = "number,url,headRefOid,baseRefName,headRefName,isDraft"
 
 MERGEABILITY_FIELDS: str = "mergeable,mergeStateStatus,headRefOid"
 
-MERGE_STATE_STATUS_DIRTY: str = "DIRTY"
-
-MERGE_STATE_STATUS_CLEAN: str = "CLEAN"
-
-MERGEABLE_CONFLICTING: str = "CONFLICTING"
-
-MERGEABLE_OK: str = "MERGEABLE"
-
 GH_FIELD_BODY_AT_PREFIX: str = "body=@"
 
 GH_REPO_ARG_TEMPLATE: str = "{owner}/{repo}"

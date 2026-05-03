@@ -132,22 +132,6 @@ def test_mergeability_fields_lists_required_field_names() -> None:
         assert required_field in fields_arg
 
 
-def test_merge_state_status_dirty_literal() -> None:
-    assert pr_converge_constants_module.MERGE_STATE_STATUS_DIRTY == "DIRTY"
-
-
-def test_merge_state_status_clean_literal() -> None:
-    assert pr_converge_constants_module.MERGE_STATE_STATUS_CLEAN == "CLEAN"
-
-
-def test_mergeable_conflicting_literal() -> None:
-    assert pr_converge_constants_module.MERGEABLE_CONFLICTING == "CONFLICTING"
-
-
-def test_mergeable_ok_literal() -> None:
-    assert pr_converge_constants_module.MERGEABLE_OK == "MERGEABLE"
-
-
 def test_requested_reviewers_path_template_accepts_owner_repo_number() -> None:
     rendered = (
         pr_converge_constants_module.GH_REQUESTED_REVIEWERS_PATH_TEMPLATE.format(

@@ -25,6 +25,7 @@ from config.pr_converge_constants import (
     CURSOR_BOT_LOGIN,
     GH_REVIEWS_PATH_TEMPLATE,
 )
+from review_field_helpers import body_of, login_of, submitted_at_of
 
 
 def fetch_bugbot_reviews(
@@ -60,12 +61,12 @@ def fetch_bugbot_reviews(
     all_bugbot_reviews = [
         each_review
         for each_review in all_flat_reviews
-        if _login_of(each_review) == CURSOR_BOT_LOGIN
+        if login_of(each_review) == CURSOR_BOT_LOGIN
         and each_review.get("submitted_at") is not None
         and each_review.get("id") is not None
     ]
     all_bugbot_reviews.sort(
-        key=lambda each_review: _submitted_at_of(each_review), reverse=True
+        key=lambda each_review: submitted_at_of(each_review), reverse=True
     )
     dirty_pattern = re.compile(BUGBOT_DIRTY_BODY_REGEX)
     return [
@@ -73,39 +74,15 @@ def fetch_bugbot_reviews(
             "review_id": each_review["id"],
             "commit_id": each_review.get("commit_id"),
             "submitted_at": each_review["submitted_at"],
-            "body": _body_of(each_review),
+            "body": body_of(each_review),
             "classification": (
                 "dirty"
-                if dirty_pattern.search(_body_of(each_review))
+                if dirty_pattern.search(body_of(each_review))
                 else "clean"
             ),
         }
         for each_review in all_bugbot_reviews
     ]
-
-
-def _login_of(field_by_key: dict[str, object]) -> str | None:
-    user_field = field_by_key.get("user")
-    if not isinstance(user_field, dict):
-        return None
-    login_field = user_field.get("login")
-    if not isinstance(login_field, str):
-        return None
-    return login_field
-
-
-def _submitted_at_of(field_by_key: dict[str, object]) -> str:
-    submitted_at_field = field_by_key.get("submitted_at")
-    if not isinstance(submitted_at_field, str):
-        return ""
-    return submitted_at_field
-
-
-def _body_of(field_by_key: dict[str, object]) -> str:
-    body_field = field_by_key.get("body")
-    if not isinstance(body_field, str):
-        return ""
-    return body_field
 
 
 def main() -> int:

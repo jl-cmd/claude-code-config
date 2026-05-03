@@ -27,6 +27,7 @@ from config.pr_converge_constants import (
     GH_INLINE_COMMENTS_PATH_TEMPLATE,
 )
 from fetch_bugbot_reviews import fetch_bugbot_reviews
+from review_field_helpers import body_of, login_of
 
 
 def fetch_bugbot_inline_comments(
@@ -78,30 +79,13 @@ def fetch_bugbot_inline_comments(
             "commit_id": each_comment.get("commit_id"),
             "path": each_comment.get("path"),
             "line": each_comment.get("line"),
-            "body": _body_of(each_comment),
+            "body": body_of(each_comment),
         }
         for each_comment in all_flat_comments
-        if _login_of(each_comment) == CURSOR_BOT_LOGIN
+        if login_of(each_comment) == CURSOR_BOT_LOGIN
         and each_comment.get("commit_id") == current_head
         and each_comment.get("pull_request_review_id") == target_pull_request_review_id
     ]
-
-
-def _login_of(field_by_key: dict[str, object]) -> str | None:
-    user_field = field_by_key.get("user")
-    if not isinstance(user_field, dict):
-        return None
-    login_field = user_field.get("login")
-    if not isinstance(login_field, str):
-        return None
-    return login_field
-
-
-def _body_of(field_by_key: dict[str, object]) -> str:
-    body_field = field_by_key.get("body")
-    if not isinstance(body_field, str):
-        return ""
-    return body_field
 
 
 def main() -> int:

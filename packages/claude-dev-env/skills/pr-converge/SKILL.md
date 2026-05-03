@@ -451,7 +451,8 @@ Decide (the three branches below cover every input combination — match the fir
 Resolve the PR's mergeability state:
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/scripts/check_pr_mergeability.py"
+python "${CLAUDE_SKILL_DIR}/scripts/check_pr_mergeability.py" \
+  --owner <OWNER> --repo <REPO> --number <NUMBER>
 ```
 
 Output is `{"mergeable", "mergeStateStatus", "headRefOid"}`. Persist `mergeStateStatus` into `merge_state_status` (state line or `state.json`). Decide:

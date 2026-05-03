@@ -33,6 +33,7 @@ from config.pr_converge_constants import (
     COPILOT_SOFT_DIRTY_REVIEW_STATE,
     GH_REVIEWS_PATH_TEMPLATE,
 )
+from review_field_helpers import body_of, login_of, state_of, submitted_at_of
 
 
 def fetch_copilot_reviews(
@@ -68,20 +69,20 @@ def fetch_copilot_reviews(
     all_copilot_reviews = [
         each_review
         for each_review in all_flat_reviews
-        if _login_of(each_review) == COPILOT_REVIEWER_LOGIN
+        if login_of(each_review) == COPILOT_REVIEWER_LOGIN
         and each_review.get("submitted_at") is not None
         and each_review.get("id") is not None
     ]
     all_copilot_reviews.sort(
-        key=lambda each_review: _submitted_at_of(each_review), reverse=True
+        key=lambda each_review: submitted_at_of(each_review), reverse=True
     )
     return [
         {
             "review_id": each_review["id"],
             "commit_id": each_review.get("commit_id"),
             "submitted_at": each_review["submitted_at"],
-            "state": _state_of(each_review),
-            "body": _body_of(each_review),
+            "state": state_of(each_review),
+            "body": body_of(each_review),
             "classification": _classify_review(each_review),
         }
         for each_review in all_copilot_reviews
@@ -89,46 +90,15 @@ def fetch_copilot_reviews(
 
 
 def _classify_review(each_review: dict[str, object]) -> str:
-    review_state = _state_of(each_review)
+    review_state = state_of(each_review)
     if review_state == COPILOT_CLEAN_REVIEW_STATE:
         return "clean"
     if review_state not in COPILOT_DIRTY_REVIEW_STATES:
         return "clean"
     state_requires_body = review_state == COPILOT_SOFT_DIRTY_REVIEW_STATE
-    if state_requires_body and not _body_of(each_review):
+    if state_requires_body and not body_of(each_review):
         return "clean"
     return "dirty"
-
-
-def _login_of(field_by_key: dict[str, object]) -> str | None:
-    user_field = field_by_key.get("user")
-    if not isinstance(user_field, dict):
-        return None
-    login_field = user_field.get("login")
-    if not isinstance(login_field, str):
-        return None
-    return login_field
-
-
-def _submitted_at_of(field_by_key: dict[str, object]) -> str:
-    submitted_at_field = field_by_key.get("submitted_at")
-    if not isinstance(submitted_at_field, str):
-        return ""
-    return submitted_at_field
-
-
-def _body_of(field_by_key: dict[str, object]) -> str:
-    body_field = field_by_key.get("body")
-    if not isinstance(body_field, str):
-        return ""
-    return body_field
-
-
-def _state_of(field_by_key: dict[str, object]) -> str:
-    state_field = field_by_key.get("state")
-    if not isinstance(state_field, str):
-        return ""
-    return state_field
 
 
 def main() -> int:

@@ -140,6 +140,10 @@ The orchestrator (main session) **never** reads **repository source files**, wri
 
 This is a [workflow-style skill](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices#use-workflows-for-complex-tasks): the orchestrator decomposes the multi-PR problem into parallel per-PR subworkflows, each owned by a short-lived teammate. The orchestrator's only job is to keep the state file consistent and spawn the next agent in each chain.
 
+### Unified queue (jl-cmd + pinned JonEcho)
+
+When converging **across repos** in one session—**open** PRs on `jl-cmd/claude-code-config` **plus** **open or draft** **pinned** JonEcho PRs—load [`workflows/parallel-debug-pinned-queue.md`](workflows/parallel-debug-pinned-queue.md). That file holds the canonical **pinned URL table**, **dedupe by `owner/repo#number`**, **Step 0** discovery commands (Bugbot scripts, inline fetch, prior bugteam review), **`gh pr … -R` / `gh api repos/<owner>/<repo>/` / `--owner` `--repo` substitution**, and **Multitask `continue` fan-out** (one background worker per tuple). **AHK-only** setup, pacer cadence, and stop scripts stay in [`workflows/ahk-auto-continue-loop.md`](workflows/ahk-auto-continue-loop.md). A Cursor-only thin wrapper may exist under `.cursor/skills/parallel-debug/` on a developer machine; it is not always tracked in this repository—this workflow is what ships under `~/.claude/skills/pr-converge/`.
+
 ### Per-PR state file
 
 Create once at session start; each teammate writes its result back before going idle:

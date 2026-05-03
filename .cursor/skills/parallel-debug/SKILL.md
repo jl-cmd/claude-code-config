@@ -101,21 +101,22 @@ Increment `tick_count`. Read prior state line from the previous response.
 **Step 2 — Branch on `phase`:**
 
 *BUGBOT phase:*
-- Fetch latest bugbot review:
+- Fetch Bugbot classification (same helper as Step 0 — do **not** re-derive clean/dirty from raw review bodies):
   ```bash
-  gh api 'repos/jl-cmd/claude-code-config/pulls/<N>/reviews?per_page=100' --paginate --slurp \
-    | jq '[.[][] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | last'
+  python "$HOME\.claude\skills\pr-converge\scripts\fetch_bugbot_reviews.py" \
+    --owner jl-cmd --repo claude-code-config --number <N>
   ```
+  Use the JSON array entries’ `commit_id` and `classification` (`clean` / `dirty`) exactly as Step 0 does.
 - Fetch inline findings for current HEAD:
   ```bash
   python "$HOME\.claude\skills\pr-converge\scripts\fetch_bugbot_inline_comments.py" \
     --owner jl-cmd --repo claude-code-config --number <N> --commit <current_head>
   ```
 - Decide:
-  - No review or `commit_id` differs from `current_head` → re-trigger bugbot (Step 3), schedule next tick
-  - Review at `current_head`, zero inline findings, body indicates clean → set `bugbot_clean_at = current_head`, transition to BUGTEAM phase, continue in same tick
-  - Review at `current_head` with inline findings → apply Fix protocol, re-trigger bugbot, schedule next tick
-  - Review at `current_head`, body indicates findings but inline API returns zero → increment `inline_lag_streak`; if `>= 3` hard blocker; else schedule next tick at AHK cadence
+  - No entry with `commit_id == current_head` → re-trigger bugbot (Step 3), schedule next tick
+  - Entry at `current_head` with `classification: "clean"` **and** zero inline findings → set `bugbot_clean_at = current_head`, transition to BUGTEAM phase, continue in same tick
+  - Non-zero inline findings on `current_head` → apply Fix protocol, re-trigger bugbot, schedule next tick
+  - Entry at `current_head` with `classification: "dirty"` **and** zero inline findings → increment `inline_lag_streak`; if `>= 3` hard blocker; else schedule next tick at AHK cadence
 
 *BUGTEAM phase:*
 - Read `$HOME\.claude\skills\pr-converge\SKILL.md` and `$HOME\.claude\skills\bugteam\SKILL.md` for full audit protocol
@@ -197,23 +198,23 @@ gh pr ready <N> --repo jl-cmd/claude-code-config
 
 Report: `PR #<N> converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>; marked ready for review.`
 
-After all open PRs have converged, stop the AHK auto-typer:
+After all open PRs have converged, stop the AHK auto-typer (canonical **scoped** kill — matches `packages/claude-dev-env/skills/pr-converge/workflows/ahk-auto-continue-loop.md` **Convergence cleanup**; command-line match avoids killing unrelated AutoHotkey tools):
 
 ```bash
-pwsh -NoProfile -NoLogo -ExecutionPolicy Bypass -File "$HOME\.claude\skills\pr-converge\scripts\cursor-agents-continue-stop-others.ps1" -KeepProcessId 0
+pwsh -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='AutoHotkey64.exe'\" | Where-Object CommandLine -like '*cursor-agents-continue.ahk*' | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
 ```
 
-The stop script ships beside `cursor-agents-continue.cmd` in the pr-converge skill; in this repository the same file is `packages/claude-dev-env/skills/pr-converge/scripts/cursor-agents-continue-stop-others.ps1` (copy or sync it under `$HOME\.claude\skills\pr-converge\scripts\` with the other pr-converge scripts).
+Use the **same** one-liner when **Safety Cap** or **Hard Blockers** require stopping the pacer.
 
 Do not emit `Awaiting next "continue" tick.` after a convergence stop — the loop is done.
 
 ## Safety Cap
 
-When `tick_count >= 30`, stop the loop and stop the auto-typer. Report the cap was hit and which PRs remain open. Something structural requires manual investigation.
+When `tick_count >= 30`, stop the loop and stop the auto-typer (**same scoped `Get-CimInstance` / `Stop-Process` one-liner as Step 5**). Report the cap was hit and which PRs remain open. Something structural requires manual investigation.
 
 ## Hard Blockers
 
-Stop immediately (stop AHK, do not schedule next tick) when:
+Stop immediately (stop AHK with the **Step 5** scoped one-liner, do not schedule next tick) when:
 - API auth failure persists across two ticks
 - `inline_lag_streak >= 3`
 - bugteam reports `stuck` state

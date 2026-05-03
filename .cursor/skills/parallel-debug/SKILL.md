@@ -113,9 +113,9 @@ Increment `tick_count`. Read prior state line from the previous response.
     --owner jl-cmd --repo claude-code-config --number <N> --commit <current_head>
   ```
 - Decide:
-  - No entry with `commit_id == current_head` → re-trigger bugbot (Step 3), schedule next tick
-  - Entry at `current_head` with `classification: "clean"` **and** zero inline findings → set `bugbot_clean_at = current_head`, transition to BUGTEAM phase, continue in same tick
-  - Non-zero inline findings on `current_head` → apply Fix protocol, re-trigger bugbot, schedule next tick
+  - No entry with `commit_id == current_head` → set `inline_lag_streak = 0`, re-trigger bugbot (Step 3), schedule next tick
+  - Entry at `current_head` with `classification: "clean"` **and** zero inline findings → set `inline_lag_streak = 0`, set `bugbot_clean_at = current_head`, transition to BUGTEAM phase, continue in same tick
+  - Non-zero inline findings on `current_head` → set `inline_lag_streak = 0`, apply Fix protocol, re-trigger bugbot, schedule next tick
   - Entry at `current_head` with `classification: "dirty"` **and** zero inline findings → increment `inline_lag_streak`; if `>= 3` hard blocker; else schedule next tick at AHK cadence
 
 *BUGTEAM phase:*

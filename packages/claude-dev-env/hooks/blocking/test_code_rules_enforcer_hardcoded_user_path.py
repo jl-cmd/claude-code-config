@@ -217,3 +217,12 @@ def test_should_not_flag_windows_all_users_folder() -> None:
     assert issues == [], (
         f"Windows 'C:/Users/All Users' is a legacy shared folder, not a user home, got: {issues}"
     )
+
+
+def test_should_not_flag_macos_public_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "/Users/Public/Documents"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"macOS '/Users/Public' is a default shared folder on every macOS install,"
+        f" not a user home — symmetry with the Windows exclusion, got: {issues}"
+    )

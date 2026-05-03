@@ -58,28 +58,28 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
         )
     except FileNotFoundError:
         print(
-            "preflight: git is not installed or not available on PATH.\n"
+            "bugteam_preflight: git is not installed or not available on PATH.\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     except OSError as os_error:
         print(
-            f"preflight: failed to run git: {os_error}\n"
+            f"bugteam_preflight: failed to run git: {os_error}\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     if query_result.returncode != 0:
         print(
-            f"preflight: {enforcement_absent_message}",
+            f"bugteam_preflight: {enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
     configured_path = query_result.stdout.strip().replace("\\", "/").rstrip("/")
     if not configured_path.endswith(expected_hooks_path_suffix):
         print(
-            f"preflight: core.hooksPath is '{configured_path}' — "
+            f"bugteam_preflight: core.hooksPath is '{configured_path}' — "
             f"expected path ending in '{expected_hooks_path_suffix}'.\n"
             f"{enforcement_absent_message}",
             file=sys.stderr,
@@ -188,7 +188,7 @@ def main(all_arguments: list[str]) -> int:
     skip_enabled_value = BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE
     if os.environ.get(skip_env_var_name, "").strip() == skip_enabled_value:
         print(
-            f"preflight: skipped ({skip_env_var_name}={skip_enabled_value}).",
+            f"bugteam_preflight: skipped ({skip_env_var_name}={skip_enabled_value}).",
             file=sys.stderr,
         )
         return 0
@@ -204,7 +204,7 @@ def main(all_arguments: list[str]) -> int:
     if not arguments.no_pytest and has_pytest_configuration(repository_root):
         if not has_discoverable_tests(repository_root):
             print(
-                "preflight: pytest configured but no tests found; skipping pytest.",
+                "bugteam_preflight: pytest configured but no tests found; skipping pytest.",
                 file=sys.stderr,
             )
         else:
@@ -213,7 +213,7 @@ def main(all_arguments: list[str]) -> int:
                 return exit_code
     elif not arguments.no_pytest:
         print(
-            "preflight: no pytest configuration found; skipping pytest.",
+            "bugteam_preflight: no pytest configuration found; skipping pytest.",
             file=sys.stderr,
         )
     if arguments.pre_commit and (repository_root / PRE_COMMIT_CONFIG_YAML_FILENAME).is_file():

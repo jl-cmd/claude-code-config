@@ -35,8 +35,9 @@ At the start of each session (or after a long pause), assemble the current PR st
 **Open PRs:**
 ```bash
 gh api 'repos/jl-cmd/claude-code-config/pulls?state=open&per_page=100' --paginate --slurp \
-  | jq '[.[][] | {number, title, headRefName, head_sha: .head.sha, mergeable, isDraft}] | sort_by(.number)'
+  | jq '[.[][] | {number, title, headRefName: .head.ref, head_sha: .head.sha, mergeable, isDraft: .draft}] | sort_by(.number)'
 ```
+Use **`head.ref`** and **`draft`** here — the REST list response does not expose GraphQL-style `headRefName` / `isDraft` keys. **`gh pr view --json`** (below) is what emits `headRefName` / `isDraft`.
 
 **Bugbot review status per PR** (run for each `<N>`):
 ```bash
@@ -91,8 +92,10 @@ Each tick (triggered by `continue` from AHK or from the user **outside Multitask
 
 **Step 1 — Resolve current HEAD and PR context:**
 ```bash
-gh pr view <N> --json number,url,headRefOid,baseRefName,headRefName,isDraft
+gh pr view <N> -R jl-cmd/claude-code-config --json "number,url,headRefOid,baseRefName,headRefName,isDraft"
 ```
+On **PowerShell**, quote the **`--json`** field list so commas are not split into separate arguments.
+
 Increment `tick_count`. Read prior state line from the previous response.
 
 **Step 2 — Branch on `phase`:**
@@ -157,11 +160,11 @@ When findings exist (either phase):
 
 1. Read each referenced `file:line`.
 2. Write a failing test first when the finding has behavior to test; skip for doc/naming nits.
-3. Implement the fix. For all production or test code edits, spawn a `Task` subagent:
+3. Implement the fix. For all production or test code edits, spawn a `Task` subagent (same split as **pr-converge** Fix protocol — `packages/claude-dev-env/skills/pr-converge/SKILL.md` §Fix protocol: subagent edits; **this session** runs commit/push in steps 4–5):
    ```
    Task(
      subagent_type="generalPurpose",
-     prompt="You are acting as clean-coder. Read $HOME/.claude/agents/clean-coder.md first, then implement: <specific fix description with file:line>. Commit the change with message 'fix(review): <summary>'. Push to origin <branch>."
+     prompt="You are acting as clean-coder. Read $HOME/.claude/agents/clean-coder.md on Unix or %USERPROFILE%\\.claude\\agents\\clean-coder.md on Windows before editing; that file is binding (naming, TDD when behavior changes, scope limited to the listed findings). Implement: <specific fix description with file:line>. Do not run git commit or git push — return when edits are complete so the coordinator runs steps 4–5."
    )
    ```
    Ensure `.cursor/agents/clean-coder.md` exists; copy from `~/.claude/agents/` when missing.

@@ -50,6 +50,11 @@ from config.banned_identifiers_constants import (  # noqa: E402
     BANNED_IDENTIFIER_SKIP_ADVISORY,
     MAX_BANNED_IDENTIFIER_ISSUES,
 )
+from config.hardcoded_user_path_constants import (  # noqa: E402
+    HARDCODED_USER_PATH_GUIDANCE,
+    HARDCODED_USER_PATH_PATTERN,
+    MAX_HARDCODED_USER_PATH_ISSUES,
+)
 from config.stuttering_check_config import (  # noqa: E402
     MAX_STUTTERING_PREFIX_ISSUES,
     STUTTERING_ALL_PREFIX_PATTERN,
@@ -82,13 +87,6 @@ COLLECTION_TYPE_NAMES: frozenset[str] = frozenset({
 })
 COLLECTION_BY_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9]*_by_[a-z][a-z0-9_]*$")
 CLI_FILE_PATH_MARKERS: tuple[str, ...] = ("/scripts/", "\\scripts\\", "_cli.py", "/cli.py", "\\cli.py")
-HARDCODED_USER_PATH_PATTERN: re.Pattern[str] = re.compile(
-    r"(?:[A-Za-z]:[\\/]Users[\\/][^\\/]+(?=[\\/])|/Users/[^/]+(?=/)|/home/[^/]+(?=/))"
-)
-MAX_HARDCODED_USER_PATH_ISSUES: int = 25
-HARDCODED_USER_PATH_GUIDANCE: str = (
-    "use pathlib.Path.home() or os.path.expanduser('~') instead of a hardcoded user directory"
-)
 
 
 def get_file_extension(file_path: str) -> str:

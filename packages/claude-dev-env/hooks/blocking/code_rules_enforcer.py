@@ -32,16 +32,12 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
-def _insert_blocking_and_hooks_trees_for_imports() -> None:
-    blocking_directory_string = str(Path(__file__).resolve().parent)
-    if blocking_directory_string not in sys.path:
-        sys.path.insert(0, blocking_directory_string)
-    hooks_tree_string = str(Path(__file__).resolve().parent.parent)
-    if hooks_tree_string not in sys.path:
-        sys.path.insert(0, hooks_tree_string)
-
-
-_insert_blocking_and_hooks_trees_for_imports()
+_BLOCKING_DIR = str(Path(__file__).resolve().parent)
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
+if _BLOCKING_DIR not in sys.path:
+    sys.path.insert(0, _BLOCKING_DIR)
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
 
 from code_rules_path_utils import is_config_file  # noqa: E402
 from config.banned_identifiers_constants import (  # noqa: E402
@@ -58,6 +54,17 @@ from config.hardcoded_user_path_constants import (  # noqa: E402
 from config.stuttering_check_config import (  # noqa: E402
     MAX_STUTTERING_PREFIX_ISSUES,
     STUTTERING_ALL_PREFIX_PATTERN,
+)
+from config.sys_path_insert_constants import MAX_SYS_PATH_INSERT_ISSUES, SYS_PATH_INSERT_GUIDANCE  # noqa: E402
+from config.unused_module_import_constants import (  # noqa: E402
+    MAX_UNUSED_IMPORT_ISSUES,
+    TYPE_CHECKING_IDENTIFIER,
+    UNUSED_IMPORT_GUIDANCE,
+)
+from config.stuttering_import_binding_constants import (  # noqa: E402
+    AST_LINENO_ATTRIBUTE,
+    MODULE_PATH_SEPARATOR,
+    WILDCARD_IMPORT_SENTINEL,
 )
 
 PYTHON_EXTENSIONS = {".py"}
@@ -2056,7 +2063,11 @@ def _walk_assignment_targets(target: ast.expr) -> list[ast.Name]:
 
 
 def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]:
-    """Return (name, line_number) for every binding whose target name starts with two or more all_/ALL_ prefixes."""
+    """Return (name, line_number) for bindings whose introduced name stutters all_/ALL_ prefixes.
+
+    Covers assignments, loops, parameters, walrus targets, comprehensions, with/except
+    aliases, import aliases, and class definitions.
+    """
     bindings: list[tuple[str, int]] = []
     for each_node in ast.walk(tree):
         if isinstance(each_node, ast.Assign):
@@ -2093,6 +2104,31 @@ def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]
                         bindings.append((each_name.id, each_name.lineno))
         elif isinstance(each_node, ast.ExceptHandler):
             if each_node.name is not None and _is_stuttering_all_name(each_node.name):
+                bindings.append((each_node.name, each_node.lineno))
+        elif isinstance(each_node, ast.Import):
+            for each_alias in each_node.names:
+                bound_name = (
+                    each_alias.asname
+                    if each_alias.asname is not None
+                    else each_alias.name.split(MODULE_PATH_SEPARATOR, 1)[0]
+                )
+                if _is_stuttering_all_name(bound_name):
+                    line_number = getattr(each_alias, AST_LINENO_ATTRIBUTE, None) or each_node.lineno
+                    bindings.append((bound_name, line_number))
+        elif isinstance(each_node, ast.ImportFrom):
+            for each_alias in each_node.names:
+                if each_alias.name == WILDCARD_IMPORT_SENTINEL:
+                    continue
+                bound_name = (
+                    each_alias.asname
+                    if each_alias.asname is not None
+                    else each_alias.name
+                )
+                if _is_stuttering_all_name(bound_name):
+                    line_number = getattr(each_alias, AST_LINENO_ATTRIBUTE, None) or each_node.lineno
+                    bindings.append((bound_name, line_number))
+        elif isinstance(each_node, ast.ClassDef):
+            if _is_stuttering_all_name(each_node.name):
                 bindings.append((each_node.name, each_node.lineno))
     return bindings
 
@@ -2158,6 +2194,215 @@ def check_hardcoded_user_paths(content: str, file_path: str) -> list[str]:
             f" — {HARDCODED_USER_PATH_GUIDANCE}"
         )
         if len(issues) >= MAX_HARDCODED_USER_PATH_ISSUES:
+            break
+    return issues
+
+
+def _is_sys_path_insert_call(call_node: ast.Call) -> bool:
+    function_reference = call_node.func
+    if not isinstance(function_reference, ast.Attribute) or function_reference.attr != "insert":
+        return False
+    receiver = function_reference.value
+    if not isinstance(receiver, ast.Attribute) or receiver.attr != "path":
+        return False
+    receiver_value = receiver.value
+    return isinstance(receiver_value, ast.Name) and receiver_value.id == "sys"
+
+
+def _is_sys_path_membership_if_test(if_test_expression: ast.AST) -> bool:
+    """Return True when `if X not in sys.path:` would guard a then-branch insert.
+
+    Only `ast.NotIn` is accepted: `_scope_has_guard_for_insert` walks the
+    then-branch (`each_statement.body`) for the insert, so accepting `ast.In`
+    here would silently approve `if X in sys.path: sys.path.insert(0, X)` —
+    code that always inserts a duplicate. The else-branch is intentionally not
+    inspected; a guard that places the insert in the else-branch of `if X in
+    sys.path:` is unconventional and not supported.
+    """
+    if not isinstance(if_test_expression, ast.Compare):
+        return False
+    if len(if_test_expression.ops) != 1:
+        return False
+    if not isinstance(if_test_expression.ops[0], ast.NotIn):
+        return False
+    membership_target = if_test_expression.comparators[0]
+    if not isinstance(membership_target, ast.Attribute) or membership_target.attr != "path":
+        return False
+    membership_receiver = membership_target.value
+    return isinstance(membership_receiver, ast.Name) and membership_receiver.id == "sys"
+
+
+def _scope_has_guard_for_insert(
+    all_scope_statements: list[ast.stmt],
+    insert_call_node: ast.Call,
+) -> bool:
+    for each_statement in all_scope_statements:
+        if not isinstance(each_statement, ast.If):
+            continue
+        membership_test = each_statement.test
+        if not isinstance(membership_test, ast.Compare):
+            continue
+        if not _is_sys_path_membership_if_test(membership_test):
+            continue
+        for each_inner in each_statement.body:
+            if isinstance(each_inner, ast.Expr) and each_inner.value is insert_call_node:
+                if len(insert_call_node.args) < 2:
+                    return True
+                if ast.dump(membership_test.left) == ast.dump(insert_call_node.args[1]):
+                    return True
+    return False
+
+
+def _enclosing_scope_body(
+    insert_call_node: ast.Call,
+    parent_by_node_id: dict[int, ast.AST],
+) -> list[ast.stmt]:
+    parent = parent_by_node_id.get(id(insert_call_node))
+    while parent is not None:
+        if isinstance(parent, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return list(parent.body)
+        parent = parent_by_node_id.get(id(parent))
+    return []
+
+
+def check_sys_path_insert_deduplication_guard(content: str, file_path: str) -> list[str]:
+    """Flag sys.path.insert calls that lack a `not in sys.path` guard.
+
+    Repeated module reloads can push the same entry onto sys.path multiple
+    times when the call is unguarded. The repo convention is to wrap the
+    call with `if <path> not in sys.path:`. PR #289 surfaced two scripts
+    (grant_project_claude_permissions.py, revoke_project_claude_permissions.py)
+    that bypassed the convention.
+    """
+    if is_test_file(file_path):
+        return []
+    if is_hook_infrastructure(file_path):
+        return []
+    if is_workflow_registry_file(file_path) or is_migration_file(file_path):
+        return []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    parent_by_node_id = _build_parent_map(tree)
+    issues: list[str] = []
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, ast.Call):
+            continue
+        if not _is_sys_path_insert_call(each_node):
+            continue
+        all_scope_statements = _enclosing_scope_body(each_node, parent_by_node_id)
+        if _scope_has_guard_for_insert(all_scope_statements, each_node):
+            continue
+        issues.append(
+            f"Line {each_node.lineno}: unguarded sys.path.insert"
+            f" — {SYS_PATH_INSERT_GUIDANCE}"
+        )
+        if len(issues) >= MAX_SYS_PATH_INSERT_ISSUES:
+            break
+    return issues
+
+
+def _import_alias_pairs(
+    import_node: ast.Import | ast.ImportFrom,
+) -> list[tuple[str, int, int | None]]:
+    """Return (binding_name, alias_line, from_keyword_line) for each name introduced.
+
+    The from-keyword line is None for plain `import X` statements; for
+    `from X import (...)` it carries the line of the `from` keyword so
+    callers can honor a `# noqa` placed on the opening line of a
+    multi-line import block.
+    """
+    bindings: list[tuple[str, int, int | None]] = []
+    from_keyword_line = import_node.lineno if isinstance(import_node, ast.ImportFrom) else None
+    for each_alias in import_node.names:
+        if each_alias.name == "*":
+            continue
+        binding_name = each_alias.asname if each_alias.asname else each_alias.name.split(".")[0]
+        alias_line = each_alias.lineno or import_node.lineno
+        bindings.append((binding_name, alias_line, from_keyword_line))
+    return bindings
+
+
+def _name_appears_outside_imports(
+    all_content_lines: list[str],
+    all_import_line_numbers: set[int],
+    name: str,
+) -> bool:
+    name_pattern = re.compile(rf"\b{re.escape(name)}\b")
+    for each_line_index, each_line in enumerate(all_content_lines, start=1):
+        if each_line_index in all_import_line_numbers:
+            continue
+        if name_pattern.search(each_line):
+            return True
+    return False
+
+
+def _line_carries_noqa_marker(line_text: str) -> bool:
+    return "# noqa" in line_text or "#noqa" in line_text
+
+
+def check_unused_module_level_imports(content: str, file_path: str) -> list[str]:
+    """Flag module-level imports that are never referenced in the rest of the file.
+
+    The rule is intentionally conservative — files declaring __all__ or
+    using TYPE_CHECKING are skipped to avoid false positives on
+    re-exports and annotation-only imports.
+    """
+    if is_test_file(file_path):
+        return []
+    if is_workflow_registry_file(file_path) or is_migration_file(file_path):
+        return []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    file_declares_dunder_all = any(
+        (
+            isinstance(each_node, ast.Assign)
+            and any(
+                isinstance(each_target, ast.Name) and each_target.id == "__all__"
+                for each_target in each_node.targets
+            )
+        )
+        or (
+            isinstance(each_node, ast.AnnAssign)
+            and isinstance(each_node.target, ast.Name)
+            and each_node.target.id == "__all__"
+        )
+        for each_node in tree.body
+    )
+    if file_declares_dunder_all:
+        return []
+    if TYPE_CHECKING_IDENTIFIER in content:
+        return []
+    content_lines = content.splitlines()
+    import_line_numbers: set[int] = set()
+    import_bindings: list[tuple[str, int, int | None]] = []
+    for each_node in tree.body:
+        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
+            import_line_numbers.add(each_node.lineno)
+            for each_alias in each_node.names:
+                import_line_numbers.add(each_alias.lineno or each_node.lineno)
+            if isinstance(each_node, ast.ImportFrom) and each_node.module == "__future__":
+                continue
+            for each_binding in _import_alias_pairs(each_node):
+                import_bindings.append(each_binding)
+    issues: list[str] = []
+    for each_name, each_line_number, each_from_keyword_line in import_bindings:
+        if 1 <= each_line_number <= len(content_lines):
+            if _line_carries_noqa_marker(content_lines[each_line_number - 1]):
+                continue
+        if each_from_keyword_line is not None and 1 <= each_from_keyword_line <= len(content_lines):
+            if _line_carries_noqa_marker(content_lines[each_from_keyword_line - 1]):
+                continue
+        if _name_appears_outside_imports(content_lines, import_line_numbers, each_name):
+            continue
+        issues.append(
+            f"Line {each_line_number}: unused module-level import {each_name!r}"
+            f" — {UNUSED_IMPORT_GUIDANCE}"
+        )
+        if len(issues) >= MAX_UNUSED_IMPORT_ISSUES:
             break
     return issues
 
@@ -2446,6 +2691,8 @@ def validate_content(content: str, file_path: str, old_content: str = "") -> lis
         all_issues.extend(check_collection_prefix(content, file_path))
         all_issues.extend(check_stuttering_collection_prefix(content, file_path))
         all_issues.extend(check_hardcoded_user_paths(content, file_path))
+        all_issues.extend(check_sys_path_insert_deduplication_guard(content, file_path))
+        all_issues.extend(check_unused_module_level_imports(content, file_path))
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))

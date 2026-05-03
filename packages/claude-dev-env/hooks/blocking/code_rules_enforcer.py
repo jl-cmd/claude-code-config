@@ -2151,7 +2151,7 @@ def _is_sys_path_insert_call(call_node: ast.Call) -> bool:
     return isinstance(receiver_value, ast.Name) and receiver_value.id == "sys"
 
 
-def _if_test_references_sys_path_membership(if_test_expression: ast.AST) -> bool:
+def _is_sys_path_membership_if_test(if_test_expression: ast.AST) -> bool:
     """Return True when `if X not in sys.path:` would guard a then-branch insert.
 
     Only `ast.NotIn` is accepted: `_scope_has_guard_for_insert` walks the
@@ -2184,7 +2184,7 @@ def _scope_has_guard_for_insert(
         membership_test = each_statement.test
         if not isinstance(membership_test, ast.Compare):
             continue
-        if not _if_test_references_sys_path_membership(membership_test):
+        if not _is_sys_path_membership_if_test(membership_test):
             continue
         for each_inner in each_statement.body:
             if isinstance(each_inner, ast.Expr) and each_inner.value is insert_call_node:

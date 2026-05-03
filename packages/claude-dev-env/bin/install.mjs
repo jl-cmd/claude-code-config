@@ -591,7 +591,6 @@ function purgeManagedInstallation({ requireManifest }) {
         } catch { /* leave non-empty dirs */ }
     }
     console.log(`\nRemoved ${removed} files.\n`);
-    return removed;
 }
 
 function uninstall() {

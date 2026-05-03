@@ -56,7 +56,7 @@ from config.stuttering_check_config import (  # noqa: E402
     STUTTERING_ALL_PREFIX_PATTERN,
 )
 from config.sys_path_insert_constants import MAX_SYS_PATH_INSERT_ISSUES, SYS_PATH_INSERT_GUIDANCE  # noqa: E402
-from config.unused_module_import_constants import (  # noqa: E402
+from config.stuttering_import_binding_constants import (  # noqa: E402
     AST_LINENO_ATTRIBUTE,
     MODULE_PATH_SEPARATOR,
     WILDCARD_IMPORT_SENTINEL,

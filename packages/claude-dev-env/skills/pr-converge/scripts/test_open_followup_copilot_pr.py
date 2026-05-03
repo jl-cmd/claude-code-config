@@ -173,6 +173,52 @@ def test_should_return_trimmed_pr_url(tmp_path: Path) -> None:
     assert new_pr_url == "https://github.com/acme/widget/pull/313"
 
 
+def test_should_pass_repo_arg_to_gh_pr_view_for_base_ref(tmp_path: Path) -> None:
+    findings_file = tmp_path / "findings.md"
+    findings_file.write_text("- Finding\n", encoding="utf-8")
+    payload_sequence = _scripted_subprocess_runs(
+        base_ref_payload=json.dumps({"baseRefName": "main"}),
+        new_pr_url="https://github.com/acme/widget/pull/313\n",
+    )
+    with patch("subprocess.run", side_effect=payload_sequence) as mock_run:
+        open_followup_copilot_pr_module.open_followup_copilot_pr(
+            owner="acme",
+            repo="widget",
+            parent_number=312,
+            head="abc12345deadbeef",
+            findings_file=findings_file,
+        )
+    pr_view_argv = mock_run.call_args_list[0][0][0]
+    assert pr_view_argv[0:3] == ["gh", "pr", "view"]
+    assert "--repo" in pr_view_argv
+    repo_arg_value = pr_view_argv[pr_view_argv.index("--repo") + 1]
+    assert repo_arg_value == "acme/widget"
+
+
+def test_should_pass_repo_arg_to_gh_pr_create_for_followup_pr(
+    tmp_path: Path,
+) -> None:
+    findings_file = tmp_path / "findings.md"
+    findings_file.write_text("- Finding\n", encoding="utf-8")
+    payload_sequence = _scripted_subprocess_runs(
+        base_ref_payload=json.dumps({"baseRefName": "main"}),
+        new_pr_url="https://github.com/acme/widget/pull/313\n",
+    )
+    with patch("subprocess.run", side_effect=payload_sequence) as mock_run:
+        open_followup_copilot_pr_module.open_followup_copilot_pr(
+            owner="acme",
+            repo="widget",
+            parent_number=312,
+            head="abc12345deadbeef",
+            findings_file=findings_file,
+        )
+    pr_create_argv = mock_run.call_args_list[4][0][0]
+    assert pr_create_argv[0:3] == ["gh", "pr", "create"]
+    assert "--repo" in pr_create_argv
+    repo_arg_value = pr_create_argv[pr_create_argv.index("--repo") + 1]
+    assert repo_arg_value == "acme/widget"
+
+
 def test_should_raise_when_subprocess_fails(tmp_path: Path) -> None:
     findings_file = tmp_path / "findings.md"
     findings_file.write_text("- Finding\n", encoding="utf-8")

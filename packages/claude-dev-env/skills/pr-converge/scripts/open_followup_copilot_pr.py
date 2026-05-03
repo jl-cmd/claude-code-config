@@ -29,6 +29,7 @@ from config.pr_converge_constants import (
     COPILOT_FOLLOWUP_BRANCH_TEMPLATE,
     COPILOT_FOLLOWUP_PR_TITLE_TEMPLATE,
     COPILOT_FOLLOWUP_SHORT_SHA_LENGTH,
+    GH_REPO_ARG_TEMPLATE,
     PR_BASE_REF_FIELDS,
 )
 
@@ -42,7 +43,10 @@ def open_followup_copilot_pr(
     findings_file: Path,
 ) -> str:
     """Create the follow-up branch + draft PR; return the new PR URL."""
-    parent_base_ref = _resolve_parent_base_ref(parent_number=parent_number)
+    repo_arg = GH_REPO_ARG_TEMPLATE.format(owner=owner, repo=repo)
+    parent_base_ref = _resolve_parent_base_ref(
+        parent_number=parent_number, repo_arg=repo_arg
+    )
     short_sha = head[:COPILOT_FOLLOWUP_SHORT_SHA_LENGTH]
     new_branch_name = COPILOT_FOLLOWUP_BRANCH_TEMPLATE.format(
         parent_number=parent_number, short_sha=short_sha
@@ -56,6 +60,8 @@ def open_followup_copilot_pr(
             "gh",
             "pr",
             "create",
+            "--repo",
+            repo_arg,
             "--draft",
             "--base",
             parent_base_ref,
@@ -70,13 +76,15 @@ def open_followup_copilot_pr(
     return completed.stdout.strip()
 
 
-def _resolve_parent_base_ref(*, parent_number: int) -> str:
+def _resolve_parent_base_ref(*, parent_number: int, repo_arg: str) -> str:
     completed = _run_checked(
         [
             "gh",
             "pr",
             "view",
             str(parent_number),
+            "--repo",
+            repo_arg,
             "--json",
             PR_BASE_REF_FIELDS,
         ]

@@ -359,6 +359,7 @@ a. Run **bugteam** (second audit) on the current PR.
 
    - **When `Skill` is invokable** (see [Pacing workflows](#pacing-workflows-load-exactly-one) tool-inventory rules — same session): invoke **bugteam** with the `Skill` tool. Path A vs Path B is selected **inside** bugteam per [bugteam Path routing](../bugteam/SKILL.md#path-routing-mandatory-first-branch); pr-converge does not branch on `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` here.
 
+     ```
      Skill({skill: "bugteam", args: "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
      ```
 

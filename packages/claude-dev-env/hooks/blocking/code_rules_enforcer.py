@@ -32,11 +32,22 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
-_BLOCKING_DIR = str(Path(__file__).resolve().parent)
-if _BLOCKING_DIR not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIR)
+def _insert_blocking_and_hooks_trees_for_imports() -> None:
+    blocking_directory_string = str(Path(__file__).resolve().parent)
+    if blocking_directory_string not in sys.path:
+        sys.path.insert(0, blocking_directory_string)
+    hooks_tree_string = str(Path(__file__).resolve().parent.parent)
+    if hooks_tree_string not in sys.path:
+        sys.path.insert(0, hooks_tree_string)
+
+
+_insert_blocking_and_hooks_trees_for_imports()
 
 from code_rules_path_utils import is_config_file  # noqa: E402
+from config.stuttering_check_config import (  # noqa: E402
+    MAX_STUTTERING_PREFIX_ISSUES,
+    STUTTERING_ALL_PREFIX_PATTERN,
+)
 
 PYTHON_EXTENSIONS = {".py"}
 JAVASCRIPT_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx"}
@@ -65,8 +76,6 @@ COLLECTION_TYPE_NAMES: frozenset[str] = frozenset({
 })
 COLLECTION_BY_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9]*_by_[a-z][a-z0-9_]*$")
 CLI_FILE_PATH_MARKERS: tuple[str, ...] = ("/scripts/", "\\scripts\\", "_cli.py", "/cli.py", "\\cli.py")
-STUTTERING_ALL_PREFIX_PATTERN: re.Pattern[str] = re.compile(r"^_?(?:all_){2,}|^_?(?:ALL_){2,}")
-MAX_STUTTERING_PREFIX_ISSUES: int = 50
 
 
 def get_file_extension(file_path: str) -> str:

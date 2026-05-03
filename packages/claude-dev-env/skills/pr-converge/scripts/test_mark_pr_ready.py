@@ -54,3 +54,16 @@ def test_should_raise_when_gh_subprocess_fails() -> None:
     with patch("subprocess.run", side_effect=failure):
         with pytest.raises(subprocess.CalledProcessError):
             mark_pr_ready_module.mark_pr_ready(owner="acme", repo="widget", number=42)
+
+
+def test_should_render_repo_arg_via_named_template_constant() -> None:
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed("ok\n")
+        mark_pr_ready_module.mark_pr_ready(owner="acme", repo="widget", number=42)
+    invoked_argv = mock_run.call_args[0][0]
+    expected_repo_arg = mark_pr_ready_module.GH_REPO_ARG_TEMPLATE.format(
+        owner="acme", repo="widget"
+    )
+    assert expected_repo_arg == "acme/widget"
+    repo_flag_index = invoked_argv.index("--repo")
+    assert invoked_argv[repo_flag_index + 1] == expected_repo_arg

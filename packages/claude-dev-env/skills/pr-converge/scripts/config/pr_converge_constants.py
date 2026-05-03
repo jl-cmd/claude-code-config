@@ -33,3 +33,5 @@ BUGBOT_RUN_TEMPFILE_PREFIX: str = "pr-converge-bugbot-run-"
 PR_CONTEXT_FIELDS: str = "number,url,headRefOid,baseRefName,headRefName,isDraft"
 
 GH_FIELD_BODY_AT_PREFIX: str = "body=@"
+
+GH_REPO_ARG_TEMPLATE: str = "{owner}/{repo}"

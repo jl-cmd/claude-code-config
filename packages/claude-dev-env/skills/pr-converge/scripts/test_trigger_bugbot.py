@@ -124,3 +124,16 @@ def test_should_write_imported_constant_directly_without_local_alias() -> None:
         captured_body_contents[0]
         == trigger_bugbot_module.BUGBOT_RUN_TRIGGER_PHRASE
     )
+
+
+def test_should_render_repo_arg_via_named_template_constant() -> None:
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed("https://example.com\n")
+        trigger_bugbot_module.trigger_bugbot(owner="acme", repo="widget", number=42)
+    invoked_argv = mock_run.call_args[0][0]
+    expected_repo_arg = trigger_bugbot_module.GH_REPO_ARG_TEMPLATE.format(
+        owner="acme", repo="widget"
+    )
+    assert expected_repo_arg == "acme/widget"
+    repo_flag_index = invoked_argv.index("--repo")
+    assert invoked_argv[repo_flag_index + 1] == expected_repo_arg

@@ -23,6 +23,7 @@ from config.pr_converge_constants import (
     BUGBOT_RUN_TEMPFILE_PREFIX,
     BUGBOT_RUN_TEMPFILE_SUFFIX,
     BUGBOT_RUN_TRIGGER_PHRASE,
+    GH_REPO_ARG_TEMPLATE,
 )
 
 
@@ -35,13 +36,14 @@ def trigger_bugbot(*, owner: str, repo: str, number: int) -> str:
         os.close(file_descriptor)
         body_file_path = Path(raw_path)
         body_file_path.write_text(BUGBOT_RUN_TRIGGER_PHRASE, encoding="utf-8")
+        repo_arg = GH_REPO_ARG_TEMPLATE.format(owner=owner, repo=repo)
         gh_command: list[str] = [
             "gh",
             "pr",
             "comment",
             str(number),
             "--repo",
-            f"{owner}/{repo}",
+            repo_arg,
             "--body-file",
             str(body_file_path),
         ]

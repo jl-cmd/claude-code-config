@@ -89,3 +89,10 @@ def test_pr_context_fields_lists_documented_field_names() -> None:
 
 def test_gh_field_body_at_prefix_matches_gh_field_from_file_form() -> None:
     assert pr_converge_constants_module.GH_FIELD_BODY_AT_PREFIX == "body=@"
+
+
+def test_gh_repo_arg_template_renders_owner_slash_repo() -> None:
+    rendered = pr_converge_constants_module.GH_REPO_ARG_TEMPLATE.format(
+        owner="acme", repo="widget"
+    )
+    assert rendered == "acme/widget"

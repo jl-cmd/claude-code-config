@@ -132,3 +132,28 @@ def test_should_build_body_field_value_from_named_prefix_constant(
     )
     assert expected_prefix == "body=@"
     assert field_value == f"{expected_prefix}{body_file}"
+
+
+def test_should_extract_int_id_from_mixed_typed_response_payload(
+    tmp_path: Path,
+) -> None:
+    body_file = tmp_path / "reply.md"
+    body_file.write_text("Reply text\n", encoding="utf-8")
+    response_with_string_and_object_fields = json.dumps(
+        {
+            "id": 7777,
+            "body": "Reply body text",
+            "user": {"login": "octocat", "id": 1},
+            "created_at": "2026-05-02T12:00:00Z",
+        }
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(response_with_string_and_object_fields)
+        reply_id = reply_to_inline_comment_module.reply_to_inline_comment(
+            owner="acme",
+            repo="widget",
+            number=42,
+            comment_id=12345,
+            body_file=body_file,
+        )
+    assert reply_id == 7777

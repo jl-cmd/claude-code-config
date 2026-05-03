@@ -52,8 +52,13 @@ def reply_to_inline_comment(
         encoding="utf-8",
         errors="replace",
     )
-    response_payload: dict[str, int] = json.loads(completed.stdout)
-    return int(response_payload["id"])
+    response_payload: dict[str, object] = json.loads(completed.stdout)
+    raw_reply_id = response_payload["id"]
+    if not isinstance(raw_reply_id, (int, str)):
+        raise TypeError(
+            f"gh response id field is not int|str: {type(raw_reply_id).__name__}"
+        )
+    return int(raw_reply_id)
 
 
 def main() -> int:

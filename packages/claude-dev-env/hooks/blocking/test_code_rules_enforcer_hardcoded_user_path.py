@@ -145,11 +145,12 @@ def test_should_suggest_path_home_or_expanduser_in_message() -> None:
         f"Error message should suggest Path.home() or os.path.expanduser('~'), got: {issues}"
     )
 
-def test_should_not_flag_url_route_with_home_segment() -> None:
+def test_should_flag_standalone_home_segment_for_symmetry_with_macos() -> None:
     source = 'def route() -> str:\n    return "/home/dashboard"\n'
     issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
-    assert issues == [], (
-        f"URL route '/home/dashboard' is not a user directory, got: {issues}"
+    assert any("/home/dashboard" in each_issue for each_issue in issues), (
+        f"Linux '/home/<segment>' is structurally indistinguishable from a real"
+        f" home directory and must flag for symmetry with macOS, got: {issues}"
     )
 
 
@@ -183,4 +184,36 @@ def test_should_not_flag_docstring_mentioning_user_path() -> None:
     issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
     assert issues == [], (
         f"Docstrings are allowed to mention paths, got: {issues}"
+    )
+
+
+def test_should_flag_linux_home_path_when_home_is_entire_path() -> None:
+    source = 'def find() -> str:\n    return "/home/alice"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert any("/home/alice" in each_issue for each_issue in issues), (
+        f"Expected Linux home literal flagged without trailing slash, got: {issues}"
+    )
+
+
+def test_should_not_flag_windows_public_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "C:/Users/Public/Documents"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Windows 'C:/Users/Public' is a system shared folder, not a user home, got: {issues}"
+    )
+
+
+def test_should_not_flag_windows_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "C:/Users/Shared/data"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Windows 'C:/Users/Shared' is a system shared folder, not a user home, got: {issues}"
+    )
+
+
+def test_should_not_flag_windows_all_users_folder() -> None:
+    source = 'def find() -> str:\n    return "C:/Users/All Users/AppData"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Windows 'C:/Users/All Users' is a legacy shared folder, not a user home, got: {issues}"
     )

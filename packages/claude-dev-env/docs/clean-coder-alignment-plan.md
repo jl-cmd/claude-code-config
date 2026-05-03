@@ -1,6 +1,6 @@
 # Clean-Coder Agent Alignment Plan
 
-This document captures the alignment between the `clean-coder` agent definition (`packages/claude-dev-env/agents/clean-coder.md`) and the local enforcement layer (`code_rules_enforcer.py` and companion blocking hooks). Companion to `agents-md-alignment-plan.md`, which performs the same exercise for `AGENTS.md`.
+This document captures the alignment between the `clean-coder` agent definition (`packages/claude-dev-env/agents/clean-coder.md`) and the local enforcement layer (`code_rules_enforcer.py` and companion blocking hooks). A companion document performing the same exercise for `AGENTS.md` (`packages/claude-dev-env/docs/agents-md-alignment-plan.md`) is planned but not yet created.
 
 ## Goal
 
@@ -13,7 +13,7 @@ The `clean-coder` agent is the canonical code-writing agent — the prompt it ca
 
 - Read every `check_*` function in `packages/claude-dev-env/hooks/blocking/code_rules_enforcer.py` (28 functions, lines 108–2236) plus `validate_content` dispatch (line 2239).
 - Read every Write/Edit hook in `packages/claude-dev-env/hooks/hooks.json`, plus `windows_rmtree_blocker.py`, `gh_body_arg_blocker.py`, `sensitive_file_protector.py`, `mypy_validator.py`, `auto_formatter.py`.
-- Read the AGENTS.md alignment plan (`packages/claude-dev-env/docs/agents-md-alignment-plan.md`) to keep the two surfaces consistent.
+- Noted that a planned AGENTS.md alignment plan (`packages/claude-dev-env/docs/agents-md-alignment-plan.md`) does not yet exist; this document covers only the `clean-coder.md` surface.
 - Walked `clean-coder.md` section by section against the above.
 
 ## What this PR changes
@@ -63,7 +63,7 @@ Out of scope for this PR.
 
 ## Recommended hook additions
 
-Same list as the AGENTS.md alignment plan — the AST/regex-tractable Category B items, each scoped as its own small PR. Each closes a gap for both bugbot review (AGENTS.md) and clean-coder generation (this prompt) simultaneously.
+The AST/regex-tractable Category B items below, each scoped as its own small PR. Each closes a gap for both bugbot review (AGENTS.md, when that alignment plan exists) and clean-coder generation (this prompt) simultaneously.
 
 | Item | Suggested check |
 |---|---|

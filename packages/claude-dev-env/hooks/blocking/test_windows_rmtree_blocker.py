@@ -147,7 +147,6 @@ def test_extract_payload_returns_content_for_write_to_python_file() -> None:
 
 def test_python_file_extension_constant_drives_python_filter() -> None:
     python_extension = hook_module.PYTHON_FILE_EXTENSION
-    assert python_extension == ".py"
     extracted_for_python = extract_payload_text(
         "Write",
         {

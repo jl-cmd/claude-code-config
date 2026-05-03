@@ -2175,10 +2175,10 @@ def _if_test_references_sys_path_membership(if_test_expression: ast.AST) -> bool
 
 
 def _scope_has_guard_for_insert(
-    scope_body: list[ast.stmt],
+    all_scope_statements: list[ast.stmt],
     insert_call_node: ast.Call,
 ) -> bool:
-    for each_statement in scope_body:
+    for each_statement in all_scope_statements:
         if not isinstance(each_statement, ast.If):
             continue
         if not _if_test_references_sys_path_membership(each_statement.test):
@@ -2225,8 +2225,8 @@ def check_sys_path_insert_deduplication_guard(content: str, file_path: str) -> l
             continue
         if not _is_sys_path_insert_call(each_node):
             continue
-        scope_body = _enclosing_scope_body(each_node, parent_by_node_id)
-        if _scope_has_guard_for_insert(scope_body, each_node):
+        all_scope_statements = _enclosing_scope_body(each_node, parent_by_node_id)
+        if _scope_has_guard_for_insert(all_scope_statements, each_node):
             continue
         issues.append(
             f"Line {each_node.lineno}: unguarded sys.path.insert"

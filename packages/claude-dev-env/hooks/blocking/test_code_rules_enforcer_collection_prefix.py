@@ -244,3 +244,52 @@ def test_should_flag_underscore_prefixed_lowercase_double_all() -> None:
     assert any("_all_all_permission_rules" in each_issue for each_issue in issues), (
         f"Stuttering _all_all_ private local must be flagged, got: {issues}"
     )
+
+
+def test_should_flag_stuttering_function_name() -> None:
+    source = "def all_all_process() -> None:\n    return None\n"
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert any("all_all_process" in each_issue for each_issue in issues), (
+        f"Stuttering function name must be flagged, got: {issues}"
+    )
+
+
+def test_should_flag_stuttering_async_function_name() -> None:
+    source = "async def all_all_fetch() -> None:\n    return None\n"
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert any("all_all_fetch" in each_issue for each_issue in issues), (
+        f"Stuttering async function name must be flagged, got: {issues}"
+    )
+
+
+def test_should_flag_stuttering_walrus_target() -> None:
+    source = (
+        "def grant() -> None:\n"
+        "    if (all_all_result := compute()):\n"
+        "        return None\n"
+        "def compute() -> int:\n"
+        "    return 0\n"
+    )
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert any("all_all_result" in each_issue for each_issue in issues), (
+        f"Stuttering walrus target must be flagged, got: {issues}"
+    )
+
+
+def test_should_flag_stuttering_comprehension_target() -> None:
+    source = (
+        "def grant() -> list[int]:\n"
+        "    return [all_all_item for all_all_item in range(10)]\n"
+    )
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, PRODUCTION_FILE_PATH
+    )
+    assert any("all_all_item" in each_issue for each_issue in issues), (
+        f"Stuttering comprehension target must be flagged, got: {issues}"
+    )

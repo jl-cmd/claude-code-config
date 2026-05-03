@@ -1010,3 +1010,13 @@ def test_check_constants_outside_config_reports_more_than_three_constants() -> N
     assert len(issues) == expected_constant_count, (
         f"Expected all {expected_constant_count} constants reported, got {len(issues)}: {issues}"
     )
+
+
+def test_stuttering_collection_prefix_flags_function_name_loop1_1() -> None:
+    source = "def all_all_process() -> None:\n    return None\n"
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, "packages/app/services/foo.py"
+    )
+    assert any("all_all_process" in each_issue for each_issue in issues), (
+        f"loop1-1: stuttering function name must be flagged, got: {issues}"
+    )

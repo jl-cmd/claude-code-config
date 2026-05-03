@@ -1983,10 +1983,10 @@ def check_collection_prefix(content: str, file_path: str) -> list[str]:
         issues.append(
             f"Line {target_line}: Collection constant {target_name} - prefix with ALL_ (CODE_RULES §5)"
         )
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for each_walked_node in ast.walk(tree):
+        if not isinstance(each_walked_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for each_arg in _collect_annotated_arguments(node):
+        for each_arg in _collect_annotated_arguments(each_walked_node):
             if not _annotation_names_collection(each_arg.annotation):
                 continue
             if each_arg.arg in {"self", "cls"}:
@@ -2034,9 +2034,18 @@ def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]
                 if _is_stuttering_all_name(each_name.id):
                     bindings.append((each_name.id, each_name.lineno))
         elif isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if _is_stuttering_all_name(each_node.name):
+                bindings.append((each_node.name, each_node.lineno))
             for each_arg in _collect_annotated_arguments(each_node):
                 if _is_stuttering_all_name(each_arg.arg):
                     bindings.append((each_arg.arg, each_arg.lineno))
+        elif isinstance(each_node, ast.NamedExpr) and isinstance(each_node.target, ast.Name):
+            if _is_stuttering_all_name(each_node.target.id):
+                bindings.append((each_node.target.id, each_node.target.lineno))
+        elif isinstance(each_node, ast.comprehension):
+            for each_name in _walk_assignment_targets(each_node.target):
+                if _is_stuttering_all_name(each_name.id):
+                    bindings.append((each_name.id, each_name.lineno))
     return bindings
 
 

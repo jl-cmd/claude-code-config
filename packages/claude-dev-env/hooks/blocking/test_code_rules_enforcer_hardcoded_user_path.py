@@ -42,6 +42,14 @@ def test_should_flag_windows_user_path_with_forward_slashes() -> None:
     )
 
 
+def test_should_flag_windows_user_path_when_users_segment_is_not_title_case() -> None:
+    source = 'def find() -> str:\n    return "c:/users/jon/notes.md"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert any("users" in each_issue.lower() for each_issue in issues), (
+        f"Expected Windows user path flagged (case-insensitive Users segment), got: {issues}"
+    )
+
+
 def test_should_flag_windows_user_path_with_backslashes() -> None:
     source = 'def find() -> str:\n    return "C:\\\\Users\\\\jon\\\\notes.md"\n'
     issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
@@ -63,6 +71,14 @@ def test_should_flag_macos_user_path() -> None:
     issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
     assert any("/Users/bob" in each_issue for each_issue in issues), (
         f"Expected macOS user path flagged, got: {issues}"
+    )
+
+
+def test_should_flag_macos_user_path_when_home_is_entire_path() -> None:
+    source = 'def find() -> str:\n    return "/Users/bob"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert any("/Users/bob" in each_issue for each_issue in issues), (
+        f"Expected macOS user home literal flagged without trailing slash, got: {issues}"
     )
 
 

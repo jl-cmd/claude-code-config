@@ -56,6 +56,11 @@ from config.stuttering_check_config import (  # noqa: E402
     STUTTERING_ALL_PREFIX_PATTERN,
 )
 from config.sys_path_insert_constants import MAX_SYS_PATH_INSERT_ISSUES, SYS_PATH_INSERT_GUIDANCE  # noqa: E402
+from config.unused_module_import_constants import (  # noqa: E402
+    AST_LINENO_ATTRIBUTE,
+    MODULE_PATH_SEPARATOR,
+    WILDCARD_IMPORT_SENTINEL,
+)
 
 PYTHON_EXTENSIONS = {".py"}
 JAVASCRIPT_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx"}
@@ -2097,19 +2102,19 @@ def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]
                 bindings.append((each_node.name, each_node.lineno))
         elif isinstance(each_node, ast.Import):
             for each_alias in each_node.names:
-                if each_alias.name == "*":
+                if each_alias.name == WILDCARD_IMPORT_SENTINEL:
                     continue
                 bound_name = (
                     each_alias.asname
                     if each_alias.asname is not None
-                    else each_alias.name.split(".", 1)[0]
+                    else each_alias.name.split(MODULE_PATH_SEPARATOR, 1)[0]
                 )
                 if _is_stuttering_all_name(bound_name):
-                    line_number = getattr(each_alias, "lineno", None) or each_node.lineno
+                    line_number = getattr(each_alias, AST_LINENO_ATTRIBUTE, None) or each_node.lineno
                     bindings.append((bound_name, line_number))
         elif isinstance(each_node, ast.ImportFrom):
             for each_alias in each_node.names:
-                if each_alias.name == "*":
+                if each_alias.name == WILDCARD_IMPORT_SENTINEL:
                     continue
                 bound_name = (
                     each_alias.asname
@@ -2117,7 +2122,7 @@ def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]
                     else each_alias.name
                 )
                 if _is_stuttering_all_name(bound_name):
-                    line_number = getattr(each_alias, "lineno", None) or each_node.lineno
+                    line_number = getattr(each_alias, AST_LINENO_ATTRIBUTE, None) or each_node.lineno
                     bindings.append((bound_name, line_number))
         elif isinstance(each_node, ast.ClassDef):
             if _is_stuttering_all_name(each_node.name):

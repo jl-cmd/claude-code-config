@@ -33,8 +33,11 @@ def _load_enforcer_module() -> ModuleType:
 code_rules_enforcer = _load_enforcer_module()
 
 _BLOCKING_DIR = Path(__file__).resolve().parent
+_HOOKS_TREE_DIR = _BLOCKING_DIR.parent
 if str(_BLOCKING_DIR) not in sys.path:
     sys.path.insert(0, str(_BLOCKING_DIR))
+if str(_HOOKS_TREE_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_TREE_DIR))
 
 from code_rules_path_utils import is_config_file as path_utils_is_config_file  # noqa: E402
 from config.stuttering_check_config import (  # noqa: E402

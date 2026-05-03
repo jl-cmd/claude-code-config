@@ -52,3 +52,16 @@ def test_read_uses_buffer_when_present() -> None:
     with patch("sys.stdin", text_wrapper):
         parsed = read_hook_input_dictionary_from_stdin()
     assert parsed == payload
+
+
+def test_read_returns_none_when_buffer_and_text_read_raise_attribute_error() -> None:
+    class BrokenStandardInput:
+        @property
+        def buffer(self) -> object:
+            raise AttributeError("no buffer")
+
+        def read(self, size: int = -1) -> str:
+            raise AttributeError("no read")
+
+    with patch("sys.stdin", BrokenStandardInput()):
+        assert read_hook_input_dictionary_from_stdin() is None

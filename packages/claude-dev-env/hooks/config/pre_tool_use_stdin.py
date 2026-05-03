@@ -12,7 +12,7 @@ def _read_stdin_text() -> str | None:
     except (AttributeError, OSError):
         try:
             decoded_text = sys.stdin.read()
-        except OSError:
+        except (AttributeError, OSError):
             return None
         if decoded_text is None:
             return None

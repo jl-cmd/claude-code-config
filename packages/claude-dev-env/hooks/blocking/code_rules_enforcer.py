@@ -2181,11 +2181,17 @@ def _scope_has_guard_for_insert(
     for each_statement in all_scope_statements:
         if not isinstance(each_statement, ast.If):
             continue
-        if not _if_test_references_sys_path_membership(each_statement.test):
+        membership_test = each_statement.test
+        if not isinstance(membership_test, ast.Compare):
+            continue
+        if not _if_test_references_sys_path_membership(membership_test):
             continue
         for each_inner in each_statement.body:
             if isinstance(each_inner, ast.Expr) and each_inner.value is insert_call_node:
-                return True
+                if len(insert_call_node.args) < 2:
+                    return True
+                if ast.dump(membership_test.left) == ast.dump(insert_call_node.args[1]):
+                    return True
     return False
 
 
@@ -2195,7 +2201,7 @@ def _enclosing_scope_body(
 ) -> list[ast.stmt]:
     parent = parent_by_node_id.get(id(insert_call_node))
     while parent is not None:
-        if isinstance(parent, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(parent, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             return list(parent.body)
         parent = parent_by_node_id.get(id(parent))
     return []
@@ -2211,6 +2217,8 @@ def check_sys_path_insert_deduplication_guard(content: str, file_path: str) -> l
     that bypassed the convention.
     """
     if is_test_file(file_path):
+        return []
+    if is_hook_infrastructure(file_path):
         return []
     if is_workflow_registry_file(file_path) or is_migration_file(file_path):
         return []

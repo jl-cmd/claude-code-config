@@ -440,9 +440,10 @@ python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_inline_comments.py" \
   --owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
 ```
 
-Decide (the three branches below cover every input combination — match the first whose predicate holds):
+Decide (the four branches below cover every input combination — match the first whose predicate holds):
 
 - **A Copilot review exists at `current_head` AND its `classification == "dirty"` AND inline comments returned non-empty for the matching `pull_request_review_id`:** Treat as a Fix protocol input (same shape as bugbot dirty). Read every inline finding, apply the **Fix protocol** below (TDD test → production fix → push → reply inline on each thread), reset `bugbot_clean_at = null` AND `copilot_clean_at = null`, transition `phase = BUGBOT`, run **Step 3** (`trigger_bugbot.py`) on the new HEAD, schedule next wakeup, return. The full back-to-back-clean cycle plus all four gates must hold again on the new HEAD before convergence.
+- **A Copilot review exists at `current_head` AND its `classification == "dirty"` AND inline comments are empty for the matching `pull_request_review_id`:** Copilot posted findings only in the review body (`CHANGES_REQUESTED` or `COMMENTED` with non-empty body and no inline threads). Treat the review body as the finding source: parse the body for actionable findings, apply the **Fix protocol** using the body excerpts in place of inline threads (TDD test → production fix → push). Post the reply as a top-level review reply on the Copilot review (not an inline-thread reply, because no inline threads exist) acknowledging the addressed findings and citing the new HEAD SHA. Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`, transition `phase = BUGBOT`, run **Step 3** (`trigger_bugbot.py`) on the new HEAD, schedule next wakeup, return. Convergence still requires the full back-to-back-clean cycle on the new HEAD.
 - **A Copilot review exists at `current_head` AND its `classification == "clean"` (state `APPROVED`):** Set `copilot_clean_at = current_head`. Continue to gate **(b)**.
 - **No Copilot review has been posted on `current_head` yet:** Skip — gate **(c)** below issues the proactive request. Continue to gate **(b)**.
 

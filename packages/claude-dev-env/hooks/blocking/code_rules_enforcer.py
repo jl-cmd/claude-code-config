@@ -2055,6 +2055,16 @@ def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]
             for each_name in _walk_assignment_targets(each_node.target):
                 if _is_stuttering_all_name(each_name.id):
                     bindings.append((each_name.id, each_name.lineno))
+        elif isinstance(each_node, (ast.With, ast.AsyncWith)):
+            for each_with_item in each_node.items:
+                if each_with_item.optional_vars is None:
+                    continue
+                for each_name in _walk_assignment_targets(each_with_item.optional_vars):
+                    if _is_stuttering_all_name(each_name.id):
+                        bindings.append((each_name.id, each_name.lineno))
+        elif isinstance(each_node, ast.ExceptHandler):
+            if each_node.name is not None and _is_stuttering_all_name(each_node.name):
+                bindings.append((each_node.name, each_node.lineno))
     return bindings
 
 

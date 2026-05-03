@@ -1029,6 +1029,32 @@ def test_stuttering_collection_prefix_flags_function_name_loop1_1() -> None:
     )
 
 
+def test_stuttering_collection_prefix_flags_with_as_binding_loop3_1() -> None:
+    source = "def f() -> None:\n    with open('x') as all_all_context:\n        pass\n"
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, "packages/app/services/foo.py"
+    )
+    assert any("all_all_context" in each_issue for each_issue in issues), (
+        f"loop3-1: stuttering with-as binding must be flagged, got: {issues}"
+    )
+
+
+def test_stuttering_collection_prefix_flags_except_as_binding_loop3_1() -> None:
+    source = (
+        "def f() -> None:\n"
+        "    try:\n"
+        "        pass\n"
+        "    except Exception as all_all_error:\n"
+        "        pass\n"
+    )
+    issues = code_rules_enforcer.check_stuttering_collection_prefix(
+        source, "packages/app/services/foo.py"
+    )
+    assert any("all_all_error" in each_issue for each_issue in issues), (
+        f"loop3-1: stuttering except-as binding must be flagged, got: {issues}"
+    )
+
+
 def test_stuttering_constants_live_under_config_subpackage() -> None:
     """Stuttering-prefix constants must be sourced from the hooks-tree config package.
 

@@ -122,13 +122,6 @@ def test_copilot_dirty_review_states_lists_changes_requested_and_commented() -> 
     assert "COMMENTED" in dirty_states
 
 
-def test_copilot_hard_dirty_review_state_is_changes_requested() -> None:
-    assert (
-        pr_converge_constants_module.COPILOT_HARD_DIRTY_REVIEW_STATE
-        == "CHANGES_REQUESTED"
-    )
-
-
 def test_copilot_soft_dirty_review_state_is_commented() -> None:
     assert pr_converge_constants_module.COPILOT_SOFT_DIRTY_REVIEW_STATE == "COMMENTED"
 

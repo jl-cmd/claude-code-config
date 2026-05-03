@@ -28,7 +28,7 @@ evict_cached_config_modules()
 
 from config.pr_converge_constants import (
     COPILOT_CLEAN_REVIEW_STATE,
-    COPILOT_HARD_DIRTY_REVIEW_STATE,
+    COPILOT_DIRTY_REVIEW_STATES,
     COPILOT_REVIEWER_LOGIN,
     COPILOT_SOFT_DIRTY_REVIEW_STATE,
     GH_REVIEWS_PATH_TEMPLATE,
@@ -92,11 +92,12 @@ def _classify_review(each_review: dict[str, object]) -> str:
     review_state = _state_of(each_review)
     if review_state == COPILOT_CLEAN_REVIEW_STATE:
         return "clean"
-    if review_state == COPILOT_HARD_DIRTY_REVIEW_STATE:
-        return "dirty"
-    if review_state == COPILOT_SOFT_DIRTY_REVIEW_STATE and _body_of(each_review):
-        return "dirty"
-    return "clean"
+    if review_state not in COPILOT_DIRTY_REVIEW_STATES:
+        return "clean"
+    state_requires_body = review_state == COPILOT_SOFT_DIRTY_REVIEW_STATE
+    if state_requires_body and not _body_of(each_review):
+        return "clean"
+    return "dirty"
 
 
 def _login_of(field_by_key: dict[str, object]) -> str | None:

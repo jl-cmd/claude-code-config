@@ -181,6 +181,37 @@ def test_should_classify_dirty_review_when_state_is_commented_with_body() -> Non
     assert all_reviews[0]["classification"] == "dirty"
 
 
+def test_should_classify_clean_review_when_state_is_commented_with_empty_body() -> None:
+    pages_payload = json.dumps(
+        [
+            [
+                {
+                    "id": 1,
+                    "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                    "state": "COMMENTED",
+                    "commit_id": "abc",
+                    "submitted_at": "2026-01-01T00:00:00Z",
+                    "body": "",
+                }
+            ]
+        ]
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(pages_payload)
+        all_reviews = fetch_copilot_reviews_module.fetch_copilot_reviews(
+            owner="acme", repo="widget", number=42
+        )
+    assert all_reviews[0]["classification"] == "clean"
+
+
+def test_should_dispatch_dirty_classification_off_copilot_dirty_review_states_tuple() -> None:
+    source_text = (
+        Path(__file__).resolve().parent / "fetch_copilot_reviews.py"
+    ).read_text(encoding="utf-8")
+    assert "COPILOT_DIRTY_REVIEW_STATES" in source_text
+    assert "in COPILOT_DIRTY_REVIEW_STATES" in source_text
+
+
 def test_should_classify_clean_review_when_state_is_approved() -> None:
     pages_payload = json.dumps(
         [

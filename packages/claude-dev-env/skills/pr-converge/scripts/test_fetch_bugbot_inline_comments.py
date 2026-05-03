@@ -286,6 +286,14 @@ def test_should_flatten_across_pages() -> None:
     ]
 
 
+def test_should_reference_cursor_bot_login_constant_directly_without_local_alias() -> None:
+    source_text = (
+        Path(__file__).resolve().parent / "fetch_bugbot_inline_comments.py"
+    ).read_text(encoding="utf-8")
+    assert "cursor_bot_login = CURSOR_BOT_LOGIN" not in source_text
+    assert "CURSOR_BOT_LOGIN" in source_text
+
+
 def test_should_raise_when_gh_subprocess_fails() -> None:
     failure = subprocess.CalledProcessError(
         returncode=1, cmd=["gh"], stderr="auth failure"

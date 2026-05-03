@@ -37,7 +37,6 @@ def fetch_bugbot_reviews(
 
     Each entry contains review_id, commit_id, submitted_at, body, and classification.
     """
-    cursor_bot_login = CURSOR_BOT_LOGIN
     reviews_endpoint = GH_REVIEWS_PATH_TEMPLATE.format(
         owner=owner, repo=repo, number=number
     )
@@ -61,7 +60,7 @@ def fetch_bugbot_reviews(
     all_bugbot_reviews = [
         each_review
         for each_review in all_flat_reviews
-        if (each_review.get("user") or {}).get("login") == cursor_bot_login
+        if (each_review.get("user") or {}).get("login") == CURSOR_BOT_LOGIN
         and each_review.get("submitted_at") is not None
         and each_review.get("id") is not None
     ]

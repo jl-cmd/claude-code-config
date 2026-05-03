@@ -114,6 +114,27 @@ def test_should_fail_when_number_without_repository() -> None:
     assert "Repository" in message
 
 
+def test_should_reject_pull_url_with_trailing_junk() -> None:
+    helpers = Path(__file__).resolve().parent / "post-bugbot-run.helpers.ps1"
+    pull = "https://github.com/acme/widget/pull/42extra"
+    command = (
+        f". '{helpers}'; "
+        f"$i = Resolve-InvocationMode -PullRequestInput '{pull}' -RepositoryInput '' -NumberInput 0; "
+        r"try { Build-GhArgumentList -Invocation $i -BodyFilePath 'C:\\t\\b.md' } "
+        "catch { $_.Exception.Message }"
+    )
+    completed = subprocess.run(
+        ["pwsh", "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    assert completed.returncode == 0
+    assert "Unrecognized PullRequest" in completed.stdout
+
+
 def test_should_fail_for_unrecognized_pull_string() -> None:
     helpers = Path(__file__).resolve().parent / "post-bugbot-run.helpers.ps1"
     pull = "not-a-valid-pr-reference"

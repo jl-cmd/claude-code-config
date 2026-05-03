@@ -40,7 +40,6 @@ def fetch_bugbot_inline_comments(
 
     Each entry contains comment_id, commit_id, path, line, and body.
     """
-    cursor_bot_login = CURSOR_BOT_LOGIN
     all_bugbot_reviews = fetch_bugbot_reviews(owner=owner, repo=repo, number=number)
     latest_bugbot_review_for_head = next(
         (
@@ -82,7 +81,7 @@ def fetch_bugbot_inline_comments(
             "body": each_comment.get("body") or "",
         }
         for each_comment in all_flat_comments
-        if (each_comment.get("user") or {}).get("login") == cursor_bot_login
+        if (each_comment.get("user") or {}).get("login") == CURSOR_BOT_LOGIN
         and each_comment.get("commit_id") == current_head
         and each_comment.get("pull_request_review_id") == target_pull_request_review_id
     ]

@@ -176,6 +176,14 @@ def test_should_classify_clean_review_when_body_lacks_findings_pattern() -> None
     assert all_reviews[0]["classification"] == "clean"
 
 
+def test_should_reference_cursor_bot_login_constant_directly_without_local_alias() -> None:
+    source_text = (
+        Path(__file__).resolve().parent / "fetch_bugbot_reviews.py"
+    ).read_text(encoding="utf-8")
+    assert "cursor_bot_login = CURSOR_BOT_LOGIN" not in source_text
+    assert "CURSOR_BOT_LOGIN" in source_text
+
+
 def test_should_raise_when_gh_subprocess_fails() -> None:
     failure = subprocess.CalledProcessError(
         returncode=1, cmd=["gh"], stderr="auth failure"

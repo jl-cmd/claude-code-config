@@ -29,7 +29,7 @@ function Build-GhArgumentList {
     }
 
     $trimmed = $Invocation.PullRequest
-    if ($trimmed -match '^https://github\.com/[^/]+/[^/]+/pull/\d+') {
+    if ($trimmed -match '^https://github\.com/[^/]+/[^/]+/pull/\d+$') {
         return @('pr', 'comment', $trimmed, '--body-file', $BodyFilePath)
     }
 

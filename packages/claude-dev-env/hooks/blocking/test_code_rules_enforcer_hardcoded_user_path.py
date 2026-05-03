@@ -26,12 +26,22 @@ assert _hook_spec.loader is not None
 _hook_module = importlib.util.module_from_spec(_hook_spec)
 _hook_spec.loader.exec_module(_hook_module)
 check_hardcoded_user_paths = _hook_module.check_hardcoded_user_paths
+HARDCODED_USER_PATH_PATTERN = _hook_module.HARDCODED_USER_PATH_PATTERN
 
 
 PRODUCTION_FILE_PATH = "packages/app/services/loader.py"
 TEST_FILE_PATH = "packages/app/tests/test_loader.py"
 CONFIG_FILE_PATH = "packages/app/config/paths.py"
 HOOK_INFRASTRUCTURE_FILE_PATH = "/repo/packages/claude-dev-env/hooks/blocking/code_rules_enforcer.py"
+
+
+def test_should_match_user_directory_without_consuming_following_separator() -> None:
+    windows = HARDCODED_USER_PATH_PATTERN.search("C:/Users/jon/more")
+    macos = HARDCODED_USER_PATH_PATTERN.search("/Users/bob/more")
+    linux = HARDCODED_USER_PATH_PATTERN.search("/home/alice/more")
+    assert windows is not None and windows.group(0) == "C:/Users/jon"
+    assert macos is not None and macos.group(0) == "/Users/bob"
+    assert linux is not None and linux.group(0) == "/home/alice"
 
 
 def test_should_flag_windows_user_path_with_forward_slashes() -> None:

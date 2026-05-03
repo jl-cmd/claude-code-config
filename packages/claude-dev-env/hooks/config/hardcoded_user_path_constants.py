@@ -4,8 +4,8 @@ import re
 
 HARDCODED_USER_PATH_PATTERN: re.Pattern[str] = re.compile(
     r"(?:"
-    r"[A-Za-z]:[\\/](?i:users)[\\/][^\\/]+(?:[\\/]|$)"
-    r"|/Users/(?!Shared(?:/|$))[^/]+(?:/|$)"
+    r"[A-Za-z]:[\\/](?i:users)[\\/][^\\/]+(?=[\\/]|$)"
+    r"|/Users/(?!Shared(?:/|$))[^/]+(?=/|$)"
     r"|/home/[^/]+(?=/))"
 )
 MAX_HARDCODED_USER_PATH_ISSUES: int = 25

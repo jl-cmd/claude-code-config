@@ -158,6 +158,14 @@ def test_python_file_extension_constant_drives_python_filter() -> None:
     assert extracted_for_python == DANGEROUS_RMTREE_SNIPPET_WITH_TARGET
 
 
+def test_extract_payload_returns_content_for_write_without_file_path() -> None:
+    extracted = extract_payload_text(
+        "Write",
+        {"content": "some python code"},
+    )
+    assert extracted == "some python code"
+
+
 def _run_hook(hook_input: dict) -> tuple[str, int]:
     captured = io.StringIO()
     exit_code = 0
@@ -223,3 +231,16 @@ def test_main_passes_through_unsafe_write_to_non_python_file() -> None:
     )
     assert exit_code == 0
     assert stdout_text == ""
+
+
+def test_main_blocks_write_with_missing_file_path_and_unsafe_content() -> None:
+    stdout_text, exit_code = _run_hook(
+        {
+            "tool_name": "Write",
+            "tool_input": {"content": DANGEROUS_RMTREE_SNIPPET_WITH_TARGET},
+        }
+    )
+    assert exit_code == 0
+    response_payload = json.loads(stdout_text)
+    decision_block = response_payload["hookSpecificOutput"]
+    assert decision_block["permissionDecision"] == "deny"

@@ -43,7 +43,7 @@ def payload_contains_unsafe_rmtree(payload_text: str) -> bool:
 def extract_payload_text(tool_name: str, tool_input: dict) -> str:
     if tool_name in {"Write", "Edit"}:
         file_path = tool_input.get("file_path", "")
-        if not file_path.endswith(PYTHON_FILE_EXTENSION):
+        if file_path and not file_path.endswith(PYTHON_FILE_EXTENSION):
             return ""
         return tool_input.get("content", "") or tool_input.get("new_string", "") or ""
     if tool_name == "Bash":

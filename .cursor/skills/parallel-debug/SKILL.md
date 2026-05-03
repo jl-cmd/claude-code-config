@@ -55,7 +55,7 @@ python "$HOME\.claude\skills\pr-converge\scripts\fetch_bugbot_inline_comments.py
 **Prior bugteam review per PR** (run for each `<N>`):
 ```bash
 gh api 'repos/jl-cmd/claude-code-config/pulls/<N>/reviews?per_page=100' --paginate --slurp \
-  | jq '[.[][] | select(.body | startswith("## /bugteam"))] | sort_by(.submitted_at) | last | {commit_id, body}'
+  | jq '[.[][] | select((.body // "") | startswith("## /bugteam"))] | sort_by(.submitted_at) | last | {commit_id, body}'
 ```
 A review body ending with `-> clean` at the current HEAD means bugteam passed.
 

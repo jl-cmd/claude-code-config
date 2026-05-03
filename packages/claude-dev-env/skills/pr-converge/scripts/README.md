@@ -29,7 +29,7 @@ Output: JSON array of `{review_id, commit_id, submitted_at, body, classification
 
 ### `fetch_bugbot_inline_comments.py`
 
-Fetches unaddressed Cursor Bugbot inline comments anchored to a specific commit.
+Fetches unaddressed Cursor Bugbot inline comments for the **newest submitted Bugbot review** on the requested ``--commit`` SHA (matches ``pull_request_review_id`` to the review returned by ``fetch_bugbot_reviews.py`` so stale inline threads from an older Bugbot review on the same SHA are ignored).
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/fetch_bugbot_inline_comments.py" \

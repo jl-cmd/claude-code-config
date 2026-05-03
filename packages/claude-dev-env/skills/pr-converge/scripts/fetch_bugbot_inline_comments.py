@@ -1,9 +1,12 @@
-"""Fetch unaddressed Cursor Bugbot inline comments anchored to a specific commit.
+"""Fetch unaddressed Cursor Bugbot inline comments for the latest Bugbot review on a commit.
 
-Wraps the gh CLI invocation required by the gh-paginate rule:
-`gh api '...?per_page=100' --paginate --slurp` piped through external Python
-JSON handling. Filters to cursor[bot] comments whose commit_id matches the
-caller-supplied current HEAD SHA.
+Uses ``fetch_bugbot_reviews`` to find the newest submitted Bugbot review whose ``commit_id`` matches the caller
+``current_head``, then returns only ``cursor[bot]`` inline comments whose ``pull_request_review_id`` matches that
+review. This avoids misclassifying a PR when Bugbot posts more than one review on the same SHA: older inline threads
+stay anchored to the earlier review id even when they share the same commit id.
+
+Wraps the gh CLI invocation required by the gh-paginate rule for the comments list:
+``gh api`` on ``repos/{owner}/{repo}/pulls/{number}/comments`` with ``--paginate --slurp`` and external JSON handling.
 """
 
 import argparse
@@ -23,6 +26,7 @@ from config.pr_converge_constants import (
     CURSOR_BOT_LOGIN,
     GH_INLINE_COMMENTS_PATH_TEMPLATE,
 )
+from fetch_bugbot_reviews import fetch_bugbot_reviews
 
 
 def fetch_bugbot_inline_comments(
@@ -32,11 +36,23 @@ def fetch_bugbot_inline_comments(
     number: int,
     current_head: str,
 ) -> list[dict]:
-    """Return cursor[bot] inline comments anchored to current_head.
+    """Return cursor[bot] inline comments for the latest Bugbot review on ``current_head``.
 
     Each entry contains comment_id, commit_id, path, line, and body.
     """
     cursor_bot_login = CURSOR_BOT_LOGIN
+    all_bugbot_reviews = fetch_bugbot_reviews(owner=owner, repo=repo, number=number)
+    latest_bugbot_review_for_head = next(
+        (
+            each_review
+            for each_review in all_bugbot_reviews
+            if each_review.get("commit_id") == current_head
+        ),
+        None,
+    )
+    if latest_bugbot_review_for_head is None:
+        return []
+    target_pull_request_review_id = latest_bugbot_review_for_head["review_id"]
     comments_endpoint = GH_INLINE_COMMENTS_PATH_TEMPLATE.format(
         owner=owner, repo=repo, number=number
     )
@@ -68,6 +84,7 @@ def fetch_bugbot_inline_comments(
         for each_comment in flat_comments
         if (each_comment.get("user") or {}).get("login") == cursor_bot_login
         and each_comment.get("commit_id") == current_head
+        and each_comment.get("pull_request_review_id") == target_pull_request_review_id
     ]
 
 

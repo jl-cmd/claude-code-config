@@ -323,14 +323,14 @@ a. Fetch Cursor Bugbot reviews newest-first and walk backwards until the first c
 
    Capture `commit_id`, `submitted_at`, body, and `classification` of the index-0 review for the decision branches below. When a branch routes to the **Fix protocol**, read every entry from `$dirty_reviews_path` and address all of them — not just index 0.
 
-b. Fetch unaddressed inline comments from `cursor[bot]` on `current_head`. The script enforces the same `--paginate --slurp` pattern and filters by commit:
+b. Fetch unaddressed inline comments from `cursor[bot]` for the **newest submitted Bugbot review** on `current_head`. The script enforces the same `--paginate --slurp` pattern as `fetch_bugbot_reviews.py`, resolves that review via the reviews list, then returns only inline rows whose `pull_request_review_id` matches that review (so stale threads from an older Bugbot review on the same SHA are excluded).
 
    ```bash
    python "${CLAUDE_SKILL_DIR}/scripts/fetch_bugbot_inline_comments.py" \
      --owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
    ```
 
-   Output is a JSON array of `{comment_id, commit_id, path, line, body}` for cursor[bot] comments anchored to `current_head`.
+   Output is a JSON array of `{comment_id, commit_id, path, line, body}` for those matching inline comments.
 
 c. Decide (the four branches below cover every input combination — match the first branch whose predicate holds):
    - **No bugbot review yet, OR latest bugbot review's `commit_id` differs from `current_head`:** Re-trigger bugbot (Step 3), set

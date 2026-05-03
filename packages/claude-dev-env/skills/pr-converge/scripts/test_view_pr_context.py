@@ -89,3 +89,23 @@ def test_should_raise_when_gh_subprocess_fails() -> None:
     with patch("subprocess.run", side_effect=failure):
         with pytest.raises(subprocess.CalledProcessError):
             view_pr_context_module.view_pr_context()
+
+
+def test_should_pass_imported_constant_directly_without_local_alias() -> None:
+    payload = json.dumps(
+        {
+            "number": 7,
+            "url": "https://github.com/acme/widget/pull/7",
+            "headRefOid": "deadbeef",
+            "baseRefName": "main",
+            "headRefName": "feat/y",
+            "isDraft": False,
+        }
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(payload)
+        view_pr_context_module.view_pr_context()
+    invoked_argv = mock_run.call_args[0][0]
+    fields_arg = invoked_argv[invoked_argv.index("--json") + 1]
+    expected_fields = view_pr_context_module.PR_CONTEXT_FIELDS
+    assert fields_arg is expected_fields

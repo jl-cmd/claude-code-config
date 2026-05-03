@@ -28,14 +28,13 @@ from config.pr_converge_constants import (
 
 def trigger_bugbot(*, owner: str, repo: str, number: int) -> str:
     """Post the bugbot re-trigger comment, return the comment URL gh emits."""
-    trigger_phrase = BUGBOT_RUN_TRIGGER_PHRASE
     file_descriptor, raw_path = tempfile.mkstemp(
         suffix=BUGBOT_RUN_TEMPFILE_SUFFIX, prefix=BUGBOT_RUN_TEMPFILE_PREFIX
     )
     try:
         os.close(file_descriptor)
         body_file_path = Path(raw_path)
-        body_file_path.write_text(trigger_phrase, encoding="utf-8")
+        body_file_path.write_text(BUGBOT_RUN_TRIGGER_PHRASE, encoding="utf-8")
         gh_command: list[str] = [
             "gh",
             "pr",

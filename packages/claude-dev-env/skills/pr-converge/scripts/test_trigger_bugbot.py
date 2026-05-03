@@ -106,3 +106,21 @@ def test_should_raise_when_gh_subprocess_fails() -> None:
     with patch("subprocess.run", side_effect=failure):
         with pytest.raises(subprocess.CalledProcessError):
             trigger_bugbot_module.trigger_bugbot(owner="acme", repo="widget", number=42)
+
+
+def test_should_write_imported_constant_directly_without_local_alias() -> None:
+    captured_body_contents: list[str] = []
+
+    def capture_body_file_contents(*subprocess_args, **_subprocess_kwargs):
+        invoked_argv = subprocess_args[0]
+        body_file_path = Path(invoked_argv[invoked_argv.index("--body-file") + 1])
+        captured_body_contents.append(body_file_path.read_text(encoding="utf-8"))
+        return _completed("https://example.com\n")
+
+    with patch("subprocess.run", side_effect=capture_body_file_contents):
+        trigger_bugbot_module.trigger_bugbot(owner="acme", repo="widget", number=99)
+    assert len(captured_body_contents) == 1
+    assert (
+        captured_body_contents[0]
+        == trigger_bugbot_module.BUGBOT_RUN_TRIGGER_PHRASE
+    )

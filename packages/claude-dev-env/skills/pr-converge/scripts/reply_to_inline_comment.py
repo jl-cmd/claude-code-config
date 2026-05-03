@@ -17,7 +17,10 @@ from evict_cached_config_modules import evict_cached_config_modules
 
 evict_cached_config_modules()
 
-from config.pr_converge_constants import GH_INLINE_COMMENT_REPLY_PATH_TEMPLATE
+from config.pr_converge_constants import (
+    GH_FIELD_BODY_AT_PREFIX,
+    GH_INLINE_COMMENT_REPLY_PATH_TEMPLATE,
+)
 
 
 def reply_to_inline_comment(
@@ -39,7 +42,7 @@ def reply_to_inline_comment(
         "POST",
         replies_endpoint,
         "-F",
-        f"body=@{body_file}",
+        f"{GH_FIELD_BODY_AT_PREFIX}{body_file}",
     ]
     completed = subprocess.run(
         gh_command,
@@ -49,7 +52,7 @@ def reply_to_inline_comment(
         encoding="utf-8",
         errors="replace",
     )
-    response_payload: dict[str, object] = json.loads(completed.stdout)
+    response_payload: dict[str, int] = json.loads(completed.stdout)
     return int(response_payload["id"])
 
 

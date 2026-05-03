@@ -109,3 +109,26 @@ def test_should_raise_when_gh_subprocess_fails(tmp_path: Path) -> None:
                 comment_id=12345,
                 body_file=body_file,
             )
+
+
+def test_should_build_body_field_value_from_named_prefix_constant(
+    tmp_path: Path,
+) -> None:
+    body_file = tmp_path / "reply.md"
+    body_file.write_text("Reply text\n", encoding="utf-8")
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(json.dumps({"id": 7777}))
+        reply_to_inline_comment_module.reply_to_inline_comment(
+            owner="acme",
+            repo="widget",
+            number=42,
+            comment_id=12345,
+            body_file=body_file,
+        )
+    invoked_argv = mock_run.call_args[0][0]
+    field_value = invoked_argv[invoked_argv.index("-F") + 1]
+    expected_prefix = (
+        reply_to_inline_comment_module.GH_FIELD_BODY_AT_PREFIX
+    )
+    assert expected_prefix == "body=@"
+    assert field_value == f"{expected_prefix}{body_file}"

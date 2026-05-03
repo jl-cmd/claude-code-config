@@ -85,3 +85,7 @@ def test_pr_context_fields_lists_documented_field_names() -> None:
         "isDraft",
     ):
         assert required_field in fields_arg
+
+
+def test_gh_field_body_at_prefix_matches_gh_field_from_file_form() -> None:
+    assert pr_converge_constants_module.GH_FIELD_BODY_AT_PREFIX == "body=@"

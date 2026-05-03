@@ -48,3 +48,31 @@ def test_pattern_excludes_macos_shared_folder() -> None:
 
 def test_pattern_excludes_macos_public_shared_folder() -> None:
     assert HARDCODED_USER_PATH_PATTERN.search("/Users/Public/Documents") is None
+
+
+def test_pattern_excludes_windows_lowercase_public_shared_folder() -> None:
+    assert HARDCODED_USER_PATH_PATTERN.search("c:/users/public/Documents") is None
+
+
+def test_pattern_excludes_windows_lowercase_shared_folder() -> None:
+    assert HARDCODED_USER_PATH_PATTERN.search("c:/users/shared/data") is None
+
+
+def test_pattern_excludes_windows_lowercase_all_users_folder() -> None:
+    assert HARDCODED_USER_PATH_PATTERN.search("c:/users/all users/AppData") is None
+
+
+def test_pattern_excludes_windows_mixed_case_public_shared_folder() -> None:
+    assert HARDCODED_USER_PATH_PATTERN.search("C:/Users/PuBlIc/Documents") is None
+
+
+def test_pattern_excludes_windows_uppercase_public_shared_folder() -> None:
+    assert HARDCODED_USER_PATH_PATTERN.search("C:/Users/PUBLIC/Documents") is None
+
+
+def test_pattern_excludes_macos_lowercase_shared_folder() -> None:
+    assert HARDCODED_USER_PATH_PATTERN.search("/Users/shared/data") is None
+
+
+def test_pattern_excludes_macos_lowercase_public_shared_folder() -> None:
+    assert HARDCODED_USER_PATH_PATTERN.search("/Users/public/Documents") is None

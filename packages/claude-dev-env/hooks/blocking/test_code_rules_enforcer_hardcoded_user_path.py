@@ -226,3 +226,66 @@ def test_should_not_flag_macos_public_shared_folder() -> None:
         f"macOS '/Users/Public' is a default shared folder on every macOS install,"
         f" not a user home — symmetry with the Windows exclusion, got: {issues}"
     )
+
+
+def test_should_not_flag_windows_lowercase_public_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "c:/users/public/Documents"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Windows 'c:/users/public' is the same shared folder regardless of case,"
+        f" the exclusion list must be case-insensitive, got: {issues}"
+    )
+
+
+def test_should_not_flag_windows_lowercase_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "c:/users/shared/data"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Windows 'c:/users/shared' is a system shared folder regardless of case,"
+        f" got: {issues}"
+    )
+
+
+def test_should_not_flag_windows_lowercase_all_users_folder() -> None:
+    source = 'def find() -> str:\n    return "c:/users/all users/AppData"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Windows 'c:/users/all users' is a legacy shared folder regardless of case,"
+        f" got: {issues}"
+    )
+
+
+def test_should_not_flag_windows_mixed_case_public_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "C:/Users/PuBlIc/Documents"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Windows 'C:/Users/PuBlIc' is the same shared folder in any casing,"
+        f" got: {issues}"
+    )
+
+
+def test_should_not_flag_windows_uppercase_public_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "C:/Users/PUBLIC/Documents"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Windows 'C:/Users/PUBLIC' is the same shared folder in any casing,"
+        f" got: {issues}"
+    )
+
+
+def test_should_not_flag_macos_lowercase_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "/Users/shared/data"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"macOS '/Users/shared' is a system shared folder regardless of case,"
+        f" got: {issues}"
+    )
+
+
+def test_should_not_flag_macos_lowercase_public_shared_folder() -> None:
+    source = 'def find() -> str:\n    return "/Users/public/Documents"\n'
+    issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"macOS '/Users/public' is a default shared folder regardless of case,"
+        f" got: {issues}"
+    )

@@ -193,3 +193,28 @@ def test_should_raise_when_gh_subprocess_fails() -> None:
             fetch_bugbot_reviews_module.fetch_bugbot_reviews(
                 owner="acme", repo="widget", number=42
             )
+
+
+def test_should_return_entries_whose_keys_are_strings() -> None:
+    pages_payload = json.dumps(
+        [
+            [
+                {
+                    "id": 1,
+                    "user": {"login": "cursor[bot]"},
+                    "commit_id": "abc",
+                    "submitted_at": "2026-01-01T00:00:00Z",
+                    "body": "Bugbot reviewed your changes and found no new issues!",
+                }
+            ]
+        ]
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(pages_payload)
+        all_reviews = fetch_bugbot_reviews_module.fetch_bugbot_reviews(
+            owner="acme", repo="widget", number=42
+        )
+    assert len(all_reviews) == 1
+    first_review_entry = all_reviews[0]
+    assert isinstance(first_review_entry, dict)
+    assert all(isinstance(each_key, str) for each_key in first_review_entry.keys())

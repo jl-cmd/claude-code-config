@@ -307,3 +307,36 @@ def test_should_raise_when_gh_subprocess_fails() -> None:
             fetch_bugbot_inline_comments_module.fetch_bugbot_inline_comments(
                 owner="acme", repo="widget", number=42, current_head="abc"
             )
+
+
+def test_should_return_entries_whose_keys_are_strings() -> None:
+    pages_payload = json.dumps(
+        [
+            [
+                {
+                    "id": 101,
+                    "user": {"login": "cursor[bot]"},
+                    "commit_id": "abc123",
+                    "pull_request_review_id": 1,
+                    "body": "bugbot finding",
+                    "path": "x.py",
+                    "line": 6,
+                }
+            ]
+        ]
+    )
+    with patch.object(
+        fetch_bugbot_inline_comments_module,
+        "fetch_bugbot_reviews",
+        return_value=_default_review_for_head(commit="abc123", review_id=1),
+    ), patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(pages_payload)
+        all_inline_comments = (
+            fetch_bugbot_inline_comments_module.fetch_bugbot_inline_comments(
+                owner="acme", repo="widget", number=42, current_head="abc123"
+            )
+        )
+    assert len(all_inline_comments) == 1
+    first_comment_entry = all_inline_comments[0]
+    assert isinstance(first_comment_entry, dict)
+    assert all(isinstance(each_key, str) for each_key in first_comment_entry.keys())

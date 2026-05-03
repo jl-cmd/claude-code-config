@@ -35,7 +35,7 @@ def fetch_bugbot_inline_comments(
     repo: str,
     number: int,
     current_head: str,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Return cursor[bot] inline comments for the latest Bugbot review on ``current_head``.
 
     Each entry contains comment_id, commit_id, path, line, and body.
@@ -70,7 +70,7 @@ def fetch_bugbot_inline_comments(
         encoding="utf-8",
         errors="replace",
     )
-    pages: list[list[dict]] = json.loads(completed.stdout)
+    pages: list[list[dict[str, object]]] = json.loads(completed.stdout)
     all_flat_comments = [each_comment for each_page in pages for each_comment in each_page]
     return [
         {
@@ -78,13 +78,30 @@ def fetch_bugbot_inline_comments(
             "commit_id": each_comment.get("commit_id"),
             "path": each_comment.get("path"),
             "line": each_comment.get("line"),
-            "body": each_comment.get("body") or "",
+            "body": _body_of(each_comment),
         }
         for each_comment in all_flat_comments
-        if (each_comment.get("user") or {}).get("login") == CURSOR_BOT_LOGIN
+        if _login_of(each_comment) == CURSOR_BOT_LOGIN
         and each_comment.get("commit_id") == current_head
         and each_comment.get("pull_request_review_id") == target_pull_request_review_id
     ]
+
+
+def _login_of(field_by_key: dict[str, object]) -> str | None:
+    user_field = field_by_key.get("user")
+    if not isinstance(user_field, dict):
+        return None
+    login_field = user_field.get("login")
+    if not isinstance(login_field, str):
+        return None
+    return login_field
+
+
+def _body_of(field_by_key: dict[str, object]) -> str:
+    body_field = field_by_key.get("body")
+    if not isinstance(body_field, str):
+        return ""
+    return body_field
 
 
 def main() -> int:

@@ -32,7 +32,7 @@ def fetch_bugbot_reviews(
     owner: str,
     repo: str,
     number: int,
-) -> list[dict]:
+) -> list[dict[str, object]]:
     """Return Cursor Bugbot reviews newest-first, each with a clean/dirty classification.
 
     Each entry contains review_id, commit_id, submitted_at, body, and classification.
@@ -55,17 +55,17 @@ def fetch_bugbot_reviews(
         encoding="utf-8",
         errors="replace",
     )
-    pages: list[list[dict]] = json.loads(completed.stdout)
+    pages: list[list[dict[str, object]]] = json.loads(completed.stdout)
     all_flat_reviews = [each_review for each_page in pages for each_review in each_page]
     all_bugbot_reviews = [
         each_review
         for each_review in all_flat_reviews
-        if (each_review.get("user") or {}).get("login") == CURSOR_BOT_LOGIN
+        if _login_of(each_review) == CURSOR_BOT_LOGIN
         and each_review.get("submitted_at") is not None
         and each_review.get("id") is not None
     ]
     all_bugbot_reviews.sort(
-        key=lambda each_review: each_review["submitted_at"], reverse=True
+        key=lambda each_review: _submitted_at_of(each_review), reverse=True
     )
     dirty_pattern = re.compile(BUGBOT_DIRTY_BODY_REGEX)
     return [
@@ -73,15 +73,39 @@ def fetch_bugbot_reviews(
             "review_id": each_review["id"],
             "commit_id": each_review.get("commit_id"),
             "submitted_at": each_review["submitted_at"],
-            "body": each_review.get("body") or "",
+            "body": _body_of(each_review),
             "classification": (
                 "dirty"
-                if dirty_pattern.search(each_review.get("body") or "")
+                if dirty_pattern.search(_body_of(each_review))
                 else "clean"
             ),
         }
         for each_review in all_bugbot_reviews
     ]
+
+
+def _login_of(field_by_key: dict[str, object]) -> str | None:
+    user_field = field_by_key.get("user")
+    if not isinstance(user_field, dict):
+        return None
+    login_field = user_field.get("login")
+    if not isinstance(login_field, str):
+        return None
+    return login_field
+
+
+def _submitted_at_of(field_by_key: dict[str, object]) -> str:
+    submitted_at_field = field_by_key.get("submitted_at")
+    if not isinstance(submitted_at_field, str):
+        return ""
+    return submitted_at_field
+
+
+def _body_of(field_by_key: dict[str, object]) -> str:
+    body_field = field_by_key.get("body")
+    if not isinstance(body_field, str):
+        return ""
+    return body_field
 
 
 def main() -> int:

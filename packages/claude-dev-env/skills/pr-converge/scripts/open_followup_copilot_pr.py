@@ -98,9 +98,9 @@ def _resolve_parent_base_ref(*, parent_number: int, repo_arg: str) -> str:
     return base_ref_name_field
 
 
-def _run_checked(command_argv: list[str]) -> subprocess.CompletedProcess:
+def _run_checked(all_command_arguments: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(
-        command_argv,
+        all_command_arguments,
         capture_output=True,
         check=True,
         text=True,

@@ -117,7 +117,7 @@ def test_copilot_clean_review_state_is_approved() -> None:
 
 
 def test_copilot_dirty_review_states_lists_changes_requested_and_commented() -> None:
-    dirty_states = pr_converge_constants_module.COPILOT_DIRTY_REVIEW_STATES
+    dirty_states = pr_converge_constants_module.ALL_COPILOT_DIRTY_REVIEW_STATES
     assert "CHANGES_REQUESTED" in dirty_states
     assert "COMMENTED" in dirty_states
 

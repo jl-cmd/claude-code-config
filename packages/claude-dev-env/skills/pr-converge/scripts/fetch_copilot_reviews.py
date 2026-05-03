@@ -27,8 +27,8 @@ from evict_cached_config_modules import evict_cached_config_modules
 evict_cached_config_modules()
 
 from config.pr_converge_constants import (
+    ALL_COPILOT_DIRTY_REVIEW_STATES,
     COPILOT_CLEAN_REVIEW_STATE,
-    COPILOT_DIRTY_REVIEW_STATES,
     COPILOT_REVIEWER_LOGIN,
     COPILOT_SOFT_DIRTY_REVIEW_STATE,
     GH_REVIEWS_PATH_TEMPLATE,
@@ -89,14 +89,14 @@ def fetch_copilot_reviews(
     ]
 
 
-def _classify_review(each_review: dict[str, object]) -> str:
-    review_state = state_of(each_review)
+def _classify_review(field_by_key: dict[str, object]) -> str:
+    review_state = state_of(field_by_key)
     if review_state == COPILOT_CLEAN_REVIEW_STATE:
         return "clean"
-    if review_state not in COPILOT_DIRTY_REVIEW_STATES:
+    if review_state not in ALL_COPILOT_DIRTY_REVIEW_STATES:
         return "clean"
     state_requires_body = review_state == COPILOT_SOFT_DIRTY_REVIEW_STATE
-    if state_requires_body and not body_of(each_review):
+    if state_requires_body and not body_of(field_by_key):
         return "clean"
     return "dirty"
 

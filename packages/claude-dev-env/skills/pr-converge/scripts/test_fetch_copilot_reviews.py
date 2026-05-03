@@ -208,8 +208,8 @@ def test_should_dispatch_dirty_classification_off_copilot_dirty_review_states_tu
     source_text = (
         Path(__file__).resolve().parent / "fetch_copilot_reviews.py"
     ).read_text(encoding="utf-8")
-    assert "COPILOT_DIRTY_REVIEW_STATES" in source_text
-    assert "in COPILOT_DIRTY_REVIEW_STATES" in source_text
+    assert "ALL_COPILOT_DIRTY_REVIEW_STATES" in source_text
+    assert "in ALL_COPILOT_DIRTY_REVIEW_STATES" in source_text
 
 
 def test_should_classify_clean_review_when_state_is_approved() -> None:

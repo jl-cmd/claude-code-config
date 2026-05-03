@@ -105,4 +105,4 @@ On back-to-back clean: stop the auto-typer per **Convergence cleanup** above; om
 
 ## Stop / safety (this path)
 
-On hard blockers, user stop, or safety cap: omit loop pacing and stop the AHK auto-typer if it was started, per main skill **Stop conditions**.
+On hard blockers or user stop: omit loop pacing and stop the AHK auto-typer if it was started, per main skill **Stop conditions**. Use the same **scoped** `Get-CimInstance` / `Stop-Process` command as **Convergence cleanup** (command-line match on `cursor-agents-continue.ahk`) so unrelated AutoHotkey instances are not killed.

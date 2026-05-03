@@ -25,7 +25,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/fetch_bugbot_reviews.py" \
   --owner <OWNER> --repo <REPO> --number <NUMBER>
 ```
 
-Output: JSON array of `{review_id, commit_id, submitted_at, body, classification}` where `classification` is `"dirty"` (body matches `Cursor Bugbot has reviewed your changes and found <N> potential issue`) or `"clean"`. Uses `--paginate --slurp` and flattens pages in Python — required by `rules/gh-paginate.md` because `gh --paginate --jq` runs the filter per-page (gh CLI #10459).
+Output: JSON array of `{review_id, commit_id, submitted_at, body, classification}` where `classification` is `"dirty"` (body matches `Cursor Bugbot has reviewed your changes and found <N> potential issue`) or `"clean"`. Uses `--paginate --slurp` and flattens pages in Python — required by `../../../rules/gh-paginate.md` because `gh --paginate --jq` runs the filter per-page (gh CLI #10459).
 
 ### `fetch_bugbot_inline_comments.py`
 
@@ -40,7 +40,7 @@ Output: JSON array of `{comment_id, commit_id, path, line, body}`. Uses the same
 
 ### `resolve_pr_head.py`
 
-Returns the current HEAD SHA of the PR. Wraps the single-object endpoint `repos/<owner>/<repo>/pulls/<number>` which is not paginated, so `gh`'s built-in `--jq .head.sha` is safe here (see "Single-object endpoints" in `rules/gh-paginate.md`).
+Returns the current HEAD SHA of the PR. Wraps the single-object endpoint `repos/<owner>/<repo>/pulls/<number>` which is not paginated, so `gh`'s built-in `--jq .head.sha` is safe here (see "Single-object endpoints" in `../../../rules/gh-paginate.md`).
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/resolve_pr_head.py" \
@@ -51,7 +51,7 @@ Output: the SHA on stdout, trailing newline.
 
 ### `trigger_bugbot.py`
 
-Posts the literal `bugbot run` re-trigger comment via `gh pr comment --body-file` (per `rules/gh-body-file.md` — passing the body inline can corrupt backticks). Writes and removes the temp body file internally.
+Posts the literal `bugbot run` re-trigger comment via `gh pr comment --body-file` (per `../../../rules/gh-body-file.md` — passing the body inline can corrupt backticks). Writes and removes the temp body file internally.
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/trigger_bugbot.py" \
@@ -71,7 +71,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/mark_pr_ready.py" \
 
 ### `reply_to_inline_comment.py`
 
-Posts an inline reply to a PR review comment. Reply body is sourced from a caller-supplied file via `gh api ... -F body=@<path>` (per `rules/gh-body-file.md`).
+Posts an inline reply to a PR review comment. Reply body is sourced from a caller-supplied file via `gh api ... -F body=@<path>` (per `../../../rules/gh-body-file.md`).
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \

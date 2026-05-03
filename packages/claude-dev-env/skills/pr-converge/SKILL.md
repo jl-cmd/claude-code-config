@@ -465,7 +465,7 @@ The fix protocol is executed by a **`clean-coder` teammate** when **`state.json`
 
 **Multi-PR (`state.json`) teammate obligations** (in addition to TDD, commit, push):
 
-- Replies inline on each addressed finding thread via `reply_to_inline_comment.py` (what changed and the commit identifier), matching §Audit result → clean-coder step 4 — **before** writing `state.json` and going idle.
+- Replies inline on each addressed finding thread via `reply_to_inline_comment.py` (what changed and the commit identifier), matching §Audit result → fix worker step 4 — **before** writing `state.json` and going idle.
 - Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase: "BUGBOT"`, `status: "awaiting_bugbot"`, and `last_updated` (ISO-8601 UTC) to `state.json` (per §Concurrency).
 - Goes idle. The orchestrator spawns the follow-up `general-purpose` agent for bugbot trigger and monitoring.
 

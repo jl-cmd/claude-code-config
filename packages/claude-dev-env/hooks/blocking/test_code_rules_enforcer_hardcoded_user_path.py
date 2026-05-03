@@ -145,6 +145,7 @@ def test_should_suggest_path_home_or_expanduser_in_message() -> None:
         f"Error message should suggest Path.home() or os.path.expanduser('~'), got: {issues}"
     )
 
+
 def test_should_flag_standalone_home_segment_for_symmetry_with_macos() -> None:
     source = 'def route() -> str:\n    return "/home/dashboard"\n'
     issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)

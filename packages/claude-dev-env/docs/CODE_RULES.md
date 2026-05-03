@@ -53,6 +53,8 @@ These rules are automatically enforced by `code_rules_enforcer.py`. Violations b
 | sys.path.insert dedup | `sys.path.insert(0, X)` must be guarded by `if X not in sys.path:` (or equivalent membership test) so reloads do not push the same entry repeatedly. **Test files exempt.** |
 | Unused module-level imports | Module-level imports never referenced in the file body are flagged. Skipped for files declaring `__all__` (re-exports), files using `TYPE_CHECKING` (annotation-only imports), and lines marked `# noqa`. **Test files exempt.** |
 
+> **Hardcoded user paths — Linux `/home/`:** The hook matches `/home/<segment>` through end-of-string (symmetry with macOS `/Users/<segment>`). That means literals shaped like URL routes (for example `/home/dashboard` with no further path after the segment) are flagged. Prefer composing those paths without a home-directory-shaped prefix, or keep them in an exempt file (`config/`, tests, workflow registries, migrations, hook infrastructure).
+
 ### Where UPPER_SNAKE is allowed
 
 The "Constants location" rule is enforced at Write time. The hook exempts these path families where UPPER_SNAKE identifiers are either the canonical home or the native convention rather than misplaced scalar constants:

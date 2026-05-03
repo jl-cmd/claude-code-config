@@ -44,7 +44,7 @@ At the start of each session (or after a long pause), assemble the current PR st
 
 ```bash
 gh api 'repos/jl-cmd/claude-code-config/pulls?state=open&per_page=100' --paginate --slurp \
-  | jq '[.[][] | {number, title, headRefName, head_sha: .head.sha, mergeable, isDraft}] | sort_by(.number)'
+  | jq '[.[][] | {number, title, headRefName: .head.ref, head_sha: .head.sha, mergeable, isDraft: .draft}] | sort_by(.number)'
 ```
 
 **Bugbot review status per queue item** (run for each `(owner, repo, number)`; primary repo uses `jl-cmd` / `claude-code-config`):

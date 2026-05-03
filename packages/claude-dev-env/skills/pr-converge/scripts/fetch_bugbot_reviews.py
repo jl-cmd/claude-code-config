@@ -57,15 +57,15 @@ def fetch_bugbot_reviews(
         errors="replace",
     )
     pages: list[list[dict]] = json.loads(completed.stdout)
-    flat_reviews = [each_review for each_page in pages for each_review in each_page]
-    bugbot_reviews = [
+    all_flat_reviews = [each_review for each_page in pages for each_review in each_page]
+    all_bugbot_reviews = [
         each_review
-        for each_review in flat_reviews
+        for each_review in all_flat_reviews
         if (each_review.get("user") or {}).get("login") == cursor_bot_login
         and each_review.get("submitted_at") is not None
         and each_review.get("id") is not None
     ]
-    bugbot_reviews.sort(
+    all_bugbot_reviews.sort(
         key=lambda each_review: each_review["submitted_at"], reverse=True
     )
     dirty_pattern = re.compile(BUGBOT_DIRTY_BODY_REGEX)
@@ -81,7 +81,7 @@ def fetch_bugbot_reviews(
                 else "clean"
             ),
         }
-        for each_review in bugbot_reviews
+        for each_review in all_bugbot_reviews
     ]
 
 

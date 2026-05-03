@@ -72,7 +72,7 @@ def fetch_bugbot_inline_comments(
         errors="replace",
     )
     pages: list[list[dict]] = json.loads(completed.stdout)
-    flat_comments = [each_comment for each_page in pages for each_comment in each_page]
+    all_flat_comments = [each_comment for each_page in pages for each_comment in each_page]
     return [
         {
             "comment_id": each_comment["id"],
@@ -81,7 +81,7 @@ def fetch_bugbot_inline_comments(
             "line": each_comment.get("line"),
             "body": each_comment.get("body") or "",
         }
-        for each_comment in flat_comments
+        for each_comment in all_flat_comments
         if (each_comment.get("user") or {}).get("login") == cursor_bot_login
         and each_comment.get("commit_id") == current_head
         and each_comment.get("pull_request_review_id") == target_pull_request_review_id

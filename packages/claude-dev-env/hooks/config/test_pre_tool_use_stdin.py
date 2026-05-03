@@ -2,12 +2,25 @@
 
 from __future__ import annotations
 
+import inspect
 import io
 import json
 import sys
 from unittest.mock import patch
 
+from config import pre_tool_use_stdin
 from config.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin
+
+
+def test_pre_tool_use_stdin_uses_shared_encoding_and_decode_constants() -> None:
+    """Pin: stdin parsing must use shared constants, not duplicate literals."""
+    module_source = inspect.getsource(pre_tool_use_stdin)
+    assert "UTF8_ENCODING" in module_source
+    assert "DECODE_ERRORS_POLICY" in module_source
+    assert "UTF8_BYTE_ORDER_MARK" in module_source
+    assert '.decode("utf-8"' not in module_source
+    assert 'errors="replace"' not in module_source
+    assert "stdin_parse_constants" not in module_source
 
 
 def test_read_returns_none_for_empty_stdin() -> None:

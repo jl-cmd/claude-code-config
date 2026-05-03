@@ -145,8 +145,8 @@ def main() -> None:
         tool_input = raw_tool_input if isinstance(raw_tool_input, dict) else {}
         if tool_name != BASH_TOOL_NAME:
             sys.exit(0)
-        command_value = tool_input.get("command", "")
-        command = command_value if isinstance(command_value, str) else ""
+        raw_command = tool_input.get("command", "")
+        command = raw_command if isinstance(raw_command, str) else ""
         if not command_invokes_es_exe(command):
             sys.exit(0)
         known_registry = load_registry()

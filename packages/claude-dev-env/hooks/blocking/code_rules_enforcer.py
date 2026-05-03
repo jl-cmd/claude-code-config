@@ -2053,7 +2053,11 @@ def _walk_assignment_targets(target: ast.expr) -> list[ast.Name]:
 
 
 def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]:
-    """Return (name, line_number) for every binding whose target name starts with two or more all_/ALL_ prefixes."""
+    """Return (name, line_number) for bindings whose introduced name stutters all_/ALL_ prefixes.
+
+    Covers assignments, loops, parameters, walrus targets, comprehensions, with/except
+    aliases, import aliases, and class definitions.
+    """
     bindings: list[tuple[str, int]] = []
     for each_node in ast.walk(tree):
         if isinstance(each_node, ast.Assign):
@@ -2090,6 +2094,33 @@ def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]
                         bindings.append((each_name.id, each_name.lineno))
         elif isinstance(each_node, ast.ExceptHandler):
             if each_node.name is not None and _is_stuttering_all_name(each_node.name):
+                bindings.append((each_node.name, each_node.lineno))
+        elif isinstance(each_node, ast.Import):
+            for each_alias in each_node.names:
+                if each_alias.name == "*":
+                    continue
+                bound_name = (
+                    each_alias.asname
+                    if each_alias.asname is not None
+                    else each_alias.name.split(".", 1)[0]
+                )
+                if _is_stuttering_all_name(bound_name):
+                    line_number = getattr(each_alias, "lineno", None) or each_node.lineno
+                    bindings.append((bound_name, line_number))
+        elif isinstance(each_node, ast.ImportFrom):
+            for each_alias in each_node.names:
+                if each_alias.name == "*":
+                    continue
+                bound_name = (
+                    each_alias.asname
+                    if each_alias.asname is not None
+                    else each_alias.name
+                )
+                if _is_stuttering_all_name(bound_name):
+                    line_number = getattr(each_alias, "lineno", None) or each_node.lineno
+                    bindings.append((bound_name, line_number))
+        elif isinstance(each_node, ast.ClassDef):
+            if _is_stuttering_all_name(each_node.name):
                 bindings.append((each_node.name, each_node.lineno))
     return bindings
 

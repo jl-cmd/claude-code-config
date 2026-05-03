@@ -88,6 +88,19 @@ def test_should_skip_file_with_dunder_all() -> None:
     )
 
 
+def test_should_skip_file_with_dunder_all_annotated_assignment() -> None:
+    source = (
+        "from config.preflight_constants import VENV_DIRECTORY_NAME\n"
+        "\n"
+        '__all__: list[str] = ["VENV_DIRECTORY_NAME"]\n'
+    )
+    issues = check_unused_module_level_imports(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        "Annotated __all__ must skip unused-import scan like plain __all__, "
+        f"got: {issues}"
+    )
+
+
 def test_should_skip_file_using_type_checking_block() -> None:
     source = (
         "from typing import TYPE_CHECKING\n"

@@ -2204,10 +2204,17 @@ def check_unused_module_level_imports(content: str, file_path: str) -> list[str]
     except SyntaxError:
         return []
     file_declares_dunder_all = any(
-        isinstance(each_node, ast.Assign)
-        and any(
-            isinstance(each_target, ast.Name) and each_target.id == "__all__"
-            for each_target in each_node.targets
+        (
+            isinstance(each_node, ast.Assign)
+            and any(
+                isinstance(each_target, ast.Name) and each_target.id == "__all__"
+                for each_target in each_node.targets
+            )
+        )
+        or (
+            isinstance(each_node, ast.AnnAssign)
+            and isinstance(each_node.target, ast.Name)
+            and each_node.target.id == "__all__"
         )
         for each_node in tree.body
     )

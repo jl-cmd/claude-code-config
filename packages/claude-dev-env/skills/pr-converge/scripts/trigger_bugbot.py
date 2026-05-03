@@ -32,9 +32,9 @@ def trigger_bugbot(*, owner: str, repo: str, number: int) -> str:
     file_descriptor, raw_path = tempfile.mkstemp(
         suffix=BUGBOT_RUN_TEMPFILE_SUFFIX, prefix=BUGBOT_RUN_TEMPFILE_PREFIX
     )
-    os.close(file_descriptor)
-    body_file_path = Path(raw_path)
     try:
+        os.close(file_descriptor)
+        body_file_path = Path(raw_path)
         body_file_path.write_text(trigger_phrase, encoding="utf-8")
         gh_command: list[str] = [
             "gh",
@@ -56,7 +56,7 @@ def trigger_bugbot(*, owner: str, repo: str, number: int) -> str:
         )
         return completed.stdout.strip()
     finally:
-        body_file_path.unlink(missing_ok=True)
+        Path(raw_path).unlink(missing_ok=True)
 
 
 def main() -> int:

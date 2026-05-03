@@ -297,7 +297,8 @@ function install(selectedGroups, options = {}) {
         );
         purgeManagedInstallation({ requireManifest: false });
     } else if (isUpdateRefresh) {
-        console.log(`${PACKAGE_NAME}: --update — re-running full install into ${CLAUDE_HOME}\n`);
+        const installScope = selectedGroups ? `groups: ${selectedGroups.join(', ')}` : 'full';
+        console.log(`${PACKAGE_NAME}: --update — re-running ${installScope} install into ${CLAUDE_HOME}\n`);
     }
     const groupLabel = selectedGroups ? `groups: ${selectedGroups.join(', ')}` : 'all';
     console.log(`\nInstalling ${PACKAGE_NAME} (${groupLabel})...\n`);

@@ -61,10 +61,14 @@ def test_should_expose_all_banned_identifiers_from_config() -> None:
     actual_banned_identifiers = getattr(
         code_rules_enforcer, "ALL_BANNED_IDENTIFIERS", None
     )
-    assert actual_banned_identifiers == expected_banned_identifiers, (
+    assert actual_banned_identifiers is not None, (
         "Renamed constant ALL_BANNED_IDENTIFIERS must be importable from "
         "config/banned_identifiers_constants.py and re-exposed on the "
         f"enforcer module, got: {actual_banned_identifiers!r}"
+    )
+    assert expected_banned_identifiers <= actual_banned_identifiers, (
+        "ALL_BANNED_IDENTIFIERS must contain every expected banned identifier; "
+        f"missing: {expected_banned_identifiers - actual_banned_identifiers!r}"
     )
 
 

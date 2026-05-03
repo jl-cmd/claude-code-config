@@ -153,7 +153,7 @@ def fetch_inline_review_comments(
 
 def _parse_paginated_json_array_documents(
     raw_output: str,
-) -> list[object] | None:
+) -> list[dict[str, object]] | None:
     """Parse gh --paginate output that emits one JSON array per page.
 
     Concatenated array documents (`[...][...]`) are decoded one at a time
@@ -163,7 +163,7 @@ def _parse_paginated_json_array_documents(
     decoder = json.JSONDecoder()
     cursor_index = 0
     output_length = len(raw_output)
-    flattened: list[object] = []
+    flattened: list[dict[str, object]] = []
     while cursor_index < output_length:
         while cursor_index < output_length and raw_output[cursor_index].isspace():
             cursor_index += 1

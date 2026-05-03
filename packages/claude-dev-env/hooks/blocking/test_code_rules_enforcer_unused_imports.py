@@ -175,6 +175,22 @@ def test_should_skip_noqa_marked_imports() -> None:
     )
 
 
+def test_should_skip_noqa_on_from_keyword_line_for_multiline_import() -> None:
+    source = (
+        "from config.constants import (  # noqa: F401\n"
+        "    SOME_CONSTANT,\n"
+        "    ANOTHER_CONSTANT,\n"
+        ")\n"
+        "\n"
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    issues = check_unused_module_level_imports(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"noqa on the from-keyword line must suppress every alias in the block, got: {issues}"
+    )
+
+
 def test_should_skip_future_annotations_import() -> None:
     source = (
         "from __future__ import annotations\n"

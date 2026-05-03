@@ -2149,14 +2149,24 @@ UNUSED_IMPORT_GUIDANCE: str = (
 )
 
 
-def _import_alias_pairs(import_node: ast.Import | ast.ImportFrom) -> list[tuple[str, int]]:
-    """Return (binding_name, line_number) for each name introduced by an import statement."""
-    bindings: list[tuple[str, int]] = []
+def _import_alias_pairs(
+    import_node: ast.Import | ast.ImportFrom,
+) -> list[tuple[str, int, int | None]]:
+    """Return (binding_name, alias_line, from_keyword_line) for each name introduced.
+
+    The from-keyword line is None for plain `import X` statements; for
+    `from X import (...)` it carries the line of the `from` keyword so
+    callers can honor a `# noqa` placed on the opening line of a
+    multi-line import block.
+    """
+    bindings: list[tuple[str, int, int | None]] = []
+    from_keyword_line = import_node.lineno if isinstance(import_node, ast.ImportFrom) else None
     for each_alias in import_node.names:
         if each_alias.name == "*":
             continue
         binding_name = each_alias.asname if each_alias.asname else each_alias.name.split(".")[0]
-        bindings.append((binding_name, each_alias.lineno or import_node.lineno))
+        alias_line = each_alias.lineno or import_node.lineno
+        bindings.append((binding_name, alias_line, from_keyword_line))
     return bindings
 
 
@@ -2207,7 +2217,7 @@ def check_unused_module_level_imports(content: str, file_path: str) -> list[str]
         return []
     content_lines = content.splitlines()
     import_line_numbers: set[int] = set()
-    import_bindings: list[tuple[str, int]] = []
+    import_bindings: list[tuple[str, int, int | None]] = []
     for each_node in tree.body:
         if isinstance(each_node, (ast.Import, ast.ImportFrom)):
             import_line_numbers.add(each_node.lineno)
@@ -2218,9 +2228,12 @@ def check_unused_module_level_imports(content: str, file_path: str) -> list[str]
             for each_binding in _import_alias_pairs(each_node):
                 import_bindings.append(each_binding)
     issues: list[str] = []
-    for each_name, each_line_number in import_bindings:
+    for each_name, each_line_number, each_from_keyword_line in import_bindings:
         if 1 <= each_line_number <= len(content_lines):
             if _line_carries_noqa_marker(content_lines[each_line_number - 1]):
+                continue
+        if each_from_keyword_line is not None and 1 <= each_from_keyword_line <= len(content_lines):
+            if _line_carries_noqa_marker(content_lines[each_from_keyword_line - 1]):
                 continue
         if _name_appears_outside_imports(content_lines, import_line_numbers, each_name):
             continue

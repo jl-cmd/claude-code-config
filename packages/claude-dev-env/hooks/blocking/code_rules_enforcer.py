@@ -2102,8 +2102,6 @@ def _collect_stuttering_name_bindings(tree: ast.Module) -> list[tuple[str, int]]
                 bindings.append((each_node.name, each_node.lineno))
         elif isinstance(each_node, ast.Import):
             for each_alias in each_node.names:
-                if each_alias.name == WILDCARD_IMPORT_SENTINEL:
-                    continue
                 bound_name = (
                     each_alias.asname
                     if each_alias.asname is not None

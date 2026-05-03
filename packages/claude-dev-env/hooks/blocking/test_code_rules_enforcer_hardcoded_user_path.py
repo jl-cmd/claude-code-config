@@ -31,6 +31,7 @@ check_hardcoded_user_paths = _hook_module.check_hardcoded_user_paths
 PRODUCTION_FILE_PATH = "packages/app/services/loader.py"
 TEST_FILE_PATH = "packages/app/tests/test_loader.py"
 CONFIG_FILE_PATH = "packages/app/config/paths.py"
+HOOK_INFRASTRUCTURE_FILE_PATH = "/repo/packages/claude-dev-env/hooks/blocking/code_rules_enforcer.py"
 
 
 def test_should_flag_windows_user_path_with_forward_slashes() -> None:
@@ -131,6 +132,19 @@ def test_should_not_flag_standalone_users_segment_without_trailing_path() -> Non
     issues = check_hardcoded_user_paths(source, PRODUCTION_FILE_PATH)
     assert issues == [], (
         f"'/Users/Shared' without trailing path component is not navigating into a user home, got: {issues}"
+    )
+
+
+def test_should_skip_hook_infrastructure_files() -> None:
+    source = (
+        'HARDCODED_USER_PATH_PATTERN = "/Users/[^/]+|/home/[^/]+"\n'
+        'def find() -> str:\n'
+        '    return "C:/Users/jon/notes.md"\n'
+    )
+    issues = check_hardcoded_user_paths(source, HOOK_INFRASTRUCTURE_FILE_PATH)
+    assert issues == [], (
+        f"Hook infrastructure files exempt — the enforcer itself encodes user-path"
+        f" patterns and would otherwise self-block, got: {issues}"
     )
 
 

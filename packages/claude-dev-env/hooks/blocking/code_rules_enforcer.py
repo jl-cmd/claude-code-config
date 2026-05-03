@@ -2106,14 +2106,19 @@ def check_hardcoded_user_paths(content: str, file_path: str) -> list[str]:
 
     Catches non-portable paths like `C:/Users/jon/...`, `/Users/alice/...`,
     and `/home/bob/...` that surface in production code (PR #257 evidence).
-    Test files, config/ files, workflow registry files, and migration files
-    are exempt.
+    Test files, config/ files, workflow registry files, migration files,
+    and hook infrastructure files are exempt. Hook infrastructure exemption
+    matches the pattern used by check_library_print and other check
+    functions, and prevents the enforcer from self-blocking on its own
+    HARDCODED_USER_PATH_PATTERN definition.
     """
     if is_test_file(file_path):
         return []
     if is_config_file(file_path):
         return []
     if is_workflow_registry_file(file_path) or is_migration_file(file_path):
+        return []
+    if is_hook_infrastructure(file_path):
         return []
     try:
         tree = ast.parse(content)

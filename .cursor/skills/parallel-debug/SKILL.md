@@ -64,9 +64,30 @@ Build a decision table from the results:
 |----|----------|--------|---------|-------------|
 | ... | ... | clean/dirty | clean/dirty/none | ... |
 
+## Multitask Mode — `continue` fan-out
+
+When **Multitask Mode** is active in Cursor and the user types **`continue`** (advance the convergence loop), the **coordinator** MUST **not** run a single-PR tick for one PR by default.
+
+1. List open PR numbers, for example:
+   ```bash
+   gh pr list -R jl-cmd/claude-code-config --state open --json number -q ".[].number"
+   ```
+   (Any equivalent that returns the same set of PR numbers is fine.)
+2. For **each** open PR number, spawn **one** background subagent:
+   ```
+   Task(
+     subagent_type="generalPurpose",
+     run_in_background=true,
+     prompt="…scoped to PR #<N> only…"
+   )
+   ```
+3. Each subagent runs **exactly one** parallel-debug tick for **that** PR: Bugbot state vs current HEAD, inline handling, and **at most one** loop advance per **Per-Tick Work** below (no full bugteam protocol duplicated here — follow **Per-Tick Work** and link out to bugteam only where that section already does).
+
+Outside Multitask Mode, `continue` still means one coordinator tick on the active PR context as today.
+
 ## Per-Tick Work
 
-Each tick (triggered by `continue` from AHK or from the user) runs these steps:
+Each tick (triggered by `continue` from AHK or from the user **outside Multitask Mode**; in Multitask Mode, coordinator `continue` fans out per **Multitask Mode — `continue` fan-out**) runs these steps:
 
 **Step 1 — Resolve current HEAD and PR context:**
 ```bash
@@ -94,7 +115,7 @@ Increment `tick_count`. Read prior state line from the previous response.
   - Review at `current_head`, body indicates findings but inline API returns zero → increment `inline_lag_streak`; if `>= 3` hard blocker; else schedule next tick at AHK cadence
 
 *BUGTEAM phase:*
-- Read `C:\Users\jon\.claude\skills\pr-converge\SKILL.md` and `C:\Users\jon\.claude\skills\bugteam\SKILL.md` for full audit protocol
+- Read `$HOME\.claude\skills\pr-converge\SKILL.md` and `$HOME\.claude\skills\bugteam\SKILL.md` for full audit protocol
 - Run bugteam audit by following the bugteam skill's Step 3 cycle against the current PR
 - Re-resolve HEAD after bugteam (it may have pushed commits)
 - If bugteam pushed → set `bugbot_clean_at = null`, re-trigger bugbot, transition to BUGBOT, schedule next tick
@@ -103,14 +124,23 @@ Increment `tick_count`. Read prior state line from the previous response.
 - If bugteam has findings without committing → apply Fix protocol, re-trigger bugbot, transition to BUGBOT, schedule next tick
 
 **Step 3 — Re-trigger bugbot:**
+
+Prefer the bundled helper (temp body file and `gh pr comment --body-file` in one process, per `pr-converge` Step 3):
+
 ```bash
+python "$HOME\.claude\skills\pr-converge\scripts\trigger_bugbot.py" \
+  --owner jl-cmd --repo claude-code-config --number <N>
+```
+
+When the script is unavailable, run **one** `pwsh` invocation so the temp path never crosses process boundaries:
+
+```powershell
 pwsh -NoProfile -Command @'
 $bodyPath = [System.IO.Path]::ChangeExtension((New-TemporaryFile).FullName, '.md')
 [IO.File]::WriteAllText($bodyPath, "bugbot run`n", [Text.UTF8Encoding]::new($false))
+gh pr comment <N> --repo jl-cmd/claude-code-config --body-file $bodyPath
+Remove-Item -LiteralPath $bodyPath -Force -ErrorAction SilentlyContinue
 '@
-```
-```bash
-gh pr comment <N> --repo jl-cmd/claude-code-config --body-file <bodyPath>
 ```
 
 **Step 4 — State line (emit every tick):**
@@ -131,7 +161,7 @@ When findings exist (either phase):
    ```
    Task(
      subagent_type="generalPurpose",
-     prompt="You are acting as clean-coder. Read C:\\Users\\jon\\.claude\\agents\\clean-coder.md first, then implement: <specific fix description with file:line>. Commit the change with message 'fix(review): <summary>'. Push to origin <branch>."
+     prompt="You are acting as clean-coder. Read $HOME/.claude/agents/clean-coder.md first, then implement: <specific fix description with file:line>. Commit the change with message 'fix(review): <summary>'. Push to origin <branch>."
    )
    ```
    Ensure `.cursor/agents/clean-coder.md` exists; copy from `~/.claude/agents/` when missing.
@@ -169,6 +199,8 @@ After all open PRs have converged, stop the AHK auto-typer:
 ```bash
 pwsh -NoProfile -NoLogo -ExecutionPolicy Bypass -File "$HOME\.claude\skills\pr-converge\scripts\cursor-agents-continue-stop-others.ps1" -KeepProcessId 0
 ```
+
+The stop script ships beside `cursor-agents-continue.cmd` in the pr-converge skill; in this repository the same file is `packages/claude-dev-env/skills/pr-converge/scripts/cursor-agents-continue-stop-others.ps1` (copy or sync it under `$HOME\.claude\skills\pr-converge\scripts\` with the other pr-converge scripts).
 
 Do not emit `Awaiting next "continue" tick.` after a convergence stop — the loop is done.
 

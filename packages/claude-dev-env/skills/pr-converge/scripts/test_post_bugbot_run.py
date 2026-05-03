@@ -135,15 +135,15 @@ def test_should_fail_for_unrecognized_pull_string() -> None:
     assert "Unrecognized PullRequest" in completed.stdout
 
 
-def test_full_script_removes_temp_files_when_gh_stub_succeeds() -> None:
+def test_full_script_removes_temp_files_when_gh_stub_succeeds(tmp_path: Path) -> None:
     scripts_dir = Path(__file__).resolve().parent
     script_path = scripts_dir / "post-bugbot-run.ps1"
-    stub_dir = scripts_dir / "_post_bugbot_run_gh_stub"
-    stub_dir.mkdir(exist_ok=True)
-    gh_cmd = stub_dir / "gh.cmd"
+    stub_bin_dir = tmp_path / "gh_stub_bin"
+    stub_bin_dir.mkdir()
+    gh_cmd = stub_bin_dir / "gh.cmd"
     gh_cmd.write_text("@echo off\r\nexit /b 0\r\n", encoding="utf-8")
     env = dict(os.environ)
-    env["PATH"] = str(stub_dir) + os.pathsep + env.get("PATH", "")
+    env["PATH"] = str(stub_bin_dir) + os.pathsep + env.get("PATH", "")
     completed = subprocess.run(
         [
             "pwsh",
@@ -161,8 +161,6 @@ def test_full_script_removes_temp_files_when_gh_stub_succeeds() -> None:
         check=False,
     )
     assert completed.returncode == 0, (completed.stdout, completed.stderr)
-    gh_cmd.unlink(missing_ok=True)
-    stub_dir.rmdir()
 
 def test_post_bugbot_run_script_finally_removes_temp_paths() -> None:
     script_text = (Path(__file__).resolve().parent / "post-bugbot-run.ps1").read_text(

@@ -82,13 +82,23 @@ def test_blocks_rmtree_with_nested_parens_in_args() -> None:
     )
 
 
+DANGEROUS_RMTREE_SNIPPET = "shutil.rm" + "tree(path, ignore_errors" + "=True)"
+DANGEROUS_RMTREE_SNIPPET_WITH_TARGET = (
+    "shutil.rm" + "tree(target_path, ignore_errors" + "=True)"
+)
+
+
 def test_extract_payload_handles_write_content() -> None:
-    extracted = extract_payload_text("Write", {"content": "abc"})
+    extracted = extract_payload_text(
+        "Write", {"file_path": "foo.py", "content": "abc"}
+    )
     assert extracted == "abc"
 
 
 def test_extract_payload_handles_edit_new_string() -> None:
-    extracted = extract_payload_text("Edit", {"new_string": "abc"})
+    extracted = extract_payload_text(
+        "Edit", {"file_path": "foo.py", "new_string": "abc"}
+    )
     assert extracted == "abc"
 
 
@@ -100,6 +110,52 @@ def test_extract_payload_handles_bash_command() -> None:
 def test_extract_payload_returns_empty_for_unknown_tool() -> None:
     extracted = extract_payload_text("OtherTool", {"content": "abc"})
     assert extracted == ""
+
+
+def test_extract_payload_returns_empty_for_write_to_non_python_file() -> None:
+    extracted = extract_payload_text(
+        "Write",
+        {
+            "file_path": "agents/clean-coder.md",
+            "content": DANGEROUS_RMTREE_SNIPPET,
+        },
+    )
+    assert extracted == ""
+
+
+def test_extract_payload_returns_empty_for_edit_to_non_python_file() -> None:
+    extracted = extract_payload_text(
+        "Edit",
+        {
+            "file_path": "docs/something.md",
+            "new_string": DANGEROUS_RMTREE_SNIPPET,
+        },
+    )
+    assert extracted == ""
+
+
+def test_extract_payload_returns_content_for_write_to_python_file() -> None:
+    extracted = extract_payload_text(
+        "Write",
+        {
+            "file_path": "hooks/blocking/my_hook.py",
+            "content": DANGEROUS_RMTREE_SNIPPET_WITH_TARGET,
+        },
+    )
+    assert extracted == DANGEROUS_RMTREE_SNIPPET_WITH_TARGET
+
+
+def test_python_file_extension_constant_drives_python_filter() -> None:
+    python_extension = hook_module.PYTHON_FILE_EXTENSION
+    assert python_extension == ".py"
+    extracted_for_python = extract_payload_text(
+        "Write",
+        {
+            "file_path": f"hooks/blocking/sample{python_extension}",
+            "content": DANGEROUS_RMTREE_SNIPPET_WITH_TARGET,
+        },
+    )
+    assert extracted_for_python == DANGEROUS_RMTREE_SNIPPET_WITH_TARGET
 
 
 def _run_hook(hook_input: dict) -> tuple[str, int]:
@@ -150,6 +206,20 @@ def test_main_passes_through_safe_write() -> None:
 def test_main_passes_through_unrelated_tool() -> None:
     stdout_text, exit_code = _run_hook(
         {"tool_name": "Read", "tool_input": {"file_path": "/tmp/x"}}
+    )
+    assert exit_code == 0
+    assert stdout_text == ""
+
+
+def test_main_passes_through_unsafe_write_to_non_python_file() -> None:
+    stdout_text, exit_code = _run_hook(
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "agents/clean-coder.md",
+                "content": DANGEROUS_RMTREE_SNIPPET,
+            },
+        }
     )
     assert exit_code == 0
     assert stdout_text == ""

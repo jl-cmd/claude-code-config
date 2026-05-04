@@ -14,6 +14,7 @@ import textwrap
 from config.reflow_skill_md_constants import (
     BASH_CONTINUATION_MARKER_WIDTH,
     BULLET_LIST_ITEM_PATTERN as BULLET_RE,
+    MARKDOWN_REFERENCE_DEFINITION_PATTERN as REF_DEF_RE,
     MAXIMUM_LINE_WIDTH as MAX_WIDTH,
     ORDERED_LIST_ITEM_PATTERN as ORDERED_RE,
     TARGET_SKILL_PATH as SKILL_PATH,
@@ -94,6 +95,8 @@ def is_new_logical_line(stripped: str) -> bool:
     if stripped.startswith("<example>") or stripped.startswith("</example>"):
         return True
     if ORDERED_RE.match(stripped) or BULLET_RE.match(stripped):
+        return True
+    if REF_DEF_RE.match(stripped):
         return True
     return False
 
@@ -189,6 +192,9 @@ def reflow_merged_line(line: str) -> list[str]:
             break_long_words=False,
             break_on_hyphens=False,
         ).splitlines()
+
+    if REF_DEF_RE.match(stripped):
+        return [stripped]
 
     ordered = ORDERED_RE.match(line)
     if ordered:

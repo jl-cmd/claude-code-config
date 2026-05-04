@@ -4,6 +4,9 @@ Path templates accept ``str.format(**kwargs)`` substitution; bugbot strings
 match the literal phrasing the Cursor Bugbot reviewer emits.
 """
 
+import re
+from pathlib import Path
+
 CURSOR_BOT_LOGIN: str = "cursor[bot]"
 
 COPILOT_REVIEWER_LOGIN: str = "copilot-pull-request-reviewer[bot]"
@@ -63,3 +66,27 @@ COPILOT_FOLLOWUP_PR_TITLE_TEMPLATE: str = (
 )
 
 COPILOT_FOLLOWUP_SHORT_SHA_LENGTH: int = 8
+
+SKILL_REFLOW_MAXIMUM_WIDTH: int = 80
+
+PR_CONVERGE_SKILL_PATH: Path = Path(__file__).resolve().parent.parent.parent / "SKILL.md"
+
+ORDERED_MARKDOWN_LIST_PATTERN: re.Pattern[str] = re.compile(
+    r"^(?P<leading_whitespace>\s*)(?P<marker>\d+\.\s)(?P<body>.*)$"
+)
+
+BULLET_MARKDOWN_LIST_PATTERN: re.Pattern[str] = re.compile(
+    r"^(?P<leading_whitespace>\s*)(?P<marker>[-*]\s)(?P<body>.*)$"
+)
+
+UNFINISHED_MARKDOWN_LINK_TARGET_PATTERN: re.Pattern[str] = re.compile(r"\]\([^)]*$")
+
+MARKDOWN_HEADING_PATTERN: re.Pattern[str] = re.compile(r"^#{1,6}\s+.+$")
+
+MARKDOWN_REFERENCE_DEFINITION_PATTERN: re.Pattern[str] = re.compile(r"^\[[^\]]+\]:\s+\S+")
+
+BASH_LINE_CONTINUATION_MARKER_WIDTH: int = 2
+
+CODE_FENCE_MARKER_LENGTH: int = 3
+
+LONG_ROW_PREVIEW_LIMIT: int = 20

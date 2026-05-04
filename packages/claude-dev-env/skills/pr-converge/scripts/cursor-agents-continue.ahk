@@ -41,7 +41,19 @@ terminate_other_script_instances() {
     stop_script := A_ScriptDir "\cursor-agents-continue-stop-others.ps1"
     if !FileExist(stop_script)
         return
-    RunWait('pwsh -NoProfile -NoLogo -ExecutionPolicy Bypass -File "' stop_script '" -KeepProcessId ' ProcessExist(), , "Hide")
+    if run_stop_script_with_shell("pwsh", stop_script)
+        return
+    run_stop_script_with_shell("powershell.exe", stop_script)
+}
+
+run_stop_script_with_shell(shell_name, stop_script) {
+    stop_command_arguments := ' -NoProfile -NoLogo -ExecutionPolicy Bypass -File "' stop_script '" -KeepProcessId ' ProcessExist()
+    try {
+        RunWait(shell_name stop_command_arguments, , "Hide")
+        return true
+    } catch ShellStartError {
+        return false
+    }
 }
 
 terminate_other_script_instances()

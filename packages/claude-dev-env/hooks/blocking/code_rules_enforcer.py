@@ -2456,6 +2456,18 @@ class _ScopeBindingCollector(ast.NodeVisitor):
             if each_alias.name != WILDCARD_IMPORT_SENTINEL:
                 self.binding_names.add(each_alias.asname or each_alias.name)
 
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        return None
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        return None
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        return None
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        return None
+
     def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
         if node.name is not None:
             self.binding_names.add(node.name)
@@ -2483,8 +2495,16 @@ def _load_name_is_shadowed(
     parent_by_node_id: dict[int, ast.AST],
 ) -> bool:
     current = parent_by_node_id.get(id(load_node))
+    has_passed_function_scope = False
     while current is not None:
-        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+        if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            has_passed_function_scope = True
+            binding_names, global_names = _scope_binding_names(current)
+            if name in global_names:
+                return False
+            if name in binding_names:
+                return True
+        elif isinstance(current, ast.ClassDef) and not has_passed_function_scope:
             binding_names, global_names = _scope_binding_names(current)
             if name in global_names:
                 return False

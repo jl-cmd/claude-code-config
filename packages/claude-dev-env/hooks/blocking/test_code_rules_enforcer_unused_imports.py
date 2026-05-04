@@ -368,3 +368,33 @@ def test_should_flag_when_noqa_only_appears_inside_string_literal() -> None:
     assert any("UNUSED" in each_issue for each_issue in issues), (
         f"String literal noqa text must not suppress unused imports, got: {issues}"
     )
+
+
+def test_should_not_flag_when_class_body_binding_matches_import_used_in_method() -> None:
+    source = (
+        "import os\n"
+        "\n"
+        "class Foo:\n"
+        "    os = 'linux'\n"
+        "\n"
+        "    def bar(self) -> str:\n"
+        "        return os.path.join('a', 'b')\n"
+    )
+    issues = check_unused_module_level_imports(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Class body bindings must not shadow module-level imports inside methods, got: {issues}"
+    )
+
+
+def test_should_not_flag_when_comprehension_variable_matches_import_used_after() -> None:
+    source = (
+        "import os\n"
+        "\n"
+        "def run() -> str:\n"
+        "    result = [x for os in [1, 2, 3]]\n"
+        "    return os.path.join('a', 'b')\n"
+    )
+    issues = check_unused_module_level_imports(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        f"Comprehension iteration variables must not shadow enclosing scope bindings, got: {issues}"
+    )

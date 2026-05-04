@@ -33,6 +33,19 @@ def test_find_repository_root_returns_git_root(tmp_path: Path) -> None:
     assert preflight.find_repository_root(nested) == tmp_path.resolve()
 
 
+def test_load_preflight_moves_script_directory_to_front() -> None:
+    script_directory = str(SCRIPT.parent.resolve())
+    original_sys_path = list(sys.path)
+    try:
+        sys.path.insert(0, script_directory)
+        sys.path.insert(0, str(REPO_ROOT))
+        _load_preflight_module()
+        assert sys.path[0] == script_directory
+        assert sys.path.count(script_directory) == 1
+    finally:
+        sys.path[:] = original_sys_path
+
+
 def test_main_help_exits_zero() -> None:
     completed = subprocess.run(
         [sys.executable, str(SCRIPT), "--help"],

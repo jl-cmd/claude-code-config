@@ -15,6 +15,10 @@ from pathlib import Path
 from re import Match
 
 script_directory = str(Path(__file__).resolve().parent)
+while sys.path.count(script_directory) > 1:
+    sys.path.remove(script_directory)
+if script_directory in sys.path:
+    sys.path.remove(script_directory)
 if script_directory not in sys.path:
     sys.path.insert(0, script_directory)
 
@@ -23,6 +27,7 @@ from evict_cached_config_modules import evict_cached_config_modules
 evict_cached_config_modules()
 
 from config.pr_converge_constants import (
+    BASH_CONTINUATION_INDENT,
     BASH_FENCE_LANGUAGE,
     BASH_LINE_CONTINUATION_MARKER_WIDTH,
     BASH_LINE_CONTINUATION_SUFFIX,
@@ -334,7 +339,8 @@ def wrap_long_bash_line(each_line: str) -> list[str]:
     while len(rest) > SKILL_REFLOW_MAXIMUM_WIDTH - len(indent):
         rest = append_bash_continuation_segment(rest, indent, all_wrapped_segments)
     if rest:
-        all_wrapped_segments.append(indent + ("  " if all_wrapped_segments else "") + rest)
+        continuation_indent = BASH_CONTINUATION_INDENT if all_wrapped_segments else ""
+        all_wrapped_segments.append(indent + continuation_indent + rest)
     return all_wrapped_segments
 
 

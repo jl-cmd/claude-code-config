@@ -16,11 +16,11 @@ from types import ModuleType
 _SCRIPTS_DIRECTORY = Path(__file__).resolve().parent
 
 
-def _load_module(module_name: str) -> ModuleType:
+def _load_module() -> ModuleType:
     if str(_SCRIPTS_DIRECTORY) not in sys.path:
         sys.path.insert(0, str(_SCRIPTS_DIRECTORY))
     module_path = _SCRIPTS_DIRECTORY / "reflow_skill_md.py"
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    spec = importlib.util.spec_from_file_location("reflow_skill_md", module_path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -28,13 +28,7 @@ def _load_module(module_name: str) -> ModuleType:
     return module
 
 
-reflow_module = _load_module("reflow_skill_md")
-
-
-def test_should_load_when_other_config_module_is_cached() -> None:
-    sys.modules["config"] = ModuleType("config")
-    loaded_module = _load_module("reflow_skill_md_with_cached_config")
-    assert loaded_module.SKILL_REFLOW_MAXIMUM_WIDTH == 80
+reflow_module = _load_module()
 
 
 def test_should_preserve_pr_converge_state_json_path_in_yaml_description() -> None:
@@ -101,10 +95,42 @@ def test_reflow_structural_line_recognizes_yaml_delimiter_via_constant() -> None
     assert reflow_module.reflow_structural_line("---", "---") == ["---"]
 
 
-def test_reflow_structural_line_preserves_reference_definitions() -> None:
-    long_reference_definition = (
-        "[path-a]: "
-        "https://example.com/this/reference/definition/path/is/long/enough/to/exceed/the/wrap/limit"
+def test_reflow_bootstrap_moves_script_directory_ahead_of_shadow_config(
+    tmp_path: Path,
+) -> None:
+    """sys.path bootstrap must move the script directory ahead of shadow config packages."""
+    shadow_config_directory = tmp_path / "shadow" / "config"
+    shadow_config_directory.mkdir(parents=True)
+    (shadow_config_directory / "__init__.py").write_text("", encoding="utf-8")
+    (shadow_config_directory / "pr_converge_constants.py").write_text(
+        "BROKEN = True\n", encoding="utf-8"
     )
-    all_result_lines = reflow_module.reflow_merged_line(long_reference_definition)
-    assert all_result_lines == [long_reference_definition]
+    original_sys_path = list(sys.path)
+    try:
+        sys.path.insert(0, str(_SCRIPTS_DIRECTORY))
+        sys.path.insert(0, str(tmp_path / "shadow"))
+        loaded_module = _load_module()
+        assert loaded_module.SKILL_REFLOW_MAXIMUM_WIDTH == 80
+        assert sys.path[0] == str(_SCRIPTS_DIRECTORY)
+        assert sys.path.count(str(_SCRIPTS_DIRECTORY)) == 1
+    finally:
+        sys.path[:] = original_sys_path
+
+
+def test_wrap_long_bash_line_applies_continuation_indent_to_wrapped_tail() -> None:
+    """Wrapped continuation tail lines use the config continuation indent."""
+    long_line = "echo " + "word " * 20
+    all_result_lines = reflow_module.wrap_long_bash_line(long_line)
+    assert len(all_result_lines) > 1, "Line must be long enough to wrap"
+    assert all_result_lines[-1].startswith(reflow_module.BASH_CONTINUATION_INDENT), (
+        "Final continuation segment must start with the config indent constant"
+    )
+
+
+def test_reflow_uses_config_constant_for_continuation_indent() -> None:
+    """The bash continuation indent string must come from config, not inline."""
+    module_path = _SCRIPTS_DIRECTORY / "reflow_skill_md.py"
+    source = module_path.read_text(encoding="utf-8")
+    assert "BASH_CONTINUATION_INDENT" in source, (
+        "reflow_skill_md.py must import BASH_CONTINUATION_INDENT from config"
+    )

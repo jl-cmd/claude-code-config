@@ -331,3 +331,19 @@ def test_pytest_no_tests_collected_helper_returns_named_constant() -> None:
     assert "PYTEST_NO_TESTS_COLLECTED_EXIT_CODE" in helper_source, (
         "Helper body must return the named constant, not the bare literal 5"
     )
+
+
+def test_preflight_bootstrap_moves_script_directory_to_front() -> None:
+    """Import bootstrap keeps exactly one script directory entry at the front."""
+    module_path = Path(__file__).parent.parent / "preflight.py"
+    script_directory = str(module_path.parent.resolve())
+    original_sys_path = list(sys.path)
+    try:
+        sys.path.insert(0, script_directory)
+        sys.path.insert(0, script_directory)
+        sys.path.insert(0, str(module_path.parents[4]))
+        _load_preflight_module()
+        assert sys.path[0] == script_directory
+        assert sys.path.count(script_directory) == 1
+    finally:
+        sys.path[:] = original_sys_path

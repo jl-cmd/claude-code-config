@@ -85,6 +85,8 @@ BASH_FENCE_LANGUAGE: str = "bash"
 
 BASH_LINE_CONTINUATION_SUFFIX: str = " \\"
 
+BASH_CONTINUATION_INDENT: str = "  "
+
 REFLOW_FRONT_MATTER_ERROR: str = "expected YAML front matter starting with ---"
 
 ORDERED_MARKDOWN_LIST_PATTERN: re.Pattern[str] = re.compile(

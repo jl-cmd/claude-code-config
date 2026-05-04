@@ -19,16 +19,27 @@ def _skill_text() -> str:
     return (here / "SKILL.md").read_text(encoding="utf-8")
 
 
+def test_reflow_module_restores_sys_path_after_import() -> None:
+    path_snapshot = list(sys.path)
+    _reflow_module()
+    assert sys.path == path_snapshot
+
+
 def _reflow_module() -> ModuleType:
     here = pathlib.Path(__file__).parent
     script_path = here / "scripts" / "reflow_skill_md.py"
-    sys.path.insert(0, str(script_path.parent))
-    spec = importlib.util.spec_from_file_location("reflow_skill_md", script_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    script_parent_entry = str(script_path.parent)
+    prior_sys_path = list(sys.path)
+    sys.path.insert(0, script_parent_entry)
+    try:
+        spec = importlib.util.spec_from_file_location("reflow_skill_md", script_path)
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        sys.path[:] = prior_sys_path
 
 
 def test_skill_documents_orchestrator_owned_team_in_multi_pr_mode() -> None:

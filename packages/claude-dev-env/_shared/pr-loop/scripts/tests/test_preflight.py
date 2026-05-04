@@ -9,6 +9,7 @@ Covers:
 
 import importlib.util
 import inspect
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -336,28 +337,40 @@ def test_pytest_no_tests_collected_helper_returns_named_constant() -> None:
 def test_preflight_bootstrap_moves_script_directory_to_front() -> None:
     """Import bootstrap keeps exactly one script directory entry at the front."""
     module_path = Path(__file__).parent.parent / "preflight.py"
-    script_directory = str(module_path.parent.resolve())
+    script_directory_resolved = str(module_path.parent.resolve())
+    script_directory_absolute = str(module_path.parent.absolute())
     original_sys_path = list(sys.path)
     try:
-        sys.path.insert(0, script_directory)
-        sys.path.insert(0, script_directory)
+        sys.path.insert(0, script_directory_resolved)
+        sys.path.insert(0, script_directory_resolved)
         sys.path.insert(0, str(module_path.parents[4]))
         _load_preflight_module()
-        assert sys.path[0] == script_directory
-        assert sys.path.count(script_directory) == 1
+        assert os.path.samefile(sys.path[0], script_directory_resolved)
+        equivalent_count = sum(
+            1
+            for each_entry in sys.path
+            if os.path.exists(each_entry)
+            and os.path.samefile(each_entry, script_directory_resolved)
+        )
+        assert equivalent_count == 1
+        assert sys.path[0] == script_directory_absolute
     finally:
         sys.path[:] = original_sys_path
+
 
 def test_preflight_bootstrap_matches_code_rules_sys_path_pattern() -> None:
     """Bootstrap must clear duplicate script_directory entries, then guard insert."""
     module_path = Path(__file__).parent.parent / "preflight.py"
     source = module_path.read_text(encoding="utf-8")
-    assert "while script_directory in sys.path:" in source, (
-        "Bootstrap must remove all existing script_directory entries"
+    assert "_entry_points_at_preflight_script_directory" in source, (
+        "Bootstrap must remove script_directory entries using path equivalence"
     )
-    assert "if script_directory not in sys.path:" in source, (
+    assert "for each_index in range(len(sys.path) - 1, -1, -1):" in source, (
+        "Bootstrap must walk sys.path to drop duplicate script directory entries"
+    )
+    assert "_preflight_scripts_path_entry not in sys.path:" in source, (
         "Bootstrap insert must be guarded for code_rules_gate compliance"
     )
-    assert "sys.path.insert(0, script_directory)" in source, (
-        "Bootstrap must insert script_directory at index 0"
+    assert "sys.path.insert(0, _preflight_scripts_path_entry)" in source, (
+        "Bootstrap must insert the absolute script directory at index 0"
     )

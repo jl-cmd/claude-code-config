@@ -19,8 +19,7 @@ while sys.path.count(script_directory) > 1:
     sys.path.remove(script_directory)
 if script_directory in sys.path:
     sys.path.remove(script_directory)
-if script_directory not in sys.path:
-    sys.path.insert(0, script_directory)
+sys.path[:0] = [script_directory]
 
 from evict_cached_config_modules import evict_cached_config_modules
 
@@ -336,12 +335,20 @@ def wrap_long_bash_line(each_line: str) -> list[str]:
         return [each_line]
     rest = each_line.lstrip()
     all_wrapped_segments: list[str] = []
-    while len(rest) > SKILL_REFLOW_MAXIMUM_WIDTH - len(indent):
+    while len(rest) > bash_tail_width(indent, bool(all_wrapped_segments)):
         rest = append_bash_continuation_segment(rest, indent, all_wrapped_segments)
     if rest:
         continuation_indent = BASH_CONTINUATION_INDENT if all_wrapped_segments else ""
         all_wrapped_segments.append(indent + continuation_indent + rest)
     return all_wrapped_segments
+
+
+def bash_tail_width(indent: str, has_wrapped_segments: bool) -> int:
+    """Return content width left for the final bash segment."""
+    continuation_indent_length = (
+        len(BASH_CONTINUATION_INDENT) if has_wrapped_segments else 0
+    )
+    return SKILL_REFLOW_MAXIMUM_WIDTH - len(indent) - continuation_indent_length
 
 
 def append_bash_continuation_segment(

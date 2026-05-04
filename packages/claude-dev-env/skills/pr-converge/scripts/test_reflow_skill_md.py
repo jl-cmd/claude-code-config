@@ -127,6 +127,12 @@ def test_wrap_long_bash_line_applies_continuation_indent_to_wrapped_tail() -> No
     )
 
 
+def test_wrap_long_bash_line_keeps_final_segment_within_width() -> None:
+    long_line = "x" * 158
+    all_result_lines = reflow_module.wrap_long_bash_line(long_line)
+    assert max(len(each_line) for each_line in all_result_lines) == 80
+
+
 def test_reflow_uses_config_constant_for_continuation_indent() -> None:
     """The bash continuation indent string must come from config, not inline."""
     module_path = _SCRIPTS_DIRECTORY / "reflow_skill_md.py"

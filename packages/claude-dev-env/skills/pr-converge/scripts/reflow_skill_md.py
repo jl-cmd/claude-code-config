@@ -235,6 +235,9 @@ def wrap_long_bash_fence_lines(all_lines: list[str]) -> list[str]:
         if is_inside_bash_fence and len(each_line) > MAX_WIDTH:
             indent_len = len(each_line) - len(each_line.lstrip())
             indent = each_line[:indent_len]
+            if len(indent) + BASH_CONTINUATION_MARKER_WIDTH >= MAX_WIDTH:
+                wrapped_lines.append(each_line)
+                continue
             content = each_line.lstrip()
             wrapped_segments: list[str] = []
             rest = content

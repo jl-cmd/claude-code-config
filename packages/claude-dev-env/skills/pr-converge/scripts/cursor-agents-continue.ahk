@@ -34,22 +34,30 @@ LABEL_ON             := "AGENTS: ON  (Ctrl+Alt+A)"
 DPI_REFERENCE := 96
 
 AUTO_START_FLAG := "--start-on"
+STOP_SCRIPT_FILE_NAME := "cursor-agents-continue-stop-others.ps1"
+POWERSHELL_CORE_SHELL_NAME := "pwsh"
+WINDOWS_POWERSHELL_SHELL_NAME := "powershell.exe"
+STOP_SCRIPT_ARGUMENTS_FORMAT := ' -NoProfile -NoLogo -ExecutionPolicy Bypass -File "{1}" -KeepProcessId {2}'
+STOP_SCRIPT_FAILURE_MESSAGE_FORMAT := 'Could not run duplicate cleanup script "{1}" with {2} or {3}.'
+RUN_WAIT_WINDOW_OPTION := "Hide"
 
 INT32_MINIMUM_VALUE := -2147483648
 
 terminate_other_script_instances() {
-    stop_script := A_ScriptDir "\cursor-agents-continue-stop-others.ps1"
+    stop_script := A_ScriptDir "\" STOP_SCRIPT_FILE_NAME
     if !FileExist(stop_script)
         return
-    if run_stop_script_with_shell("pwsh", stop_script)
+    if run_stop_script_with_shell(POWERSHELL_CORE_SHELL_NAME, stop_script)
         return
-    run_stop_script_with_shell("powershell.exe", stop_script)
+    if run_stop_script_with_shell(WINDOWS_POWERSHELL_SHELL_NAME, stop_script)
+        return
+    throw Error(Format(STOP_SCRIPT_FAILURE_MESSAGE_FORMAT, stop_script, POWERSHELL_CORE_SHELL_NAME, WINDOWS_POWERSHELL_SHELL_NAME))
 }
 
 run_stop_script_with_shell(shell_name, stop_script) {
-    stop_command_arguments := ' -NoProfile -NoLogo -ExecutionPolicy Bypass -File "' stop_script '" -KeepProcessId ' ProcessExist()
+    stop_command_arguments := Format(STOP_SCRIPT_ARGUMENTS_FORMAT, stop_script, ProcessExist())
     try {
-        RunWait(shell_name stop_command_arguments, , "Hide")
+        RunWait(shell_name stop_command_arguments, , RUN_WAIT_WINDOW_OPTION)
         return true
     } catch {
         return false

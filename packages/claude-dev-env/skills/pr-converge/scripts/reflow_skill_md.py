@@ -116,11 +116,11 @@ def is_new_logical_line(stripped: str) -> bool:
         return False
     if stripped.startswith(MARKDOWN_CODE_FENCE_MARKER):
         return True
-    if MARKDOWN_HEADING_PATTERN.match(stripped):
+    if is_table_line(stripped):
         return True
     if stripped == YAML_FRONT_MATTER_DELIMITER:
         return True
-    if is_table_line(stripped):
+    if MARKDOWN_HEADING_PATTERN.match(stripped):
         return True
     if MARKDOWN_REFERENCE_DEFINITION_PATTERN.match(stripped):
         return True

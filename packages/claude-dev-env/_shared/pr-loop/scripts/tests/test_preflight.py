@@ -347,3 +347,17 @@ def test_preflight_bootstrap_moves_script_directory_to_front() -> None:
         assert sys.path.count(script_directory) == 1
     finally:
         sys.path[:] = original_sys_path
+
+def test_preflight_bootstrap_matches_code_rules_sys_path_pattern() -> None:
+    """Bootstrap must clear duplicate script_directory entries, then guard insert."""
+    module_path = Path(__file__).parent.parent / "preflight.py"
+    source = module_path.read_text(encoding="utf-8")
+    assert "while script_directory in sys.path:" in source, (
+        "Bootstrap must remove all existing script_directory entries"
+    )
+    assert "if script_directory not in sys.path:" in source, (
+        "Bootstrap insert must be guarded for code_rules_gate compliance"
+    )
+    assert "sys.path.insert(0, script_directory)" in source, (
+        "Bootstrap must insert script_directory at index 0"
+    )

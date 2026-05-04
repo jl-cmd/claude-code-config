@@ -6,11 +6,10 @@ from pathlib import Path
 
 sys.modules.pop("config", None)
 script_directory = str(Path(__file__).resolve().parent)
-while sys.path.count(script_directory) > 1:
+while script_directory in sys.path:
     sys.path.remove(script_directory)
-if script_directory in sys.path:
-    sys.path.remove(script_directory)
-sys.path[:0] = [script_directory]
+if script_directory not in sys.path:
+    sys.path.insert(0, script_directory)
 
 from config.fix_hookspath_constants import HOOKS_PATH_VERIFICATION_SUFFIX
 from config.preflight_constants import (

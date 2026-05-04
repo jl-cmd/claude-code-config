@@ -95,6 +95,20 @@ def test_reflow_structural_line_recognizes_yaml_delimiter_via_constant() -> None
     assert reflow_module.reflow_structural_line("---", "---") == ["---"]
 
 
+def test_reflow_merged_line_preserves_long_markdown_reference_definition() -> None:
+    """Lines matching reference definitions survive reflow without paragraph wrapping."""
+    long_url_token = "x" * 90
+    line = f"[bugbot-ref]: https://example.com/{long_url_token}"
+    stripped_line = line.strip()
+    maximum_width = reflow_module.SKILL_REFLOW_MAXIMUM_WIDTH
+    assert len(stripped_line) > maximum_width
+    matched_reference = (
+        reflow_module.MARKDOWN_REFERENCE_DEFINITION_PATTERN.match(stripped_line)
+    )
+    assert matched_reference is not None
+    assert reflow_module.reflow_merged_line(line) == [stripped_line]
+
+
 def test_reflow_bootstrap_moves_script_directory_ahead_of_shadow_config(
     tmp_path: Path,
 ) -> None:
@@ -139,4 +153,18 @@ def test_reflow_uses_config_constant_for_continuation_indent() -> None:
     source = module_path.read_text(encoding="utf-8")
     assert "BASH_CONTINUATION_INDENT" in source, (
         "reflow_skill_md.py must import BASH_CONTINUATION_INDENT from config"
+    )
+
+def test_reflow_bootstrap_matches_code_rules_sys_path_pattern() -> None:
+    """Bootstrap must clear duplicate script_directory entries, then guard insert."""
+    module_path = _SCRIPTS_DIRECTORY / "reflow_skill_md.py"
+    source = module_path.read_text(encoding="utf-8")
+    assert "while script_directory in sys.path:" in source, (
+        "Bootstrap must remove all existing script_directory entries with a while loop"
+    )
+    assert "if script_directory not in sys.path:" in source, (
+        "Bootstrap insert must be guarded for code_rules_gate compliance"
+    )
+    assert "sys.path.insert(0, script_directory)" in source, (
+        "Bootstrap must insert script_directory at index 0"
     )

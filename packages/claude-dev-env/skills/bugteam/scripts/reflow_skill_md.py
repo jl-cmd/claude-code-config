@@ -6,8 +6,9 @@ wrap with textwrap. Preserves fenced blocks verbatim.
 
 Same algorithm as ``packages/claude-dev-env/skills/pr-converge/scripts/reflow_skill_md.py``
 from https://github.com/jl-cmd/claude-code-config/pull/349 (branch
-``cursor/pr-converge-skill-line-wrap-ecd1``); only ``SKILL_PATH`` and this
-docstring differ.
+``cursor/pr-converge-skill-line-wrap-ecd1``); ``SKILL_PATH`` points at bugteam
+``SKILL.md``. Link reference definitions (``[id]: url``) are treated as logical
+line starts so they are not merged with prior paragraphs.
 
 Run: python3 packages/claude-dev-env/skills/bugteam/scripts/reflow_skill_md.py
 """
@@ -82,6 +83,10 @@ def is_table_line(line: str) -> bool:
     return line.lstrip().startswith("|")
 
 
+def is_link_reference_definition(stripped: str) -> bool:
+    return bool(re.match(r"^\[[^\]]+\]:\s+\S", stripped))
+
+
 def is_new_logical_line(stripped: str) -> bool:
     if not stripped:
         return False
@@ -94,6 +99,8 @@ def is_new_logical_line(stripped: str) -> bool:
     if is_table_line(stripped):
         return True
     if stripped.startswith("<example>") or stripped.startswith("</example>"):
+        return True
+    if is_link_reference_definition(stripped):
         return True
     if ORDERED_RE.match(stripped) or BULLET_RE.match(stripped):
         return True
@@ -173,6 +180,8 @@ def reflow_merged_line(line: str) -> list[str]:
         ).splitlines()
     if stripped == "---":
         return ["---"]
+    if is_link_reference_definition(stripped):
+        return [stripped]
     if is_table_line(stripped):
         return [stripped]
     if stripped.startswith("</example>"):

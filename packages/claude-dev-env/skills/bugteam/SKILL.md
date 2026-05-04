@@ -367,8 +367,8 @@ sort_by(.submitted_at) | reverse'
 
 Iterate from index 0 (most recent) toward older entries:
 
-- A bugteam review body that ends with `→ clean` is **clean**; any other
-  `## /bugteam loop ...` body is **dirty**.
+- A bugteam review body that ends with `→ clean` is **clean**; any other `##
+  /bugteam loop ...` body is **dirty**.
 - For a dirty review, increment `dirty_review_count` by one. The review's
   specific finding bodies are not carried forward —
   bugteam's AUDIT regenerates
@@ -411,8 +411,8 @@ Lead only; merge-base / diff semantics:
 inventory: [`../../_shared/pr-loop/scripts/README.md`][path-scripts-readme].
 Non-zero → spawn **clean-coder** standards-fix (read stderr, edit, re-run
 **this same** command, one commit, `git push`, shutdown) until exit **0** or
-**5** failed gate rounds → `error: code rules gate failed pre-audit`. After
-**0**:
+**5**
+failed gate rounds → `error: code rules gate failed pre-audit`. After **0**:
 `loop_count += 1`; if `loop_count > 10` → `cap reached`. Then **AUDIT**
 (bugfind); print `Loop <N> audit: ...`.
 
@@ -453,7 +453,8 @@ outcome schema. Lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml`, fills
 after three full audit/fix rounds without convergence, issue three spawns in
 one assistant message (parallel): Path A — three `Agent` calls; Path B —
 three `Task` calls — full rules in the workflow files § parallel auditors.
-`-a` posts the review and merges outcomes from `-b`/`-c` (read
+`-a` posts
+the review and merges outcomes from `-b`/`-c` (read
 `.bugteam-pr<N>-loop<L>.outcomes.xml` plus
 `<team_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml` and `...-c...`); merge key
 `(file, line, category_letter)`; re-id `loopN-K`. `-b`/`-c` write sibling XML
@@ -571,7 +572,7 @@ See [`reference/README.md`](reference/README.md).
 
 See [`sources.md`](sources.md).
 
-[path-a]: reference/workflow-path-a-orchestrated-teams.md [path-b]:
-reference/workflow-path-b-task-harness.md [path-code-rules]:
-../../_shared/pr-loop/code-rules-gate.md [path-scripts-readme]:
-../../_shared/pr-loop/scripts/README.md
+[path-a]: reference/workflow-path-a-orchestrated-teams.md
+[path-b]: reference/workflow-path-b-task-harness.md
+[path-code-rules]: ../../_shared/pr-loop/code-rules-gate.md
+[path-scripts-readme]: ../../_shared/pr-loop/scripts/README.md

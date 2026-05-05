@@ -25,7 +25,7 @@ Each invariant cites the normative section or companion file it derives from. Al
 | I-5 | Audit and fix spawns pass `model="opus"` on every `Agent` call. | `SKILL.md` § Step 2 (**Roles**); `CONSTRAINTS.md` — **Opus 4.7 at xhigh effort for both teammates** |
 | I-6 | Loop count ≤ 10 audits. 11th audit never fires. | `SKILL.md` YAML `description` (10-loop cap); § Step 3 (**Pre-audit** / **FIX** increment rules) |
 | I-7 | From loop 4 onward without convergence, three parallel `Agent(..., run_in_background=true)` calls in one message for audit. | `SKILL.md` § AUDIT action (**Parallel auditors**) |
-| I-8 | Lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` with the `Read` tool after each audit, before the next action. | `SKILL.md` § AUDIT action |
+| I-8 | Lead reads `.bugteam-loop-<N>.outcomes.xml` with the `Read` tool after each audit, before the next action. | `SKILL.md` § AUDIT action |
 | I-9 | Teardown sequence: `git worktree remove` each PR → `rmtree` `<run_temp_dir>` → Step 4.5 → revoke. | `SKILL.md` § Step 4; § Step 4.5; § Step 5 |
 | I-10 | The bugfind subagent posts ONE per-loop review; the bugfix subagent posts fix replies. The lead's only PR-write action is the Step 4.5 description rewrite. | `CONSTRAINTS.md` — **Audit/fix comment posting** |
 
@@ -54,7 +54,7 @@ The harness does not yet exist; this document defines its contract.
 **Layer B predicted trace (smoke).**
 1. `Bash("python .../grant_project_claude_permissions.py")` runs (Step 0).
 2. `Agent(subagent_type="code-quality-agent", name="bugfind-pr...-loop1", run_in_background=true, model="opus", ...)` spawned for AUDIT.
-3. Lead awaits background-completion notification, then `Read(".bugteam-pr368-loop1.outcomes.xml")`.
+3. Lead awaits background-completion notification, then `Read(".bugteam-pr42-loop1.outcomes.xml")`.
 4. `Agent(subagent_type="clean-coder", name="bugfix-pr...-loop1", run_in_background=true, model="opus", ...)` spawned for FIX (if findings).
 5. `Bash("python .../revoke_project_claude_permissions.py")` on exit.
 
@@ -109,15 +109,15 @@ The harness does not yet exist; this document defines its contract.
 | 5 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/loop-1.patch")` | `SKILL.md` § AUDIT action |
 | 6 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop1", run_in_background=true, model="opus", description=..., prompt=<audit XML loop 1>)` | `SKILL.md` § AUDIT action |
 | 7 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
-| 8 | `Read(".bugteam-pr368-loop1.outcomes.xml")` | `SKILL.md` § AUDIT action |
+| 8 | `Read(".bugteam-pr42-loop1.outcomes.xml")` | `SKILL.md` § AUDIT action |
 | 9 | `Agent(subagent_type="clean-coder", name="bugfix-pr42-loop1", run_in_background=true, model="opus", description=..., prompt=<fix XML loop 1>)` | `SKILL.md` § FIX action |
 | 10 | Lead awaits background-completion notification | `SKILL.md` § FIX action |
-| 11 | `Read(".bugteam-pr368-loop1.outcomes.xml")` — bugfix outcome XML | `SKILL.md` § FIX action |
+| 11 | `Read(".bugteam-pr42-loop1.outcomes.xml")` — bugfix outcome XML | `SKILL.md` § FIX action |
 | 12 | `Bash("git rev-parse HEAD")` → verify HEAD advanced | `SKILL.md` § FIX action (**Verify**) |
 | 13 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/loop-2.patch")` | `SKILL.md` § AUDIT action |
 | 14 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop2", run_in_background=true, ...)` (loop 2) | `SKILL.md` § AUDIT action |
 | 15 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
-| 16 | `Read(".bugteam-pr368-loop2.outcomes.xml")` — zero findings | `SKILL.md` § AUDIT action |
+| 16 | `Read(".bugteam-pr42-loop2.outcomes.xml")` — zero findings | `SKILL.md` § AUDIT action |
 | 17 | `Bash("python -c \"...shutil.rmtree(r'<run_temp_dir>', ...)\"")` | `SKILL.md` § Step 4 (Windows-safe teardown) |
 | 18 | `Bash("gh pr diff 42 -R ... > .bugteam-final.diff")` | `SKILL.md` § Step 4.5 step 1 |
 | 19 | `Bash("gh pr view 42 -R ... --json body --jq .body > .bugteam-original-body.md")` | `SKILL.md` § Step 4.5 step 2 |
@@ -148,7 +148,7 @@ Patch this table to match observation and annotate each correction.
 
 **Layer A invariants.** I-1, I-2, I-3, I-4, I-5, I-6, I-8, I-9, I-10. I-6 trivially holds.
 
-**Layer B predicted trace.** Identical to Eval 5 steps 1–16 with this divergence:
+**Layer B predicted trace.** Identical to Eval 5 steps 1–12 with this divergence:
 - Step 11 bugfix outcome XML marks every finding `status="could_not_address"`.
 - Step 12 `Bash("git rev-parse HEAD")` returns the pre-fix SHA unchanged.
 - Skill sets exit reason = `stuck`, skips loop 2, and falls through to `rmtree`.
@@ -274,7 +274,7 @@ Steps 24–27 follow normally.
 **Scenario.** Bugfind subagent completes but writes no outcomes XML (background subagent completes notification arrives with no file at the expected path).
 
 **Layer B predicted trace.** Eval 5 steps 1–7, then:
-- Lead awaits notification and calls `Read(".bugteam-pr368-loop1.outcomes.xml")` → file missing.
+- Lead awaits notification and calls `Read(".bugteam-pr42-loop1.outcomes.xml")` → file missing.
 - Skill sets exit reason = `error: outcomes XML missing after bugfind loop 1`.
 - Teardown (steps 17–24 from Eval 5) all fire.
 

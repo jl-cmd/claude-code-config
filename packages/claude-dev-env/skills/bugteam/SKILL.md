@@ -154,8 +154,8 @@ loop_count=0
 last_action="fresh"
 last_findings='{"total": 0}'
 audit_log=""
-starting_sha="$(git -C "<run_temp_dir>/pr-<N>/worktree" rev-parse HEAD)"
 run_temp_dir="<absolute-path>/<run_name>"
+starting_sha="$(git -C "<run_temp_dir>/pr-<N>/worktree" rev-parse HEAD)"
 loop_comment_index=""
 ```
 

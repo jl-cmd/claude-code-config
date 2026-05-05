@@ -178,7 +178,7 @@ workflow](#pacing-workflow)):
 
 - `delaySeconds: 270` after bugbot re-trigger. Bugbot finishes in 1–4
   min; 270s stays under 5-min prompt-cache TTL with margin. Exception:
-  BUGBOT inline-lag branch uses `delaySeconds: 60` (no re-trigger;
+  BUGBOT inline-lag branch uses `delaySeconds: 90` (no re-trigger;
   awaiting GitHub inline API).
 - `reason`: short sentence on what is awaited, including `phase` and
   `bugbot_clean_at` SHA.
@@ -198,5 +198,5 @@ rubric, outcome shape, Step 2 BUGTEAM §(b)–(d) contract — all in
 **pr-converge rule:** Prefer **`Skill({skill: "bugteam", args: "<PR URL or
 args>"})`** wherever registry exposes `Skill`. When `Skill` not invokable
 (typical delegated teammate), worker runs **bugteam** by loading
-`../bugteam/SKILL.md` from the same checkout. Never replace bugteam with
-hand-rolled audit.
+`../bugteam/SKILL.md` from the same checkout. If bugteam cannot run, cancel the
+convergence loop fully and report the issue to the user.

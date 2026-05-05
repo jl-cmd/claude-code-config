@@ -6,8 +6,7 @@ guarantees `ScheduleWakeup` is available before any tick runs. Shared bugbot
 
 ## Session behavior
 
-Call `ScheduleWakeup` from this same session so the next tick fires back into **this** transcript with the prior tick's state line and PR
-  context still addressable.
+Call `ScheduleWakeup` from this same session so the next tick fires back into **this** transcript with the prior tick's state line and PR context still addressable.
 
 ## Calling ScheduleWakeup
 
@@ -28,7 +27,7 @@ omitted pacing), call `ScheduleWakeup` with:
 
 See [`../reference/per-tick.md`](../reference/per-tick.md) — the BUGBOT
 inline-lag branch (review body says findings, inline API returns zero
-matching for `current_head`) uses `delaySeconds: 60` because no
+matching for `current_head`) uses `delaySeconds: 90` because no
 re-trigger fired and only GitHub's inline-comments API needs to catch up.
 
 ## Convergence

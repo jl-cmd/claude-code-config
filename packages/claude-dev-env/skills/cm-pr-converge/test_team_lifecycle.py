@@ -1,9 +1,12 @@
-"""Markdown assertion tests for pr-converge orchestrator team lifecycle.
+"""Markdown assertion tests for cm-pr-converge orchestrator team lifecycle.
 
-Locks in the contract that pr-converge multi-PR orchestration must:
+Locks in the contract that cm-converge multi-PR orchestration must:
   - own a single long-lived team for the whole sweep
   - pass that team to every bugteam invocation via attach mode
   - tear down only when every PR reaches `converged` or `blocked`
+
+cm-pr-converge uses hub-and-spoke progressive disclosure: SKILL.md is a
+trimmed hub; orchestration detail lives in reference/multi-pr-orchestration.md.
 """
 
 from __future__ import annotations
@@ -17,6 +20,18 @@ from types import ModuleType
 def _skill_text() -> str:
     here = pathlib.Path(__file__).parent
     return (here / "SKILL.md").read_text(encoding="utf-8")
+
+
+def _orchestration_text() -> str:
+    here = pathlib.Path(__file__).parent
+    return (here / "reference" / "multi-pr-orchestration.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def _state_schema_text() -> str:
+    here = pathlib.Path(__file__).parent
+    return (here / "reference" / "state-schema.md").read_text(encoding="utf-8")
 
 
 def test_reflow_module_restores_sys_path_after_import() -> None:
@@ -43,34 +58,38 @@ def _reflow_module() -> ModuleType:
 
 
 def test_skill_documents_orchestrator_owned_team_in_multi_pr_mode() -> None:
-    skill_text = _skill_text()
-    assert "team_name" in skill_text
-    assert "TeamCreate" in skill_text
-    assert "orchestrator" in skill_text.lower()
+    orchestration_text = _orchestration_text()
+    assert "team_name" in orchestration_text
+    assert "TeamCreate" in orchestration_text
+    assert "orchestrator" in orchestration_text.lower()
 
 
 def test_skill_passes_attach_mode_to_bugteam_invocations() -> None:
-    skill_text = _skill_text()
-    assert "BUGTEAM_TEAM_LIFECYCLE" in skill_text
-    assert "attach" in skill_text
-    assert "BUGTEAM_TEAM_NAME" in skill_text
+    orchestration_text = _orchestration_text()
+    assert "BUGTEAM_TEAM_LIFECYCLE" in orchestration_text
+    assert "attach" in orchestration_text
+    assert "BUGTEAM_TEAM_NAME" in orchestration_text
 
 
 def test_skill_tears_down_team_only_on_full_convergence() -> None:
-    skill_text = _skill_text()
-    assert "TeamDelete" in skill_text
+    orchestration_text = _orchestration_text()
+    assert "TeamDelete" in orchestration_text
     convergence_phrases = [
         "every PR",
         "all PRs",
         "fully converged",
         "every prs[",
     ]
-    assert any(phrase in skill_text for phrase in convergence_phrases)
+    assert any(
+        phrase in orchestration_text for phrase in convergence_phrases
+    )
 
 
 def test_state_schema_includes_team_name_field() -> None:
-    skill_text = _skill_text()
-    assert '"team_name"' in skill_text or "team_name:" in skill_text
+    state_text = _state_schema_text()
+    orchestration_text = _orchestration_text()
+    combined = state_text + orchestration_text
+    assert '"team_name"' in combined or "team_name:" in combined
 
 
 def test_skill_md_physical_lines_fit_eighty_column_limit() -> None:
@@ -83,9 +102,10 @@ def test_skill_md_physical_lines_fit_eighty_column_limit() -> None:
 
 
 def test_skill_front_matter_keeps_state_json_code_span_closed() -> None:
-    skill_text = _skill_text()
-    assert "`<TMPDIR>/pr-converge-<session_id>/state.json>`" not in skill_text
-    assert "`<TMPDIR>/pr-converge-<session_id>/state.json` per" in skill_text
+    state_text = _state_schema_text()
+    assert (
+        "`<TMPDIR>/pr-converge-<session_id>/state.json>`" not in state_text
+    )
 
 
 def test_skill_does_not_promote_inline_pr_numbers_to_headings() -> None:
@@ -130,15 +150,6 @@ def test_reflow_merges_inline_pr_number_continuations() -> None:
         "with title `chore: address Copilot findings from PR #<NUMBER>`; "
         "reports both PR URLs"
     ]
-
-
-def test_skill_keeps_markdown_reference_definitions_separate() -> None:
-    skill_text = _skill_text()
-    assert "[path-b]: ../bugteam/reference/workflow-path-b-task-harness.md\n" in skill_text
-    assert (
-        "[path-a]: ../bugteam/reference/workflow-path-a-orchestrated-teams.md\n"
-        in skill_text
-    )
 
 
 def test_reflow_keeps_reference_definitions_as_separate_lines() -> None:

@@ -129,5 +129,5 @@ Output: none on success (gh's stdout is suppressed); `subprocess.CalledProcessEr
 Each script has a sibling `test_<name>.py`. Run them all with:
 
 ```bash
-python -m pytest packages/claude-dev-env/skills/pr-converge/scripts/ -v
+python -m pytest packages/claude-dev-env/skills/cm-pr-converge/scripts/ -v
 ```

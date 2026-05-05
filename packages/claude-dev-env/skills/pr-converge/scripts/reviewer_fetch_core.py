@@ -40,7 +40,7 @@ def _login_matches_substring(
     field_by_key: dict[str, object], login_filter_substring: str
 ) -> bool:
     author_login = login_of(field_by_key) or ""
-    return login_filter_substring in author_login.lower()
+    return login_filter_substring.lower() in author_login.lower()
 
 
 def _run_gh_paginated(*, endpoint_path: str) -> list[dict[str, object]]:

@@ -32,7 +32,7 @@ post a fresh PR in a fresh branch based on origin main to the user.
   with `ScheduleWakeup` in registry can call it.
 - **Review body and inline comments desync for same `commit_id`** —
   "dirty body, zero inline rows at `current_head`" is **`inline_lag`**,
-  not **`dirty`**. Bump `inline_lag_streak`, wait 60s, retry fetch.
+  not **`dirty`**. Bump `inline_lag_streak`, wait 90s, retry fetch.
 - **`state.json` without §Concurrency lock loses merges** when teammates
   finish in same wall-clock window.
 - **`tick_count` must not double-increment** — conversation state line

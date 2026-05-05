@@ -26,7 +26,7 @@ files during fix phase in multi-PR mode.
 - Write failing test first when finding has behavior to test. Pure doc /
   comment / naming nits with no behavior → straight to fix.
 - **Implement** via `Agent` (`subagent_type: "clean-coder"`).
-  Full-stop if `Task` is unavailable.
+  Full-stop if `Agent` is unavailable.
 - Stage affected files and create one new commit on existing branch:
   ```bash
 git add <files> && git commit -m "fix(review): <brief summary>"

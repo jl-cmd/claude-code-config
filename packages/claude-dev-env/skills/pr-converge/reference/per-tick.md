@@ -100,7 +100,7 @@ c. Decide (four branches; match first whose predicate holds):
      API zero matching for `current_head`:** Transient API lag. Increment
      `inline_lag_streak`. `>= 3` → hard blocker; report and terminate with
      no loop pacing. Else Step 4 uses the BUGBOT inline-lag section of
-     `../workflows/schedule-wakeup-loop.md` (`delaySeconds: 60`).
+     `../workflows/schedule-wakeup-loop.md` (`delaySeconds: 90`).
 
 ### `phase == BUGTEAM`
 

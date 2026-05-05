@@ -32,7 +32,7 @@ re-trigger fired and only GitHub's inline-comments API needs to catch up.
 
 ## Convergence
 
-On back-to-back-to-back clean: **omit** further `ScheduleWakeup` calls.
+On convergence: **omit** further `ScheduleWakeup` calls.
 
 ## Stop / safety
 

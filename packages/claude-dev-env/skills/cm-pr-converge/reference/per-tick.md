@@ -23,7 +23,7 @@ protocol per [fix-protocol.md](fix-protocol.md). Pacing stays in main session vi
 ## Pacing workflow
 
 Read [`../workflows/schedule-wakeup-loop.md`](../workflows/schedule-wakeup-loop.md)
-(installed copy under `$HOME/.claude/skills/pr-converge/workflows/`) before
+(installed copy under `$HOME/.claude/skills/cm-pr-converge/workflows/`) before
 Step 4. The pre-flight gate guarantees `ScheduleWakeup` is invokable; the
 workflow file specifies delays, prompts, convergence cleanup, and
 inline-lag handling.
@@ -161,7 +161,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/trigger_bugbot.py" \
 **Bundled PowerShell alternative** (same gh-body-file contract):
 
 ```bash
-POST_BUGBOT_RUN="$HOME/.claude/skills/pr-converge/scripts/post-bugbot-run.ps1"
+POST_BUGBOT_RUN="$HOME/.claude/skills/cm-pr-converge/scripts/post-bugbot-run.ps1"
 pwsh -NoProfile -ExecutionPolicy Bypass -File "$POST_BUGBOT_RUN" \
 "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"
 ```

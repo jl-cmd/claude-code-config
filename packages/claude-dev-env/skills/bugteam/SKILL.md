@@ -166,9 +166,9 @@ environment (load from `packages/claude-dev-env/.env` when that file exists;
 prompt the user to create it from `.env.example` if still unset). Any other
 `BUGTEAM_FIX_IMPLEMENTER` value (or unset) uses `clean-coder`.
 
-**`--bugbot-retrigger` flag:** when present, after every successful FIX push in
-Step 3, post a `bugbot run` issue comment via the Step 2.5 issue-comments
-fallback endpoint to re-trigger Cursor's bugbot on the new commit.
+**`--bugbot-retrigger` flag:** when present, the FIX subagent posts a `bugbot
+run` issue comment via the Step 2.5 issue-comments fallback endpoint after
+every successful FIX push, to re-trigger Cursor's bugbot on the new commit.
 
 **`loop_comment_index`:** reset each AUDIT start; filled during AUDIT; FIX
 consumes for replies; cleared after FIX. Entries: `{loop, finding_id,

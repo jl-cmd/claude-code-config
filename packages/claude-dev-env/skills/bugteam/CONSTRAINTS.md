@@ -15,12 +15,12 @@
 - **One commit per fix action.** Loops produce one commit per loop, not one per bug.
 - **Linear branch, fixed PR base.** Every loop appends one forward-only commit; existing commits and the PR base stay intact throughout the cycle.
 - **Lead-only cleanup.** Cleanup runs in the lead (this session) only. Step 4 removes the full `<run_temp_dir>` so no loop patches leak between runs.
-- **Cleanup all `.bugteam-*` files on exit.** `.bugteam-loop-*.patch`, `.bugteam-loop-*.outcomes.xml`, `.bugteam-final.diff`, `.bugteam-original-body.md`, `.bugteam-final-body.md`. Working directory ends clean.
+- **Cleanup all `.bugteam-*` files on exit.** `.bugteam-pr*-loop*.patch`, `.bugteam-pr*-loop*.outcomes.xml`, `.bugteam-final.diff`, `.bugteam-original-body.md`, `.bugteam-final-body.md`. Working directory ends clean.
 - **Audit/fix comment posting.** The bugfind subagent posts ONE per-loop review (parent body + child finding comments in a single batched POST, with review-fallback to a top-level issue comment). The bugfix subagent posts the fix replies after committing. All comment, review, and reply POSTs belong to the subagents; the lead's single PR-write action is the final description rewrite at Step 4.5.
 - **Lead owns the final PR description rewrite only** (Step 4.5), and only via the `pr-description-writer` agent. The lead does not compose the description inline.
 - **One review per loop, findings as child comments of that review.** Each loop posts a single pull-request review whose body is the loop header and whose `comments[]` are the anchored findings. Each loop's review stands alone — one review created per loop, fully self-contained on the PR conversation.
 - **PR description rewrite on every exit.** Step 4.5 runs on `converged`, `cap reached`, and `stuck`. On `error`, the rewrite is best-effort; if it fails, surface the error in the final report and continue to revoke.
-- **Outcome XML, not JSON.** Both teammates write structured outcome data (findings or fix outcomes) to `.bugteam-loop-<N>.outcomes.xml`. The lead reads these files between actions. XML chosen for parser robustness against multi-line, special-character, and quoted reason fields.
+- **Outcome XML, not JSON.** Both teammates write structured outcome data (findings or fix outcomes) to `.bugteam-pr<N>-loop<L>.outcomes.xml`. The lead reads these files between actions. XML chosen for parser robustness against multi-line, special-character, and quoted reason fields.
 
 ## Why this design
 

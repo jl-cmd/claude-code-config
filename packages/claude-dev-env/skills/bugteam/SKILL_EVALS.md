@@ -25,7 +25,7 @@ Each invariant cites the normative section or companion file it derives from. Al
 | I-5 | Audit and fix spawns pass `model="opus"` on every `Agent` call. | `SKILL.md` § Step 2 (**Roles**); `CONSTRAINTS.md` — **Opus 4.7 at xhigh effort for both teammates** |
 | I-6 | Loop count ≤ 10 audits. 11th audit never fires. | `SKILL.md` YAML `description` (10-loop cap); § Step 3 (**Pre-audit** / **FIX** increment rules) |
 | I-7 | From loop 4 onward without convergence, three parallel `Agent(..., run_in_background=true)` calls in one message for audit. | `SKILL.md` § AUDIT action (**Parallel auditors**) |
-| I-8 | Lead reads `.bugteam-loop-<N>.outcomes.xml` with the `Read` tool after each audit, before the next action. | `SKILL.md` § AUDIT action |
+| I-8 | Lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` with the `Read` tool after each audit, before the next action. | `SKILL.md` § AUDIT action |
 | I-9 | Teardown sequence: `git worktree remove` each PR → `rmtree` `<run_temp_dir>` → Step 4.5 → revoke. | `SKILL.md` § Step 4; § Step 4.5; § Step 5 |
 | I-10 | The bugfind subagent posts ONE per-loop review; the bugfix subagent posts fix replies. The lead's only PR-write action is the Step 4.5 description rewrite. | `CONSTRAINTS.md` — **Audit/fix comment posting** |
 
@@ -113,28 +113,30 @@ The harness does not yet exist; this document defines its contract.
 | 9 | `Agent(subagent_type="clean-coder", name="bugfix-pr42-loop1", run_in_background=true, model="opus", description=..., prompt=<fix XML loop 1>)` | `SKILL.md` § FIX action |
 | 10 | Lead awaits background-completion notification | `SKILL.md` § FIX action |
 | 11 | `Read(".bugteam-pr42-loop1.outcomes.xml")` — bugfix outcome XML | `SKILL.md` § FIX action |
-| 12 | `Bash("git rev-parse HEAD")` → verify HEAD advanced | `SKILL.md` § FIX action (**Verify**) |
-| 13 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/loop-2.patch")` | `SKILL.md` § AUDIT action |
-| 14 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop2", run_in_background=true, ...)` (loop 2) | `SKILL.md` § AUDIT action |
-| 15 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
-| 16 | `Read(".bugteam-pr42-loop2.outcomes.xml")` — zero findings | `SKILL.md` § AUDIT action |
-| 17 | `Bash("python -c \"...shutil.rmtree(r'<run_temp_dir>', ...)\"")` | `SKILL.md` § Step 4 (Windows-safe teardown) |
-| 18 | `Bash("gh pr diff 42 -R ... > .bugteam-final.diff")` | `SKILL.md` § Step 4.5 step 1 |
-| 19 | `Bash("gh pr view 42 -R ... --json body --jq .body > .bugteam-original-body.md")` | `SKILL.md` § Step 4.5 step 2 |
-| 20 | `Agent(subagent_type="pr-description-writer", description=..., prompt=<brief>)` | `SKILL.md` § Step 4.5 |
-| 21 | `Write(".bugteam-final-body.md", <returned body>)` | `SKILL.md` § Step 4.5 step 4 |
-| 22 | `Bash("gh pr edit 42 -R ... --body-file .bugteam-final-body.md")` | `SKILL.md` § Step 4.5 step 4 |
-| 23 | `Bash("rm .bugteam-final.diff .bugteam-original-body.md .bugteam-final-body.md")` | `SKILL.md` § Step 4.5 step 5 |
-| 24 | `Bash("python .../scripts/revoke_project_claude_permissions.py")` | `SKILL.md` § Step 5 |
+| 12 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" rev-parse HEAD")` → verify HEAD advanced | `SKILL.md` § FIX action (**Verify**) |
+| 13 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" fetch origin <branch>")` → fetch remote state | `SKILL.md` § FIX action (**Verify**) |
+| 14 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" rev-parse origin/<branch>")` → confirm matches HEAD | `SKILL.md` § FIX action (**Verify**) |
+| 15 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/loop-2.patch")` | `SKILL.md` § AUDIT action |
+| 16 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop2", run_in_background=true, ...)` (loop 2) | `SKILL.md` § AUDIT action |
+| 17 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
+| 18 | `Read(".bugteam-pr42-loop2.outcomes.xml")` — zero findings | `SKILL.md` § AUDIT action |
+| 19 | `Bash("python -c \"...shutil.rmtree(r'<run_temp_dir>', ...)\"")` | `SKILL.md` § Step 4 (Windows-safe teardown) |
+| 20 | `Bash("gh pr diff 42 -R ... > .bugteam-final.diff")` | `SKILL.md` § Step 4.5 step 1 |
+| 21 | `Bash("gh pr view 42 -R ... --json body --jq .body > .bugteam-original-body.md")` | `SKILL.md` § Step 4.5 step 2 |
+| 22 | `Agent(subagent_type="pr-description-writer", description=..., prompt=<brief>)` | `SKILL.md` § Step 4.5 |
+| 23 | `Write(".bugteam-final-body.md", <returned body>)` | `SKILL.md` § Step 4.5 step 4 |
+| 24 | `Bash("gh pr edit 42 -R ... --body-file .bugteam-final-body.md")` | `SKILL.md` § Step 4.5 step 4 |
+| 25 | `Bash("rm .bugteam-final.diff .bugteam-original-body.md .bugteam-final-body.md")` | `SKILL.md` § Step 4.5 step 5 |
+| 26 | `Bash("python .../scripts/revoke_project_claude_permissions.py")` | `SKILL.md` § Step 5 |
 
 **Pass criteria.**
 - All Layer A invariants hold.
 - Exactly 2 `Agent(name="bugfind-pr42-loop...")` calls, exactly 1 `Agent(name="bugfix-pr42-loop...")` call.
 - Final report contains `/bugteam exit: converged` and `Loops: 2`.
 
-**Process check after first real run.** Compare the observed trace against steps 1–27. Common expected divergences that should not fail the eval:
+**Process check after first real run.** Compare the observed trace against steps 1–26. Common expected divergences that should not fail the eval:
 - Extra `Bash("git rev-parse HEAD")` calls the lead inserts for bookkeeping.
-- Consolidated `Bash` calls (step 26 may split into two or three calls).
+- Consolidated `Bash` calls (step 25 may split into two or three calls).
 - Extra `Read` calls when the lead re-reads an outcome XML to quote specific findings.
 - Reordered but still-Layer-A-compliant cleanup sequencing.
 

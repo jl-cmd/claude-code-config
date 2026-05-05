@@ -57,7 +57,7 @@ The `bws run` subshell resolves the project's secrets and exports them for the w
 For each discovered PR:
 
 1. Resolve the PR's repo checkout (existing worktree or fresh `git clone`).
-2. From that checkout, invoke `/bugteam <pr_number>` under the `bws run` wrapper from §Secret Wrapping.
+2. From that checkout, invoke `/bugteam --bugbot-retrigger <pr_number>` under the `bws run` wrapper from §Secret Wrapping.
 3. The `BUGTEAM_FIX_IMPLEMENTER=groq-coder` env var routes the FIX role to the `groq-coder` subagent. The `--bugbot-retrigger` flag tells bugteam to post `bugbot run` as an issue comment after every successful FIX push so Cursor's bugbot re-evaluates the new commit.
 4. Bugteam runs its own 10-loop audit/fix cycle per PR; this skill waits for each bugteam invocation to return before dispatching the next (or fanning out — see below).
 

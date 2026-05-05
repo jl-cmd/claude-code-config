@@ -4,7 +4,7 @@ Merge soft line breaks outside fenced blocks (space join; URL path fragments
 joined without a space only inside unfinished markdown link targets), then
 wrap with textwrap. Preserves fenced blocks verbatim.
 
-Run: python3 packages/claude-dev-env/skills/pr-converge/scripts/reflow_skill_md.py
+Run: python3 packages/claude-dev-env/skills/cm-pr-converge/scripts/reflow_skill_md.py
 """
 
 from __future__ import annotations

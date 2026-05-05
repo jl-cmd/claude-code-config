@@ -29,11 +29,16 @@ evict_cached_config_modules()
 from config.pr_converge_constants import (
     ALL_COPILOT_DIRTY_REVIEW_STATES,
     COPILOT_CLEAN_REVIEW_STATE,
-    COPILOT_REVIEWER_LOGIN,
+    COPILOT_LOGIN_FILTER_SUBSTRING,
     COPILOT_SOFT_DIRTY_REVIEW_STATE,
     GH_REVIEWS_PATH_TEMPLATE,
 )
 from review_field_helpers import body_of, login_of, state_of, submitted_at_of
+
+
+def _is_copilot_author(field_by_key: dict[str, object]) -> bool:
+    author_login = login_of(field_by_key) or ""
+    return COPILOT_LOGIN_FILTER_SUBSTRING in author_login.lower()
 
 
 def fetch_copilot_reviews(
@@ -69,7 +74,7 @@ def fetch_copilot_reviews(
     all_copilot_reviews = [
         each_review
         for each_review in all_flat_reviews
-        if login_of(each_review) == COPILOT_REVIEWER_LOGIN
+        if _is_copilot_author(each_review)
         and each_review.get("submitted_at") is not None
         and each_review.get("id") is not None
     ]

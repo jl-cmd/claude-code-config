@@ -4,13 +4,13 @@ Worked examples for `cm-pr-converge`. Read on demand when a tick's
 classification is novel or ambiguous against the in-skill rules. Cross-refs
 into `SKILL.md` use `§Section name` notation.
 
-<example> User: `/pr-converge` Claude: [PR context + one tick bugbot/bugteam
+<example> User: `/cm-pr-converge` Claude: [PR context + one tick bugbot/bugteam
 work; Step 4 per `workflows/schedule-wakeup-loop.md` — default loop until
 convergence or stop]
 </example>
 
-<example> User: `/loop /pr-converge` Claude: [same per-tick work and Step 4 as
-bare `/pr-converge` — harness wrapper only when host routes wakeups through
+<example> User: `/loop /cm-pr-converge` Claude: [same per-tick work and Step 4 as
+bare `/cm-pr-converge` — harness wrapper only when host routes wakeups through
 `/loop`]
 </example>
 

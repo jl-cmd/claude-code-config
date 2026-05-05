@@ -23,11 +23,16 @@ from evict_cached_config_modules import evict_cached_config_modules
 evict_cached_config_modules()
 
 from config.pr_converge_constants import (
-    COPILOT_REVIEWER_LOGIN,
+    COPILOT_LOGIN_FILTER_SUBSTRING,
     GH_INLINE_COMMENTS_PATH_TEMPLATE,
 )
 from fetch_copilot_reviews import fetch_copilot_reviews
 from review_field_helpers import body_of, login_of
+
+
+def _is_copilot_author(field_by_key: dict[str, object]) -> bool:
+    author_login = login_of(field_by_key) or ""
+    return COPILOT_LOGIN_FILTER_SUBSTRING in author_login.lower()
 
 
 def fetch_copilot_inline_comments(
@@ -84,7 +89,7 @@ def fetch_copilot_inline_comments(
             "body": body_of(each_comment),
         }
         for each_comment in all_flat_comments
-        if login_of(each_comment) == COPILOT_REVIEWER_LOGIN
+        if _is_copilot_author(each_comment)
         and each_comment.get("commit_id") == current_head
         and each_comment.get("pull_request_review_id") == target_pull_request_review_id
     ]

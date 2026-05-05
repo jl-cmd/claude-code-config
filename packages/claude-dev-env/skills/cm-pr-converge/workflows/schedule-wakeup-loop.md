@@ -18,8 +18,8 @@ At end of tick (unless convergence or another stop condition already omitted pac
   giving a margin past bugbot's typical upper bound. The single exception is the BUGBOT inline-lag branch in Step 2 of the main skill, which
   uses `delaySeconds: 60` because no re-trigger fired and the only thing being awaited is GitHub's inline-comments API catching up.
 - `reason`: one short sentence on what is being awaited, including the current `phase` and `bugbot_clean_at` SHA when set.
-- `prompt: "/pr-converge"` — re-enters this skill on the next firing with default loop semantics (no need for the user to type `/loop`). If
-  the parent harness requires the `/loop` wrapper for wakeups to execute, `prompt: "/loop /pr-converge"` is equivalent.
+- `prompt: "/cm-pr-converge"` — re-enters this skill on the next firing with default loop semantics (no need for the user to type `/loop`). If
+  the parent harness requires the `/loop` wrapper for wakeups to execute, `prompt: "/loop /cm-pr-converge"` is equivalent.
 
 ## BUGBOT inline-lag
 

@@ -41,6 +41,12 @@ post a fresh PR in a fresh branch based on origin main to the user.
 - **Duplicate `bugbot run` while review queued** — skip Step 3 when the
   latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction;
   wait for review or HEAD change before re-triggering.
+- **Bot logins differ between review-level and inline-comment endpoints** —
+  Copilot reviews come from `copilot-pull-request-reviewer[bot]`, but its
+  inline comments are authored by `Copilot`. Always use case-insensitive
+  substring matching on `user.login`, never strict equality. The fetch
+  scripts use a substring filter (`copilot` / `cursor` / `claude`) via
+  `_is_X_author` helpers for this reason.
 
 ## First tick of a session
 

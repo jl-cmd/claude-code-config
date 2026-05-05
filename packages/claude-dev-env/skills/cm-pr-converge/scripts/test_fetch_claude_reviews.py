@@ -208,10 +208,10 @@ def test_should_dispatch_dirty_classification_off_claude_dirty_review_states_tup
     None
 ):
     source_text = (
-        Path(__file__).resolve().parent / "fetch_claude_reviews.py"
+        Path(__file__).resolve().parent / "reviewer_specs.py"
     ).read_text(encoding="utf-8")
     assert "ALL_CLAUDE_DIRTY_REVIEW_STATES" in source_text
-    assert "in ALL_CLAUDE_DIRTY_REVIEW_STATES" in source_text
+    assert "all_dirty_states=ALL_CLAUDE_DIRTY_REVIEW_STATES" in source_text
 
 
 def test_should_classify_clean_review_when_state_is_approved() -> None:

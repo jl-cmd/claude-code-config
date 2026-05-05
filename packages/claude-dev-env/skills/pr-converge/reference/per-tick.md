@@ -198,5 +198,5 @@ rubric, outcome shape, Step 2 BUGTEAM §(b)–(d) contract — all in
 **pr-converge rule:** Prefer **`Skill({skill: "bugteam", args: "<PR URL or
 args>"})`** wherever registry exposes `Skill`. When `Skill` not invokable
 (typical delegated teammate), worker runs **bugteam** by loading
-`../bugteam/SKILL.md` from the same checkout. If bugteam cannot run, cancel the
+`../../bugteam/SKILL.md` from the same checkout. If bugteam cannot run, cancel the
 convergence loop fully and report the issue to the user.

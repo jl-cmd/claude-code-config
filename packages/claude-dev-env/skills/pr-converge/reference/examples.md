@@ -37,7 +37,7 @@ same tick, `phase = BUGBOT`, Step 4 at 270s]
 
 <example> BUGBOT tick, review body says "found 3 potential issues" against
 HEAD but inline API returns zero matching for `current_head`. Claude:
-[increments `inline_lag_streak` to 1, Step 4 inline-lag rules (60s
+[increments `inline_lag_streak` to 1, Step 4 inline-lag rules (90s
 `ScheduleWakeup`), returns]
 </example>
 

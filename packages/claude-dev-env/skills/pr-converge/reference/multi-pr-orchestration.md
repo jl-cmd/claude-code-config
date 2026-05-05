@@ -198,7 +198,7 @@ When bugfix (clean-coder) teammate goes idle after push:
        `awaiting_bugbot`). `inline_lag_streak >= 3` → **hard blocker** per
        `SKILL.md` §Stop conditions (structurally inconsistent review);
        report and go idle **without** classifying as `dirty`. Else sleep
-       60s and repeat from 4a (re-fetch inline only).
+       90s and repeat from 4a (re-fetch inline only).
      - **4d. `clean`:** exit. Locked merge: `bugbot_clean_at =
        current_head`, reset `inline_lag_streak`, update `last_action`,
        `status`, `phase: BUGTEAM`.

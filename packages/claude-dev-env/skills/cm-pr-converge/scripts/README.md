@@ -1,4 +1,4 @@
-# pr-converge scripts
+# cm-pr-converge scripts
 
 Thin Python wrappers around the gh CLI calls the skill makes per tick. Centralizing them lets the skill body reference one script path per action and keeps the gh-paginate and gh-body-file rules enforced in one place.
 
@@ -86,7 +86,8 @@ Output: the new reply id from gh's JSON response, on stdout.
 Returns the mergeability state of the current PR as JSON. Wraps `gh pr view --json mergeable,mergeStateStatus,headRefOid` (single-object endpoint — no pagination needed). Used by the convergence gate to detect base-branch conflicts (`mergeStateStatus == "DIRTY"` / `mergeable == "CONFLICTING"`) before flipping the PR ready.
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/scripts/check_pr_mergeability.py"
+python "${CLAUDE_SKILL_DIR}/scripts/check_pr_mergeability.py" \
+--owner <OWNER> --repo <REPO> --number <NUMBER>
 ```
 
 Output: `{"mergeable", "mergeStateStatus", "headRefOid"}`.

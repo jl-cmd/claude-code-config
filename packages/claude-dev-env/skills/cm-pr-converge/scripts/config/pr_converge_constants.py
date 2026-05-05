@@ -1,4 +1,4 @@
-"""Configuration constants for the pr-converge skill scripts.
+"""Configuration constants for the cm-pr-converge skill scripts.
 
 Path templates accept ``str.format(**kwargs)`` substitution; bugbot strings
 match the literal phrasing the Cursor Bugbot reviewer emits.

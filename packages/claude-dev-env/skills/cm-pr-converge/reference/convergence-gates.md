@@ -57,7 +57,7 @@ Persist `mergeStateStatus` into `merge_state_status`. Decide:
   Continue to gate (c).
 - **`mergeStateStatus == "DIRTY"` (or `mergeable == "CONFLICTING"`):** Do
   **not** mark ready. Invoke **`rebase`** skill
-  ([`../rebase/SKILL.md`](../rebase/SKILL.md)) Phase 1–4 against PR's
+  ([`../../rebase/SKILL.md`](../../rebase/SKILL.md)) Phase 1–4 against PR's
   base ref. After rebase + force-with-lease push, new HEAD invalidates
   every prior clean state — reset `bugbot_clean_at = null`,
   `copilot_clean_at = null`, `merge_state_status = null`, `phase = BUGBOT`,

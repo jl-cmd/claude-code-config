@@ -118,7 +118,7 @@ Skill({skill: "bugteam", args:
      ```
 
    - **`Skill` not invokable** (typical `Task` teammate): worker executes
-     bugteam by reading [`../bugteam/SKILL.md`](../bugteam/SKILL.md). Same
+     bugteam by reading [`../../bugteam/SKILL.md`](../../bugteam/SKILL.md). Same
      loop and gates; only harness steps differ.
 
 b. **Re-resolve current HEAD** — second audit may have pushed commits
@@ -195,7 +195,7 @@ workflow](#pacing-workflow)):
 **Second audit** (BUGTEAM phase) is **always** **bugteam** skill: preflight,
 CODE_RULES gate, **`code-quality-agent`** / **`clean-coder`** loop, audit
 rubric, outcome shape, Step 2 BUGTEAM §(b)–(d) contract — all in
-[`../bugteam/SKILL.md`](../bugteam/SKILL.md) plus `PROMPTS.md` / `EXAMPLES.md` /
+[`../../bugteam/SKILL.md`](../../bugteam/SKILL.md) plus `PROMPTS.md` / `EXAMPLES.md` /
 `CONSTRAINTS.md`. Do not re-spec.
 
 **pr-converge rule:** Prefer **`Skill({skill: "bugteam", args: "<PR URL or

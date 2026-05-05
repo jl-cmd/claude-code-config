@@ -1,4 +1,4 @@
-"""Configuration for the pr-converge skill Markdown reflow script."""
+"""Configuration for the cm-pr-converge skill Markdown reflow script."""
 
 import re
 from pathlib import Path

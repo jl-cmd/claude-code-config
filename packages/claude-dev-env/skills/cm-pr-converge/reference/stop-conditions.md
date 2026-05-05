@@ -7,7 +7,7 @@
   `state.json`, append convergence row to
   `<TMPDIR>/pr-converge-<session_id>/converged.log` per `reference/multi-pr-orchestration.md` §Memory; else
   skip. Report [convergence-gates.md](convergence-gates.md) (d) summary, then **omit loop pacing**
-  per **Convergence** in `workflows/schedule-wakeup-loop.md`. End all loops
+  per **Convergence** in `../workflows/schedule-wakeup-loop.md`. End all loops
   once all PRs converged.
 - **Hard blocker:** API auth failure across two ticks, CI regression
   whose root cause falls outside this PR, hook rejection unresolved
@@ -15,7 +15,7 @@
   stuck, or post-convergence Copilot request fails to surface review on
   `current_head` after three consecutive wakeups. Report specific
   blocker and diagnosis, **omit loop pacing** per
-  `workflows/schedule-wakeup-loop.md`.
+  `../workflows/schedule-wakeup-loop.md`.
 - **Hard blocker (`mergeStateStatus` non-CLEAN non-DIRTY):**
   `mergeStateStatus` is `BLOCKED`, `UNKNOWN`, or `BEHIND` (required
   checks pending, branch behind base without textual conflicts, or
@@ -23,4 +23,4 @@
   handles `DIRTY` (textual conflicts) only. Report specific
   `mergeStateStatus`, **omit loop pacing**.
 - **User stops loop:** "stop the converge loop" → **omit loop pacing**
-  per `workflows/schedule-wakeup-loop.md`.
+  per `../workflows/schedule-wakeup-loop.md`.

@@ -1,4 +1,4 @@
-"""Reflow packages/claude-dev-env/skills/pr-converge/SKILL.md to 80 columns.
+"""Reflow packages/claude-dev-env/skills/cm-pr-converge/SKILL.md to 80 columns.
 
 Merge soft line breaks outside fenced blocks (space join; URL path fragments
 joined without a space only inside unfinished markdown link targets), then

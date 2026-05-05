@@ -9,25 +9,31 @@ guarantees `ScheduleWakeup` is available before any tick runs. Shared bugbot
 Call `ScheduleWakeup` from this same session so the next tick fires back into **this** transcript with the prior tick's state line and PR
   context still addressable.
 
-## Step 4 — `ScheduleWakeup` branch
+## Calling ScheduleWakeup
 
-At end of tick (unless convergence or another stop condition already omitted pacing), call `ScheduleWakeup` with:
+At end of tick (unless convergence or another stop condition already
+omitted pacing), call `ScheduleWakeup` with:
 
-- `delaySeconds: 270` whenever bugbot was just re-triggered (whether by Step 3 directly, by the Fix protocol's mandatory re-trigger, or by BUGTEAM branch 1's same-tick re-trigger). Bugbot finishes a 
-review in 1–4 minutes, so 270s stays under the 5-minute prompt-cache TTL while giving a margin past
-bugbot's typical upper bound. The single exception is the BUGBOT inline-lag branch in Step 2 of the main
-skill, which uses `delaySeconds: 60` because no re-trigger fired and the only thing being awaited is GitHub's inline-comments API catching up.
-- `reason`: one short sentence on what is being awaited, including the current `phase` and bugbot_clean_at` SHA when set.
+- `delaySeconds: 270` whenever bugbot was just re-triggered (by the
+  bugbot re-trigger in `../reference/per-tick.md`, by Fix protocol's
+  mandatory re-trigger, or by BUGTEAM's same-tick re-trigger). Bugbot
+  finishes a review in 1–4 minutes, so 270s stays under the 5-minute
+  prompt-cache TTL with margin past bugbot's typical upper bound. The
+  exception is the BUGBOT inline-lag branch (see below).
+- `reason`: one short sentence on what is being awaited, including the
+  current `phase` and `bugbot_clean_at` SHA when set.
 - `prompt: "/cm-pr-converge"` — re-enters this skill on the next firing.
 
 ## BUGBOT inline-lag
 
-When Step 2 BUGBOT branch c routes to API lag, complete Step 4 with
-`ScheduleWakeup` using `delaySeconds: 60` (lag is short-lived).
+See [`../reference/per-tick.md`](../reference/per-tick.md) — the BUGBOT
+inline-lag branch (review body says findings, inline API returns zero
+matching for `current_head`) uses `delaySeconds: 60` because no
+re-trigger fired and only GitHub's inline-comments API needs to catch up.
 
 ## Convergence
 
-On back-to-back clean: **omit** further `ScheduleWakeup` calls.
+On back-to-back-to-back clean: **omit** further `ScheduleWakeup` calls.
 
 ## Stop / safety
 

@@ -73,16 +73,6 @@ GH_FIELD_BODY_AT_PREFIX: str = "body=@"
 
 GH_REPO_ARG_TEMPLATE: str = "{owner}/{repo}"
 
-PR_BASE_REF_FIELDS: str = "baseRefName"
-
-COPILOT_FOLLOWUP_BRANCH_TEMPLATE: str = "chore/copilot-followup-{parent_number}-{short_sha}"
-
-COPILOT_FOLLOWUP_PR_TITLE_TEMPLATE: str = (
-    "chore: address Copilot findings from PR #{parent_number}"
-)
-
-COPILOT_FOLLOWUP_SHORT_SHA_LENGTH: int = 8
-
 SKILL_REFLOW_MAXIMUM_WIDTH: int = 80
 
 PR_CONVERGE_SKILL_PATH: Path = Path(__file__).resolve().parent.parent.parent / "SKILL.md"

@@ -1,7 +1,7 @@
 # Fix protocol
 
 Single-PR (no `state.json`): production edits run in main session via
-`Task` (`subagent_type: "clean-coder"`). Multi-PR (`state.json`):
+`Agent` (`subagent_type: "clean-coder"`). Multi-PR (`state.json`):
 clean-coder teammate; orchestrator never edits inline. Hook handling
 per [ground-rules.md](ground-rules.md).
 
@@ -25,7 +25,7 @@ files during fix phase in multi-PR mode.
 - Read each referenced file:line.
 - Write failing test first when finding has behavior to test. Pure doc /
   comment / naming nits with no behavior → straight to fix.
-- **Implement** via `Task` (`subagent_type: "clean-coder"`).
+- **Implement** via `Agent` (`subagent_type: "clean-coder"`).
   Full-stop if `Task` is unavailable.
 - Stage affected files and create one new commit on existing branch:
   ```bash

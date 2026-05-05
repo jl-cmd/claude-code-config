@@ -310,12 +310,80 @@ def test_should_flatten_across_pages() -> None:
     ]
 
 
-def test_should_reference_copilot_login_constant_directly_without_local_alias() -> None:
-    source_text = (
-        Path(__file__).resolve().parent / "fetch_copilot_inline_comments.py"
-    ).read_text(encoding="utf-8")
-    assert "copilot_reviewer_login = COPILOT_REVIEWER_LOGIN" not in source_text
-    assert "COPILOT_REVIEWER_LOGIN" in source_text
+def test_should_match_login_case_insensitively() -> None:
+    pages_payload = json.dumps(
+        [
+            [
+                {
+                    "id": 300,
+                    "user": {"login": "Copilot"},
+                    "commit_id": "abc123",
+                    "pull_request_review_id": 1,
+                    "body": "uppercase login",
+                    "path": "x.py",
+                    "line": 5,
+                },
+                {
+                    "id": 301,
+                    "user": {"login": "GITHUB-COPILOT[bot]"},
+                    "commit_id": "abc123",
+                    "pull_request_review_id": 1,
+                    "body": "screaming login",
+                    "path": "x.py",
+                    "line": 6,
+                },
+            ]
+        ]
+    )
+    with (
+        patch.object(
+            fetch_copilot_inline_comments_module,
+            "fetch_copilot_reviews",
+            return_value=_default_review_for_head(commit="abc123", review_id=1),
+        ),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = _completed(pages_payload)
+        all_inline_comments = (
+            fetch_copilot_inline_comments_module.fetch_copilot_inline_comments(
+                owner="acme", repo="widget", number=42, current_head="abc123"
+            )
+        )
+    assert {each_comment["comment_id"] for each_comment in all_inline_comments} == {300, 301}
+
+
+def test_should_match_login_containing_copilot_substring() -> None:
+    pages_payload = json.dumps(
+        [
+            [
+                {
+                    "id": 400,
+                    "user": {"login": "internal-copilot-fork[bot]"},
+                    "commit_id": "abc123",
+                    "pull_request_review_id": 1,
+                    "body": "non-canonical login still matches",
+                    "path": "x.py",
+                    "line": 5,
+                }
+            ]
+        ]
+    )
+    with (
+        patch.object(
+            fetch_copilot_inline_comments_module,
+            "fetch_copilot_reviews",
+            return_value=_default_review_for_head(commit="abc123", review_id=1),
+        ),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_run.return_value = _completed(pages_payload)
+        all_inline_comments = (
+            fetch_copilot_inline_comments_module.fetch_copilot_inline_comments(
+                owner="acme", repo="widget", number=42, current_head="abc123"
+            )
+        )
+    assert len(all_inline_comments) == 1
+    assert all_inline_comments[0]["comment_id"] == 400
 
 
 def test_should_raise_when_gh_subprocess_fails() -> None:

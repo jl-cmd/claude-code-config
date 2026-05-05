@@ -5,7 +5,7 @@
   "MERGEABLE"` ∧ post-convergence Copilot request returned `clean` at
   `current_head`): prefer `mark_pr_ready.py`; else `gh pr ready`. With
   `state.json`, append convergence row to
-  `<TMPDIR>/pr-converge-<session_id>/converged.log` per `reference/multi-pr-orchestration.md` §Memory; else
+  `<TMPDIR>/pr-converge-<session_id>/converged.log` per `multi-pr-orchestration.md` §Memory; else
   skip. Report [convergence-gates.md](convergence-gates.md) (d) summary, then **omit loop pacing**
   per **Convergence** in `../workflows/schedule-wakeup-loop.md`. End all loops
   once all PRs converged.

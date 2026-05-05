@@ -23,8 +23,8 @@ until all three are clean on the same `HEAD` and mergeable.
 ## Gotchas
 
 Highest-signal content. Append a bullet each time a tick fails in a new
-way — these are the hard-won lessons that keep the loop honest. Once this 
-grows to 5 or more items, suggest spinning up a subagent to investigate, fix, 
+way — these are the hard-won lessons that keep the loop honest. Once this
+grows to 5 or more items, suggest spinning up a subagent to investigate, fix,
 post a fresh PR in a fresh branch based on origin main to the user.
 
 - **`ScheduleWakeup` not in subagent tool registries** — background

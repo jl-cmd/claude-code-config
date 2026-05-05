@@ -16,4 +16,4 @@ plain text so next tick re-reads from context:
 
 Tick begins reading prior state line from most recent assistant message
 (no `state.json`) and ends by emitting updated state line; with
-`state.json`, follow `reference/multi-pr-orchestration.md` §What orchestrator does per tick.
+`state.json`, follow `multi-pr-orchestration.md` §What orchestrator does per tick.

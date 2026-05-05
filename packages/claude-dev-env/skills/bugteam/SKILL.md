@@ -154,7 +154,7 @@ loop_count=0
 last_action="fresh"
 last_findings='{"total": 0}'
 audit_log=""
-starting_sha="$(git rev-parse HEAD)"
+starting_sha="$(git -C "<run_temp_dir>/pr-<N>/worktree" rev-parse HEAD)"
 run_temp_dir="<absolute-path>/<run_name>"
 loop_comment_index=""
 ```
@@ -388,8 +388,8 @@ Pass finding comment URLs/ids from `loop_comment_index` in XML. Lead awaits the
 background-completion notification. Replies: `Fixed in <sha>` or `Could not
 address this loop: <reason>`.
 
-[`PROMPTS.md`](PROMPTS.md): fix XML + schema. Verify: `git rev-parse HEAD`
-advanced; `git fetch origin <branch> && git rev-parse origin/<branch>` matches
+[`PROMPTS.md`](PROMPTS.md): fix XML + schema. Verify from worktree: `git -C "<run_temp_dir>/pr-<N>/worktree" rev-parse HEAD`
+advanced; `git -C "<run_temp_dir>/pr-<N>/worktree" fetch origin <branch> && git -C "<run_temp_dir>/pr-<N>/worktree" rev-parse origin/<branch>` matches
 `HEAD`. Unchanged HEAD →
 `stuck — bugfix subagent could not address findings`.
 

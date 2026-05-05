@@ -88,7 +88,7 @@ c. Decide (four branches; match first whose predicate holds):
    - **`commit_id == current_head` AND zero unaddressed inline AND review
      body clean:** Set `bugbot_clean_at = current_head`, reset
      `inline_lag_streak = 0`, `phase = BUGTEAM`. Continue BUGTEAM in same
-     tick — back-to-back convergence requires second audit on same HEAD
+     tick — back-to-back convergence requires bugteam on same HEAD
      before next wakeup.
    - **`commit_id == current_head` with unaddressed inline findings:**
      Apply **Fix protocol**. Reset `inline_lag_streak = 0`. With
@@ -106,7 +106,7 @@ c. Decide (four branches; match first whose predicate holds):
 
 ### `phase == BUGTEAM`
 
-a. Run **bugteam** (second audit) on current PR.
+a. Run **bugteam** on current PR.
 
    - **`Skill` invokable** (see [Pacing
      workflow](#pacing-workflow) tool-inventory rules): invoke bugteam
@@ -121,8 +121,8 @@ Skill({skill: "bugteam", args:
      bugteam by reading [`../../bugteam/SKILL.md`](../../bugteam/SKILL.md). Same
      loop and gates; only harness steps differ.
 
-b. **Re-resolve current HEAD** — second audit may have pushed commits
-during its run. `current_head` from Step 1 is potentially stale:
+b. **Re-resolve current HEAD** — bugteam may have pushed commits during
+its run. `current_head` from Step 1 is potentially stale:
    ```bash
 new_head=$(python "${CLAUDE_SKILL_DIR}/scripts/resolve_pr_head.py" \
 --owner <OWNER> --repo <REPO> --number <NUMBER>)
@@ -133,8 +133,8 @@ If `new_head != current_head`, set `current_head = new_head` AND
 c. Inspect bugteam outcome. Reports `convergence (zero findings)` or list
 of unfixed findings with file:line.
 
-d. Decide based on post-audit state — order matters. Check
-pushed-during-second-audit FIRST so convergence report against stale HEAD
+d. Decide based on post-bugteam state — order matters. Check
+pushed-during-bugteam FIRST so convergence report against stale HEAD
 never falsely terminates:
    - **Audit pushed this tick (`bugbot_clean_at` reset in step b):**
      Re-trigger bugbot same tick (Step 3) so new HEAD enters queue, `phase

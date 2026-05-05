@@ -47,8 +47,8 @@ python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \
   ```
 - **After pushing a fix, always run Step 3 (`bugbot run`) in the same
   tick** regardless of phase. New commit **resets full convergence cycle**:
-  prior bugbot clean and prior second-audit clean on older SHA do **not**
+  prior bugbot clean and prior bugteam clean on older SHA do **not**
   count toward convergence on new `HEAD`. Must re-obtain bugbot CLEAN on
-  `current_head`, then second-audit CLEAN on same `HEAD` with no
+  `current_head`, then bugteam CLEAN on same `HEAD` with no
   intervening push. Re-triggering in same tick saves a wakeup cycle vs
   deferring Step 3.

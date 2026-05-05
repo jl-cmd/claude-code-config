@@ -12,8 +12,8 @@ description: >-
 
 # PR Converge
 
-One tick per invocation. Bugbot ↔ second-audit loop on a draft PR until
-back-to-back clean on same `HEAD`, mergeable, and Copilot clean.
+One tick per invocation. Bugbot ↔ bugteam ↔ Copilot loop on a draft PR
+until all three are clean on the same `HEAD` and mergeable.
 
 ## Pre-flight
 
@@ -44,9 +44,7 @@ post a fresh PR in a fresh branch based on origin main to the user.
 - **Bot logins differ between review-level and inline-comment endpoints** —
   Copilot reviews come from `copilot-pull-request-reviewer[bot]`, but its
   inline comments are authored by `Copilot`. Always use case-insensitive
-  substring matching on `user.login`, never strict equality. The fetch
-  scripts use a substring filter (`copilot` / `cursor` / `claude`) via
-  `_is_X_author` helpers for this reason.
+  substring matching on `user.login`, never strict equality.
 
 ## First tick of a session
 

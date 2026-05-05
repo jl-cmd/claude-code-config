@@ -240,7 +240,7 @@ can remove files mid-run — environmental risk.
 
 - **Path:** sibling of `state.json`.
 - **Format:** one tab-separated row per converged PR: ISO8601 UTC,
-  owner/repo#number, bugbot SHA, second-audit SHA (label always `bugteam`).
+  owner/repo#number, bugbot SHA, bugteam SHA.
 - **Append site:** agent running `mark_pr_ready.py`. Append **before**
   locked `state.json` publish so log row survives failed merge.
 - **Never read inside loop.** User / follow-up tooling only.

@@ -9,11 +9,6 @@ work; Step 4 per `workflows/schedule-wakeup-loop.md` — default loop until
 convergence or stop]
 </example>
 
-<example> User: `/loop /cm-pr-converge` Claude: [same per-tick work and Step 4 as
-bare `/cm-pr-converge` — harness wrapper only when host routes wakeups through
-`/loop`]
-</example>
-
 <example> BUGBOT tick, latest bugbot review against older commit. Claude:
 [posts `bugbot run`, sets `bugbot_clean_at = null`, Step 4 per
 `workflows/schedule-wakeup-loop.md` (e.g. 270s wakeup), returns]

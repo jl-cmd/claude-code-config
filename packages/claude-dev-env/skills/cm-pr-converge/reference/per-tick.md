@@ -14,11 +14,9 @@ protocol per [fix-protocol.md](fix-protocol.md). Pacing stays in main session vi
 
 ## Invocation modes
 
-- **`/cm-pr-converge`** (default): runs one tick, then Step 4. Omit next
-  wakeup only on convergence or **Stop conditions**.
-- **`/loop /cm-pr-converge`**: harness wrapper when parent only executes
-  wakeup `prompt`s through `/loop`. Set `prompt: "/loop /cm-pr-converge"`
-  in `ScheduleWakeup` only when wrapper required.
+- **`/cm-pr-converge`** runs one tick, then Step 4 schedules the next via
+  `ScheduleWakeup`. Omit the next wakeup only on convergence or **Stop
+  conditions**.
 
 ## Pacing workflow
 
@@ -184,13 +182,12 @@ workflow](#pacing-workflow)):
   awaiting GitHub inline API).
 - `reason`: short sentence on what is awaited, including `phase` and
   `bugbot_clean_at` SHA.
-- `prompt: "/cm-pr-converge"` — default. Harness needs `/loop` wrapper →
-  `prompt: "/loop /cm-pr-converge"`.
+- `prompt: "/cm-pr-converge"`.
 
 **On convergence:** apply **Convergence** section of
 `../workflows/schedule-wakeup-loop.md` (omit wakeups).
 
-## Second-audit execution
+## Bugteam execution
 
 **Second audit** (BUGTEAM phase) is **always** **bugteam** skill: preflight,
 CODE_RULES gate, **`code-quality-agent`** / **`clean-coder`** loop, audit

@@ -13,13 +13,12 @@ Call `ScheduleWakeup` from this same session so the next tick fires back into **
 
 At end of tick (unless convergence or another stop condition already omitted pacing), call `ScheduleWakeup` with:
 
-- `delaySeconds: 270` whenever bugbot was just re-triggered (whether by Step 3 directly, by the Fix protocol's mandatory re-trigger, or by
-  BUGTEAM branch 1's same-tick re-trigger). Bugbot finishes a review in 1–4 minutes, so 270s stays under the 5-minute prompt-cache TTL while
-  giving a margin past bugbot's typical upper bound. The single exception is the BUGBOT inline-lag branch in Step 2 of the main skill, which
-  uses `delaySeconds: 60` because no re-trigger fired and the only thing being awaited is GitHub's inline-comments API catching up.
-- `reason`: one short sentence on what is being awaited, including the current `phase` and `bugbot_clean_at` SHA when set.
-- `prompt: "/cm-pr-converge"` — re-enters this skill on the next firing with default loop semantics (no need for the user to type `/loop`). If
-  the parent harness requires the `/loop` wrapper for wakeups to execute, `prompt: "/loop /cm-pr-converge"` is equivalent.
+- `delaySeconds: 270` whenever bugbot was just re-triggered (whether by Step 3 directly, by the Fix protocol's mandatory re-trigger, or by BUGTEAM branch 1's same-tick re-trigger). Bugbot finishes a 
+review in 1–4 minutes, so 270s stays under the 5-minute prompt-cache TTL while giving a margin past
+bugbot's typical upper bound. The single exception is the BUGBOT inline-lag branch in Step 2 of the main
+skill, which uses `delaySeconds: 60` because no re-trigger fired and the only thing being awaited is GitHub's inline-comments API catching up.
+- `reason`: one short sentence on what is being awaited, including the current `phase` and bugbot_clean_at` SHA when set.
+- `prompt: "/cm-pr-converge"` — re-enters this skill on the next firing.
 
 ## BUGBOT inline-lag
 
@@ -32,5 +31,4 @@ On back-to-back clean: **omit** further `ScheduleWakeup` calls.
 
 ## Stop / safety
 
-On hard blockers or user stop: omit `ScheduleWakeup` per main skill **Stop
-conditions**.
+On hard blockers or user stop: omit `ScheduleWakeup` per main skill **Stop conditions**.

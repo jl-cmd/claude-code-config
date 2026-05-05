@@ -1,9 +1,9 @@
-"""Fetch unaddressed Cursor Bugbot inline comments for the latest Bugbot review on a commit.
+"""Fetch unaddressed Claude inline comments for the latest Claude review on a commit.
 
-Uses ``fetch_bugbot_reviews`` to find the newest submitted Bugbot review whose ``commit_id`` matches the caller
-``current_head``, then returns only ``cursor[bot]`` inline comments whose ``pull_request_review_id`` matches that
-review. This avoids misclassifying a PR when Bugbot posts more than one review on the same SHA: older inline threads
-stay anchored to the earlier review id even when they share the same commit id.
+Uses ``fetch_claude_reviews`` to find the newest submitted Claude review whose ``commit_id`` matches the caller
+``current_head``, then returns only ``claude[bot]`` inline comments whose
+``pull_request_review_id`` matches that review. This avoids misclassifying a PR when Claude posts more than one review
+on the same SHA: older inline threads stay anchored to the earlier review id even when they share the same commit id.
 
 Wraps the gh CLI invocation required by the gh-paginate rule for the comments list:
 ``gh api`` on ``repos/{owner}/{repo}/pulls/{number}/comments`` with ``--paginate --slurp`` and external JSON handling.
@@ -23,41 +23,41 @@ from evict_cached_config_modules import evict_cached_config_modules
 evict_cached_config_modules()
 
 from config.pr_converge_constants import (
-    CURSOR_LOGIN_FILTER_SUBSTRING,
+    CLAUDE_LOGIN_FILTER_SUBSTRING,
     GH_INLINE_COMMENTS_PATH_TEMPLATE,
 )
-from fetch_bugbot_reviews import fetch_bugbot_reviews
+from fetch_claude_reviews import fetch_claude_reviews
 from review_field_helpers import body_of, login_of
 
 
-def _is_cursor_bot_author(field_by_key: dict[str, object]) -> bool:
+def _is_claude_author(field_by_key: dict[str, object]) -> bool:
     author_login = login_of(field_by_key) or ""
-    return CURSOR_LOGIN_FILTER_SUBSTRING in author_login.lower()
+    return CLAUDE_LOGIN_FILTER_SUBSTRING in author_login.lower()
 
 
-def fetch_bugbot_inline_comments(
+def fetch_claude_inline_comments(
     *,
     owner: str,
     repo: str,
     number: int,
     current_head: str,
 ) -> list[dict[str, object]]:
-    """Return cursor[bot] inline comments for the latest Bugbot review on ``current_head``.
+    """Return Claude inline comments for the latest Claude review on ``current_head``.
 
     Each entry contains comment_id, commit_id, path, line, and body.
     """
-    all_bugbot_reviews = fetch_bugbot_reviews(owner=owner, repo=repo, number=number)
-    latest_bugbot_review_for_head = next(
+    all_claude_reviews = fetch_claude_reviews(owner=owner, repo=repo, number=number)
+    latest_claude_review_for_head = next(
         (
             each_review
-            for each_review in all_bugbot_reviews
+            for each_review in all_claude_reviews
             if each_review.get("commit_id") == current_head
         ),
         None,
     )
-    if latest_bugbot_review_for_head is None:
+    if latest_claude_review_for_head is None:
         return []
-    target_pull_request_review_id = latest_bugbot_review_for_head["review_id"]
+    target_pull_request_review_id = latest_claude_review_for_head["review_id"]
     comments_endpoint = GH_INLINE_COMMENTS_PATH_TEMPLATE.format(
         owner=owner, repo=repo, number=number
     )
@@ -77,7 +77,9 @@ def fetch_bugbot_inline_comments(
         errors="replace",
     )
     pages: list[list[dict[str, object]]] = json.loads(completed.stdout)
-    all_flat_comments = [each_comment for each_page in pages for each_comment in each_page]
+    all_flat_comments = [
+        each_comment for each_page in pages for each_comment in each_page
+    ]
     return [
         {
             "comment_id": each_comment["id"],
@@ -87,7 +89,7 @@ def fetch_bugbot_inline_comments(
             "body": body_of(each_comment),
         }
         for each_comment in all_flat_comments
-        if _is_cursor_bot_author(each_comment)
+        if _is_claude_author(each_comment)
         and each_comment.get("commit_id") == current_head
         and each_comment.get("pull_request_review_id") == target_pull_request_review_id
     ]
@@ -100,7 +102,7 @@ def main() -> int:
     parser.add_argument("--number", required=True, type=int)
     parser.add_argument("--commit", required=True, dest="current_head")
     parsed_arguments = parser.parse_args()
-    all_comments = fetch_bugbot_inline_comments(
+    all_comments = fetch_claude_inline_comments(
         owner=parsed_arguments.owner,
         repo=parsed_arguments.repo,
         number=parsed_arguments.number,

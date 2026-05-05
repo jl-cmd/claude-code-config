@@ -9,6 +9,8 @@ from pathlib import Path
 
 CURSOR_BOT_LOGIN: str = "cursor[bot]"
 
+CURSOR_LOGIN_FILTER_SUBSTRING: str = "cursor"
+
 COPILOT_REVIEWER_LOGIN: str = "copilot-pull-request-reviewer[bot]"
 
 COPILOT_REVIEWER_REQUEST_ID: str = COPILOT_REVIEWER_LOGIN
@@ -20,6 +22,18 @@ COPILOT_CLEAN_REVIEW_STATE: str = "APPROVED"
 ALL_COPILOT_DIRTY_REVIEW_STATES: tuple[str, ...] = ("CHANGES_REQUESTED", "COMMENTED")
 
 COPILOT_SOFT_DIRTY_REVIEW_STATE: str = "COMMENTED"
+
+CLAUDE_REVIEWER_LOGIN: str = "claude[bot]"
+
+CLAUDE_REVIEWER_REQUEST_ID: str = CLAUDE_REVIEWER_LOGIN
+
+CLAUDE_LOGIN_FILTER_SUBSTRING: str = "claude"
+
+CLAUDE_CLEAN_REVIEW_STATE: str = "APPROVED"
+
+ALL_CLAUDE_DIRTY_REVIEW_STATES: tuple[str, ...] = ("CHANGES_REQUESTED", "COMMENTED")
+
+CLAUDE_SOFT_DIRTY_REVIEW_STATE: str = "COMMENTED"
 
 BUGBOT_DIRTY_BODY_REGEX: str = (
     r"Cursor Bugbot has reviewed your changes and found \d+ potential issue"

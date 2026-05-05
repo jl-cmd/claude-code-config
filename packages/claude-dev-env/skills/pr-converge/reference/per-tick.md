@@ -106,8 +106,7 @@ c. Decide (four branches; match first whose predicate holds):
 
 a. Run **bugteam** on current PR.
 
-   - **`Skill` invokable** (see [Pacing
-     workflow](#pacing-workflow) tool-inventory rules): invoke bugteam
+   - **`Skill` invokable**: invoke bugteam
      with `Skill`.
 
      ```
@@ -115,7 +114,7 @@ Skill({skill: "bugteam", args:
 "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"})
      ```
 
-   - **`Skill` not invokable** (typical `Task` teammate): worker executes
+   - **`Skill` not invokable** (typical delegated teammate): worker executes
      bugteam by reading [`../../bugteam/SKILL.md`](../../bugteam/SKILL.md). Same
      loop and gates; only harness steps differ.
 

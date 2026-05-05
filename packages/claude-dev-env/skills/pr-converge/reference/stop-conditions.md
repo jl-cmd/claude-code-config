@@ -8,7 +8,7 @@
   `<TMPDIR>/pr-converge-<session_id>/converged.log` per `multi-pr-orchestration.md` §Memory; else
   skip. Report [convergence-gates.md](convergence-gates.md) (d) summary, then **omit loop pacing**
   per **Convergence** in `../workflows/schedule-wakeup-loop.md`. End all loops
-  once all PRs converged.
+  once all PRs terminal (converged or blocked).
 - **Hard blocker:** API auth failure across two ticks, CI regression
   whose root cause falls outside this PR, hook rejection unresolved
   across three commits, `inline_lag_streak >= 3`, **bugteam** reports

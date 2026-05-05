@@ -5,8 +5,8 @@ classification is novel or ambiguous against the in-skill rules. Cross-refs
 into `SKILL.md` use `§Section name` notation.
 
 <example> User: `/pr-converge` Claude: [PR context + one tick bugbot/bugteam
-work; Step 4 per loaded pacing workflow — default loop until convergence or
-stop]
+work; Step 4 per `workflows/schedule-wakeup-loop.md` — default loop until
+convergence or stop]
 </example>
 
 <example> User: `/loop /pr-converge` Claude: [same per-tick work and Step 4 as
@@ -26,13 +26,13 @@ bare `/pr-converge` — harness wrapper only when host routes wakeups through
 
 <example> BUGBOT tick, bugbot clean against HEAD. Claude: [sets
 `bugbot_clean_at = HEAD`, `phase = BUGTEAM`, runs `Skill({skill: "bugteam",
-...})` in same tick — bugteam Path routing picks Path A vs B internally]
+...})` in same tick]
 </example>
 
 <example> BUGTEAM phase, bugteam reports convergence and `bugbot_clean_at
 == current_head`. Claude: [runs `gh pr ready <NUMBER>`, reports "PR
 converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>; marked ready for
-review", applies **Convergence** from active pacing workflow]
+review", applies **Convergence** from `workflows/schedule-wakeup-loop.md`]
 </example>
 
 <example> BUGTEAM phase, bugteam pushed fix commit during run. Claude:
@@ -43,14 +43,7 @@ same tick, `phase = BUGBOT`, Step 4 at 270s]
 <example> BUGBOT tick, review body says "found 3 potential issues" against
 HEAD but inline API returns zero matching for `current_head`. Claude:
 [increments `inline_lag_streak` to 1, Step 4 inline-lag rules (60s
-`ScheduleWakeup` vs AHK cadence), returns]
-</example>
-
-<example> BUGTEAM tick with no agent teams: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
-unset; bugteam Path B applies inside `Skill`. Claude: [invokes bugteam;
-bugteam runs Path B per `bugteam/SKILL.md` +
-`bugteam/reference/workflow-path-b-task-harness.md`; applies Step 2
-§(b)–(d) unchanged]
+`ScheduleWakeup`), returns]
 </example>
 
 <example> Back-to-back clean reached, but `mergeStateStatus: DIRTY` (base
@@ -79,11 +72,10 @@ mergeStateStatus CLEAN, copilot CLEAN; marked ready for review"]
 
 <example> Back-to-back clean, mergeability CLEAN, post-convergence Copilot
 review returned `state: CHANGES_REQUESTED` with inline findings on
-`current_head`. Claude: [still marks PR ready (four-gate rule allows
-convergence when follow-up captures Copilot findings); builds findings
-checklist from `fetch_copilot_inline_comments.py`; runs
-`open_followup_copilot_pr.py` off `current_head` (branch
-`chore/copilot-followup-<NUMBER>-<short_sha>`, title `chore: address
-Copilot findings from PR #<NUMBER>`); reports both URLs; queues
-`/pr-converge` on new PR for user]
+`current_head`. Claude: [does NOT mark PR ready — gate (4) failed;
+applies Fix protocol on every confirmed Copilot finding (TDD test → fix →
+push → reply inline on each thread); resets `bugbot_clean_at = null` and
+`copilot_clean_at = null`; `phase = BUGBOT`; posts `bugbot run` on new
+HEAD; schedules next wakeup. Full back-to-back-clean cycle plus all four
+gates must hold again on new HEAD.]
 </example>

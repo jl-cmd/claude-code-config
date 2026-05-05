@@ -1,8 +1,8 @@
 # ScheduleWakeup loop pacing (pr-converge)
 
-Load this document when **`ScheduleWakeup` is available** in the parent harness session and you use it for converge **loop pacing** (primary /
-  orchestrated-teams path). Follow it for **every** instruction below that depends on that choice. Shared bugbot / bugteam / Fix protocol steps
-  stay in the main `SKILL.md`.
+Load this document for converge **loop pacing**. The pre-flight in `SKILL.md`
+guarantees `ScheduleWakeup` is available before any tick runs. Shared bugbot
+/ bugteam / Fix protocol steps stay in the main `SKILL.md`.
 
 ## Session behavior
 
@@ -21,17 +21,16 @@ At end of tick (unless convergence or another stop condition already omitted pac
 - `prompt: "/pr-converge"` — re-enters this skill on the next firing with default loop semantics (no need for the user to type `/loop`). If
   the parent harness requires the `/loop` wrapper for wakeups to execute, `prompt: "/loop /pr-converge"` is equivalent.
 
-## BUGBOT inline-lag (this path only)
+## BUGBOT inline-lag
 
-When Step 2 BUGBOT branch c routes to API lag and you are on **this** pacing path: complete Step 4 with `ScheduleWakeup` using `delaySeconds:
-  60` (lag is short-lived).
+When Step 2 BUGBOT branch c routes to API lag, complete Step 4 with
+`ScheduleWakeup` using `delaySeconds: 60` (lag is short-lived).
 
 ## Convergence
 
-On back-to-back clean: **omit** further `ScheduleWakeup` calls. Do not start the AHK auto-typer for loop pacing when this path is the active
-  pacer.
+On back-to-back clean: **omit** further `ScheduleWakeup` calls.
 
-## Stop / safety (this path)
+## Stop / safety
 
-On hard blockers or user stop: omit `ScheduleWakeup` per main skill **Stop conditions**. If the session never used AHK for pacing,
-  skip AHK shutdown commands in the companion AHK workflow.
+On hard blockers or user stop: omit `ScheduleWakeup` per main skill **Stop
+conditions**.

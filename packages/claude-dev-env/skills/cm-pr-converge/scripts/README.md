@@ -124,18 +124,6 @@ python "${CLAUDE_SKILL_DIR}/scripts/request_copilot_review.py" \
 
 Output: none on success (gh's stdout is suppressed); `subprocess.CalledProcessError` on failure.
 
-### `open_followup_copilot_pr.py`
-
-Opens a follow-up draft PR addressing Copilot findings from the parent PR. Subprocess sequence: resolve parent's `baseRefName` → `git fetch origin <head_sha>` → `git switch -c <new_branch> <head_sha>` → `git push -u origin <new_branch>` → `gh pr create --draft --base <base_ref> --head <new_branch> --title <...> --body-file <findings_file>` (per `../../../rules/gh-body-file.md`). Branch name format: `chore/copilot-followup-{parent_number}-{short_sha}`.
-
-```bash
-python "${CLAUDE_SKILL_DIR}/scripts/open_followup_copilot_pr.py" \
-  --owner <OWNER> --repo <REPO> --parent-number <PARENT_NUMBER> \
-  --head <HEAD_SHA> --findings-file <PATH_TO_FINDINGS_MD>
-```
-
-Output: the new PR URL on stdout, trimmed.
-
 ## Tests
 
 Each script has a sibling `test_<name>.py`. Run them all with:

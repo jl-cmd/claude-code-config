@@ -52,9 +52,8 @@ Create once at session start. Each teammate writes result before going idle.
 }
 ```
 
-**`team_name` field (Path A only):** when
-`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, orchestrator owns single long-lived
-team for whole sweep — see §Orchestrator team lifecycle.
+**`team_name` field:** orchestrator owns a single long-lived team for the
+whole sweep — see §Orchestrator team lifecycle.
 
 **`status` values:** `fresh` | `in_progress` | `awaiting_bugbot` |
 `awaiting_bugteam` | `converged` | `blocked`
@@ -97,11 +96,7 @@ file contents, or teammate-owned fields except two exceptions. Uses same
 Orchestrator reads file at start of every tick for cross-PR state, not
 conversation context.
 
-## Orchestrator team lifecycle (Path A only)
-
-Applies when bugteam Path A in use (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`).
-Teams disabled → Path B, no team state. See `SKILL.md` §Team infrastructure
-detection.
+## Orchestrator team lifecycle
 
 **Why orchestrator owns team:** bugteam's per-invocation `TeamCreate` /
 `TeamDelete` assumes one invocation per session. Multi-PR converge runs
@@ -152,9 +147,8 @@ one agent per PR in single parallel message. Never process any PR inline.
 
 Bugfind teammate completes (findings or clean):
 
-- **PRs with findings:** spawn one fix worker per PR (Claude Code:
-  `clean-coder` / `Agent`; Cursor `Task`: `generalPurpose` + clean-coder
-  **Read** preamble per `SKILL.md` §Fix protocol). Worker:
+- **PRs with findings:** spawn one fix worker per PR
+  (`clean-coder`). Worker:
   1. Reads outcomes XML.
   2. Applies TDD fixes (test first, then production).
   3. Commits, pushes one fix commit.
@@ -215,7 +209,7 @@ When bugfix (clean-coder) teammate goes idle after push:
 
 - Orchestrator reads updated `state.json`, spawns next agent:
   - `clean` → `general-purpose` runs BUGTEAM phase (bugteam via `Skill`
-    when available, else inline bugteam `SKILL.md` + Path B deltas).
+    when available, else inline by reading bugteam `SKILL.md`).
   - Exited on `dirty` (4e) with actionable inline threads → spawn same
     fix worker as "audit result with findings". Do **not** spawn
     `clean-coder` when monitor only saw `inline_lag` (4c retries) without
@@ -238,7 +232,7 @@ Run directory `<TMPDIR>/pr-converge-<session_id>/` holds `state.json` and
 optional `converged.log`. Keep from first create until every PR under `prs`
 is `converged` or `blocked`, or **Stop conditions** ends loop. Safe to
 delete folder after — `mark_pr_ready.py` / `gh pr ready` on GitHub is
-canonical record. Folder skill, not Cursor plugin package; do **not** rely
+canonical record. Folder skill, not a plugin package; do **not** rely
 on `${CLAUDE_PLUGIN_DATA}`. OS/disk cleanup of `<TMPDIR>` (reboot, policy)
 can remove files mid-run — environmental risk.
 

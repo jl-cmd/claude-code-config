@@ -14,10 +14,10 @@ protocol per [fix-protocol.md](fix-protocol.md). Pacing stays in main session vi
 
 ## Invocation modes
 
-- **`/pr-converge`** (default): runs one tick, then Step 4. Omit next
+- **`/cm-pr-converge`** (default): runs one tick, then Step 4. Omit next
   wakeup only on convergence or **Stop conditions**.
-- **`/loop /pr-converge`**: harness wrapper when parent only executes
-  wakeup `prompt`s through `/loop`. Set `prompt: "/loop /pr-converge"`
+- **`/loop /cm-pr-converge`**: harness wrapper when parent only executes
+  wakeup `prompt`s through `/loop`. Set `prompt: "/loop /cm-pr-converge"`
   in `ScheduleWakeup` only when wrapper required.
 
 ## Pacing workflow
@@ -28,7 +28,7 @@ Step 4. The pre-flight gate guarantees `ScheduleWakeup` is invokable; the
 workflow file specifies delays, prompts, convergence cleanup, and
 inline-lag handling.
 
-- **`/pr-converge`** (default): loops until convergence. After each tick
+- **`/cm-pr-converge`** (default): loops until convergence. After each tick
   (unless converged or stopped), run **Step 4**.
 
 ## Step 1: Resolve current HEAD and PR context
@@ -184,8 +184,8 @@ workflow](#pacing-workflow)):
   awaiting GitHub inline API).
 - `reason`: short sentence on what is awaited, including `phase` and
   `bugbot_clean_at` SHA.
-- `prompt: "/pr-converge"` — default. Harness needs `/loop` wrapper →
-  `prompt: "/loop /pr-converge"`.
+- `prompt: "/cm-pr-converge"` — default. Harness needs `/loop` wrapper →
+  `prompt: "/loop /cm-pr-converge"`.
 
 **On convergence:** apply **Convergence** section of
 `../workflows/schedule-wakeup-loop.md` (omit wakeups).

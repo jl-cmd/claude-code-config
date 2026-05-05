@@ -5,7 +5,7 @@ description: >-
   second-opinion bug audit, and Copilot — applying TDD fixes, posting
   inline replies, and re-triggering reviewers each tick until all three
   reviewers are clean on the same HEAD. Use when the user says
-  '/pr-converge', 'drive PR to convergence', 'loop bugbot and bugteam',
+  '/cm-pr-converge', 'drive PR to convergence', 'loop bugbot and bugteam',
   'babysit bugbot and bugteam', 'until both are clean', or 'converge this
   PR'.
 ---

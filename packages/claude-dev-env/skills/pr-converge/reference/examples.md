@@ -1,10 +1,10 @@
 # Examples
 
-Worked examples for `cm-pr-converge`. Read on demand when a tick's
+Worked examples for `pr-converge`. Read on demand when a tick's
 classification is novel or ambiguous against the in-skill rules. Cross-refs
 into `SKILL.md` use `§Section name` notation.
 
-<example> User: `/cm-pr-converge` Claude: [PR context + one tick bugbot/bugteam
+<example> User: `/pr-converge` Claude: [PR context + one tick bugbot/bugteam
 work; Step 4 per `workflows/schedule-wakeup-loop.md` — default loop until
 convergence or stop]
 </example>

@@ -176,12 +176,91 @@ def test_should_classify_clean_review_when_body_lacks_findings_pattern() -> None
     assert all_reviews[0]["classification"] == "clean"
 
 
-def test_should_reference_cursor_bot_login_constant_directly_without_local_alias() -> None:
-    source_text = (
-        Path(__file__).resolve().parent / "fetch_bugbot_reviews.py"
-    ).read_text(encoding="utf-8")
-    assert "cursor_bot_login = CURSOR_BOT_LOGIN" not in source_text
-    assert "CURSOR_BOT_LOGIN" in source_text
+def test_should_match_login_case_insensitively() -> None:
+    pages_payload = json.dumps(
+        [
+            [
+                {
+                    "id": 1,
+                    "user": {"login": "Cursor"},
+                    "commit_id": "abc",
+                    "submitted_at": "2026-01-01T00:00:00Z",
+                    "body": "Cursor Bugbot has reviewed your changes and found 1 potential issue.",
+                },
+                {
+                    "id": 2,
+                    "user": {"login": "CURSOR[bot]"},
+                    "commit_id": "abc",
+                    "submitted_at": "2026-01-02T00:00:00Z",
+                    "body": "Bugbot reviewed your changes and found no new issues!",
+                },
+            ]
+        ]
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(pages_payload)
+        all_reviews = fetch_bugbot_reviews_module.fetch_bugbot_reviews(
+            owner="acme", repo="widget", number=42
+        )
+    assert {each_review["review_id"] for each_review in all_reviews} == {1, 2}
+
+
+def test_should_match_login_containing_cursor_substring() -> None:
+    pages_payload = json.dumps(
+        [
+            [
+                {
+                    "id": 1,
+                    "user": {"login": "cursor[bot]"},
+                    "commit_id": "abc",
+                    "submitted_at": "2026-01-01T00:00:00Z",
+                    "body": "Cursor Bugbot has reviewed your changes and found 1 potential issue.",
+                },
+                {
+                    "id": 2,
+                    "user": {"login": "internal-cursor-fork[bot]"},
+                    "commit_id": "abc",
+                    "submitted_at": "2026-01-02T00:00:00Z",
+                    "body": "Cursor Bugbot has reviewed your changes and found 2 potential issues.",
+                },
+            ]
+        ]
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(pages_payload)
+        all_reviews = fetch_bugbot_reviews_module.fetch_bugbot_reviews(
+            owner="acme", repo="widget", number=42
+        )
+    assert {each_review["review_id"] for each_review in all_reviews} == {1, 2}
+
+
+def test_should_exclude_login_without_cursor_substring() -> None:
+    pages_payload = json.dumps(
+        [
+            [
+                {
+                    "id": 1,
+                    "user": {"login": "copilot-pull-request-reviewer[bot]"},
+                    "commit_id": "abc",
+                    "submitted_at": "2026-01-01T00:00:00Z",
+                    "body": "copilot finding",
+                },
+                {
+                    "id": 2,
+                    "user": {"login": "dependabot[bot]"},
+                    "commit_id": "abc",
+                    "submitted_at": "2026-01-02T00:00:00Z",
+                    "body": "dependency bump",
+                },
+            ]
+        ]
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(pages_payload)
+        all_reviews = fetch_bugbot_reviews_module.fetch_bugbot_reviews(
+            owner="acme", repo="widget", number=42
+        )
+    assert all_reviews == []
 
 
 def test_should_raise_when_gh_subprocess_fails() -> None:

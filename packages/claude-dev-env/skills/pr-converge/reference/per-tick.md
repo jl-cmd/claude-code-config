@@ -14,19 +14,19 @@ protocol per [fix-protocol.md](fix-protocol.md). Pacing stays in main session vi
 
 ## Invocation modes
 
-- **`/cm-pr-converge`** runs one tick, then Step 4 schedules the next via
+- **`/pr-converge`** runs one tick, then Step 4 schedules the next via
   `ScheduleWakeup`. Omit the next wakeup only on convergence or **Stop
   conditions**.
 
 ## Pacing workflow
 
 Read [`../workflows/schedule-wakeup-loop.md`](../workflows/schedule-wakeup-loop.md)
-(installed copy under `$HOME/.claude/skills/cm-pr-converge/workflows/`) before
+(installed copy under `$HOME/.claude/skills/pr-converge/workflows/`) before
 Step 4. The pre-flight gate guarantees `ScheduleWakeup` is invokable; the
 workflow file specifies delays, prompts, convergence cleanup, and
 inline-lag handling.
 
-- **`/cm-pr-converge`** (default): loops until convergence. After each tick
+- **`/pr-converge`** (default): loops until convergence. After each tick
   (unless converged or stopped), run **Step 4**.
 
 ## Step 1: Resolve current HEAD and PR context
@@ -159,7 +159,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/trigger_bugbot.py" \
 **Bundled PowerShell alternative** (same gh-body-file contract):
 
 ```bash
-POST_BUGBOT_RUN="$HOME/.claude/skills/cm-pr-converge/scripts/post-bugbot-run.ps1"
+POST_BUGBOT_RUN="$HOME/.claude/skills/pr-converge/scripts/post-bugbot-run.ps1"
 pwsh -NoProfile -ExecutionPolicy Bypass -File "$POST_BUGBOT_RUN" \
 "https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"
 ```
@@ -182,7 +182,7 @@ workflow](#pacing-workflow)):
   awaiting GitHub inline API).
 - `reason`: short sentence on what is awaited, including `phase` and
   `bugbot_clean_at` SHA.
-- `prompt: "/cm-pr-converge"`.
+- `prompt: "/pr-converge"`.
 
 **On convergence:** apply **Convergence** section of
 `../workflows/schedule-wakeup-loop.md` (omit wakeups).

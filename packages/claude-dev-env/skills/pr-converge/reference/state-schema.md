@@ -3,7 +3,7 @@
 **Dual persistence:** `<TMPDIR>/pr-converge-<session_id>/state.json`
 exists (multi-PR) → that file is source of truth for `phase`, heads,
 counters, status, not conversation transcript. No `state.json` (typical
-single-PR `/cm-pr-converge`) → track in each assistant turn as
+single-PR `/pr-converge`) → track in each assistant turn as
 plain text so next tick re-reads from context:
 
 - `phase`: `BUGBOT` or `BUGTEAM`. Start `BUGBOT` on first tick.

@@ -1,6 +1,6 @@
 # Multi-PR orchestration model
 
-Loaded by `cm-pr-converge` only when `state.json` exists at
+Loaded by `pr-converge` only when `state.json` exists at
 `<TMPDIR>/pr-converge-<session_id>/state.json`. Single-PR runs ignore.
 
 ## Core rule: orchestrator is traffic controller only

@@ -1,15 +1,16 @@
 """Fetch Cursor Bugbot reviews newest-first, classified as dirty or clean.
 
-Wraps the gh CLI invocation required by the gh-paginate rule:
-`gh api '...?per_page=100' --paginate --slurp` piped through external Python
-JSON handling (instead of `gh --jq`, which runs per-page and breaks cross-page
-operations like sort/reverse — see GitHub CLI #10459).
+Thin wrapper around ``reviewer_fetch_core.fetch_reviewer_reviews`` parameterised
+by ``bugbot_spec``. Wraps the gh CLI invocation required by the gh-paginate
+rule: ``gh api '...?per_page=100' --paginate --slurp`` piped through external
+Python JSON handling (instead of ``gh --jq``, which runs per-page and breaks
+cross-page operations like sort/reverse - see GitHub CLI issue 10459).
 """
+
+from __future__ import annotations
 
 import argparse
 import json
-import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -20,12 +21,8 @@ from evict_cached_config_modules import evict_cached_config_modules
 
 evict_cached_config_modules()
 
-from config.pr_converge_constants import (
-    BUGBOT_DIRTY_BODY_REGEX,
-    CURSOR_BOT_LOGIN,
-    GH_REVIEWS_PATH_TEMPLATE,
-)
-from review_field_helpers import body_of, login_of, submitted_at_of
+from reviewer_fetch_core import fetch_reviewer_reviews
+from reviewer_specs import bugbot_spec
 
 
 def fetch_bugbot_reviews(
@@ -34,55 +31,10 @@ def fetch_bugbot_reviews(
     repo: str,
     number: int,
 ) -> list[dict[str, object]]:
-    """Return Cursor Bugbot reviews newest-first, each with a clean/dirty classification.
-
-    Each entry contains review_id, commit_id, submitted_at, body, and classification.
-    """
-    reviews_endpoint = GH_REVIEWS_PATH_TEMPLATE.format(
-        owner=owner, repo=repo, number=number
+    """Return Cursor Bugbot reviews newest-first, each with a classification."""
+    return fetch_reviewer_reviews(
+        bugbot_spec, owner=owner, repo=repo, number=number
     )
-    gh_command: list[str] = [
-        "gh",
-        "api",
-        reviews_endpoint,
-        "--paginate",
-        "--slurp",
-    ]
-    completed = subprocess.run(
-        gh_command,
-        capture_output=True,
-        check=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    pages: list[list[dict[str, object]]] = json.loads(completed.stdout)
-    all_flat_reviews = [each_review for each_page in pages for each_review in each_page]
-    all_bugbot_reviews = [
-        each_review
-        for each_review in all_flat_reviews
-        if login_of(each_review) == CURSOR_BOT_LOGIN
-        and each_review.get("submitted_at") is not None
-        and each_review.get("id") is not None
-    ]
-    all_bugbot_reviews.sort(
-        key=lambda each_review: submitted_at_of(each_review), reverse=True
-    )
-    dirty_pattern = re.compile(BUGBOT_DIRTY_BODY_REGEX)
-    return [
-        {
-            "review_id": each_review["id"],
-            "commit_id": each_review.get("commit_id"),
-            "submitted_at": each_review["submitted_at"],
-            "body": body_of(each_review),
-            "classification": (
-                "dirty"
-                if dirty_pattern.search(body_of(each_review))
-                else "clean"
-            ),
-        }
-        for each_review in all_bugbot_reviews
-    ]
 
 
 def main() -> int:
@@ -92,7 +44,9 @@ def main() -> int:
     parser.add_argument("--number", required=True, type=int)
     parsed_arguments = parser.parse_args()
     all_reviews = fetch_bugbot_reviews(
-        owner=parsed_arguments.owner, repo=parsed_arguments.repo, number=parsed_arguments.number
+        owner=parsed_arguments.owner,
+        repo=parsed_arguments.repo,
+        number=parsed_arguments.number,
     )
     json.dump(all_reviews, sys.stdout)
     sys.stdout.write("\n")

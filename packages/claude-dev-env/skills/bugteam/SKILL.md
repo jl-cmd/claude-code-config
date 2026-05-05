@@ -4,7 +4,7 @@ description: >-
   Open pull request audit–fix until convergence: CODE_RULES gate, clean-room
   audit (`code-quality-agent`, opus) and fix (`clean-coder`, opus), per-loop
   GitHub reviews, 10-audit cap; grant then revoke `.claude/**`. Spawns
-  background subagents — no `TeamCreate` required. Triggers: '/bugteam', 'run
+  background subagents (`Agent(..., run_in_background=true)`). Triggers: '/bugteam', 'run
   the bug team', 'auto-fix the PR until clean', 'loop audit and fix'.
 ---
 
@@ -15,8 +15,7 @@ description: >-
 cap: 10 audit loops. Grant `.claude/**` at start, revoke always at end.
 
 Both audit and fix roles run as background subagents
-(`Agent(..., run_in_background=true)`). No `TeamCreate`, `TeamDelete`, or
-`SendMessage` required. Verbatim doc quotes and URLs:
+(`Agent(..., run_in_background=true)`). Verbatim doc quotes and URLs:
 [`sources.md`](sources.md).
 
 ## Contents

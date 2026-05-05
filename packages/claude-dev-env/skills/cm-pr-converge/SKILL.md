@@ -18,7 +18,7 @@ back-to-back clean on same `HEAD`, mergeable, and Copilot clean.
 ## Pre-flight
 
 `ScheduleWakeup` not in this turn's tool registry → abort. Report
-`pr-converge requires ScheduleWakeup; aborting` and return.
+`cm-pr-converge requires ScheduleWakeup; aborting` and return.
 
 ## Gotchas
 

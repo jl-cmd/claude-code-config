@@ -150,6 +150,38 @@ class DescribeVerifyPrReview:
             exit_code = verify_review.verify_pr_review("own", "rep", 1, "abc1234", 3)
         assert exit_code == 2
 
+    def test_wrong_commit_path_iterates_all_matching_reviews(self):
+        first_stale = {
+            "id": 1,
+            "body": "## Loop 3 Audit",
+            "commit_id": "stale_one",
+            "html_url": "url-1",
+        }
+        second_stale = {
+            "id": 2,
+            "body": "## /bugteam loop 3 ",
+            "commit_id": "stale_two",
+            "html_url": "url-2",
+        }
+        with patch.object(
+            verify_review,
+            "run_gh",
+            return_value=type(
+                "GhResult",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": json.dumps([[first_stale, second_stale]]),
+                    "stderr": "",
+                    "is_timed_out": False,
+                },
+            )(),
+        ):
+            exit_code = verify_review.verify_pr_review(
+                "own", "rep", 1, "expected_sha", 3
+            )
+        assert exit_code == 2
+
     def test_returns_exit_duplicate_when_multiple_matching_reviews(self):
         review_a = {
             "id": 1,

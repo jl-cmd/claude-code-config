@@ -6,13 +6,12 @@ issue comment.
 
 import argparse
 import json
-import os.path
 import sys
+from pathlib import Path
 
 sys.modules.pop("config", None)
-script_directory = os.path.dirname(os.path.abspath(__file__))
-if script_directory not in sys.path:
-    sys.path.insert(0, script_directory)
+if str(Path(__file__).absolute().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).absolute().parent))
 
 from config.review_posting_constants import (
     BUGTEAM_LOOP_HEADER_TEMPLATE,
@@ -109,7 +108,9 @@ def verify_pr_review(
     ]
 
     if not reviews_on_expected_commit:
-        stale_commits = {r.get("commit_id", "") for r in matching_reviews}
+        stale_commits = {
+            each_review.get("commit_id", "") for each_review in matching_reviews
+        }
         print(
             f"Review(s) found on commit(s) {stale_commits}, expected {expected_commit_id}",
             file=sys.stderr,

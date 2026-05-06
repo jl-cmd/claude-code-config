@@ -129,3 +129,15 @@ def test_should_pass_imported_constant_directly_without_local_alias() -> None:
     fields_arg = invoked_argv[invoked_argv.index("--json") + 1]
     expected_fields = view_pr_context_module.PR_CONTEXT_FIELDS
     assert fields_arg is expected_fields
+
+
+def test_should_exit_when_number_provided_without_owner_and_repo() -> None:
+    with patch("sys.argv", ["view_pr_context.py", "--number", "42"]):
+        with pytest.raises(SystemExit):
+            view_pr_context_module.main()
+
+
+def test_should_exit_when_owner_and_repo_provided_without_number() -> None:
+    with patch("sys.argv", ["view_pr_context.py", "--owner", "acme", "--repo", "widget"]):
+        with pytest.raises(SystemExit):
+            view_pr_context_module.main()

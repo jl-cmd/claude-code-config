@@ -53,9 +53,9 @@ After the teammate returns, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml`
 
 ### Shutdown (bugfind)
 
-**Expected path — self-termination:** Teammates often self-terminate when complete — the `Agent` call returns and the session ends. Then no `SendMessage` is needed.
+**Expected path — self-termination:** Teammates self-terminate when complete — the background-completion notification arrives and the lead reads the outcomes XML. No `SendMessage` is needed.
 
-**Fallback — lead-initiated shutdown:** If the teammate still appears active after `Agent` returns, send:
+**Fallback — lead-initiated shutdown:** If the teammate does not self-terminate (notification never arrives), send:
 
 ```
 SendMessage(
@@ -91,7 +91,7 @@ Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-k", team_n
 
 Teammate `-a` is the opus validator: polls for all 10 sibling XMLs at explicit absolute paths under `<run_temp_dir>/pr-<N>` (60s timeout, 2s interval; on timeout: log diagnostics entry, proceed with validated findings from available XMLs), then validates each finding — file exists, line in bounds, excerpt matches claimed line, category is A–J, severity is P0/P1/P2. Hallucinated findings are quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)` (max severity wins, keep longest description on conflict) and re-assigned merged IDs as `loop<L>-<K>`. The `-a` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
 
-Shutdown order: parallel `SendMessage` to `-b` through `-k`, then `-a`:
+Shutdown order (fallback only — expected path is self-termination via background completion): parallel `SendMessage` to `-b` through `-k`, then `-a`:
 
 ```
 SendMessage(to="bugfind-pr<N>-loop<L>-b", message={"type": "shutdown_request", "reason": "validator complete"})

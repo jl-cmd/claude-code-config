@@ -381,8 +381,8 @@ calls in one assistant message (`run_in_background=true`):
 
 Lead awaits the opus validator (-a) background-completion notification (120s
 timeout). The validator independently polls all 10 sibling XMLs; the lead does
-not gate on haiku peer completion. On timeout: proceed with validated findings
-from available XMLs; log partial-aggregation warning.
+not gate on haiku peer completion. On lead timeout: the validator did not post
+a merged review — treat as a hard blocker and abort the loop.
 
 The sibling-output paths in [`PROMPTS.md`](PROMPTS.md) must cover the full
 `-b` through `-k` range.

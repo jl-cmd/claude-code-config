@@ -55,7 +55,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
      in memory; all posting happens at step 6 once anchors are validated.
   2. Assign each finding a stable finding_id of exactly the form `loop<L>-<K>`
      where <K> is 1-based within this loop.
-  3. Validate every finding's (file, line) against the captured diff. Split
+  3. For each finding, capture a verbatim excerpt from the target file at the cited line. Populate the `<excerpt>` element in the outcome XML with it. Validate every finding's (file, line) against the captured diff. Split
      findings into two buckets: anchored (line is in the diff) and
      unanchored (line is not in the diff — goes into the review body's
      "Findings without a diff anchor" section per Step 2.5).

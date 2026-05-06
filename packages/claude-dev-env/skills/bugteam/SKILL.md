@@ -374,7 +374,7 @@ calls in one assistant message (`run_in_background=true`):
   - Validates each finding: file exists, line in bounds, excerpt matches claimed
     line, category is A–J, severity is P0/P1/P2.
   - Hallucinated findings → quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under
-    `validator_rejected`.
+    `validator_rejected` (added alongside the required diagnostics keys defined in the shared audit contract).
   - De-dups by `(file, line, category)`, max severity wins; on conflict, keep longest description text.
   - Re-ids as `loop<L>-<K>`.
   - Writes `<worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml`, posts review.

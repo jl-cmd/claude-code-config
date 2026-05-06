@@ -361,18 +361,39 @@ background-completion notification, then reads
 `last_action = "audited"`; append audit line to `audit_log`.
 
 **Parallel auditors (`loop_count >= 4`):** gate passes immediately before;
-after three full audit/fix rounds without convergence, issue three `Agent`
-calls in one assistant message (`run_in_background=true`): `-a` posts the
-review and merges outcomes from `-b`/`-c` (read
-`.bugteam-pr<N>-loop<L>.outcomes.xml` plus
-`<run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml` and `...-c...`); merge key
-`(file, line, category_letter)`; re-id `loopN-K`. `-b`/`-c` write sibling XML
-only; prompts must pass literal absolute sibling paths. Output path
-contract: `-b`/`-c` write to `<run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml`
-and `<run_temp_dir>/pr-<N>/loop-<L>-c.outcomes.xml`; `-a` writes to
-`<worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml`.
-Lead awaits all three background-completion notifications before merging
-outcomes.
+after three full audit/fix rounds without convergence, issue eleven `Agent`
+calls in one assistant message (`run_in_background=true`):
+
+- **10 haiku auditors (`-b` through `-k`):** `subagent_type="code-quality-agent"`,
+  `model="haiku"`, write sibling XML to
+  `<run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml`, skip PR posting.
+  Prompts must pass literal absolute sibling paths.
+- **1 opus validator (`-a`):** `subagent_type="code-quality-agent"`,
+  `model="opus"`:
+  - Polls for all 10 sibling XMLs before proceeding (60s timeout, 2s interval).
+  - Validates each finding: file exists, line in bounds, excerpt matches claimed
+    line, category is A–J, severity is P0/P1/P2.
+  - Hallucinated findings → quarantined to `loop-<N>-diagnostics.json` under
+    `validator_rejected`.
+  - De-dups by `(file, line, category)`, max severity wins.
+  - Re-ids as `loopN-K`.
+  - Writes `<worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml`, posts review.
+
+Lead awaits all eleven background-completion notifications. Validator polls
+independently; lead does not gate on peer completion.
+
+After the validator completes, lead runs `verify_review.py` to confirm exactly
+one review was posted at the correct commit:
+
+```bash
+python <script_dir>/verify_review.py \
+  --owner <owner> --repo <repo> --number <N> \
+  --commit-id "$(git rev-parse HEAD)" --loop <N>
+```
+
+Non-zero exit → lead posts fallback issue comment with all findings inline
+from the outcome XML, then populates `loop_comment_index` from the fallback
+comment URL. `<script_dir>` = absolute path to `_shared/pr-loop/scripts/`.
 
 ### FIX action
 

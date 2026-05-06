@@ -52,6 +52,8 @@ def post_review_summary(
             f"{GH_FIELD_BODY_AT_PREFIX}{body_file}",
         ],
         timeout_seconds=timeout_seconds,
+        retry_nonzero=False,
+        retry_timeout=False,
     )
     if gh_result.returncode != 0:
         error_text = (gh_result.stderr or "").strip() or gh_result.stdout.strip()
@@ -94,6 +96,8 @@ def post_comment(
             f"side={REVIEW_COMMENTS_SIDE}",
         ],
         timeout_seconds=timeout_seconds,
+        retry_nonzero=False,
+        retry_timeout=False,
     )
     if gh_result.returncode != 0:
         return None

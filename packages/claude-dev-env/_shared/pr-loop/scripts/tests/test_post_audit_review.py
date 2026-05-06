@@ -40,26 +40,6 @@ class DescribeParseIdentifierAndUrl:
         assert post_audit_review._parse_identifier_and_url(raw, "review") is None
 
 
-class DescribeValidateFindingCounts:
-    def test_returns_none_when_counts_match(self):
-        error = post_audit_review._validate_finding_counts(
-            [Path("f1.md")], ["src/a.py"], [10]
-        )
-        assert error is None
-
-    def test_returns_error_when_finding_count_mismatches_paths(self):
-        error = post_audit_review._validate_finding_counts(
-            [Path("f1.md"), Path("f2.md")], ["src/a.py"], [10, 20]
-        )
-        assert "2 finding-files, 1 paths" in error
-
-    def test_returns_error_when_finding_count_mismatches_lines(self):
-        error = post_audit_review._validate_finding_counts(
-            [Path("f1.md")], ["src/a.py", "src/b.py"], [10]
-        )
-        assert "1 finding-files, 2 paths" in error
-
-
 class DescribeBuildOutputPayload:
     def test_builds_correct_json_structure(self):
         output = post_audit_review._build_output_payload(

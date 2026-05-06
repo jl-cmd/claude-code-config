@@ -265,9 +265,8 @@ dirty so the AUDIT runs against the latest diff with that signal in mind:
 
 ```bash
 dirty_review_count=0
-gh api "repos/<owner>/<repo>/pulls/<number>/reviews" \
---jq '[.[] | select(.body | startswith("## /bugteam loop "))] |
-sort_by(.submitted_at) | reverse'
+gh api "repos/<owner>/<repo>/pulls/<number>/reviews?per_page=100" --paginate --slurp \
+  | jq '[.[][] | select(.body | startswith("## /bugteam loop "))] | sort_by(.submitted_at) | reverse'
 ```
 
 Iterate from index 0 (most recent) toward older entries:

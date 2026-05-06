@@ -53,21 +53,7 @@ After the teammate returns, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml`
 
 ### Shutdown (bugfind)
 
-**Expected path — self-termination:** Teammates self-terminate when complete — the background-completion notification arrives and the lead reads the outcomes XML. No `SendMessage` is needed.
-
-**Fallback — lead-initiated shutdown:** If the teammate does not self-terminate (notification never arrives), send:
-
-```
-SendMessage(
-  to="bugfind-pr<N>-loop<L>",
-  message={
-    "type": "shutdown_request",
-    "reason": "audit loop <L> complete; outcome XML captured"
-  }
-)
-```
-
-The teammate replies with `{type: "shutdown_response", approve: true}`. If `approve` is `false`, exit reason = `error: bugfind teammate refused shutdown` → Step 4 teardown then Step 5 revoke.
+Teammates self-terminate when complete — the background-completion notification arrives and the lead reads the outcomes XML. If the notification does not arrive within the lead timeout (120s), treat as a hard blocker and abort the loop.
 
 `last_action = "audited"`. Append audit metadata to `audit_log`.
 
@@ -91,26 +77,7 @@ Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-k", team_n
 
 Teammate `-a` is the opus validator: polls for all 10 sibling XMLs at explicit absolute paths under `<run_temp_dir>/pr-<N>` (60s timeout, 2s interval; on timeout: log diagnostics entry, proceed with validated findings from available XMLs), then validates each finding — file exists, line in bounds, excerpt matches claimed line, category is A–J, severity is P0/P1/P2. Hallucinated findings are quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)` (max severity wins, keep longest description on conflict) and re-assigned merged IDs as `loop<L>-<K>`. The `-a` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
 
-Shutdown order (fallback only — expected path is self-termination via background completion): parallel `SendMessage` to `-b` through `-k`, then `-a`:
-
-```
-SendMessage(to="bugfind-pr<N>-loop<L>-b", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-c", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-d", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-e", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-f", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-g", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-h", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-i", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-j", message={"type": "shutdown_request", "reason": "validator complete"})
-SendMessage(to="bugfind-pr<N>-loop<L>-k", message={"type": "shutdown_request", "reason": "validator complete"})
-```
-
-then
-
-```
-SendMessage(to="bugfind-pr<N>-loop<L>-a", message={"type": "shutdown_request", "reason": "merged review posted"})
-```
+All subagents self-terminate via background completion. The lead awaits only the validator (-a) notification (120s timeout). Missing notification → hard blocker.
 
 ## FIX action (fresh teammate)
 
@@ -122,17 +89,7 @@ After replies, the teammate writes outcome XML (schema in [`../PROMPTS.md`](../P
 
 ### Shutdown (bugfix)
 
-Same self-termination vs `SendMessage` split as bugfind. Fallback message:
-
-```
-SendMessage(
-  to="bugfix-pr<N>-loop<L>",
-  message={
-    "type": "shutdown_request",
-    "reason": "fix loop <L> complete; commit <sha7> pushed"
-  }
-)
-```
+Same self-termination model as bugfind. Missing notification → hard blocker.
 
 `approve: false` → `error: bugfix teammate refused shutdown` → Step 4 then 5.
 

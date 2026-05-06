@@ -76,8 +76,8 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 </comment_posting>
 
 <output_format>
-  Write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml inside
-  the PR's worktree directory (<worktree_path>). Return only that path on stdout. The schema:
+  For the primary (-a) auditor: write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml inside
+  the PR's worktree directory (<worktree_path>). For sibling auditors (-b/-c): write to <run_temp_dir>/pr-<N>/loop-<L>-{b,c}.outcomes.xml (absolute path passed in prompt). Return only that path on stdout. The schema:
 </output_format>
 ```
 

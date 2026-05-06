@@ -26,7 +26,7 @@ Direct quote:
 
 **Skill use:** Subagents return into the lead context (accumulates across loops); agent-team teammates do not pollute the lead. This skill needs the independent-context property.
 
-### Referencing subagent types when spawning teammates
+### Referencing subagent types when spawning subagents
 
 Direct quote:
 

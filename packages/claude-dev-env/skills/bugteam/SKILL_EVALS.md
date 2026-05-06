@@ -158,7 +158,7 @@ Patch this table to match observation and annotate each correction.
 **Pass criteria.**
 - Loop count stops at 1.
 - Final report contains `/bugteam exit: stuck` and names the two unresolved findings.
-- Steps 17–24 fire despite the stuck exit — I-2 and I-9 enforce this.
+- Steps 19–26 fire despite the stuck exit — I-2 and I-9 enforce this.
 
 ---
 
@@ -173,7 +173,7 @@ Patch this table to match observation and annotate each correction.
 - Loops 4–10: three parallel `Agent(name="bugfind-pr<N>-loop<L>-[abc]", run_in_background=true)` in a single assistant message per loop; lead awaits all three notifications then merges outcomes.
 - Each loop produces one `Agent(name="bugfix-pr<N>-loop<L>", run_in_background=true)`.
 - Exactly 10 audit phases, exactly 10 fix phases.
-- Steps 17–24 from Eval 5 fire at teardown.
+- Steps 19–26 from Eval 5 fire at teardown.
 
 **Pass criteria.**
 - I-6 holds: exactly 10 audit phases.
@@ -190,7 +190,7 @@ Patch this table to match observation and annotate each correction.
 
 **Layer A invariants.** I-1, I-2, I-3, I-4, I-5, I-6, I-8, I-9, I-10.
 
-**Layer B predicted trace.** Eval 5 steps 1–8 and 17–24 only — no FIX phase because zero findings means the skill exits the loop at `last_action == "audited"` and `last_findings.total == 0`.
+**Layer B predicted trace.** Eval 5 steps 1–8 and 19–26 only — no FIX phase because zero findings means the skill exits the loop at `last_action == "audited"` and `last_findings.total == 0`.
 
 **Pass criteria.**
 - Exactly 1 `Agent(subagent_type="code-quality-agent", run_in_background=true)` call, 0 fix agent spawns.
@@ -235,9 +235,9 @@ Patch this table to match observation and annotate each correction.
 - Bugfix teammate outcome XML marks every finding `status="hook_blocked"` with populated `<hook_output>`.
 - Bugfix teammate posts `Hook blocked the fix commit: <one-line summary>` to each finding comment.
 - Lead's `Bash("git rev-parse HEAD")` after fix detects no SHA change → exit reason `stuck`.
-- Steps 19–27 from Eval 5 fire at teardown.
+- Steps 19–26 from Eval 5 fire at teardown.
 
-**Pass criteria.** Layer A I-2 and I-11 hold. Final report contains `/bugteam exit: stuck` and surfaces the hook_output summary.
+**Pass criteria.** Layer A I-2 and I-9 hold. Final report contains `/bugteam exit: stuck` and surfaces the hook_output summary.
 
 ---
 
@@ -251,7 +251,7 @@ Patch this table to match observation and annotate each correction.
 Agent(subagent_type="general-purpose", description="Rewrite PR 42 body from cumulative diff", prompt=<same brief>)
 ```
 
-Steps 24–27 follow normally.
+Steps 24–26 follow normally.
 
 **Pass criteria.** Exactly 1 `Agent(subagent_type="general-purpose", ...)` call for the description rewrite. `gh pr edit` fires. Final report carries no Step 4.5 skip warning.
 
@@ -261,7 +261,7 @@ Steps 24–27 follow normally.
 
 **Scenario.** Neither `pr-description-writer` nor `general-purpose` appear in the available-agents list.
 
-**Layer B predicted trace.** Eval 5 steps 1–22, then skip steps 23–25. Steps 26–27 still fire.
+**Layer B predicted trace.** Eval 5 steps 1–22, then skip steps 23–25. Step 26 still fires.
 
 **Pass criteria.**
 - Zero `Agent` calls for PR description rewriting.
@@ -278,7 +278,7 @@ Steps 24–27 follow normally.
 **Layer B predicted trace.** Eval 5 steps 1–7, then:
 - Lead awaits notification and calls `Read(".bugteam-pr42-loop1.outcomes.xml")` → file missing.
 - Skill sets exit reason = `error: outcomes XML missing after bugfind loop 1`.
-- Teardown (steps 17–24 from Eval 5) all fire.
+- Teardown (steps 19–26 from Eval 5) all fire.
 
 **Pass criteria.** Final report surfaces the error and the loop number. Revoke fires despite the error.
 

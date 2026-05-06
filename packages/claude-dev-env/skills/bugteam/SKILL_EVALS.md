@@ -245,13 +245,13 @@ Patch this table to match observation and annotate each correction.
 
 **Scenario.** The available-agents list does not include `pr-description-writer` but does include `general-purpose`.
 
-**Layer B predicted trace.** Eval 5 steps 1–22 identical; step 23 becomes:
+**Layer B predicted trace.** Eval 5 steps 1–21 identical; step 22 becomes:
 
 ```
 Agent(subagent_type="general-purpose", description="Rewrite PR 42 body from cumulative diff", prompt=<same brief>)
 ```
 
-Steps 24–26 follow normally.
+Steps 23–26 follow normally.
 
 **Pass criteria.** Exactly 1 `Agent(subagent_type="general-purpose", ...)` call for the description rewrite. `gh pr edit` fires. Final report carries no Step 4.5 skip warning.
 
@@ -261,7 +261,7 @@ Steps 24–26 follow normally.
 
 **Scenario.** Neither `pr-description-writer` nor `general-purpose` appear in the available-agents list.
 
-**Layer B predicted trace.** Eval 5 steps 1–22, then skip steps 23–25. Step 26 still fires.
+**Layer B predicted trace.** Eval 5 steps 1–21, then skip steps 22–24. Steps 25–26 still fire.
 
 **Pass criteria.**
 - Zero `Agent` calls for PR description rewriting.

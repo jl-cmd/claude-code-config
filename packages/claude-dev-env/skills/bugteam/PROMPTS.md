@@ -45,6 +45,12 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 </constraints>
 
 <comment_posting>
+  Sibling auditors (-b through -k): run only steps 1–3 (audit, assign IDs,
+  validate anchors), then write outcome XML per <output_format> and return.
+  Skip steps 4–8 — sibling auditors do not post PR reviews.
+
+  Validator (-a) and single-opus auditors: run all steps below.
+
   1. Audit the diff against the 10 categories above. Buffer the findings
      in memory; all posting happens at step 6 once anchors are validated.
   2. Assign each finding a stable finding_id of exactly the form `loop<L>-<K>`

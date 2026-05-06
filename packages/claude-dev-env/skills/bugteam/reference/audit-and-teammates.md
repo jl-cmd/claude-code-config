@@ -94,16 +94,16 @@ Teammate `-a` is the opus validator: polls for all 10 sibling XMLs at explicit a
 Shutdown order: parallel `SendMessage` to `-b` through `-k`, then `-a`:
 
 ```
-SendMessage(to="bugfind-pr<N>-loop<L>-b", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-c", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-d", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-e", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-f", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-g", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-h", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-i", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-j", message={"type": "shutdown_request", "reason": "variant XML captured"})
-SendMessage(to="bugfind-pr<N>-loop<L>-k", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-pr<N>-loop<L>-b", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-c", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-d", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-e", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-f", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-g", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-h", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-i", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-j", message={"type": "shutdown_request", "reason": "validator complete"})
+SendMessage(to="bugfind-pr<N>-loop<L>-k", message={"type": "shutdown_request", "reason": "validator complete"})
 ```
 
 then

@@ -73,21 +73,37 @@ The teammate replies with `{type: "shutdown_response", approve: true}`. If `appr
 
 ### Parallel auditors (`loop_count >= 4`)
 
-The pre-audit gate must pass immediately before this step. After three full audit/fix rounds without convergence, issue three `Agent` calls in **one** assistant message so they run in parallel:
+The pre-audit gate must pass immediately before this step. After three full audit/fix rounds without convergence, issue eleven `Agent` calls in **one** assistant message so they run in parallel:
 
 ```
-Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-a", team_name="<team_name>", model="opus", description="Bugfind audit loop <N> variant a", prompt="<audit XML; write outcome to .bugteam-loop-<N>.outcomes.xml; post the per-loop review; read and merge b/c outcomes from <team_temp_dir>/loop-<N>-b.outcomes.xml and <team_temp_dir>/loop-<N>-c.outcomes.xml>")
-Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-b", team_name="<team_name>", model="opus", description="Bugfind audit loop <N> variant b", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-b.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-c", team_name="<team_name>", model="opus", description="Bugfind audit loop <N> variant c", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-c.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-a", team_name="<team_name>", model="opus", description="Bugfind audit loop <N> validator", prompt="<audit XML; poll for all 10 sibling XMLs at <team_temp_dir>/loop-<N>-b.outcomes.xml through <team_temp_dir>/loop-<N>-k.outcomes.xml (60s timeout, 2s interval); validate each finding: file exists, line in bounds, excerpt matches claimed line, category A-J, severity P0/P1/P2; quarantine hallucinated findings to loop-<N>-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins; re-id as loopN-K; write .bugteam-loop-<N>.outcomes.xml; post review>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-b", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant b", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-b.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-c", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant c", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-c.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-d", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant d", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-d.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-e", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant e", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-e.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-f", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant f", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-f.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-g", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant g", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-g.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-h", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant h", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-h.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-i", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant i", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-i.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-j", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant j", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-j.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-loop-<N>-k", team_name="<team_name>", model="haiku", description="Bugfind audit loop <N> variant k", prompt="<audit XML; write outcome to <team_temp_dir>/loop-<N>-k.outcomes.xml; skip PR posting>")
 ```
 
-Teammate `-a` is the post-owner: read all three outcome XML files at explicit absolute paths (`.bugteam-loop-<N>.outcomes.xml` in cwd, plus sibling paths under `<team_temp_dir>`), merge findings by `(file, line, category_letter)` (collapse duplicates, keep longest description and highest severity), re-assign merged IDs as `loopN-K`, post the single per-loop review. The `-a` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
+Teammate `-a` is the opus validator: polls for all 10 sibling XMLs at explicit absolute paths under `<team_temp_dir>` (60s timeout, 2s interval), then validates each finding — file exists, line in bounds, excerpt matches claimed line, category is A–J, severity is P0/P1/P2. Hallucinated findings are quarantined to `loop-<N>-diagnostics.json` under `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)` (max severity wins) and re-assigned merged IDs as `loopN-K`. The `-a` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
 
-Shutdown order: parallel `SendMessage` to `b` and `c`, then `a`:
+Shutdown order: parallel `SendMessage` to `-b` through `-k`, then `-a`:
 
 ```
 SendMessage(to="bugfind-loop-<N>-b", message={"type": "shutdown_request", "reason": "variant XML captured"})
 SendMessage(to="bugfind-loop-<N>-c", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-loop-<N>-d", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-loop-<N>-e", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-loop-<N>-f", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-loop-<N>-g", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-loop-<N>-h", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-loop-<N>-i", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-loop-<N>-j", message={"type": "shutdown_request", "reason": "variant XML captured"})
+SendMessage(to="bugfind-loop-<N>-k", message={"type": "shutdown_request", "reason": "variant XML captured"})
 ```
 
 then

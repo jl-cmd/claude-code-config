@@ -86,6 +86,7 @@ def verify_pr_review(
         each_review
         for each_review in all_reviews
         if _is_matching_review(each_review.get("body"), all_expected_headers)
+        and each_review.get("commit_id") == expected_commit_id
     ]
 
     review_count = len(matching_reviews)

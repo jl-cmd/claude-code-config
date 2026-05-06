@@ -370,17 +370,18 @@ calls in one assistant message (`run_in_background=true`):
   Prompts must pass literal absolute sibling paths.
 - **1 opus validator (`-a`):** `subagent_type="code-quality-agent"`,
   `model="opus"`:
-  - Polls for all 10 sibling XMLs before proceeding (60s timeout, 2s interval).
+  - Polls for all 10 sibling XMLs before proceeding (60s timeout, 2s interval). On timeout: log diagnostics entry, proceed with validated findings from available XMLs, report count in validator output.
   - Validates each finding: file exists, line in bounds, excerpt matches claimed
     line, category is A–J, severity is P0/P1/P2.
   - Hallucinated findings → quarantined to `loop-<N>-diagnostics.json` under
     `validator_rejected`.
-  - De-dups by `(file, line, category)`, max severity wins.
+  - De-dups by `(file, line, category)`, max severity wins; on conflict, keep longest description text.
   - Re-ids as `loopN-K`.
   - Writes `<worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml`, posts review.
 
-Lead awaits all eleven background-completion notifications. Validator polls
-independently; lead does not gate on peer completion.
+Lead awaits all eleven background-completion notifications with 120s timeout.
+On timeout: proceed with available XML outputs; log partial-aggregation warning.
+Validator polls independently; lead does not gate on peer completion.
 
 ### FIX action
 

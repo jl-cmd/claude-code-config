@@ -233,23 +233,23 @@ def get_changed_files(repository_root: Path, base_ref: str) -> list[Path]:
     ]
 
 
-def _find_related_test_files(changed_path: Path, repo_root: Path) -> list[Path]:
+def _find_related_test_files(changed_path: Path, repository_root: Path) -> list[Path]:
     if changed_path.suffix != PYTHON_FILE_SUFFIX:
         return []
     stem = changed_path.stem
     test_prefix = PYTEST_TEST_FILENAME_PREFIX
     test_suffix = PYTEST_TEST_FILENAME_SUFFIX
     if (stem.startswith(test_prefix) or stem.endswith(test_suffix)) and (
-        repo_root / changed_path
+        repository_root / changed_path
     ).is_file():
-        return [repo_root / changed_path]
-    full_path = repo_root / changed_path
+        return [repository_root / changed_path]
+    full_path = repository_root / changed_path
     parent = full_path.parent
     adjacent_tests = parent / TESTS_DIRECTORY_NAME
-    top_tests = repo_root / TESTS_DIRECTORY_NAME
+    top_tests = repository_root / TESTS_DIRECTORY_NAME
     relative_parent = changed_path.parent
     py_suffix = PYTHON_FILE_SUFFIX
-    candidates = [
+    all_candidates = [
         parent / f"{test_prefix}{stem}{py_suffix}",
         parent / f"{stem}{test_suffix}{py_suffix}",
         adjacent_tests / f"{test_prefix}{stem}{py_suffix}",
@@ -257,15 +257,15 @@ def _find_related_test_files(changed_path: Path, repo_root: Path) -> list[Path]:
         top_tests / relative_parent / f"{test_prefix}{stem}{py_suffix}",
         top_tests / relative_parent / f"{stem}{test_suffix}{py_suffix}",
     ]
-    return sorted({c for c in candidates if c.is_file()})
+    return sorted({each_candidate for each_candidate in all_candidates if each_candidate.is_file()})
 
 
 def discover_related_tests(
-    all_changed_files: list[Path], repo_root: Path
+    all_changed_files: list[Path], repository_root: Path
 ) -> list[Path]:
     related: set[Path] = set()
     for each_file in all_changed_files:
-        related.update(_find_related_test_files(each_file, repo_root))
+        related.update(_find_related_test_files(each_file, repository_root))
     return sorted(related)
 
 
@@ -369,16 +369,16 @@ def main(all_arguments: list[str]) -> int:
                 )
                 effective_scope = PYTEST_SCOPE_ALL
             if effective_scope == PYTEST_SCOPE_CHANGED and arguments.base_ref is not None:
-                changed = get_changed_files(repository_root, arguments.base_ref)
-                related = discover_related_tests(changed, repository_root)
-                if related:
+                all_changed = get_changed_files(repository_root, arguments.base_ref)
+                all_related = discover_related_tests(all_changed, repository_root)
+                if all_related:
                     print(
-                        f"bugteam_preflight: running {len(related)} test(s) "
+                        f"bugteam_preflight: running {len(all_related)} test(s) "
                         f"related to changed files (scope=changed).",
                         file=sys.stderr,
                     )
                     exit_code = run_pytest(
-                        repository_root, arguments.verbose, related
+                        repository_root, arguments.verbose, all_related
                     )
                 else:
                     print(

@@ -24,7 +24,7 @@ post_audit_review = _load_module("post_audit_review", "post_audit_review.py")
 class DescribeParseReviewResponse:
     def test_extracts_review_id_url_and_empty_comments_when_no_nested_comments(self):
         raw = json.dumps({"id": 42, "html_url": "https://github.com/pr#review-42"})
-        result = post_audit_review._parse_review_response(raw, expected_comment_count=0)
+        result = post_audit_review._parse_review_response(raw)
         assert result is not None
         review_id, review_url, all_comment_entries = result
         assert review_id == "42"
@@ -42,7 +42,7 @@ class DescribeParseReviewResponse:
                 ],
             }
         )
-        result = post_audit_review._parse_review_response(raw, expected_comment_count=2)
+        result = post_audit_review._parse_review_response(raw)
         assert result is not None
         review_id, review_url, all_comment_entries = result
         assert review_id == "42"
@@ -53,24 +53,15 @@ class DescribeParseReviewResponse:
         ]
 
     def test_returns_none_on_invalid_json(self):
-        assert (
-            post_audit_review._parse_review_response("not json", expected_comment_count=0)
-            is None
-        )
+        assert post_audit_review._parse_review_response("not json") is None
 
     def test_returns_none_when_id_missing(self):
         raw = json.dumps({"html_url": "https://github.com/pr"})
-        assert (
-            post_audit_review._parse_review_response(raw, expected_comment_count=0)
-            is None
-        )
+        assert post_audit_review._parse_review_response(raw) is None
 
     def test_returns_none_when_url_not_string(self):
         raw = json.dumps({"id": 1, "html_url": 99})
-        assert (
-            post_audit_review._parse_review_response(raw, expected_comment_count=0)
-            is None
-        )
+        assert post_audit_review._parse_review_response(raw) is None
 
     def test_skips_malformed_nested_comments(self):
         raw = json.dumps(
@@ -83,45 +74,26 @@ class DescribeParseReviewResponse:
                 ],
             }
         )
-        result = post_audit_review._parse_review_response(raw, expected_comment_count=1)
+        result = post_audit_review._parse_review_response(raw)
         assert result is not None
         review_id, review_url, all_comment_entries = result
         assert all_comment_entries == [
             {"id": "101", "url": "https://github.com/pr#comment-101"},
         ]
 
-    def test_returns_result_when_expected_count_matches(self):
-        raw = json.dumps(
-            {
-                "id": 42,
-                "html_url": "https://github.com/pr#review-42",
-                "comments": [
-                    {"id": 101, "html_url": "https://github.com/pr#comment-101"},
-                    {"id": 102, "html_url": "https://github.com/pr#comment-102"},
-                ],
-            }
-        )
-        result = post_audit_review._parse_review_response(
-            raw, expected_comment_count=2
-        )
+    def test_returns_success_when_post_response_omits_comments_field(self):
+        """The GitHub REST API POST /reviews response does NOT include inline
+        comments — they are returned via a separate GET /reviews/{id}/comments
+        call. Success must therefore be signaled by the review object alone,
+        regardless of how many comments were sent in the request payload.
+        """
+        raw = json.dumps({"id": 42, "html_url": "https://github.com/pr#review-42"})
+        result = post_audit_review._parse_review_response(raw)
         assert result is not None
         review_id, review_url, all_comment_entries = result
-        assert len(all_comment_entries) == 2
-
-    def test_returns_none_when_expected_count_exceeds_returned(self):
-        raw = json.dumps(
-            {
-                "id": 42,
-                "html_url": "https://github.com/pr#review-42",
-                "comments": [
-                    {"id": 101, "html_url": "https://github.com/pr#comment-101"},
-                ],
-            }
-        )
-        assert (
-            post_audit_review._parse_review_response(raw, expected_comment_count=3)
-            is None
-        )
+        assert review_id == "42"
+        assert review_url == "https://github.com/pr#review-42"
+        assert all_comment_entries == []
 
 
 class DescribeBuildOutputPayload:

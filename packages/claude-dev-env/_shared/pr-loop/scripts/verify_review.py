@@ -116,11 +116,11 @@ def verify_pr_review(
     ]
 
     if not all_reviews_on_expected_commit:
-        stale_commits = {
+        all_stale_commits = {
             each_review.get("commit_id", "") for each_review in all_matching_reviews
         }
         print(
-            f"Review(s) found on commit(s) {stale_commits}, expected {expected_commit_id}",
+            f"Review(s) found on commit(s) {all_stale_commits}, expected {expected_commit_id}",
             file=sys.stderr,
         )
         return EXIT_WRONG_COMMIT

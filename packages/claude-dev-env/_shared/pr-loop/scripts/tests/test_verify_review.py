@@ -230,3 +230,5 @@ class DescribeVerifyPrReviewCollectionNamingPrefix:
         verify_pr_review_source_text = inspect.getsource(verify_review.verify_pr_review)
         assert "all_matching_reviews = [" in verify_pr_review_source_text
         assert "all_reviews_on_expected_commit = [" in verify_pr_review_source_text
+        assert "all_stale_commits = {" in verify_pr_review_source_text
+        assert " stale_commits = {" not in verify_pr_review_source_text

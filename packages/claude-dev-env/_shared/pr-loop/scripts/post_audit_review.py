@@ -65,22 +65,20 @@ def post_review(
         error_text = (gh_result.stderr or "").strip() or gh_result.stdout.strip()
         print(f"Review POST failed: {error_text}", file=sys.stderr)
         return None
-    return _parse_review_response(
-        gh_result.stdout, expected_comment_count=len(all_comments)
-    )
+    return _parse_review_response(gh_result.stdout)
 
 
 def _parse_review_response(
     response_text: str,
-    *,
-    expected_comment_count: int,
 ) -> tuple[str, str, list[dict[str, str]]] | None:
-    """Extract review id, html_url, and nested comment info from a review POST response.
+    """Extract review id, html_url, and any nested comment info from a review POST response.
 
-    When the response returns fewer well-formed inline comments than were
-    requested via expected_comment_count, this prints a stderr warning and
-    returns None so the caller falls back to a single issue comment instead
-    of believing every finding got an anchor.
+    Per the GitHub REST API, the POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews
+    response does not include inline comments — they are returned via a separate
+    GET /reviews/{id}/comments call. A successful response with a parseable review
+    object means GitHub created the inline comments server-side from the request
+    payload; absence of a nested ``comments`` field is therefore expected and not
+    a failure signal.
     """
     try:
         response_payload = json.loads(response_text)
@@ -101,14 +99,6 @@ def _parse_review_response(
                 each_url = each_comment.get("html_url")
                 if isinstance(each_id, (int, str)) and isinstance(each_url, str):
                     all_comment_entries.append({"id": str(each_id), "url": each_url})
-    if len(all_comment_entries) < expected_comment_count:
-        print(
-            f"Review response returned {len(all_comment_entries)} inline "
-            f"comment anchors, expected {expected_comment_count}. "
-            "Falling back so every finding is reported.",
-            file=sys.stderr,
-        )
-        return None
     return (str(raw_identifier), raw_url, all_comment_entries)
 
 

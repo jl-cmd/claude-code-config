@@ -57,6 +57,9 @@ def test_pre_commit_config_yaml_filename() -> None:
 def test_all_git_ls_files_test_discovery_command() -> None:
     assert constants_module.ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND == (
         "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
         "--",
         "**/test_*.py",
         "**/*_test.py",

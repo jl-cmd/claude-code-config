@@ -144,7 +144,7 @@ def has_pytest_configuration(root: Path) -> bool:
     return PYTEST_TOML_TABLE_PREFIX in text
 
 
-def has_discoverable_tests(root: Path) -> bool:
+def has_discoverable_tests(root: Path) -> bool | None:
     command = ["git", "-C", str(root), *ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND]
     try:
         completed = subprocess.run(
@@ -160,7 +160,7 @@ def has_discoverable_tests(root: Path) -> bool:
             "bugteam_preflight: git is not installed or not available on PATH.",
             file=sys.stderr,
         )
-        return False
+        return None
     except subprocess.CalledProcessError as error:
         error_detail = (error.stderr or "").strip()
         print(
@@ -168,13 +168,13 @@ def has_discoverable_tests(root: Path) -> bool:
             + (f"\n{error_detail}" if error_detail else ""),
             file=sys.stderr,
         )
-        return False
+        return None
     except OSError as error:
         print(
             f"bugteam_preflight: failed to run git ls-files: {error}",
             file=sys.stderr,
         )
-        return False
+        return None
     return bool(completed.stdout.strip())
 
 
@@ -192,6 +192,7 @@ def run_pytest(
     if not verbose:
         command.append("-q")
     if all_test_paths is not None:
+        command.append("--")
         command.extend(str(each_path) for each_path in all_test_paths)
     completed = subprocess.run(
         command,
@@ -365,13 +366,18 @@ def main(all_arguments: list[str]) -> int:
     if hooks_path_exit_code != 0:
         return hooks_path_exit_code
     if not arguments.no_pytest and has_pytest_configuration(repository_root):
-        has_tests = has_discoverable_tests(repository_root)
-        if not has_tests:
+        tests_discovered = has_discoverable_tests(repository_root)
+        if tests_discovered is None:
+            print(
+                "bugteam_preflight: test discovery failed; running full suite anyway.",
+                file=sys.stderr,
+            )
+        elif not tests_discovered:
             print(
                 "bugteam_preflight: pytest configured but no tests found; skipping pytest.",
                 file=sys.stderr,
             )
-        else:
+        if tests_discovered is not False:
             effective_scope = arguments.scope
             if effective_scope is None:
                 effective_scope = (

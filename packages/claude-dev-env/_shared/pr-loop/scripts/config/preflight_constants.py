@@ -18,8 +18,11 @@ PYTEST_TOML_TABLE_PREFIX: str = "[tool.pytest"
 
 PYTEST_FAILED_FIRST_FLAG: str = "--ff"
 
-ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND: tuple[str, str, str, str] = (
+ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND: tuple[str, ...] = (
     "ls-files",
+    "--cached",
+    "--others",
+    "--exclude-standard",
     "--",
     "**/test_*.py",
     "**/*_test.py",

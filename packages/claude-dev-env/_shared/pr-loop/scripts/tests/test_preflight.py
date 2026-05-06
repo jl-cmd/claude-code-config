@@ -416,12 +416,12 @@ def test_main_should_warn_when_scope_changed_without_base_ref(
 def test_has_discoverable_tests_should_not_re_raise_on_git_failure(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """has_discoverable_tests must return False instead of re-raising on git failure."""
+    """has_discoverable_tests must return None instead of re-raising on git failure."""
     with patch("subprocess.run", side_effect=subprocess.CalledProcessError(128, ["git"])):
         result = preflight.has_discoverable_tests(Path("/nonexistent"))
     captured = capsys.readouterr()
-    assert result is False, (
-        "Should return False instead of propagating the exception"
+    assert result is None, (
+        "Should return None instead of propagating the exception"
     )
     assert "bugteam_preflight:" in captured.err
     assert "git ls-files failed" in captured.err
@@ -430,20 +430,28 @@ def test_has_discoverable_tests_should_not_re_raise_on_git_failure(
 def test_main_should_not_double_print_when_git_ls_fails(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """has_discoverable_tests must not re-raise so main() avoids duplicate errors."""
+    """When git ls-files fails, main() must print a distinct failure warning and
+    run the full pytest suite instead of silently skipping tests."""
     mock_hooks_result = _make_completed_process(
         "/home/user/.claude/hooks/git-hooks\n", returncode=0
     )
-    with patch("subprocess.run") as mock_run:
+    with (
+        patch("subprocess.run") as mock_run,
+        patch.object(preflight, "run_pytest", return_value=0) as mock_pytest,
+    ):
         mock_run.side_effect = [
             mock_hooks_result,
             subprocess.CalledProcessError(128, ["git", "ls-files"]),
         ]
         exit_code = preflight.main([])
     captured = capsys.readouterr()
-    assert "bugteam_preflight: pytest configured but no tests found" in captured.err, (
-        "Should gracefully skip pytest instead of raw exception print"
+    assert "bugteam_preflight: test discovery failed" in captured.err, (
+        "Must print a distinct warning when discovery fails, not the 'no tests found' message"
     )
+    assert "bugteam_preflight: pytest configured but no tests found" not in captured.err, (
+        "Must not print the 'no tests found' skip message when discovery fails"
+    )
+    mock_pytest.assert_called_once_with(ANY, False)
 
 
 def test_should_default_to_changed_scope_when_base_ref_provided() -> None:
@@ -530,4 +538,36 @@ def test_preflight_bootstrap_matches_code_rules_sys_path_pattern() -> None:
     )
     assert "sys.path.insert(0, _preflight_scripts_path_entry)" in source, (
         "Bootstrap must insert the absolute script directory at index 0"
+    )
+
+
+def test_has_discoverable_tests_should_include_untracked_test_files() -> None:
+    """has_discoverable_tests must include --others --exclude-standard
+    to discover untracked test files not yet in the git index."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process("untracked_test.py\n", returncode=0)
+        preflight.has_discoverable_tests(Path("/fake/repo"))
+    called_command = mock_run.call_args[0][0]
+    assert "--others" in called_command, (
+        "--others flag required to include untracked files in ls-files output"
+    )
+    assert "--exclude-standard" in called_command, (
+        "--exclude-standard flag required to respect .gitignore for untracked files"
+    )
+
+
+def test_run_pytest_should_use_positional_separator_before_test_paths() -> None:
+    """run_pytest must pass '--' before test paths so pytest does not misinterpret
+    paths starting with '-' as command-line options."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process("", returncode=0)
+        preflight.run_pytest(
+            Path("/fake/repository"),
+            verbose=False,
+            all_test_paths=[Path("test_copilot_finding.py")],
+        )
+    called_command = mock_run.call_args[0][0]
+    separator_index = called_command.index("--")
+    assert called_command[separator_index + 1:] == ["test_copilot_finding.py"], (
+        "All test paths must follow the '--' positional separator"
     )

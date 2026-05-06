@@ -64,9 +64,9 @@ def main() -> int:
     number = parsed.number.strip() if parsed.number else None
     owner = parsed.owner.strip() if parsed.owner else None
     repo = parsed.repo.strip() if parsed.repo else None
-    has_any = number is not None or owner is not None or repo is not None
+    needs_repo = owner is not None or repo is not None
     has_all = number is not None and owner is not None and repo is not None
-    if has_any and not has_all:
+    if needs_repo and not has_all:
         parser.error(PR_DETACHED_HEAD_ARGS_ERROR)
     pr_context = view_pr_context(number=number, owner=owner, repo=repo)
     json.dump(pr_context, sys.stdout)

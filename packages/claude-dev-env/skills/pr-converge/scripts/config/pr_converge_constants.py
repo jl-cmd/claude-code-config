@@ -67,7 +67,7 @@ BUGBOT_RUN_TEMPFILE_PREFIX: str = "pr-converge-bugbot-run-"
 
 PR_CONTEXT_FIELDS: str = "number,url,headRefOid,baseRefName,headRefName,isDraft"
 
-PR_DETACHED_HEAD_ARGS_ERROR: str = "--number, --owner, and --repo must all be provided together for detached-HEAD PR resolution"
+PR_DETACHED_HEAD_ARGS_ERROR: str = "--owner and --repo require --number; all three must be provided together for detached-HEAD PR resolution"
 
 PR_NUMBER_ARG_FLAG: str = "--number"
 

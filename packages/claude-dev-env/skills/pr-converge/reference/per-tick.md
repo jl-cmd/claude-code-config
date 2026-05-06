@@ -40,6 +40,8 @@ state line when **no** `state.json` (single-PR only). With `state.json`, do
 python "${CLAUDE_SKILL_DIR}/scripts/view_pr_context.py" --owner <OWNER> --repo <REPO> --number <NUMBER>
 ```
 
+If owner/repo/number are not yet known, extract them from the PR URL or run without flags in a repo checkout.
+
 Capture `number`, `headRefOid` (= `current_head`), owner/repo, branch.
 
 ## Step 2: Branch on `phase`
@@ -93,7 +95,7 @@ c. Decide (four branches; match first whose predicate holds):
      `state.json`: clean-coder teammate pushes, replies inline, writes
      `state.json`, goes idle; Step 3 on new HEAD runs after via
      orchestrator-spawned follow-up agent (§Fix result → general-purpose).
-     No `state.json` (single-PR): implement → push → reply inline on each thread
+     No `state.json` (single-PR): spawn Agent (subagent_type: clean-coder) to implement → push → reply inline on each thread
      via `reply_to_inline_comment.py` → Step 3 in same tick (see
      [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
      full contract).
@@ -144,7 +146,7 @@ never falsely terminates:
      **omit loop pacing** per **Convergence** of active pacing workflow.
    - **Convergence BUT `bugbot_clean_at != current_head` (no push):**
      `phase = BUGBOT`, schedule next wakeup, return.
-   - **Findings without committed fixes:** follow [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
+   - **Findings without committed fixes:** spawn Agent (subagent_type: clean-coder) to implement fixes and push, then reply inline via `reply_to_inline_comment.py`, following [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
      `phase = BUGBOT`, schedule next wakeup, return.
 
 ## Step 3: Re-trigger bugbot

@@ -131,10 +131,9 @@ def test_should_pass_imported_constant_directly_without_local_alias() -> None:
     assert fields_arg is expected_fields
 
 
-def test_should_exit_when_number_provided_without_owner_and_repo() -> None:
+def test_should_not_exit_when_number_provided_alone() -> None:
     with patch("sys.argv", ["view_pr_context.py", "--number", "42"]):
-        with pytest.raises(SystemExit):
-            view_pr_context_module.main()
+        view_pr_context_module.main()
 
 
 def test_should_exit_when_owner_and_repo_provided_without_number() -> None:

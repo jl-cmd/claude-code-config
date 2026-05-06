@@ -21,6 +21,7 @@ from config.pr_converge_constants import (
     GH_REPO_ARG_TEMPLATE,
     GH_REPO_FLAG,
     PR_CONTEXT_FIELDS,
+    PR_DETACHED_HEAD_ARGS_ERROR,
     PR_NUMBER_ARG_FLAG,
     PR_NUMBER_ARG_HELP,
     PR_OWNER_ARG_FLAG,
@@ -60,11 +61,14 @@ def main() -> int:
     parser.add_argument(PR_OWNER_ARG_FLAG, default=None, help=PR_OWNER_ARG_HELP)
     parser.add_argument(PR_REPO_ARG_FLAG, default=None, help=PR_REPO_ARG_HELP)
     parsed = parser.parse_args()
-    has_any = parsed.number is not None or parsed.owner is not None or parsed.repo is not None
-    has_all = parsed.number is not None and parsed.owner is not None and parsed.repo is not None
+    number = parsed.number.strip() if parsed.number else None
+    owner = parsed.owner.strip() if parsed.owner else None
+    repo = parsed.repo.strip() if parsed.repo else None
+    has_any = number is not None or owner is not None or repo is not None
+    has_all = number is not None and owner is not None and repo is not None
     if has_any and not has_all:
-        parser.error("--number, --owner, and --repo must all be provided together for detached-HEAD PR resolution")
-    pr_context = view_pr_context(number=parsed.number, owner=parsed.owner, repo=parsed.repo)
+        parser.error(PR_DETACHED_HEAD_ARGS_ERROR)
+    pr_context = view_pr_context(number=number, owner=owner, repo=repo)
     json.dump(pr_context, sys.stdout)
     sys.stdout.write("\n")
     return 0

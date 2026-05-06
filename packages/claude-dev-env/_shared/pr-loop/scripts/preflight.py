@@ -209,15 +209,32 @@ def get_changed_files(repository_root: Path, base_ref: str) -> list[Path]:
         f"{base_ref}...HEAD",
         "--name-only",
     ]
-    completed = subprocess.run(
-        command,
-        cwd=str(repository_root),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(repository_root),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError:
+        print(
+            "bugteam_preflight: git is not installed or not available on PATH.\n"
+            f"bugteam_preflight: cannot determine changed files against "
+            f"{base_ref}; falling back to full suite.",
+            file=sys.stderr,
+        )
+        return []
+    except OSError as os_error:
+        print(
+            f"bugteam_preflight: failed to run git: {os_error}\n"
+            f"bugteam_preflight: cannot determine changed files against "
+            f"{base_ref}; falling back to full suite.",
+            file=sys.stderr,
+        )
+        return []
     if completed.returncode != 0:
         print(
             f"bugteam_preflight: git diff against {base_ref} failed "

@@ -274,17 +274,6 @@ def test_preflight_uses_extracted_directory_marker_constants() -> None:
     assert "ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND" in discover_tests_source
 
 
-def test_preflight_does_not_import_unused_venv_directory_name_constant() -> None:
-    """The ``VENV_DIRECTORY_NAME`` constant is not consumed by preflight.py
-    (``.venv`` reaches the function body via ``ALL_TESTS_DIRECTORY_IGNORE_PARTS``).
-    Importing the standalone name is dead code per the unused-imports rule."""
-    preflight_source = inspect.getsource(preflight)
-    assert "VENV_DIRECTORY_NAME" not in preflight_source, (
-        "Dead import must be removed; preflight.py reaches `.venv` via "
-        "ALL_TESTS_DIRECTORY_IGNORE_PARTS instead"
-    )
-
-
 def test_preflight_stderr_uses_bugteam_preflight_prefix(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -365,6 +354,45 @@ def test_should_not_return_nonexistent_test_file(tmp_path: Path) -> None:
     deleted_test_path = Path("test_deleted_module.py")
     result = preflight._find_related_test_files(deleted_test_path, repo_root)
     assert result == []
+
+
+def test_should_not_return_test_files_for_non_python_file(tmp_path: Path) -> None:
+    """A non-.py file must return an empty list regardless of file existence."""
+    repo_root = tmp_path
+    non_python_path = Path("readme.txt")
+    (repo_root / non_python_path).touch()
+    result = preflight._find_related_test_files(non_python_path, repo_root)
+    assert result == []
+
+
+def test_should_find_test_file_in_adjacent_tests_directory(tmp_path: Path) -> None:
+    """A source file with a matching test in the adjacent tests/ directory
+    must return that test file path."""
+    repo_root = tmp_path
+    source_path = Path("src/module.py")
+    (repo_root / source_path).parent.mkdir(parents=True)
+    (repo_root / source_path).touch()
+    adjacent_tests = repo_root / "src" / "tests"
+    adjacent_tests.mkdir(parents=True)
+    expected_test = adjacent_tests / "test_module.py"
+    expected_test.touch()
+    result = preflight._find_related_test_files(source_path, repo_root)
+    assert expected_test in result
+
+
+def test_should_find_test_file_in_top_level_tests_directory(tmp_path: Path) -> None:
+    """A source file with a matching test in the top-level tests/ directory
+    must return that test file path."""
+    repo_root = tmp_path
+    source_path = Path("src/module.py")
+    (repo_root / source_path).parent.mkdir(parents=True)
+    (repo_root / source_path).touch()
+    top_tests = repo_root / "tests" / "src"
+    top_tests.mkdir(parents=True)
+    expected_test = top_tests / "test_module.py"
+    expected_test.touch()
+    result = preflight._find_related_test_files(source_path, repo_root)
+    assert expected_test in result
 
 
 def test_main_should_warn_when_scope_changed_without_base_ref(

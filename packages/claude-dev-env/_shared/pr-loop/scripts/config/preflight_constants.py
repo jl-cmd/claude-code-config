@@ -8,8 +8,6 @@ GIT_DIRECTORY_NAME: str = ".git"
 
 CLAUDE_DIRECTORY_NAME: str = ".claude"
 
-VENV_DIRECTORY_NAME: str = ".venv"
-
 PYTEST_INI_FILENAME: str = "pytest.ini"
 
 PYPROJECT_TOML_FILENAME: str = "pyproject.toml"
@@ -47,7 +45,6 @@ PYTEST_SCOPE_ALL: str = "all"
 PYTEST_SCOPE_CHANGED: str = "changed"
 
 ALL_PYTEST_SCOPE_CHOICES: tuple[str, str] = (PYTEST_SCOPE_ALL, PYTEST_SCOPE_CHANGED)
-
 
 
 PYTHON_FILE_SUFFIX: str = ".py"

@@ -38,10 +38,6 @@ def test_claude_directory_name() -> None:
     assert constants_module.CLAUDE_DIRECTORY_NAME == ".claude"
 
 
-def test_venv_directory_name() -> None:
-    assert constants_module.VENV_DIRECTORY_NAME == ".venv"
-
-
 def test_pytest_ini_filename() -> None:
     assert constants_module.PYTEST_INI_FILENAME == "pytest.ini"
 

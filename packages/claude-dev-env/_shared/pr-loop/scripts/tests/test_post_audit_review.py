@@ -27,10 +27,10 @@ class DescribeParseReviewResponse:
         raw = json.dumps({"id": 42, "html_url": "https://github.com/pr#review-42"})
         result = post_audit_review._parse_review_response(raw)
         assert result is not None
-        review_id, review_url, all_comment_infos = result
+        review_id, review_url, all_comment_entries = result
         assert review_id == "42"
         assert review_url == "https://github.com/pr#review-42"
-        assert all_comment_infos == []
+        assert all_comment_entries == []
 
     def test_extracts_nested_comment_infos(self):
         raw = json.dumps(
@@ -45,10 +45,10 @@ class DescribeParseReviewResponse:
         )
         result = post_audit_review._parse_review_response(raw)
         assert result is not None
-        review_id, review_url, all_comment_infos = result
+        review_id, review_url, all_comment_entries = result
         assert review_id == "42"
         assert review_url == "https://github.com/pr#review-42"
-        assert all_comment_infos == [
+        assert all_comment_entries == [
             {"id": "101", "url": "https://github.com/pr#comment-101"},
             {"id": "102", "url": "https://github.com/pr#comment-102"},
         ]
@@ -77,8 +77,8 @@ class DescribeParseReviewResponse:
         )
         result = post_audit_review._parse_review_response(raw)
         assert result is not None
-        review_id, review_url, all_comment_infos = result
-        assert all_comment_infos == [
+        review_id, review_url, all_comment_entries = result
+        assert all_comment_entries == [
             {"id": "101", "url": "https://github.com/pr#comment-101"},
         ]
 
@@ -137,10 +137,10 @@ class DescribePostReview:
                 ],
             )
         assert result is not None
-        review_id, review_url, all_comment_infos = result
+        review_id, review_url, all_comment_entries = result
         assert review_id == "99"
         assert review_url == "https://github.com/pr#review-99"
-        assert all_comment_infos == [
+        assert all_comment_entries == [
             {"id": "101", "url": "https://github.com/pr#comment-101"}
         ]
 

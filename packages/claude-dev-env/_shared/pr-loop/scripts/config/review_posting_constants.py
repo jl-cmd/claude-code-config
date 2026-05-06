@@ -13,11 +13,6 @@ BUGTEAM_LOOP_HEADER_TEMPLATE: str = "## /bugteam loop {loop_number} "
 REVIEW_POST_ENDPOINT_TEMPLATE: str = (
     "/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
 )
-COMMENT_POST_ENDPOINT_TEMPLATE: str = (
-    "/repos/{owner}/{repo}/pulls/{pull_number}/comments"
-)
-
-GH_FIELD_BODY_AT_PREFIX: str = "body=@"
 
 REVIEW_EVENT_COMMENT: str = "COMMENT"
 REVIEW_COMMENTS_SIDE: str = "RIGHT"

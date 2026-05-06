@@ -14,7 +14,6 @@ sys.modules.pop("config", None)
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from config.gh_util_constants import DEFAULT_TIMEOUT_SECONDS
 from config.review_posting_constants import (
     REVIEW_COMMENTS_SIDE,
     REVIEW_EVENT_COMMENT,
@@ -31,7 +30,6 @@ def post_review(
     commit_id: str,
     body_text: str,
     all_comments: list[dict[str, object]],
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> tuple[str, str, list[dict[str, str]]] | None:
     """Post a PR review with inline comments, return (review_id, review_url, comment_infos).
 
@@ -50,11 +48,18 @@ def post_review(
     payload_text = json.dumps(request_payload)
     gh_result = run_gh(
         ["gh", "api", endpoint_path, "-X", "POST", "--input", "-"],
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=120,
         retry_nonzero=False,
         retry_timeout=False,
         stdin_text=payload_text,
     )
+    if gh_result.is_timed_out:
+        print(
+            "Review POST timed out -- review may already exist. "
+            "Check PR for conflicts before fallback.",
+            file=sys.stderr,
+        )
+        return None
     if gh_result.returncode != 0:
         error_text = (gh_result.stderr or "").strip() or gh_result.stdout.strip()
         print(f"Review POST failed: {error_text}", file=sys.stderr)
@@ -76,7 +81,7 @@ def _parse_review_response(
     if not isinstance(raw_identifier, (int, str)) or not isinstance(raw_url, str):
         print("Review response missing id or html_url.", file=sys.stderr)
         return None
-    all_comment_infos: list[dict[str, str]] = []
+    all_comment_entries: list[dict[str, str]] = []
     nested_comments = response_payload.get("comments")
     if isinstance(nested_comments, list):
         for each_comment in nested_comments:
@@ -84,8 +89,8 @@ def _parse_review_response(
                 each_id = each_comment.get("id")
                 each_url = each_comment.get("html_url")
                 if isinstance(each_id, (int, str)) and isinstance(each_url, str):
-                    all_comment_infos.append({"id": str(each_id), "url": each_url})
-    return (str(raw_identifier), raw_url, all_comment_infos)
+                    all_comment_entries.append({"id": str(each_id), "url": each_url})
+    return (str(raw_identifier), raw_url, all_comment_entries)
 
 
 
@@ -93,20 +98,19 @@ def _parse_review_response(
 def _build_output_payload(
     review_identifier: str,
     review_url: str,
-    all_comment_infos: list[dict[str, str]],
+    all_comment_entries: list[dict[str, str]],
 ) -> str:
     """Build the JSON output string written to stdout on success."""
     output_payload: dict[str, object] = {
         "review_id": review_identifier,
         "review_url": review_url,
-        "comments": all_comment_infos,
+        "comments": all_comment_entries,
     }
     return json.dumps(output_payload)
 
 
 def main(
     all_arguments: list[str],
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> int:
     parsed_arguments = _parse_arguments(all_arguments)
     all_finding_files = parsed_arguments.finding_file
@@ -145,13 +149,12 @@ def main(
         commit_id=parsed_arguments.commit_id,
         body_text=body_text,
         all_comments=all_comments,
-        timeout_seconds=timeout_seconds,
     )
     if review_result is None:
         return 1
-    review_identifier, review_url, all_comment_infos = review_result
+    review_identifier, review_url, all_comment_entries = review_result
     output_text = _build_output_payload(
-        review_identifier, review_url, all_comment_infos
+        review_identifier, review_url, all_comment_entries
     )
     print(output_text)
     return 0

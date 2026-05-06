@@ -76,7 +76,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 </comment_posting>
 
 <output_format>
-  For the primary (-a) auditor: write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml inside
+  For the (-a) validator: write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml inside
   the PR's worktree directory (<worktree_path>). For sibling auditors (-b through -k): write to <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed in prompt). Return only that path on stdout. The schema:
 </output_format>
 ```
@@ -86,7 +86,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 ```xml
 <bugteam_audit loop="<N>" review_url="<url>">
   <finding
-    finding_id="loop<N>-<index>"
+    finding_id="loop<L>-K"
     severity="P0|P1|P2"
     category="<letter>"
     file="<path>"
@@ -124,7 +124,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 <bugs_to_fix>
   [for each P0/P1/P2 finding from last_findings:]
   <bug
-    finding_id="loop<N>-<index>"
+    finding_id="loop<L>-K"
     severity="P0|P1|P2"
     file="<path>"
     line="<int>"
@@ -158,7 +158,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 <outcome_xml_schema>
   <bugteam_fix loop="<N>" commit_sha="<sha or empty if no commit>">
     <outcome
-      finding_id="loop<N>-<index>"
+      finding_id="loop<L>-K"
       status="fixed|could_not_address|hook_blocked"
       commit_sha="<sha if fixed, empty otherwise>"
       reply_comment_id="<id of the reply posted>"

@@ -59,10 +59,10 @@ After the teammate returns, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml`
 
 ```
 SendMessage(
-  to="bugfind",
+  to="bugfind-pr<N>-loop<L>",
   message={
     "type": "shutdown_request",
-    "reason": "audit loop <N> complete; outcome XML captured"
+    "reason": "audit loop <L> complete; outcome XML captured"
   }
 )
 ```
@@ -76,20 +76,20 @@ The teammate replies with `{type: "shutdown_response", approve: true}`. If `appr
 The pre-audit gate must pass immediately before this step. After three full audit/fix rounds without convergence, issue eleven `Agent` calls in **one** assistant message so they run in parallel:
 
 ```
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-a", team_name="<team_name>", model="opus", description="Bugfind audit PR <N> loop <L> validator", prompt="<audit XML; poll for all 10 sibling XMLs at <run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml through <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml (60s timeout, 2s interval); on timeout: log diagnostics entry, proceed with validated findings from available XMLs; validate each finding: file exists, line in bounds, excerpt matches claimed line, category A-J, severity P0/P1/P2; quarantine hallucinated findings to <run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins, keep longest description on conflict; re-id as loop<L>-K; write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml; post review>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-b", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant b", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-c", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant c", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-c.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-d", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant d", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-d.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-e", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant e", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-e.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-f", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant f", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-f.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-g", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant g", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-g.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-h", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant h", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-h.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-i", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant i", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-i.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-j", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant j", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-j.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-k", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant k", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-a", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> validator", prompt="<audit XML; poll for all 10 sibling XMLs at <run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml through <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml (60s timeout, 2s interval); on timeout: log diagnostics entry, proceed with validated findings from available XMLs; validate each finding: file exists, line in bounds, excerpt matches claimed line, category A-J, severity P0/P1/P2; quarantine hallucinated findings to <run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins, keep longest description on conflict; re-id as loop<L>-<K>; write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml; post review>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-b", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant b", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-c", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant c", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-c.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-d", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant d", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-d.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-e", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant e", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-e.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-f", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant f", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-f.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-g", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant g", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-g.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-h", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant h", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-h.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-i", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant i", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-i.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-j", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant j", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-j.outcomes.xml; skip PR posting>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-k", team_name="<team_name>", model="haiku", run_in_background=true, description="Bugfind audit PR <N> loop <L> variant k", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml; skip PR posting>")
 ```
 
-Teammate `-a` is the opus validator: polls for all 10 sibling XMLs at explicit absolute paths under `<run_temp_dir>/pr-<N>` (60s timeout, 2s interval; on timeout: log diagnostics entry, proceed with validated findings from available XMLs), then validates each finding — file exists, line in bounds, excerpt matches claimed line, category is A–J, severity is P0/P1/P2. Hallucinated findings are quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)` (max severity wins, keep longest description on conflict) and re-assigned merged IDs as `loop<L>-K`. The `-a` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
+Teammate `-a` is the opus validator: polls for all 10 sibling XMLs at explicit absolute paths under `<run_temp_dir>/pr-<N>` (60s timeout, 2s interval; on timeout: log diagnostics entry, proceed with validated findings from available XMLs), then validates each finding — file exists, line in bounds, excerpt matches claimed line, category is A–J, severity is P0/P1/P2. Hallucinated findings are quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)` (max severity wins, keep longest description on conflict) and re-assigned merged IDs as `loop<L>-<K>`. The `-a` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
 
 Shutdown order: parallel `SendMessage` to `-b` through `-k`, then `-a`:
 
@@ -126,10 +126,10 @@ Same self-termination vs `SendMessage` split as bugfind. Fallback message:
 
 ```
 SendMessage(
-  to="bugfix",
+  to="bugfix-pr<N>-loop<L>",
   message={
     "type": "shutdown_request",
-    "reason": "fix loop <N> complete; commit <sha7> pushed"
+    "reason": "fix loop <L> complete; commit <sha7> pushed"
   }
 )
 ```

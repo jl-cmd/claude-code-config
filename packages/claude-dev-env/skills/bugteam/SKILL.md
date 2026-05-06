@@ -184,7 +184,7 @@ only PR write before Step 4.5 is the final description rewrite.
 
 Order: audit → buffer → validate anchors vs diff → single review POST.
 Review body states counts; zero findings → still one review, `comments: []`,
-body `## /bugteam loop <N> audit: 0P0 / 0P1 / 0P2 → clean`.
+body `## /bugteam loop <L> audit: 0P0 / 0P1 / 0P2 → clean`.
 
 **Payloads:** build JSON with `jq --rawfile` / `-Rs`, pipe to `gh api ...
 --input -` (avoids shell-quoting; satisfies `gh-body-backtick-guard`). Write
@@ -228,7 +228,7 @@ before POST.
 **Review body template (`<tmp_review_body.md>`):**
 
 ```
-## /bugteam loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2
+## /bugteam loop <L> audit: <P0>P0 / <P1>P1 / <P2>P2
 
 ### Findings without a diff anchor
 (only if needed)
@@ -318,11 +318,11 @@ Non-zero → spawn **clean-coder** standards-fix (read stderr, edit, re-run
 **5**
 failed gate rounds → `error: code rules gate failed pre-audit`. After **0**:
 `loop_count += 1`; if `loop_count > 10` → `cap reached`. Then **AUDIT**
-(bugfind); print `Loop <N> audit: ...`.
+(bugfind); print `Loop <L> audit: ...`.
 
 3. **FIX** (`last_action == "audited"` and `last_findings.total > 0`):
    `loop_count += 1`; if `loop_count > 10` → `cap reached`; **FIX** (bugfix);
-   print `Loop <N> fix: ...`; `last_action = "fixed"`, update `audit_log`; loop
+   print `Loop <L> fix: ...`; `last_action = "fixed"`, update `audit_log`; loop
    to step 1.
 
 4. After **AUDIT**: update `last_action`, `last_findings`, `audit_log`; print
@@ -376,7 +376,7 @@ calls in one assistant message (`run_in_background=true`):
   - Hallucinated findings → quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under
     `validator_rejected`.
   - De-dups by `(file, line, category)`, max severity wins; on conflict, keep longest description text.
-  - Re-ids as `loop<L>-K`.
+  - Re-ids as `loop<L>-<K>`.
   - Writes `<worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml`, posts review.
 
 Lead awaits the opus validator (-a) background-completion notification (120s

@@ -10,8 +10,8 @@ Keep the spawn prompt self-contained: reference only the PR scope, audit rubric,
   <branch>head ref</branch>
   <base_branch>base ref</base_branch>
   <pr_url>full URL</pr_url>
-  <loop>N</loop>
-  <pr_number>N</pr_number>
+  <loop><L></loop>
+  <pr_number><N></pr_number>
   <worktree_path>absolute path from Step 1 per-PR workspace</worktree_path>
 </context>
 
@@ -47,8 +47,8 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 <comment_posting>
   1. Audit the diff against the 10 categories above. Buffer the findings
      in memory; all posting happens at step 6 once anchors are validated.
-  2. Assign each finding a stable finding_id of exactly the form `loop<L>-K`
-     where K is 1-based within this loop.
+  2. Assign each finding a stable finding_id of exactly the form `loop<L>-<K>`
+     where <K> is 1-based within this loop.
   3. Validate every finding's (file, line) against the captured diff. Split
      findings into two buckets: anchored (line is in the diff) and
      unanchored (line is not in the diff — goes into the review body's
@@ -61,7 +61,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
        Category: <letter> (<category name>)
        <2-3 sentence description with concrete trace>
 
-       _From /bugteam audit loop N._
+       _From /bugteam audit loop <L>._
 
   6. Post ONE review via Step 2.5's per-loop review CLI shape. Harvest the
      parent review `html_url` from the response JSON and the `comments[]`
@@ -114,8 +114,8 @@ After the teammate writes the XML and returns, the lead reads `.bugteam-pr<N>-lo
   <branch>head</branch>
   <base_branch>base</base_branch>
   <pr_url>url</pr_url>
-  <loop>N</loop>
-  <pr_number>N</pr_number>
+  <loop><L></loop>
+  <pr_number><N></pr_number>
   <worktree_path>absolute path from Step 1 per-PR workspace</worktree_path>
 </context>
 

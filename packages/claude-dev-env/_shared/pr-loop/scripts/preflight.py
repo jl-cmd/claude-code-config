@@ -191,7 +191,7 @@ def run_pytest(
     if not verbose:
         command.append("-q")
     if all_test_paths is not None:
-        command.extend(str(p) for p in all_test_paths)
+        command.extend(str(each_path) for each_path in all_test_paths)
     completed = subprocess.run(
         command,
         cwd=str(repository_root),

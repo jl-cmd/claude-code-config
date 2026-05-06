@@ -16,7 +16,9 @@ PRE_COMMIT_CONFIG_YAML_FILENAME: str = ".pre-commit-config.yaml"
 
 PYTEST_TOML_TABLE_PREFIX: str = "[tool.pytest"
 
-ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND: tuple[str, str, str, str] = (
+PYTEST_FAILED_FIRST_FLAG: str = "--ff"
+
+ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND: tuple[str, str, str, str] = (
     "ls-files",
     "--",
     "**/test_*.py",

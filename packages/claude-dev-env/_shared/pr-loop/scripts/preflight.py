@@ -37,13 +37,14 @@ if _preflight_scripts_path_entry not in sys.path:
 from config.fix_hookspath_constants import HOOKS_PATH_VERIFICATION_SUFFIX
 from config.preflight_constants import (
     ALL_GIT_CONFIG_GET_CORE_HOOKS_PATH_SUBCOMMAND,
-    ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND,
+    ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND,
     ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND,
     BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE,
     BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME,
     GIT_DIRECTORY_NAME,
     PRE_COMMIT_CONFIG_YAML_FILENAME,
     PYPROJECT_TOML_FILENAME,
+    PYTEST_FAILED_FIRST_FLAG,
     PYTEST_INI_FILENAME,
     ALL_PYTEST_SCOPE_CHOICES,
     PYTEST_NO_TESTS_COLLECTED_EXIT_CODE,
@@ -144,7 +145,7 @@ def has_pytest_configuration(root: Path) -> bool:
 
 
 def has_discoverable_tests(root: Path) -> bool:
-    command = ["git", "-C", str(root), *ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND]
+    command = ["git", "-C", str(root), *ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND]
     try:
         completed = subprocess.run(
             command,
@@ -187,7 +188,7 @@ def run_pytest(
     verbose: bool,
     all_test_paths: list[Path] | None = None,
 ) -> int:
-    command = [sys.executable, "-m", "pytest", "--ff"]
+    command = [sys.executable, "-m", "pytest", PYTEST_FAILED_FIRST_FLAG]
     if not verbose:
         command.append("-q")
     if all_test_paths is not None:

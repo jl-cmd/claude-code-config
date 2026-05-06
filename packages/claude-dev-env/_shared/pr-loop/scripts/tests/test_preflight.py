@@ -260,18 +260,18 @@ def test_loop_variables_use_each_prefix_in_preflight_module() -> None:
     assert "for each_candidate in" in find_root_source
 
     discover_tests_source = inspect.getsource(preflight.has_discoverable_tests)
-    assert "ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND" in discover_tests_source
+    assert "ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND" in discover_tests_source
 
 
 def test_preflight_uses_extracted_directory_marker_constants() -> None:
     preflight_source = inspect.getsource(preflight)
     assert "GIT_DIRECTORY_NAME" in preflight_source
-    assert "ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND" in preflight_source
+    assert "ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND" in preflight_source
     find_root_source = inspect.getsource(preflight.find_repository_root)
     assert "'.git'" not in find_root_source
     assert '".git"' not in find_root_source
     discover_tests_source = inspect.getsource(preflight.has_discoverable_tests)
-    assert "ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND" in discover_tests_source
+    assert "ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND" in discover_tests_source
 
 
 def test_preflight_stderr_uses_bugteam_preflight_prefix(

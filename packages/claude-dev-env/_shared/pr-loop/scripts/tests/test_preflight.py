@@ -31,7 +31,10 @@ def _load_preflight_module() -> ModuleType:
 
 preflight = _load_preflight_module()
 
-from config.preflight_constants import PYTEST_NO_TESTS_COLLECTED_EXIT_CODE  # noqa: E402
+from config.preflight_constants import (  # noqa: E402
+    PYTEST_INI_FILENAME,
+    PYTEST_NO_TESTS_COLLECTED_EXIT_CODE,
+)
 
 
 def _make_completed_process(
@@ -415,10 +418,12 @@ def test_main_should_warn_when_scope_changed_without_base_ref(
 
 def test_has_discoverable_tests_should_not_re_raise_on_git_failure(
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     """has_discoverable_tests must return None instead of re-raising on git failure."""
+    (tmp_path / ".git").mkdir()
     with patch("subprocess.run", side_effect=subprocess.CalledProcessError(128, ["git"])):
-        result = preflight.has_discoverable_tests(Path("/nonexistent"))
+        result = preflight.has_discoverable_tests(tmp_path)
     captured = capsys.readouterr()
     assert result is None, (
         "Should return None instead of propagating the exception"
@@ -541,12 +546,15 @@ def test_preflight_bootstrap_matches_code_rules_sys_path_pattern() -> None:
     )
 
 
-def test_has_discoverable_tests_should_include_untracked_test_files() -> None:
+def test_has_discoverable_tests_should_include_untracked_test_files(
+    tmp_path: Path,
+) -> None:
     """has_discoverable_tests must include --others --exclude-standard
     to discover untracked test files not yet in the git index."""
+    (tmp_path / ".git").mkdir()
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process("untracked_test.py\n", returncode=0)
-        preflight.has_discoverable_tests(Path("/fake/repo"))
+        preflight.has_discoverable_tests(tmp_path)
     called_command = mock_run.call_args[0][0]
     assert "--others" in called_command, (
         "--others flag required to include untracked files in ls-files output"
@@ -571,3 +579,92 @@ def test_run_pytest_should_use_positional_separator_before_test_paths() -> None:
     assert called_command[separator_index + 1:] == ["test_copilot_finding.py"], (
         "All test paths must follow the '--' positional separator"
     )
+
+
+# ---- Copilot finding 1: has_discoverable_tests in non-git directories ----
+
+
+def test_has_discoverable_tests_returns_true_when_no_git_marker(
+    tmp_path: Path,
+) -> None:
+    """has_discoverable_tests must return True without running git when the root
+    has no .git marker (e.g., repo root found via pytest.ini)."""
+    (tmp_path / PYTEST_INI_FILENAME).touch()
+    result = preflight.has_discoverable_tests(tmp_path)
+    assert result is True
+
+
+# ---- Copilot finding 2: base_ref command injection ----
+
+
+def test_get_changed_files_returns_none_when_base_ref_starts_with_hyphen(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """get_changed_files must return None and print a warning when base_ref
+    starts with '-', preventing option injection into git diff."""
+    result = preflight.get_changed_files(Path("/fake"), "-oMalicious")
+    assert result is None
+    captured = capsys.readouterr()
+    assert "base_ref" in captured.err
+    assert "hyphen" in captured.err
+
+
+# ---- Copilot finding 3: duplicate git failures when discovery_result is None ----
+
+
+def test_main_skips_changed_scope_when_discovery_result_is_none(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When has_discoverable_tests returns None (git unavailable), main must
+    not call get_changed_files even when --base-ref is provided."""
+    with (
+        patch.object(preflight, "verify_git_hooks_path", return_value=0),
+        patch.object(preflight, "has_pytest_configuration", return_value=True),
+        patch.object(preflight, "has_discoverable_tests", return_value=None),
+        patch.object(preflight, "get_changed_files") as mock_get_changed,
+        patch.object(preflight, "run_pytest", return_value=0),
+    ):
+        exit_code = preflight.main(["--base-ref", "origin/main"])
+    assert exit_code == 0
+    mock_get_changed.assert_not_called()
+
+
+# ---- Copilot finding 4: misleading no-related-tests message on git diff failure ----
+
+
+def test_main_does_not_print_no_related_tests_when_get_changed_files_returns_none(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When get_changed_files returns None (git diff failed), main must not
+    print the misleading 'no related tests found' message."""
+    with (
+        patch.object(preflight, "verify_git_hooks_path", return_value=0),
+        patch.object(preflight, "has_pytest_configuration", return_value=True),
+        patch.object(preflight, "has_discoverable_tests", return_value=True),
+        patch.object(preflight, "get_changed_files", return_value=None),
+        patch.object(preflight, "discover_related_tests", return_value=[]),
+        patch.object(preflight, "run_pytest", return_value=0),
+    ):
+        exit_code = preflight.main(["--scope", "changed", "--base-ref", "origin/main"])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "no related tests found" not in captured.err
+
+
+def test_main_prints_no_related_tests_when_get_changed_files_returns_empty(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When get_changed_files returns [] (no changed files, git succeeded),
+    main must print the 'no related tests found' message and run full suite."""
+    with (
+        patch.object(preflight, "verify_git_hooks_path", return_value=0),
+        patch.object(preflight, "has_pytest_configuration", return_value=True),
+        patch.object(preflight, "has_discoverable_tests", return_value=True),
+        patch.object(preflight, "get_changed_files", return_value=[]),
+        patch.object(preflight, "discover_related_tests", return_value=[]),
+        patch.object(preflight, "run_pytest", return_value=0),
+    ):
+        exit_code = preflight.main(["--scope", "changed", "--base-ref", "origin/main"])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "no related tests found" in captured.err

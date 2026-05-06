@@ -146,6 +146,9 @@ def has_pytest_configuration(root: Path) -> bool:
 
 
 def has_discoverable_tests(root: Path) -> bool | None:
+    git_marker = root / GIT_DIRECTORY_NAME
+    if not (git_marker.is_dir() or git_marker.is_file()):
+        return True
     command = ["git", "-C", str(root), *ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND]
     try:
         completed = subprocess.run(
@@ -205,7 +208,14 @@ def run_pytest(
     return completed.returncode
 
 
-def get_changed_files(repository_root: Path, base_ref: str) -> list[Path]:
+def get_changed_files(repository_root: Path, base_ref: str) -> list[Path] | None:
+    if base_ref.startswith("-"):
+        print(
+            f"bugteam_preflight: invalid base_ref '{base_ref}' starts "
+            f"with hyphen; falling back to full suite.",
+            file=sys.stderr,
+        )
+        return None
     command = [
         "git",
         *ALL_GIT_DIFF_NAME_ONLY_SUBCOMMAND,
@@ -228,7 +238,7 @@ def get_changed_files(repository_root: Path, base_ref: str) -> list[Path]:
             f"{base_ref}; falling back to full suite.",
             file=sys.stderr,
         )
-        return []
+        return None
     except OSError as os_error:
         print(
             f"bugteam_preflight: failed to run git: {os_error}\n"
@@ -236,7 +246,7 @@ def get_changed_files(repository_root: Path, base_ref: str) -> list[Path]:
             f"{base_ref}; falling back to full suite.",
             file=sys.stderr,
         )
-        return []
+        return None
     if completed.returncode != 0:
         print(
             f"bugteam_preflight: git diff against {base_ref} failed "
@@ -244,7 +254,7 @@ def get_changed_files(repository_root: Path, base_ref: str) -> list[Path]:
             f"{completed.stderr.strip()}",
             file=sys.stderr,
         )
-        return []
+        return None
     return [
         Path(each_line.strip())
         for each_line in completed.stdout.splitlines()
@@ -382,6 +392,8 @@ def main(all_arguments: list[str]) -> int:
             )
         if discovery_result is not False:
             effective_scope = arguments.scope
+            if discovery_result is None:
+                effective_scope = PYTEST_SCOPE_ALL
             if effective_scope is None:
                 effective_scope = (
                     PYTEST_SCOPE_CHANGED
@@ -397,23 +409,26 @@ def main(all_arguments: list[str]) -> int:
                 effective_scope = PYTEST_SCOPE_ALL
             if effective_scope == PYTEST_SCOPE_CHANGED and arguments.base_ref is not None:
                 all_changed = get_changed_files(repository_root, arguments.base_ref)
-                all_related = discover_related_tests(all_changed, repository_root)
-                if all_related:
-                    print(
-                        f"bugteam_preflight: running {len(all_related)} test(s) "
-                        f"related to changed files (scope=changed).",
-                        file=sys.stderr,
-                    )
-                    exit_code = run_pytest(
-                        repository_root, arguments.verbose, all_related
-                    )
-                else:
-                    print(
-                        "bugteam_preflight: no related tests found; "
-                        "running full suite.",
-                        file=sys.stderr,
-                    )
+                if all_changed is None:
                     exit_code = run_pytest(repository_root, arguments.verbose)
+                else:
+                    all_related = discover_related_tests(all_changed, repository_root)
+                    if all_related:
+                        print(
+                            f"bugteam_preflight: running {len(all_related)} test(s) "
+                            f"related to changed files (scope=changed).",
+                            file=sys.stderr,
+                        )
+                        exit_code = run_pytest(
+                            repository_root, arguments.verbose, all_related
+                        )
+                    else:
+                        print(
+                            "bugteam_preflight: no related tests found; "
+                            "running full suite.",
+                            file=sys.stderr,
+                        )
+                        exit_code = run_pytest(repository_root, arguments.verbose)
             else:
                 exit_code = run_pytest(repository_root, arguments.verbose)
             if exit_code != 0:

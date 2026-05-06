@@ -1,7 +1,8 @@
-"""Post a PR review with inline findings using gh api.
+"""Post a PR review with inline child comments using gh api.
 
-Step 1: POST a review summary (COMMENT event) to the reviews endpoint.
-Step 2: POST each finding as an inline review comment anchored to the diff.
+Builds a single JSON payload with a review summary body and an array of
+inline comments, then POSTs it to the reviews endpoint. All findings appear
+as child comment threads under the parent review on GitHub.
 """
 
 import argparse
@@ -15,8 +16,6 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 
 from config.gh_util_constants import DEFAULT_TIMEOUT_SECONDS
 from config.review_posting_constants import (
-    COMMENT_POST_ENDPOINT_TEMPLATE,
-    GH_FIELD_BODY_AT_PREFIX,
     REVIEW_COMMENTS_SIDE,
     REVIEW_EVENT_COMMENT,
     REVIEW_POST_ENDPOINT_TEMPLATE,
@@ -24,104 +23,69 @@ from config.review_posting_constants import (
 from gh_util import run_gh
 
 
-def post_review_summary(
+def post_review(
     *,
     owner: str,
     repo: str,
     pull_number: int,
     commit_id: str,
-    body_file: Path,
+    body_text: str,
+    all_comments: list[dict[str, object]],
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
-) -> tuple[str, str] | None:
-    """Post a review summary COMMENT on a pull request, return (id, html_url)."""
+) -> tuple[str, str, list[dict[str, str]]] | None:
+    """Post a PR review with inline comments, return (review_id, review_url, comment_infos).
+
+    Each comment_infos entry is {"id": str, "url": str} extracted from the
+    response's nested comment objects when available.
+    """
     endpoint_path = REVIEW_POST_ENDPOINT_TEMPLATE.format(
         owner=owner, repo=repo, pull_number=pull_number
     )
+    request_payload: dict[str, object] = {
+        "commit_id": commit_id,
+        "event": REVIEW_EVENT_COMMENT,
+        "body": body_text,
+        "comments": all_comments,
+    }
+    payload_text = json.dumps(request_payload)
     gh_result = run_gh(
-        [
-            "gh",
-            "api",
-            endpoint_path,
-            "-X",
-            "POST",
-            "-f",
-            f"commit_id={commit_id}",
-            "-f",
-            f"event={REVIEW_EVENT_COMMENT}",
-            "-F",
-            f"{GH_FIELD_BODY_AT_PREFIX}{body_file}",
-        ],
+        ["gh", "api", endpoint_path, "-X", "POST", "--input", "-"],
         timeout_seconds=timeout_seconds,
         retry_nonzero=False,
         retry_timeout=False,
+        stdin_text=payload_text,
     )
     if gh_result.returncode != 0:
         error_text = (gh_result.stderr or "").strip() or gh_result.stdout.strip()
         print(f"Review POST failed: {error_text}", file=sys.stderr)
         return None
-    return _parse_identifier_and_url(gh_result.stdout, "review")
+    return _parse_review_response(gh_result.stdout)
 
 
-def post_comment(
-    *,
-    owner: str,
-    repo: str,
-    pull_number: int,
-    commit_id: str,
-    body_file: Path,
-    path: str,
-    line: int,
-    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
-) -> tuple[str, str] | None:
-    """Post an inline review comment on a pull request, return (id, html_url)."""
-    endpoint_path = COMMENT_POST_ENDPOINT_TEMPLATE.format(
-        owner=owner, repo=repo, pull_number=pull_number
-    )
-    gh_result = run_gh(
-        [
-            "gh",
-            "api",
-            endpoint_path,
-            "-X",
-            "POST",
-            "-F",
-            f"{GH_FIELD_BODY_AT_PREFIX}{body_file}",
-            "-f",
-            f"commit_id={commit_id}",
-            "-f",
-            f"path={path}",
-            "-F",
-            f"line={line}",
-            "-f",
-            f"side={REVIEW_COMMENTS_SIDE}",
-        ],
-        timeout_seconds=timeout_seconds,
-        retry_nonzero=False,
-        retry_timeout=False,
-    )
-    if gh_result.returncode != 0:
-        error_text = (gh_result.stderr or "").strip() or gh_result.stdout.strip()
-        print(f"Comment POST failed: {error_text}", file=sys.stderr)
-        return None
-    return _parse_identifier_and_url(gh_result.stdout, "comment")
-
-
-def _parse_identifier_and_url(
+def _parse_review_response(
     response_text: str,
-    label: str,
-) -> tuple[str, str] | None:
-    """Extract id and html_url from a gh API POST response JSON."""
+) -> tuple[str, str, list[dict[str, str]]] | None:
+    """Extract review id, html_url, and nested comment info from a review POST response."""
     try:
         response_payload = json.loads(response_text)
     except json.JSONDecodeError:
-        print(f"Failed to decode {label} response JSON.", file=sys.stderr)
+        print("Failed to decode review response JSON.", file=sys.stderr)
         return None
     raw_identifier = response_payload.get("id")
     raw_url = response_payload.get("html_url")
     if not isinstance(raw_identifier, (int, str)) or not isinstance(raw_url, str):
-        print(f"{label} response missing id or html_url.", file=sys.stderr)
+        print("Review response missing id or html_url.", file=sys.stderr)
         return None
-    return (str(raw_identifier), raw_url)
+    all_comment_infos: list[dict[str, str]] = []
+    nested_comments = response_payload.get("comments")
+    if isinstance(nested_comments, list):
+        for each_comment in nested_comments:
+            if isinstance(each_comment, dict):
+                each_id = each_comment.get("id")
+                each_url = each_comment.get("html_url")
+                if isinstance(each_id, (int, str)) and isinstance(each_url, str):
+                    all_comment_infos.append({"id": str(each_id), "url": each_url})
+    return (str(raw_identifier), raw_url, all_comment_infos)
 
 
 
@@ -129,21 +93,21 @@ def _parse_identifier_and_url(
 def _build_output_payload(
     review_identifier: str,
     review_url: str,
-    all_comment_results: list[tuple[str, str]],
+    all_comment_infos: list[dict[str, str]],
 ) -> str:
     """Build the JSON output string written to stdout on success."""
     output_payload: dict[str, object] = {
         "review_id": review_identifier,
         "review_url": review_url,
-        "comments": [
-            {"id": each_identifier, "url": each_url}
-            for each_identifier, each_url in all_comment_results
-        ],
+        "comments": all_comment_infos,
     }
     return json.dumps(output_payload)
 
 
-def main(all_arguments: list[str], timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> int:
+def main(
+    all_arguments: list[str],
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> int:
     parsed_arguments = _parse_arguments(all_arguments)
     all_finding_files = parsed_arguments.finding_file
     all_paths = parsed_arguments.path
@@ -159,51 +123,35 @@ def main(all_arguments: list[str], timeout_seconds: int = DEFAULT_TIMEOUT_SECOND
             file=sys.stderr,
         )
         return 1
-    review_result = post_review_summary(
+
+    body_text = parsed_arguments.body_file.read_text(encoding="utf-8")
+
+    all_comments: list[dict[str, object]] = []
+    for each_index, each_finding_file in enumerate(all_finding_files):
+        finding_body = each_finding_file.read_text(encoding="utf-8")
+        all_comments.append(
+            {
+                "path": all_paths[each_index],
+                "line": all_lines[each_index],
+                "side": REVIEW_COMMENTS_SIDE,
+                "body": finding_body,
+            }
+        )
+
+    review_result = post_review(
         owner=parsed_arguments.owner,
         repo=parsed_arguments.repo,
         pull_number=parsed_arguments.number,
         commit_id=parsed_arguments.commit_id,
-        body_file=parsed_arguments.body_file,
+        body_text=body_text,
+        all_comments=all_comments,
         timeout_seconds=timeout_seconds,
     )
     if review_result is None:
         return 1
-    review_identifier, review_url = review_result
-    all_comment_results: list[tuple[str, str]] = []
-    if finding_count > 0:
-        for each_index, each_finding_file in enumerate(all_finding_files):
-            each_path = all_paths[each_index]
-            each_line = all_lines[each_index]
-            comment_result = post_comment(
-                owner=parsed_arguments.owner,
-                repo=parsed_arguments.repo,
-                pull_number=parsed_arguments.number,
-                commit_id=parsed_arguments.commit_id,
-                body_file=each_finding_file,
-                path=each_path,
-                line=each_line,
-                timeout_seconds=timeout_seconds,
-            )
-            if comment_result is None:
-                finding_number = each_index + 1
-                print(
-                    f"Review already posted at {review_url}",
-                    file=sys.stderr,
-                )
-                print(
-                    f"Failed to post finding {finding_number}/{finding_count}: "
-                    f"{each_finding_file}",
-                    file=sys.stderr,
-                )
-                partial_output = _build_output_payload(
-                    review_identifier, review_url, all_comment_results
-                )
-                print(partial_output)
-                return 1
-            all_comment_results.append(comment_result)
+    review_identifier, review_url, all_comment_infos = review_result
     output_text = _build_output_payload(
-        review_identifier, review_url, all_comment_results
+        review_identifier, review_url, all_comment_infos
     )
     print(output_text)
     return 0
@@ -211,7 +159,7 @@ def main(all_arguments: list[str], timeout_seconds: int = DEFAULT_TIMEOUT_SECOND
 
 def _parse_arguments(all_arguments: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Post a PR review summary with inline findings.",
+        description="Post a PR review with inline findings.",
     )
     parser.add_argument("--owner", required=True)
     parser.add_argument("--repo", required=True)

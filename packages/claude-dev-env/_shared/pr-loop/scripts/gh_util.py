@@ -56,6 +56,7 @@ def run_gh(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     retry_nonzero: bool = True,
     retry_timeout: bool = True,
+    stdin_text: str | None = None,
 ) -> GhResult:
     """Run a gh command with timeout + transient retry handling.
 
@@ -78,6 +79,7 @@ def run_gh(
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
+                input=stdin_text,
             )
         except subprocess.TimeoutExpired as error:
             error_stderr = _ensure_text(error.stderr)

@@ -22,22 +22,65 @@ def _load_module(module_name: str, filename: str) -> ModuleType:
 post_audit_review = _load_module("post_audit_review", "post_audit_review.py")
 
 
-class DescribeParseIdentifierAndUrl:
-    def test_extracts_id_and_html_url_from_valid_response(self):
+class DescribeParseReviewResponse:
+    def test_extracts_review_id_url_and_empty_comments_when_no_nested_comments(self):
         raw = json.dumps({"id": 42, "html_url": "https://github.com/pr#review-42"})
-        result = post_audit_review._parse_identifier_and_url(raw, "review")
-        assert result == ("42", "https://github.com/pr#review-42")
+        result = post_audit_review._parse_review_response(raw)
+        assert result is not None
+        review_id, review_url, all_comment_infos = result
+        assert review_id == "42"
+        assert review_url == "https://github.com/pr#review-42"
+        assert all_comment_infos == []
+
+    def test_extracts_nested_comment_infos(self):
+        raw = json.dumps(
+            {
+                "id": 42,
+                "html_url": "https://github.com/pr#review-42",
+                "comments": [
+                    {"id": 101, "html_url": "https://github.com/pr#comment-101"},
+                    {"id": 102, "html_url": "https://github.com/pr#comment-102"},
+                ],
+            }
+        )
+        result = post_audit_review._parse_review_response(raw)
+        assert result is not None
+        review_id, review_url, all_comment_infos = result
+        assert review_id == "42"
+        assert review_url == "https://github.com/pr#review-42"
+        assert all_comment_infos == [
+            {"id": "101", "url": "https://github.com/pr#comment-101"},
+            {"id": "102", "url": "https://github.com/pr#comment-102"},
+        ]
 
     def test_returns_none_on_invalid_json(self):
-        assert post_audit_review._parse_identifier_and_url("not json", "review") is None
+        assert post_audit_review._parse_review_response("not json") is None
 
     def test_returns_none_when_id_missing(self):
         raw = json.dumps({"html_url": "https://github.com/pr"})
-        assert post_audit_review._parse_identifier_and_url(raw, "review") is None
+        assert post_audit_review._parse_review_response(raw) is None
 
     def test_returns_none_when_url_not_string(self):
         raw = json.dumps({"id": 1, "html_url": 99})
-        assert post_audit_review._parse_identifier_and_url(raw, "review") is None
+        assert post_audit_review._parse_review_response(raw) is None
+
+    def test_skips_malformed_nested_comments(self):
+        raw = json.dumps(
+            {
+                "id": 42,
+                "html_url": "https://github.com/pr#review-42",
+                "comments": [
+                    {"id": 101, "html_url": "https://github.com/pr#comment-101"},
+                    {"id": "not-a-number", "html_url": 99},
+                ],
+            }
+        )
+        result = post_audit_review._parse_review_response(raw)
+        assert result is not None
+        review_id, review_url, all_comment_infos = result
+        assert all_comment_infos == [
+            {"id": "101", "url": "https://github.com/pr#comment-101"},
+        ]
 
 
 class DescribeBuildOutputPayload:
@@ -45,7 +88,7 @@ class DescribeBuildOutputPayload:
         output = post_audit_review._build_output_payload(
             "99",
             "https://github.com/pr#review-99",
-            [("101", "https://github.com/pr#comment-101")],
+            [{"id": "101", "url": "https://github.com/pr#comment-101"}],
         )
         payload = json.loads(output)
         assert payload["review_id"] == "99"
@@ -55,15 +98,25 @@ class DescribeBuildOutputPayload:
 
     def test_handles_multiple_comments(self):
         output = post_audit_review._build_output_payload(
-            "1", "url1", [("2", "url2"), ("3", "url3")]
+            "1",
+            "url1",
+            [{"id": "2", "url": "url2"}, {"id": "3", "url": "url3"}],
         )
         payload = json.loads(output)
         assert len(payload["comments"]) == 2
 
 
-class DescribePostReviewSummary:
-    def test_returns_id_and_url_on_success(self):
-        response = json.dumps({"id": 99, "html_url": "https://github.com/pr#review-99"})
+class DescribePostReview:
+    def test_returns_review_info_on_success(self):
+        response = json.dumps(
+            {
+                "id": 99,
+                "html_url": "https://github.com/pr#review-99",
+                "comments": [
+                    {"id": 101, "html_url": "https://github.com/pr#comment-101"}
+                ],
+            }
+        )
         with patch.object(
             post_audit_review,
             "run_gh",
@@ -73,14 +126,23 @@ class DescribePostReviewSummary:
                 {"returncode": 0, "stdout": response, "stderr": "", "is_timed_out": False},
             )(),
         ):
-            result = post_audit_review.post_review_summary(
+            result = post_audit_review.post_review(
                 owner="own",
                 repo="rep",
                 pull_number=1,
                 commit_id="abc",
-                body_file=Path("body.md"),
+                body_text="review body",
+                all_comments=[
+                    {"path": "file.py", "line": 42, "side": "RIGHT", "body": "finding"}
+                ],
             )
-        assert result == ("99", "https://github.com/pr#review-99")
+        assert result is not None
+        review_id, review_url, all_comment_infos = result
+        assert review_id == "99"
+        assert review_url == "https://github.com/pr#review-99"
+        assert all_comment_infos == [
+            {"id": "101", "url": "https://github.com/pr#comment-101"}
+        ]
 
     def test_returns_none_on_gh_failure(self):
         with patch.object(
@@ -92,56 +154,12 @@ class DescribePostReviewSummary:
                 {"returncode": 1, "stdout": "", "stderr": "gh error", "is_timed_out": False},
             )(),
         ):
-            result = post_audit_review.post_review_summary(
+            result = post_audit_review.post_review(
                 owner="own",
                 repo="rep",
                 pull_number=1,
                 commit_id="abc",
-                body_file=Path("body.md"),
-            )
-        assert result is None
-
-
-class DescribePostComment:
-    def test_returns_id_and_url_on_success(self):
-        response = json.dumps({"id": 55, "html_url": "https://github.com/pr#comment-55"})
-        with patch.object(
-            post_audit_review,
-            "run_gh",
-            return_value=type(
-                "GhResult",
-                (),
-                {"returncode": 0, "stdout": response, "stderr": "", "is_timed_out": False},
-            )(),
-        ):
-            result = post_audit_review.post_comment(
-                owner="own",
-                repo="rep",
-                pull_number=1,
-                commit_id="abc",
-                body_file=Path("finding.md"),
-                path="src/file.py",
-                line=42,
-            )
-        assert result == ("55", "https://github.com/pr#comment-55")
-
-    def test_returns_none_on_gh_failure(self):
-        with patch.object(
-            post_audit_review,
-            "run_gh",
-            return_value=type(
-                "GhResult",
-                (),
-                {"returncode": 1, "stdout": "", "stderr": "gh error", "is_timed_out": False},
-            )(),
-        ):
-            result = post_audit_review.post_comment(
-                owner="own",
-                repo="rep",
-                pull_number=1,
-                commit_id="abc",
-                body_file=Path("finding.md"),
-                path="src/file.py",
-                line=42,
+                body_text="review body",
+                all_comments=[],
             )
         assert result is None

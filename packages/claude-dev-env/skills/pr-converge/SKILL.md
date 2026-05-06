@@ -38,9 +38,10 @@ post a fresh PR in a fresh branch based on origin main to the user.
 - **`tick_count` must not double-increment** — conversation state line
   only when **no** `state.json`; with `state.json`, only the
   orchestrator bump increments.
-- **Duplicate `bugbot run` while review queued** — skip Step 3 when the
-  latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction;
-  wait for review or HEAD change before re-triggering.
+- **Duplicate `bugbot run` while review queued** — check
+  `view_bugbot_status.py` first; if `status == "in_progress"`, skip
+  Step 3. The check-run status is authoritative over the `:eyes:` /
+  `:+1:` reaction heuristic.
 - **Bot logins differ between review-level and inline-comment endpoints** —
   Copilot reviews come from `copilot-pull-request-reviewer[bot]`, but its
   inline comments are authored by `Copilot`. Always use case-insensitive

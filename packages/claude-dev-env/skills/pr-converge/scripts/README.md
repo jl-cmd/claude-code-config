@@ -60,6 +60,28 @@ python "${CLAUDE_SKILL_DIR}/scripts/trigger_bugbot.py" \
 
 Output: the comment URL from gh on stdout.
 
+### `view_bugbot_status.py`
+
+Queries GitHub check-runs on the PR head commit and filters to the Cursor Bugbot check run, reporting status, conclusion, annotations count, and analysis pipeline summary as JSON.
+
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/view_bugbot_status.py" \
+  --owner <OWNER> --repo <REPO> --number <NUMBER>
+```
+
+Output: `{"head_sha", "check_runs": [{id, name, status, conclusion, started_at, completed_at, html_url, details_url, annotations_count, summary}]}`. `status == "in_progress"` is the authoritative signal that Bugbot is actively running — prefer this over the `:eyes:` reaction heuristic. `conclusion == "neutral"` means Bugbot completed without blocking failures.
+
+### `open_bugbot_check.py`
+
+Prints the Cursor Bugbot check-run details in human-readable form: html_url, status, conclusion, the analysis pipeline summary, and any annotations (issues found).
+
+```bash
+python "${CLAUDE_SKILL_DIR}/scripts/open_bugbot_check.py" \
+  --owner <OWNER> --repo <REPO> --number <NUMBER>
+```
+
+Output: plain text with the check-run URL, status, and pipeline summary. When annotations exist, lists each with path, line, severity, and message. Use to inspect what Bugbot found without opening a browser.
+
 ### `mark_pr_ready.py`
 
 Marks a draft PR as ready for review. Convergence action invoked when both bugbot and bugteam are clean against the same HEAD.

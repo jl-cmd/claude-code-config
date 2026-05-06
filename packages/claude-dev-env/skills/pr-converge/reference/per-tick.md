@@ -81,7 +81,20 @@ python "${CLAUDE_SKILL_DIR}/scripts/fetch_bugbot_inline_comments.py" \
 --owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
    ```
 
-c. Decide (four branches; match first whose predicate holds):
+   Then check Bugbot's live check-run status on `current_head`:
+
+   ```bash
+python "${CLAUDE_SKILL_DIR}/scripts/view_bugbot_status.py" \
+--owner <OWNER> --repo <REPO> --number <NUMBER>
+   ```
+
+   `status == "in_progress"` is the authoritative signal that Bugbot is
+   actively reviewing — prefer this over the `:eyes:` reaction heuristic.
+   When Bugbot is in progress, skip re-trigger and wait.
+
+c. Decide (five branches; match first whose predicate holds):
+   - **Bugbot check run `status == "in_progress"`:** Skip Step 3, schedule
+     next wakeup, return.
    - **No bugbot review yet, OR latest review's `commit_id` ≠
      `current_head`:** Re-trigger bugbot (Step 3), set `bugbot_clean_at =
      null`, reset `inline_lag_streak = 0`, schedule next wakeup, return.
@@ -169,9 +182,11 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File "$POST_BUGBOT_RUN" \
 `bugbot run` is empirically the only re-trigger Cursor Bugbot recognizes;
 alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
 
-**Gotcha (duplicate `bugbot run` while review queued):** Skip Step 3 when
-the latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction; wait
-for review or HEAD change before re-triggering.
+**Gotcha (duplicate `bugbot run` while review queued):** Before Step 3,
+check `view_bugbot_status.py`. If the check run `status == "in_progress"`,
+skip the re-trigger — Bugbot is already running. The `:eyes:` / `:+1:`
+reaction on the `bugbot run` comment is a secondary signal; the check-run
+status is authoritative.
 
 ## Step 4: Loop pacing
 

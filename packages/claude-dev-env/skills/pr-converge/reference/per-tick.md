@@ -37,7 +37,7 @@ state line when **no** `state.json` (single-PR only). With `state.json`, do
 **not** increment here — orchestrator's per-tick bump is sole increment.
 
 ```bash
-python "${CLAUDE_SKILL_DIR}/scripts/view_pr_context.py"
+python "${CLAUDE_SKILL_DIR}/scripts/view_pr_context.py" --owner <OWNER> --repo <REPO> --number <NUMBER>
 ```
 
 Capture `number`, `headRefOid` (= `current_head`), owner/repo, branch.

@@ -91,6 +91,26 @@ def test_should_raise_when_gh_subprocess_fails() -> None:
             view_pr_context_module.view_pr_context()
 
 
+def test_should_append_number_and_repo_flag_when_owner_repo_and_number_provided() -> None:
+    payload = json.dumps(
+        {
+            "number": 25,
+            "url": "https://github.com/acme/widget/pull/25",
+            "headRefOid": "abc123",
+            "baseRefName": "main",
+            "headRefName": "feat/x",
+            "isDraft": True,
+        }
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(payload)
+        view_pr_context_module.view_pr_context(number="25", owner="acme", repo="widget")
+    invoked_argv = mock_run.call_args[0][0]
+    assert "25" in invoked_argv
+    assert "--repo" in invoked_argv
+    assert "acme/widget" in invoked_argv
+
+
 def test_should_pass_imported_constant_directly_without_local_alias() -> None:
     payload = json.dumps(
         {

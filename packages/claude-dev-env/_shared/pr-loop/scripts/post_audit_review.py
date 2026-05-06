@@ -50,8 +50,8 @@ def post_review(
     gh_result = run_gh(
         ["gh", "api", endpoint_path, "-X", "POST", "--input", "-"],
         timeout_seconds=REVIEW_POST_TIMEOUT_SECONDS,
-        retry_nonzero=False,
-        retry_timeout=False,
+        should_retry_nonzero=False,
+        should_retry_timeout=False,
         stdin_text=payload_text,
     )
     if gh_result.is_timed_out:

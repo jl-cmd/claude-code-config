@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -217,3 +218,15 @@ class DescribeVerifyPrReview:
         ):
             exit_code = verify_review.verify_pr_review("own", "rep", 1, "abc1234", 3)
         assert exit_code == 3
+
+
+class DescribeVerifyPrReviewCollectionNamingPrefix:
+    """List-collection variables inside verify_pr_review must use the
+    `all_` prefix per CODE_RULES §5 (consistent with `all_reviews`,
+    `all_expected_headers`, `all_command` in the same function).
+    """
+
+    def test_verify_pr_review_local_variables_use_all_prefix(self):
+        verify_pr_review_source_text = inspect.getsource(verify_review.verify_pr_review)
+        assert "all_matching_reviews = [" in verify_pr_review_source_text
+        assert "all_reviews_on_expected_commit = [" in verify_pr_review_source_text

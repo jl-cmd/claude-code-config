@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import json
 import sys
 from pathlib import Path
@@ -203,3 +204,40 @@ class DescribePostReview:
                 all_comments=[],
             )
         assert result is None
+
+
+class DescribePostReviewUsesShouldRetryParameterNames:
+    """The call to run_gh inside post_review must pass the renamed boolean
+    parameters `should_retry_nonzero` and `should_retry_timeout` (CODE_RULES
+    §5 boolean prefix).
+    """
+
+    def test_post_review_passes_should_retry_kwargs_to_run_gh(self):
+        captured_call_kwargs: dict[str, object] = {}
+
+        def fake_run_gh(*_args: object, **kwargs: object) -> object:
+            captured_call_kwargs.update(kwargs)
+            return type(
+                "GhResult",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": json.dumps({"id": 1, "html_url": "u", "comments": []}),
+                    "stderr": "",
+                    "is_timed_out": False,
+                },
+            )()
+
+        with patch.object(post_audit_review, "run_gh", side_effect=fake_run_gh):
+            post_audit_review.post_review(
+                owner="own",
+                repo="rep",
+                pull_number=1,
+                commit_id="abc",
+                body_text="body",
+                all_comments=[],
+            )
+        assert captured_call_kwargs.get("should_retry_nonzero") is False
+        assert captured_call_kwargs.get("should_retry_timeout") is False
+        assert "retry_nonzero" not in captured_call_kwargs
+        assert "retry_timeout" not in captured_call_kwargs

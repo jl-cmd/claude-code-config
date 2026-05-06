@@ -70,6 +70,7 @@ def run_gh(
                 all_command,
                 check=False,
                 capture_output=True,
+                encoding="utf-8",
                 text=True,
                 timeout=timeout_seconds,
             )

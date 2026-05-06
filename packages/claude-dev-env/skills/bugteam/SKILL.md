@@ -373,7 +373,7 @@ calls in one assistant message (`run_in_background=true`):
   - Polls for all 10 sibling XMLs before proceeding (60s timeout, 2s interval). On timeout: log diagnostics entry, proceed with validated findings from available XMLs, report count in validator output.
   - Validates each finding: file exists, line in bounds, excerpt matches claimed
     line, category is A–J, severity is P0/P1/P2.
-  - Hallucinated findings → quarantined to `loop-<N>-diagnostics.json` under
+  - Hallucinated findings → quarantined to `loop-<L>-diagnostics.json` under
     `validator_rejected`.
   - De-dups by `(file, line, category)`, max severity wins; on conflict, keep longest description text.
   - Re-ids as `loopN-K`.

@@ -81,13 +81,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/fetch_bugbot_inline_comments.py" \
 --owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
    ```
 
-   Then check Bugbot's live check-run status on `current_head`:
-
-   ```bash
-python "${CLAUDE_SKILL_DIR}/scripts/view_bugbot_status.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER>
-   ```
-
+   Check Bugbot's live check-run status via `view_bugbot_status.py`.
    `status == "in_progress"` is the authoritative signal that Bugbot is
    actively reviewing — prefer this over the `:eyes:` reaction heuristic.
    When Bugbot is in progress, skip re-trigger and wait.

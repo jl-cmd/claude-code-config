@@ -84,9 +84,9 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 ## AUDIT outcome XML schema (bugfind writes this)
 
 ```xml
-<bugteam_audit loop="<N>" review_url="<url>">
+<bugteam_audit loop="<L>" review_url="<url>">
   <finding
-    finding_id="loop<L>-K"
+    finding_id="loop<L>-<K>"
     severity="P0|P1|P2"
     category="<letter>"
     file="<path>"
@@ -124,7 +124,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 <bugs_to_fix>
   [for each P0/P1/P2 finding from last_findings:]
   <bug
-    finding_id="loop<L>-K"
+    finding_id="loop<L>-<K>"
     severity="P0|P1|P2"
     file="<path>"
     line="<int>"
@@ -156,9 +156,9 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 </execution>
 
 <outcome_xml_schema>
-  <bugteam_fix loop="<N>" commit_sha="<sha or empty if no commit>">
+  <bugteam_fix loop="<L>" commit_sha="<sha or empty if no commit>">
     <outcome
-      finding_id="loop<L>-K"
+      finding_id="loop<L>-<K>"
       status="fixed|could_not_address|hook_blocked"
       commit_sha="<sha if fixed, empty otherwise>"
       reply_comment_id="<id of the reply posted>"

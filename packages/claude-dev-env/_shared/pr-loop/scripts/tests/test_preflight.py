@@ -418,6 +418,34 @@ def test_main_should_not_double_print_when_git_ls_fails(
     )
 
 
+def test_explicit_scope_all_with_base_ref_should_not_call_get_changed_files(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Explicit --scope all with --base-ref must not auto-convert to 'changed'.
+
+    Before the fix, ``argparse`` defaulted ``--scope`` to ``PYTEST_SCOPE_ALL``
+    (``"all"``), making it impossible to distinguish "user typed --scope all"
+    versus "user omitted --scope". The code then auto-converted
+    ``effective_scope == "all"`` to ``"changed"`` whenever ``--base-ref`` was
+    present, silently overriding an explicit ``--scope all``.
+
+    After the fix, ``--scope`` defaults to ``None`` and is resolved to ``"all"``
+    only after argparse, so the user's explicit ``--scope all`` stays ``"all"``
+    and the full suite runs regardless of ``--base-ref``.
+    """
+    with (
+        patch.object(preflight, "verify_git_hooks_path", return_value=0),
+        patch.object(preflight, "has_pytest_configuration", return_value=True),
+        patch.object(preflight, "has_discoverable_tests", return_value=True),
+        patch.object(preflight, "get_changed_files") as mock_get_changed,
+        patch.object(preflight, "discover_related_tests", return_value=[]),
+        patch.object(preflight, "run_pytest", return_value=0),
+    ):
+        exit_code = preflight.main(["--scope", "all", "--base-ref", "origin/main"])
+    assert exit_code == 0
+    mock_get_changed.assert_not_called()
+
+
 def test_preflight_bootstrap_matches_code_rules_sys_path_pattern() -> None:
     """Bootstrap must clear duplicate script_directory entries, then guard insert."""
     module_path = Path(__file__).parent.parent / "preflight.py"

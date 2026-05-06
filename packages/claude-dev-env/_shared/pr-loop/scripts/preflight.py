@@ -317,7 +317,7 @@ def parse_arguments(all_arguments: list[str]) -> argparse.Namespace:
         "--scope",
         type=str,
         choices=list(ALL_PYTEST_SCOPE_CHOICES),
-        default=PYTEST_SCOPE_ALL,
+        default=None,
         help=(
             "Test selection scope. 'all' runs the full suite. "
             "'changed' runs only tests related to changed files (requires --base-ref). "
@@ -355,6 +355,8 @@ def main(all_arguments: list[str]) -> int:
             )
         else:
             effective_scope = arguments.scope
+            if effective_scope is None:
+                effective_scope = PYTEST_SCOPE_ALL
             if effective_scope == PYTEST_SCOPE_CHANGED and arguments.base_ref is None:
                 print(
                     "bugteam_preflight: --scope changed requires --base-ref; "
@@ -362,8 +364,6 @@ def main(all_arguments: list[str]) -> int:
                     file=sys.stderr,
                 )
                 effective_scope = PYTEST_SCOPE_ALL
-            if effective_scope == PYTEST_SCOPE_ALL and arguments.base_ref is not None:
-                effective_scope = PYTEST_SCOPE_CHANGED
             if effective_scope == PYTEST_SCOPE_CHANGED and arguments.base_ref is not None:
                 changed = get_changed_files(repository_root, arguments.base_ref)
                 related = discover_related_tests(changed, repository_root)

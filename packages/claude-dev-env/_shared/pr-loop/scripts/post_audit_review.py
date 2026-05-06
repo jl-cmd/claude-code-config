@@ -100,6 +100,8 @@ def post_comment(
         retry_timeout=False,
     )
     if gh_result.returncode != 0:
+        error_text = (gh_result.stderr or "").strip() or gh_result.stdout.strip()
+        print(f"Comment POST failed: {error_text}", file=sys.stderr)
         return None
     return _parse_identifier_and_url(gh_result.stdout, "comment")
 

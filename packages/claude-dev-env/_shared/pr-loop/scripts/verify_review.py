@@ -6,12 +6,13 @@ issue comment.
 
 import argparse
 import json
+import os.path
 import sys
-from pathlib import Path
 
 sys.modules.pop("config", None)
-if str(Path(__file__).resolve().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+script_directory = os.path.dirname(os.path.abspath(__file__))
+if script_directory not in sys.path:
+    sys.path.insert(0, script_directory)
 
 from config.review_posting_constants import (
     BUGTEAM_LOOP_HEADER_TEMPLATE,

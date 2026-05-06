@@ -349,6 +349,24 @@ def test_preflight_bootstrap_moves_script_directory_to_front() -> None:
         sys.path[:] = original_sys_path
 
 
+def test_main_uses_correct_changed_files_function_name() -> None:
+    """main() must call get_changed_files, not the undefined get_all_changed_files."""
+    main_source = inspect.getsource(preflight.main)
+    assert "get_all_changed_files(" not in main_source
+
+
+def test_should_not_return_nonexistent_test_file(tmp_path: Path) -> None:
+    """A deleted test file path from git diff --name-only must not be returned.
+    Before the fix, _find_related_test_files returned paths without checking
+    whether the file exists on disk, which caused pytest to receive
+    nonexistent paths for deleted files.
+    """
+    repo_root = tmp_path
+    deleted_test_path = Path("test_deleted_module.py")
+    result = preflight._find_related_test_files(deleted_test_path, repo_root)
+    assert result == []
+
+
 def test_preflight_bootstrap_matches_code_rules_sys_path_pattern() -> None:
     """Bootstrap must clear duplicate script_directory entries, then guard insert."""
     module_path = Path(__file__).parent.parent / "preflight.py"

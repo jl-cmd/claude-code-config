@@ -58,16 +58,12 @@ def test_pre_commit_config_yaml_filename() -> None:
     assert constants_module.PRE_COMMIT_CONFIG_YAML_FILENAME == ".pre-commit-config.yaml"
 
 
-def test_all_test_file_patterns_for_discovery() -> None:
-    assert constants_module.ALL_TEST_FILE_PATTERNS_FOR_DISCOVERY == (
+def test_all_git_ls_files_test_discovery_command() -> None:
+    assert constants_module.ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND == (
+        "ls-files",
+        "--",
         "test_*.py",
         "*_test.py",
-    )
-
-
-def test_all_tests_directory_ignore_parts_includes_venv_marker() -> None:
-    assert constants_module.VENV_DIRECTORY_NAME in (
-        constants_module.ALL_TESTS_DIRECTORY_IGNORE_PARTS
     )
 
 

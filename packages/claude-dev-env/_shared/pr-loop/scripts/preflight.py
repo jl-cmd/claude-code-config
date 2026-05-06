@@ -231,7 +231,9 @@ def _find_related_test_files(changed_path: Path, repo_root: Path) -> list[Path]:
     stem = changed_path.stem
     test_prefix = PYTEST_TEST_FILENAME_PREFIX
     test_suffix = PYTEST_TEST_FILENAME_SUFFIX
-    if stem.startswith(test_prefix) or stem.endswith(test_suffix):
+    if (stem.startswith(test_prefix) or stem.endswith(test_suffix)) and (
+        repo_root / changed_path
+    ).is_file():
         return [repo_root / changed_path]
     full_path = repo_root / changed_path
     parent = full_path.parent
@@ -355,7 +357,7 @@ def main(all_arguments: list[str]) -> int:
             if effective_scope == PYTEST_SCOPE_ALL and arguments.base_ref is not None:
                 effective_scope = PYTEST_SCOPE_CHANGED
             if effective_scope == PYTEST_SCOPE_CHANGED and arguments.base_ref is not None:
-                changed = get_all_changed_files(repository_root, arguments.base_ref)
+                changed = get_changed_files(repository_root, arguments.base_ref)
                 related = discover_related_tests(changed, repository_root)
                 if related:
                     print(

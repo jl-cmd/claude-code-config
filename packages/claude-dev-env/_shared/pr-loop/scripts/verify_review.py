@@ -36,10 +36,10 @@ def _build_expected_headers(loop_number: int) -> tuple[str, str]:
 
 
 def _is_matching_review(
-    review_body: str | None, expected_headers: tuple[str, str]
+    review_body: str | None, all_expected_headers: tuple[str, str]
 ) -> bool:
     body = review_body or ""
-    return any(body.startswith(each_header) for each_header in expected_headers)
+    return any(body.startswith(each_header) for each_header in all_expected_headers)
 
 
 def _parse_paginated_slurp_response(
@@ -81,11 +81,11 @@ def verify_pr_review(
         print("Failed to parse paginated reviews response", file=sys.stderr)
         return EXIT_NO_REVIEW
 
-    expected_headers = _build_expected_headers(loop_number)
+    all_expected_headers = _build_expected_headers(loop_number)
     matching_reviews = [
         each_review
         for each_review in all_reviews
-        if _is_matching_review(each_review.get("body"), expected_headers)
+        if _is_matching_review(each_review.get("body"), all_expected_headers)
     ]
 
     review_count = len(matching_reviews)

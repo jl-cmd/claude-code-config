@@ -11,8 +11,8 @@ import sys
 from pathlib import Path
 
 sys.modules.pop("config", None)
-if str(Path(__file__).resolve().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+if str(Path(__file__).absolute().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).absolute().parent))
 
 from config.review_posting_constants import (
     REVIEW_COMMENTS_SIDE,
@@ -91,8 +91,6 @@ def _parse_review_response(
                 if isinstance(each_id, (int, str)) and isinstance(each_url, str):
                     all_comment_entries.append({"id": str(each_id), "url": each_url})
     return (str(raw_identifier), raw_url, all_comment_entries)
-
-
 
 
 def _build_output_payload(

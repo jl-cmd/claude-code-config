@@ -366,18 +366,18 @@ def main(all_arguments: list[str]) -> int:
     if hooks_path_exit_code != 0:
         return hooks_path_exit_code
     if not arguments.no_pytest and has_pytest_configuration(repository_root):
-        tests_discovered = has_discoverable_tests(repository_root)
-        if tests_discovered is None:
+        discovery_result = has_discoverable_tests(repository_root)
+        if discovery_result is None:
             print(
                 "bugteam_preflight: test discovery failed; running full suite anyway.",
                 file=sys.stderr,
             )
-        elif not tests_discovered:
+        elif not discovery_result:
             print(
                 "bugteam_preflight: pytest configured but no tests found; skipping pytest.",
                 file=sys.stderr,
             )
-        if tests_discovered is not False:
+        if discovery_result is not False:
             effective_scope = arguments.scope
             if effective_scope is None:
                 effective_scope = (

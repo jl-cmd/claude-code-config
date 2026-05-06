@@ -118,20 +118,6 @@ def _parse_identifier_and_url(
     return (str(raw_identifier), raw_url)
 
 
-def _validate_finding_counts(
-    all_finding_files: list[Path],
-    all_paths: list[str],
-    all_lines: list[int],
-) -> str | None:
-    """Return an error message when finding triples have mismatched counts."""
-    finding_count = len(all_finding_files)
-    if finding_count != len(all_paths) or finding_count != len(all_lines):
-        return (
-            f"Finding count mismatch: {finding_count} finding-files, "
-            f"{len(all_paths)} paths, {len(all_lines)} lines. "
-            "Each finding needs --finding-file, --path, and --line."
-        )
-    return None
 
 
 def _build_output_payload(
@@ -153,16 +139,20 @@ def _build_output_payload(
 
 def main(all_arguments: list[str], timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> int:
     parsed_arguments = _parse_arguments(all_arguments)
-    has_any_findings = bool(parsed_arguments.finding_file)
-    if has_any_findings:
-        validation_error = _validate_finding_counts(
-            parsed_arguments.finding_file,
-            parsed_arguments.path,
-            parsed_arguments.line,
+    all_finding_files = parsed_arguments.finding_file
+    all_paths = parsed_arguments.path
+    all_lines = parsed_arguments.line
+    finding_count = len(all_finding_files)
+    path_count = len(all_paths)
+    line_count = len(all_lines)
+    if not (finding_count == path_count == line_count):
+        print(
+            f"Finding argument mismatch: {finding_count} finding-files, "
+            f"{path_count} paths, {line_count} lines. "
+            "Each finding needs --finding-file, --path, and --line.",
+            file=sys.stderr,
         )
-        if validation_error is not None:
-            print(validation_error, file=sys.stderr)
-            return 1
+        return 1
     review_result = post_review_summary(
         owner=parsed_arguments.owner,
         repo=parsed_arguments.repo,
@@ -175,10 +165,10 @@ def main(all_arguments: list[str], timeout_seconds: int = DEFAULT_TIMEOUT_SECOND
         return 1
     review_identifier, review_url = review_result
     all_comment_results: list[tuple[str, str]] = []
-    if has_any_findings:
-        for each_index, each_finding_file in enumerate(parsed_arguments.finding_file):
-            each_path = parsed_arguments.path[each_index]
-            each_line = parsed_arguments.line[each_index]
+    if finding_count > 0:
+        for each_index, each_finding_file in enumerate(all_finding_files):
+            each_path = all_paths[each_index]
+            each_line = all_lines[each_index]
             comment_result = post_comment(
                 owner=parsed_arguments.owner,
                 repo=parsed_arguments.repo,
@@ -191,9 +181,12 @@ def main(all_arguments: list[str], timeout_seconds: int = DEFAULT_TIMEOUT_SECOND
             )
             if comment_result is None:
                 finding_number = each_index + 1
-                total_findings = len(parsed_arguments.finding_file)
                 print(
-                    f"Failed to post finding {finding_number}/{total_findings}: "
+                    f"Review already posted at {review_url}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"Failed to post finding {finding_number}/{finding_count}: "
                     f"{each_finding_file}",
                     file=sys.stderr,
                 )

@@ -370,7 +370,7 @@ calls in one assistant message (`run_in_background=true`):
   Prompts must pass literal absolute sibling paths.
 - **1 opus validator (`-a`):** `subagent_type="code-quality-agent"`,
   `model="opus"`:
-  - Polls for all 10 sibling XMLs before proceeding (60s timeout, 2s interval).
+  - Polls for all 10 sibling XMLs before proceeding (120s timeout, 2s interval).
   - Validates each finding: file exists, line in bounds, excerpt matches claimed
     line, category is A–J, severity is P0/P1/P2.
   - Hallucinated findings → quarantined to `loop-<N>-diagnostics.json` under

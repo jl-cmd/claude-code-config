@@ -104,6 +104,9 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   For the validator (-a): post findings via the script in <posting> above,
   then write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml
   inside the PR's worktree directory (<worktree_path>).
+  When running a single auditor without a team (one agent does both audit
+  and posting), use the validator (-a) role's prompt template so the
+  agent receives the full <posting> instructions.
   For sibling auditors (-b through -k): write outcome XML to
   <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed
   in prompt). YOU DO NOT POST TO GITHUB. Return only that path on stdout.

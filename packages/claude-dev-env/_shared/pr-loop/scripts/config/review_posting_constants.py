@@ -8,7 +8,7 @@ EXIT_DUPLICATE_REVIEW: int = 3
 REVIEWS_PATH_TEMPLATE: str = "/repos/{owner}/{repo}/pulls/{number}/reviews?per_page=100"
 
 LOOP_AUDIT_HEADER_TEMPLATE: str = "## Loop {loop_number} Audit"
-BUGTEAM_LOOP_HEADER_TEMPLATE: str = "## /bugteam loop {loop_number}"
+BUGTEAM_LOOP_HEADER_TEMPLATE: str = "## /bugteam loop {loop_number} "
 
 REVIEW_POST_ENDPOINT_TEMPLATE: str = (
     "/repos/{owner}/{repo}/pulls/{pull_number}/reviews"

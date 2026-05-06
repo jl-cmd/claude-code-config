@@ -73,14 +73,14 @@ def post_review(
 def _parse_review_response(
     response_text: str,
     *,
-    expected_comment_count: int | None = None,
+    expected_comment_count: int,
 ) -> tuple[str, str, list[dict[str, str]]] | None:
     """Extract review id, html_url, and nested comment info from a review POST response.
 
-    When expected_comment_count is provided and the response returns fewer
-    well-formed inline comments than were requested, this prints a stderr
-    warning and returns None so the caller falls back to a single issue
-    comment instead of believing every finding got an anchor.
+    When the response returns fewer well-formed inline comments than were
+    requested via expected_comment_count, this prints a stderr warning and
+    returns None so the caller falls back to a single issue comment instead
+    of believing every finding got an anchor.
     """
     try:
         response_payload = json.loads(response_text)
@@ -101,10 +101,7 @@ def _parse_review_response(
                 each_url = each_comment.get("html_url")
                 if isinstance(each_id, (int, str)) and isinstance(each_url, str):
                     all_comment_entries.append({"id": str(each_id), "url": each_url})
-    if (
-        expected_comment_count is not None
-        and len(all_comment_entries) < expected_comment_count
-    ):
+    if len(all_comment_entries) < expected_comment_count:
         print(
             f"Review response returned {len(all_comment_entries)} inline "
             f"comment anchors, expected {expected_comment_count}. "

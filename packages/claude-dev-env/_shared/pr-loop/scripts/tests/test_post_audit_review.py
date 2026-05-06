@@ -23,7 +23,7 @@ post_audit_review = _load_module("post_audit_review", "post_audit_review.py")
 class DescribeParseReviewResponse:
     def test_extracts_review_id_url_and_empty_comments_when_no_nested_comments(self):
         raw = json.dumps({"id": 42, "html_url": "https://github.com/pr#review-42"})
-        result = post_audit_review._parse_review_response(raw)
+        result = post_audit_review._parse_review_response(raw, expected_comment_count=0)
         assert result is not None
         review_id, review_url, all_comment_entries = result
         assert review_id == "42"
@@ -41,7 +41,7 @@ class DescribeParseReviewResponse:
                 ],
             }
         )
-        result = post_audit_review._parse_review_response(raw)
+        result = post_audit_review._parse_review_response(raw, expected_comment_count=2)
         assert result is not None
         review_id, review_url, all_comment_entries = result
         assert review_id == "42"
@@ -52,15 +52,24 @@ class DescribeParseReviewResponse:
         ]
 
     def test_returns_none_on_invalid_json(self):
-        assert post_audit_review._parse_review_response("not json") is None
+        assert (
+            post_audit_review._parse_review_response("not json", expected_comment_count=0)
+            is None
+        )
 
     def test_returns_none_when_id_missing(self):
         raw = json.dumps({"html_url": "https://github.com/pr"})
-        assert post_audit_review._parse_review_response(raw) is None
+        assert (
+            post_audit_review._parse_review_response(raw, expected_comment_count=0)
+            is None
+        )
 
     def test_returns_none_when_url_not_string(self):
         raw = json.dumps({"id": 1, "html_url": 99})
-        assert post_audit_review._parse_review_response(raw) is None
+        assert (
+            post_audit_review._parse_review_response(raw, expected_comment_count=0)
+            is None
+        )
 
     def test_skips_malformed_nested_comments(self):
         raw = json.dumps(
@@ -73,7 +82,7 @@ class DescribeParseReviewResponse:
                 ],
             }
         )
-        result = post_audit_review._parse_review_response(raw)
+        result = post_audit_review._parse_review_response(raw, expected_comment_count=1)
         assert result is not None
         review_id, review_url, all_comment_entries = result
         assert all_comment_entries == [

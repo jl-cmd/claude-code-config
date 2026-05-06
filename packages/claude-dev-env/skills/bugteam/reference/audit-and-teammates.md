@@ -24,11 +24,11 @@ Repeat until an exit condition fires.
    2. If exit code **0** → continue to step 2.5 (AUDIT spawn) below.
    3. If exit code **non-zero** → spawn a new **clean-coder** teammate — **standards-fix pass** — with instructions: read the script’s stderr, edit the repo until a **re-run** of the **same** gate command exits **0**, then one commit, `git push`, shutdown. Repeat standards-fix spawns until the gate exits **0** or **5** failed gate rounds (each round = one teammate session after a non-zero gate). If still non-zero after 5 rounds → exit reason = `error: code rules gate failed pre-audit`.
    4. After gate exit **0**, increment `loop_count`. If `loop_count > 10`, exit reason = `cap reached` (counts **audits**, not standards-only rounds).
-   5. Execute **AUDIT action** (spawn bugfind). Print progress: `Loop <N> audit: ...`
+   5. Execute **AUDIT action** (spawn bugfind). Print progress: `Loop <L> audit: ...`
 
 3. **FIX path** (when `last_action == "audited"` and `last_findings.total > 0`):
    1. Increment `loop_count`. If `loop_count > 10`, exit reason = `cap reached`.
-   2. Execute **FIX action** (spawn bugfix clean-coder for audit findings). Print: `Loop <N> fix: commit ...`
+   2. Execute **FIX action** (spawn bugfix clean-coder for audit findings). Print: `Loop <L> fix: commit ...`
    3. Set `last_action = "fixed"`, update `audit_log`, loop to step 1 (next iteration hits **pre-audit path** before the next AUDIT).
 
 4. After **AUDIT**, update `last_action`, `last_findings`, `audit_log`; print the audit progress line if not already printed.

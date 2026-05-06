@@ -8,7 +8,7 @@ Shared output schema and audit-loop contract used by `/bugteam`, `/qbug`, `/find
 - Adversarial second pass
 - Haiku secondary auditor
 - Post-fix self-audit
-- Persistence (loop-N-audit.json, loop-N-diagnostics.json)
+- Persistence (loop-<L>-audit.json, loop-<L>-diagnostics.json)
 
 ## Finding schema
 
@@ -131,7 +131,7 @@ Sequence:
 
 Every audit loop writes two JSON files under the skill's scoped temp directory (resolved via `tempfile.gettempdir()`):
 
-### `loop-<N>-audit.json`
+### `loop-<L>-audit.json`
 
 ```json
 {
@@ -141,7 +141,7 @@ Every audit loop writes two JSON files under the skill's scoped temp directory (
 }
 ```
 
-### `loop-<N>-diagnostics.json`
+### `loop-<L>-diagnostics.json`
 
 ```json
 {

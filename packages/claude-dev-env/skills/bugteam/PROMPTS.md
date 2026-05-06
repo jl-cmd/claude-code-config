@@ -83,7 +83,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 
 <output_format>
   For the (-a) validator: write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml inside
-  the PR's worktree directory (<worktree_path>). For sibling auditors (-b through -k): write to <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed in prompt). Sibling auditors do not post PR reviews; set review_url, finding_comment_id, and finding_comment_url to empty strings, and used_fallback to "false". Return only that path on stdout. The schema:
+  the PR's worktree directory (<worktree_path>). For sibling auditors (-b through -k): write to <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed in prompt). Sibling auditors do not post PR reviews; set review_url, finding_comment_id, and finding_comment_url to empty strings, and used_fallback to "false". Omit unanchored findings from sibling output — only the validator handles those. Return only that path on stdout. The schema:
 </output_format>
 ```
 

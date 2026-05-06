@@ -388,7 +388,7 @@ one review was posted at the correct commit:
 ```bash
 python <script_dir>/verify_review.py \
   --owner <owner> --repo <repo> --number <N> \
-  --commit-id "$(git rev-parse HEAD)" --loop <N>
+  --commit-id "$(git rev-parse HEAD)" --loop <L>
 ```
 
 Non-zero exit → lead posts fallback issue comment with all findings inline

@@ -88,7 +88,7 @@ def post_comment(
             f"commit_id={commit_id}",
             "-f",
             f"path={path}",
-            "-f",
+            "-F",
             f"line={line}",
             "-f",
             f"side={REVIEW_COMMENTS_SIDE}",
@@ -153,14 +153,16 @@ def _build_output_payload(
 
 def main(all_arguments: list[str]) -> int:
     parsed_arguments = _parse_arguments(all_arguments)
-    validation_error = _validate_finding_counts(
-        parsed_arguments.finding_file,
-        parsed_arguments.path,
-        parsed_arguments.line,
-    )
-    if validation_error is not None:
-        print(validation_error, file=sys.stderr)
-        return 1
+    has_any_findings = bool(parsed_arguments.finding_file)
+    if has_any_findings:
+        validation_error = _validate_finding_counts(
+            parsed_arguments.finding_file,
+            parsed_arguments.path,
+            parsed_arguments.line,
+        )
+        if validation_error is not None:
+            print(validation_error, file=sys.stderr)
+            return 1
     review_result = post_review_summary(
         owner=parsed_arguments.owner,
         repo=parsed_arguments.repo,
@@ -172,28 +174,29 @@ def main(all_arguments: list[str]) -> int:
         return 1
     review_identifier, review_url = review_result
     all_comment_results: list[tuple[str, str]] = []
-    for each_index, each_finding_file in enumerate(parsed_arguments.finding_file):
-        each_path = parsed_arguments.path[each_index]
-        each_line = parsed_arguments.line[each_index]
-        comment_result = post_comment(
-            owner=parsed_arguments.owner,
-            repo=parsed_arguments.repo,
-            pull_number=parsed_arguments.number,
-            commit_id=parsed_arguments.commit_id,
-            body_file=each_finding_file,
-            path=each_path,
-            line=each_line,
-        )
-        if comment_result is None:
-            finding_number = each_index + 1
-            total_findings = len(parsed_arguments.finding_file)
-            print(
-                f"Failed to post finding {finding_number}/{total_findings}: "
-                f"{each_finding_file}",
-                file=sys.stderr,
+    if has_any_findings:
+        for each_index, each_finding_file in enumerate(parsed_arguments.finding_file):
+            each_path = parsed_arguments.path[each_index]
+            each_line = parsed_arguments.line[each_index]
+            comment_result = post_comment(
+                owner=parsed_arguments.owner,
+                repo=parsed_arguments.repo,
+                pull_number=parsed_arguments.number,
+                commit_id=parsed_arguments.commit_id,
+                body_file=each_finding_file,
+                path=each_path,
+                line=each_line,
             )
-            return 1
-        all_comment_results.append(comment_result)
+            if comment_result is None:
+                finding_number = each_index + 1
+                total_findings = len(parsed_arguments.finding_file)
+                print(
+                    f"Failed to post finding {finding_number}/{total_findings}: "
+                    f"{each_finding_file}",
+                    file=sys.stderr,
+                )
+                return 1
+            all_comment_results.append(comment_result)
     output_text = _build_output_payload(
         review_identifier, review_url, all_comment_results
     )
@@ -214,21 +217,24 @@ def _parse_arguments(all_arguments: list[str]) -> argparse.Namespace:
         "--finding-file",
         action="append",
         type=Path,
-        required=True,
+        required=False,
+        default=[],
         dest="finding_file",
         help="Markdown file with the finding body (repeat per finding).",
     )
     parser.add_argument(
         "--path",
         action="append",
-        required=True,
+        required=False,
+        default=[],
         help="Source file path for the finding (repeat per finding).",
     )
     parser.add_argument(
         "--line",
         action="append",
         type=int,
-        required=True,
+        required=False,
+        default=[],
         help="Line number for the finding (repeat per finding).",
     )
     return parser.parse_args(all_arguments)

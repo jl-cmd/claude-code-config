@@ -55,7 +55,15 @@ def _parse_paginated_slurp_response(
         return None
     if not isinstance(parsed_pages, list):
         return None
-    return [each_item for each_page in parsed_pages for each_item in each_page]
+    flattened_items: list[dict[str, object]] = []
+    for each_page in parsed_pages:
+        if not isinstance(each_page, list):
+            return None
+        for each_item in each_page:
+            if not isinstance(each_item, dict):
+                return None
+            flattened_items.append(each_item)
+    return flattened_items
 
 
 def verify_pr_review(

@@ -5,8 +5,6 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
-import pytest
-
 
 def _load_module(module_name: str, filename: str) -> ModuleType:
     module_path = Path(__file__).parent.parent / filename
@@ -75,6 +73,14 @@ class DescribeParsePaginatedSlurpResponse:
 
     def test_returns_none_when_root_is_not_list(self):
         assert verify_review._parse_paginated_slurp_response('"string"') is None
+
+    def test_returns_none_when_page_is_not_list(self):
+        raw = json.dumps([[{"a": 1}], "not-a-page"])
+        assert verify_review._parse_paginated_slurp_response(raw) is None
+
+    def test_returns_none_when_item_is_not_dict(self):
+        raw = json.dumps([[{"a": 1}, 42]])
+        assert verify_review._parse_paginated_slurp_response(raw) is None
 
 
 class DescribeVerifyPrReview:

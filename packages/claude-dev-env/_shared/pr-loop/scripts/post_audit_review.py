@@ -65,13 +65,23 @@ def post_review(
         error_text = (gh_result.stderr or "").strip() or gh_result.stdout.strip()
         print(f"Review POST failed: {error_text}", file=sys.stderr)
         return None
-    return _parse_review_response(gh_result.stdout)
+    return _parse_review_response(
+        gh_result.stdout, expected_comment_count=len(all_comments)
+    )
 
 
 def _parse_review_response(
     response_text: str,
+    *,
+    expected_comment_count: int | None = None,
 ) -> tuple[str, str, list[dict[str, str]]] | None:
-    """Extract review id, html_url, and nested comment info from a review POST response."""
+    """Extract review id, html_url, and nested comment info from a review POST response.
+
+    When expected_comment_count is provided and the response returns fewer
+    well-formed inline comments than were requested, this prints a stderr
+    warning and returns None so the caller falls back to a single issue
+    comment instead of believing every finding got an anchor.
+    """
     try:
         response_payload = json.loads(response_text)
     except json.JSONDecodeError:
@@ -91,6 +101,17 @@ def _parse_review_response(
                 each_url = each_comment.get("html_url")
                 if isinstance(each_id, (int, str)) and isinstance(each_url, str):
                     all_comment_entries.append({"id": str(each_id), "url": each_url})
+    if (
+        expected_comment_count is not None
+        and len(all_comment_entries) < expected_comment_count
+    ):
+        print(
+            f"Review response returned {len(all_comment_entries)} inline "
+            f"comment anchors, expected {expected_comment_count}. "
+            "Falling back so every finding is reported.",
+            file=sys.stderr,
+        )
+        return None
     return (str(raw_identifier), raw_url, all_comment_entries)
 
 

@@ -5,8 +5,6 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import patch
 
-import pytest
-
 
 def _load_module(module_name: str, filename: str) -> ModuleType:
     module_path = Path(__file__).parent.parent / filename
@@ -81,6 +79,39 @@ class DescribeParseReviewResponse:
         assert all_comment_entries == [
             {"id": "101", "url": "https://github.com/pr#comment-101"},
         ]
+
+    def test_returns_result_when_expected_count_matches(self):
+        raw = json.dumps(
+            {
+                "id": 42,
+                "html_url": "https://github.com/pr#review-42",
+                "comments": [
+                    {"id": 101, "html_url": "https://github.com/pr#comment-101"},
+                    {"id": 102, "html_url": "https://github.com/pr#comment-102"},
+                ],
+            }
+        )
+        result = post_audit_review._parse_review_response(
+            raw, expected_comment_count=2
+        )
+        assert result is not None
+        review_id, review_url, all_comment_entries = result
+        assert len(all_comment_entries) == 2
+
+    def test_returns_none_when_expected_count_exceeds_returned(self):
+        raw = json.dumps(
+            {
+                "id": 42,
+                "html_url": "https://github.com/pr#review-42",
+                "comments": [
+                    {"id": 101, "html_url": "https://github.com/pr#comment-101"},
+                ],
+            }
+        )
+        assert (
+            post_audit_review._parse_review_response(raw, expected_comment_count=3)
+            is None
+        )
 
 
 class DescribeBuildOutputPayload:

@@ -74,24 +74,6 @@ gh api 'repos/<owner>/<repo>/pulls/<number>/reviews?per_page=100' --paginate --s
 
 This is the canonical pattern for the bugbot ↔ bugteam convergence loop: walk newest-first, stop at the first clean review.
 
-## What NOT to do
-
-```bash
-# BAD — unpaginated: only the first page is fetched
-gh api repos/<owner>/<repo>/pulls/<number>/reviews \
-  --jq '[.[] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | last'
-
-# BAD — `?per_page=100` alone: still only one page
-gh api 'repos/<owner>/<repo>/pulls/<number>/reviews?per_page=100' \
-  --jq '[.[] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | last'
-
-# BAD — `--paginate` with `--jq`: jq runs per-page, not cross-page (gh CLI #10459)
-gh api 'repos/<owner>/<repo>/pulls/<number>/reviews?per_page=100' --paginate \
-  --jq '[.[] | select(.user.login=="cursor[bot]")] | sort_by(.submitted_at) | last'
-
-# BAD — `| last` on an unpaginated read: latest within one page, not actual latest
-```
-
 ## Enforcement
 
 This rule is documentation-only at present. A future PreToolUse hook may pattern-match `Bash` invocations of `gh api repos/.../pulls/<n>/(reviews|comments)` without `--paginate --slurp` (or with `--paginate --jq` doing cross-page operations) and return a corrective message. Until that hook lands, treat this rule as binding by review and rely on it during skill authoring.

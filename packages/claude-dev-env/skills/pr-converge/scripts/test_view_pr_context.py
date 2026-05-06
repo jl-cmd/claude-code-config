@@ -132,8 +132,21 @@ def test_should_pass_imported_constant_directly_without_local_alias() -> None:
 
 
 def test_should_not_exit_when_number_provided_alone() -> None:
-    with patch("sys.argv", ["view_pr_context.py", "--number", "42"]):
-        view_pr_context_module.main()
+    payload = json.dumps(
+        {
+            "number": 42,
+            "url": "https://github.com/acme/widget/pull/42",
+            "headRefOid": "abc123",
+            "baseRefName": "main",
+            "headRefName": "feat/x",
+            "isDraft": True,
+        }
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _completed(payload)
+        with patch("sys.argv", ["view_pr_context.py", "--number", "42"]):
+            return_code = view_pr_context_module.main()
+    assert return_code == 0
 
 
 def test_should_exit_when_owner_and_repo_provided_without_number() -> None:

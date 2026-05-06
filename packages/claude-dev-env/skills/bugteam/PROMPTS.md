@@ -46,7 +46,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 
 <comment_posting>
   Sibling auditors (-b through -k): run only steps 1–3 (audit, assign IDs,
-  validate anchors), then write outcome XML per <output_format> and return.
+  capture excerpt, validate anchors), then write outcome XML per <output_format> and return.
   Skip steps 4–8 — sibling auditors do not post PR reviews.
 
   Validator (-a) and single-opus auditors: run all steps below.

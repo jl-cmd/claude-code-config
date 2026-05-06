@@ -22,7 +22,7 @@ Each invariant cites the normative section or companion file it derives from. Al
 | I-2 | `Bash` invoking `scripts/revoke_project_claude_permissions.py` runs exactly once per invocation on every exit path, after teardown. | `SKILL.md` § Step 5 |
 | I-3 | Orchestration uses `Agent(..., run_in_background=true)` only — no `TeamCreate`, `TeamDelete`, `SendMessage`, or `Task` tool calls. | `SKILL.md` § Step 2; § Step 4 |
 | I-4 | `Agent` calls are fresh per loop (`run_in_background=true`; new `name` each loop). | `CONSTRAINTS.md` — **Fresh subagent per loop** |
-| I-5 | Audit sibling spawns pass `model="haiku"`; validator and fix spawns pass `model="opus"`. | `SKILL.md` § AUDIT action (parallel auditors); § FIX action; `CONSTRAINTS.md` — **Opus 4.7 at xhigh effort for both subagents** |
+| I-5 | Audit sibling spawns pass `model="haiku"`; validator and fix spawns pass `model="opus"`. | `SKILL.md` § AUDIT action (parallel auditors); § FIX action; `CONSTRAINTS.md` — **Opus 4.7 at xhigh effort for validator and fix subagents** |
 | I-6 | Loop count ≤ 10 audits. 11th audit never fires. | `SKILL.md` YAML `description` (10-loop cap); § Step 3 (**Pre-audit** / **FIX** increment rules) |
 | I-7 | From loop 4 onward without convergence, eleven parallel `Agent(..., run_in_background=true)` calls in one message for audit. | `SKILL.md` § AUDIT action (**Parallel auditors**) |
 | I-8 | Lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` with the `Read` tool after each audit, before the next action. | `SKILL.md` § AUDIT action |

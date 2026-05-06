@@ -86,34 +86,37 @@ def verify_pr_review(
         each_review
         for each_review in all_reviews
         if _is_matching_review(each_review.get("body"), all_expected_headers)
-        and each_review.get("commit_id") == expected_commit_id
     ]
 
-    review_count = len(matching_reviews)
-    if review_count == 0:
+    if not matching_reviews:
         print(
             f"No review found with matching loop header for loop {loop_number}",
             file=sys.stderr,
         )
         return EXIT_NO_REVIEW
 
-    if review_count > 1:
-        print(
-            f"Found {review_count} reviews with matching loop header for loop {loop_number}",
-            file=sys.stderr,
-        )
-        return EXIT_DUPLICATE_REVIEW
+    reviews_on_expected_commit = [
+        each_review
+        for each_review in matching_reviews
+        if each_review.get("commit_id") == expected_commit_id
+    ]
 
-    found_review = matching_reviews[0]
-    found_commit_id = found_review.get("commit_id", "")
-
-    if found_commit_id != expected_commit_id:
+    if not reviews_on_expected_commit:
+        stale_commits = {r.get("commit_id", "") for r in matching_reviews}
         print(
-            f"Review found on commit {found_commit_id}, expected {expected_commit_id}",
+            f"Review(s) found on commit(s) {stale_commits}, expected {expected_commit_id}",
             file=sys.stderr,
         )
         return EXIT_WRONG_COMMIT
 
+    if len(reviews_on_expected_commit) > 1:
+        print(
+            f"Found {len(reviews_on_expected_commit)} reviews for loop {loop_number} on commit {expected_commit_id}",
+            file=sys.stderr,
+        )
+        return EXIT_DUPLICATE_REVIEW
+
+    found_review = reviews_on_expected_commit[0]
     review_id = found_review.get("id")
     review_url = found_review.get("html_url", "")
     confirmed_review = {

@@ -56,7 +56,10 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   4. Build the review summary markdown. Write to a temp file:
 
        ## /bugteam loop <N> Audit — Merged Findings
-       **Total: N (P0=X, P1=Y, P2=Z)**
+       **Total: N (P0=X, P1=Y, P2=Z)**  (append ` → clean` when N=0)
+
+       When the total finding count is zero, append ` → clean` to the Total
+       line so the re-invocation scan recognizes the prior audit as clean.
 
        ### Findings without a diff anchor
        (only if unanchored findings exist)

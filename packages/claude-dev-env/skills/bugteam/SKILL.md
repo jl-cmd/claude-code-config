@@ -373,15 +373,19 @@ calls in one assistant message (`run_in_background=true`):
   - Polls for all 10 sibling XMLs before proceeding (60s timeout, 2s interval). On timeout: log diagnostics entry, proceed with validated findings from available XMLs, report count in validator output.
   - Validates each finding: file exists, line in bounds, excerpt matches claimed
     line, category is A–J, severity is P0/P1/P2.
-  - Hallucinated findings → quarantined to `loop-<L>-diagnostics.json` under
+  - Hallucinated findings → quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under
     `validator_rejected`.
   - De-dups by `(file, line, category)`, max severity wins; on conflict, keep longest description text.
-  - Re-ids as `loopN-K`.
+  - Re-ids as `loop<L>-K`.
   - Writes `<worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml`, posts review.
 
-Lead awaits all eleven background-completion notifications with 120s timeout.
-On timeout: proceed with available XML outputs; log partial-aggregation warning.
-Validator polls independently; lead does not gate on peer completion.
+Lead awaits the opus validator (-a) background-completion notification (120s
+timeout). The validator independently polls all 10 sibling XMLs; the lead does
+not gate on haiku peer completion. On timeout: proceed with validated findings
+from available XMLs; log partial-aggregation warning.
+
+The sibling-output paths in [`PROMPTS.md`](PROMPTS.md) must cover the full
+`-b` through `-k` range.
 
 ### FIX action
 

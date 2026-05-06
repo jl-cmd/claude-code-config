@@ -47,7 +47,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 <comment_posting>
   1. Audit the diff against the 10 categories above. Buffer the findings
      in memory; all posting happens at step 6 once anchors are validated.
-  2. Assign each finding a stable finding_id of exactly the form `loopN-K`
+  2. Assign each finding a stable finding_id of exactly the form `loop<L>-K`
      where K is 1-based within this loop.
   3. Validate every finding's (file, line) against the captured diff. Split
      findings into two buckets: anchored (line is in the diff) and
@@ -77,7 +77,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 
 <output_format>
   For the primary (-a) auditor: write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml inside
-  the PR's worktree directory (<worktree_path>). For sibling auditors (-b/-c): write to <run_temp_dir>/pr-<N>/loop-<L>-{b,c}.outcomes.xml (absolute path passed in prompt). Return only that path on stdout. The schema:
+  the PR's worktree directory (<worktree_path>). For sibling auditors (-b through -k): write to <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed in prompt). Return only that path on stdout. The schema:
 </output_format>
 ```
 

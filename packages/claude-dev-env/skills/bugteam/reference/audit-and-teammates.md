@@ -39,11 +39,11 @@ Repeat until an exit condition fires.
 
 ## AUDIT action (clean-room teammate, fresh per loop)
 
-Capture a fresh PR diff for this loop into the per-team scoped directory so concurrent `/bugteam` runs keep patches isolated. Use the literal `<team_temp_dir>` resolved once in Step 2 — Claude resolves the absolute path; every shell receives the same literal value.
+Capture a fresh PR diff for this loop into the per-PR scoped directory so concurrent `/bugteam` runs keep patches isolated. Use the literal `<run_temp_dir>` resolved once in Step 2 — Claude resolves the absolute path; every shell receives the same literal value.
 
 Commands and `Agent(...)` shape: `SKILL.md`.
 
-`<team_temp_dir>` includes the sanitized `team_name` and timestamp; `team_name` is already prefixed with `bugteam-`. Claude resolves `Path(tempfile.gettempdir()) / team_name` once and passes that absolute path to every shell. `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, `TMP` and falls back to the OS temp directory, so the same approach works on macOS, Linux, Windows cmd.exe, and PowerShell.
+`<run_temp_dir>` includes the sanitized `team_name` and timestamp; `team_name` is already prefixed with `bugteam-`. Claude resolves `Path(tempfile.gettempdir()) / team_name` once and passes that absolute path to every shell. `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, `TMP` and falls back to the OS temp directory, so the same approach works on macOS, Linux, Windows cmd.exe, and PowerShell.
 
 Each loop calls `Agent` again with a fresh invocation so the teammate starts with its own context window. Doc line on lead history: [`../sources.md`](../sources.md).
 
@@ -76,7 +76,7 @@ The teammate replies with `{type: "shutdown_response", approve: true}`. If `appr
 The pre-audit gate must pass immediately before this step. After three full audit/fix rounds without convergence, issue eleven `Agent` calls in **one** assistant message so they run in parallel:
 
 ```
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-a", team_name="<team_name>", model="opus", description="Bugfind audit PR <N> loop <L> validator", prompt="<audit XML; poll for all 10 sibling XMLs at <run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml through <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml (60s timeout, 2s interval); on timeout: log diagnostics entry, proceed with validated findings from available XMLs; validate each finding: file exists, line in bounds, excerpt matches claimed line, category A-J, severity P0/P1/P2; quarantine hallucinated findings to loop-<L>-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins, keep longest description on conflict; re-id as loop<L>-K; write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml; post review>")
+Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-a", team_name="<team_name>", model="opus", description="Bugfind audit PR <N> loop <L> validator", prompt="<audit XML; poll for all 10 sibling XMLs at <run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml through <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml (60s timeout, 2s interval); on timeout: log diagnostics entry, proceed with validated findings from available XMLs; validate each finding: file exists, line in bounds, excerpt matches claimed line, category A-J, severity P0/P1/P2; quarantine hallucinated findings to <run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins, keep longest description on conflict; re-id as loop<L>-K; write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml; post review>")
 Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-b", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant b", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml; skip PR posting>")
 Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-c", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant c", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-c.outcomes.xml; skip PR posting>")
 Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-d", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant d", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-d.outcomes.xml; skip PR posting>")
@@ -89,7 +89,7 @@ Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-j", team_n
 Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-k", team_name="<team_name>", model="haiku", description="Bugfind audit PR <N> loop <L> variant k", prompt="<audit XML; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml; skip PR posting>")
 ```
 
-Teammate `-a` is the opus validator: polls for all 10 sibling XMLs at explicit absolute paths under `<run_temp_dir>/pr-<N>` (60s timeout, 2s interval; on timeout: log diagnostics entry, proceed with validated findings from available XMLs), then validates each finding — file exists, line in bounds, excerpt matches claimed line, category is A–J, severity is P0/P1/P2. Hallucinated findings are quarantined to `loop-<L>-diagnostics.json` under `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)` (max severity wins, keep longest description on conflict) and re-assigned merged IDs as `loop<L>-K`. The `-a` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
+Teammate `-a` is the opus validator: polls for all 10 sibling XMLs at explicit absolute paths under `<run_temp_dir>/pr-<N>` (60s timeout, 2s interval; on timeout: log diagnostics entry, proceed with validated findings from available XMLs), then validates each finding — file exists, line in bounds, excerpt matches claimed line, category is A–J, severity is P0/P1/P2. Hallucinated findings are quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)` (max severity wins, keep longest description on conflict) and re-assigned merged IDs as `loop<L>-K`. The `-a` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
 
 Shutdown order: parallel `SendMessage` to `-b` through `-k`, then `-a`:
 

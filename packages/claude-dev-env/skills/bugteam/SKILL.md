@@ -128,11 +128,16 @@ follows the same downstream rules.
 
 Keep: owner/repo, branches, PR number, URL — for all loops.
 
+**`<run_temp_dir>`:** `Path(tempfile.gettempdir()) / run_name` where
+`run_name = "bugteam-pr-<number>-<YYYYMMDDHHMMSS>"` for a single-PR invocation
+or `"bugteam-<YYYYMMDDHHMMSS>"` for multi-PR. Lead resolves once to an absolute
+path; every shell gets that literal string.
+
 #### Per-PR workspace
 
 For each PR in all_prs:
 
-1. Create `<run_temp_dir>/pr-<N>/` (`<run_temp_dir>` is defined in Step 2 below).
+1. Create `<run_temp_dir>/pr-<N>/`.
 2. Run `git worktree add "<run_temp_dir>/pr-<N>/worktree" origin/<headRef>`.
 3. Record the absolute worktree path alongside the PR's other fields.
 
@@ -141,11 +146,6 @@ teardown runs `git worktree remove "<run_temp_dir>/pr-<N>/worktree"` for each
 PR before the shared `rmtree`.
 
 ### Step 2: Loop state
-
-**`<run_temp_dir>`:** `Path(tempfile.gettempdir()) / run_name` where
-`run_name = "bugteam-pr-<number>-<YYYYMMDDHHMMSS>"` for a single-PR invocation
-or `"bugteam-<YYYYMMDDHHMMSS>"` for multi-PR. Lead resolves once to an absolute
-path; every shell gets that literal string.
 
 **Loop state (lead; not a single script; per-PR):** The variables
 below are tracked independently for each PR in `all_prs`. Each PR has its

@@ -61,9 +61,9 @@ def main() -> int:
     parser.add_argument(PR_OWNER_ARG_FLAG, default=None, help=PR_OWNER_ARG_HELP)
     parser.add_argument(PR_REPO_ARG_FLAG, default=None, help=PR_REPO_ARG_HELP)
     parsed = parser.parse_args()
-    number = parsed.number.strip() if parsed.number else None
-    owner = parsed.owner.strip() if parsed.owner else None
-    repo = parsed.repo.strip() if parsed.repo else None
+    number = (parsed.number.strip() or None) if parsed.number else None
+    owner = (parsed.owner.strip() or None) if parsed.owner else None
+    repo = (parsed.repo.strip() or None) if parsed.repo else None
     needs_repo = owner is not None or repo is not None
     has_all = number is not None and owner is not None and repo is not None
     if needs_repo and not has_all:

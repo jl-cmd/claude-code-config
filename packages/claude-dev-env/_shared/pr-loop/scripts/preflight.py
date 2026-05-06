@@ -266,14 +266,14 @@ def _find_related_test_files(changed_path: Path, repository_root: Path) -> list[
     adjacent_tests = parent / TESTS_DIRECTORY_NAME
     top_tests = repository_root / TESTS_DIRECTORY_NAME
     relative_parent = changed_path.parent
-    py_suffix = PYTHON_FILE_SUFFIX
+    python_suffix = PYTHON_FILE_SUFFIX
     all_candidates = [
-        parent / f"{test_prefix}{stem}{py_suffix}",
-        parent / f"{stem}{test_suffix}{py_suffix}",
-        adjacent_tests / f"{test_prefix}{stem}{py_suffix}",
-        adjacent_tests / f"{stem}{test_suffix}{py_suffix}",
-        top_tests / relative_parent / f"{test_prefix}{stem}{py_suffix}",
-        top_tests / relative_parent / f"{stem}{test_suffix}{py_suffix}",
+        parent / f"{test_prefix}{stem}{python_suffix}",
+        parent / f"{stem}{test_suffix}{python_suffix}",
+        adjacent_tests / f"{test_prefix}{stem}{python_suffix}",
+        adjacent_tests / f"{stem}{test_suffix}{python_suffix}",
+        top_tests / relative_parent / f"{test_prefix}{stem}{python_suffix}",
+        top_tests / relative_parent / f"{stem}{test_suffix}{python_suffix}",
     ]
     return sorted({each_candidate for each_candidate in all_candidates if each_candidate.is_file()})
 

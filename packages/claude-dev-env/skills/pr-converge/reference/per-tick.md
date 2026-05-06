@@ -93,8 +93,17 @@ c. Decide (four branches; match first whose predicate holds):
      `state.json`: clean-coder teammate pushes, replies inline, writes
      `state.json`, goes idle; Step 3 on new HEAD runs after via
      orchestrator-spawned follow-up agent (§Fix result → general-purpose).
-     No `state.json` (single-PR): implement → push → inline replies
-     → Step 3 in same tick per loaded pacing workflow. Schedule next
+     No `state.json` (single-PR): spawn `Task`
+     (`subagent_type: "clean-coder"`) for implementation
+     (fix-protocol.md §Single-PR). Full-stop if `Task` unavailable.
+     After push, reply inline on each addressed thread via
+     `reply_to_inline_comment.py`:
+     ```bash
+     python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \
+       --owner <OWNER> --repo <REPO> --number <NUMBER> \
+       --comment-id <COMMENT_ID> --body-file <path/to/reply.md>
+     ```
+     Then Step 3 (re-trigger bugbot) in same tick. Schedule next
      wakeup, return.
    - **`commit_id == current_head` AND review body findings AND inline
      API zero matching for `current_head`:** Transient API lag. Increment
@@ -142,9 +151,18 @@ never falsely terminates:
      **omit loop pacing** per **Convergence** of active pacing workflow.
    - **Convergence BUT `bugbot_clean_at != current_head` (no push):**
      `phase = BUGBOT`, schedule next wakeup, return.
-   - **Findings without committed fixes:** apply **[fix-protocol.md](fix-protocol.md)**; Step 3
-     on new HEAD runs after fix handoff per `multi-pr-orchestration.md` or in-tick for
-     single-PR. `phase = BUGBOT`, schedule next wakeup, return.
+   - **Findings without committed fixes:** spawn `Task`
+     (`subagent_type: "clean-coder"`) for implementation
+     (fix-protocol.md §Single-PR). Full-stop if `Task` unavailable.
+     After push, reply inline on each addressed thread via
+     `reply_to_inline_comment.py`:
+     ```bash
+     python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \
+       --owner <OWNER> --repo <REPO> --number <NUMBER> \
+       --comment-id <COMMENT_ID> --body-file <path/to/reply.md>
+     ```
+     Then Step 3 (re-trigger bugbot) in same tick. `phase = BUGBOT`,
+     schedule next wakeup, return.
 
 ## Step 3: Re-trigger bugbot
 

@@ -21,7 +21,7 @@ from config.review_posting_constants import (
     REVIEW_EVENT_COMMENT,
     REVIEW_POST_ENDPOINT_TEMPLATE,
 )
-from gh_util import GhResult, run_gh
+from gh_util import run_gh
 
 
 def post_review_summary(
@@ -151,7 +151,7 @@ def _build_output_payload(
     return json.dumps(output_payload)
 
 
-def main(all_arguments: list[str]) -> int:
+def main(all_arguments: list[str], timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> int:
     parsed_arguments = _parse_arguments(all_arguments)
     has_any_findings = bool(parsed_arguments.finding_file)
     if has_any_findings:
@@ -169,6 +169,7 @@ def main(all_arguments: list[str]) -> int:
         pull_number=parsed_arguments.number,
         commit_id=parsed_arguments.commit_id,
         body_file=parsed_arguments.body_file,
+        timeout_seconds=timeout_seconds,
     )
     if review_result is None:
         return 1
@@ -186,6 +187,7 @@ def main(all_arguments: list[str]) -> int:
                 body_file=each_finding_file,
                 path=each_path,
                 line=each_line,
+                timeout_seconds=timeout_seconds,
             )
             if comment_result is None:
                 finding_number = each_index + 1

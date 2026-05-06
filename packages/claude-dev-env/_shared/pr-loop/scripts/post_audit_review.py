@@ -194,6 +194,10 @@ def main(all_arguments: list[str], timeout_seconds: int = DEFAULT_TIMEOUT_SECOND
                     f"{each_finding_file}",
                     file=sys.stderr,
                 )
+                partial_output = _build_output_payload(
+                    review_identifier, review_url, all_comment_results
+                )
+                print(partial_output)
                 return 1
             all_comment_results.append(comment_result)
     output_text = _build_output_payload(

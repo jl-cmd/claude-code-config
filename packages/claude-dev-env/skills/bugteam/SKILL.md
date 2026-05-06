@@ -391,9 +391,10 @@ python <script_dir>/verify_review.py \
   --commit-id "$(git -C <worktree_path> rev-parse HEAD)" --loop <L>
 ```
 
-Non-zero exit → lead posts fallback issue comment with all findings inline
-from the outcome XML, then populates `loop_comment_index` from the fallback
-comment URL. `<script_dir>` = absolute path to `_shared/pr-loop/scripts/`.
+Non-zero exit → lead checks for an existing fallback issue comment from
+the validator. If one exists, use its URL directly. Otherwise, post a new
+fallback issue comment with all findings inline from the outcome XML.
+Populate `loop_comment_index` from the (existing or new) comment URL. `<script_dir>` = absolute path to `_shared/pr-loop/scripts/`.
 
 ### FIX action
 

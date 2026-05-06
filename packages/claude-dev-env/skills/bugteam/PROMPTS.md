@@ -10,8 +10,8 @@ Keep the spawn prompt self-contained: reference only the PR scope, audit rubric,
   <branch>head ref</branch>
   <base_branch>base ref</base_branch>
   <pr_url>full URL</pr_url>
-  <loop><L></loop>
-  <pr_number><N></pr_number>
+  <loop>L</loop>
+  <pr_number>N</pr_number>
   <worktree_path>absolute path from Step 1 per-PR workspace</worktree_path>
 </context>
 
@@ -120,8 +120,8 @@ After the teammate writes the XML and returns, the lead reads `.bugteam-pr<N>-lo
   <branch>head</branch>
   <base_branch>base</base_branch>
   <pr_url>url</pr_url>
-  <loop><L></loop>
-  <pr_number><N></pr_number>
+  <loop>L</loop>
+  <pr_number>N</pr_number>
   <worktree_path>absolute path from Step 1 per-PR workspace</worktree_path>
 </context>
 

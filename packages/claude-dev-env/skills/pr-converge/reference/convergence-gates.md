@@ -23,27 +23,16 @@ Decide (four branches; match first whose predicate holds):
 
 - **`classification == "dirty"` with non-empty inline comments matching
   `pull_request_review_id`:** Fix protocol input (same shape as bugbot
-  dirty). Spawn `Task` (`subagent_type: "clean-coder"`) for
-  implementation (fix-protocol.md §Single-PR). Full-stop if `Task`
-  unavailable. After push, reply inline on each addressed thread via
-  `reply_to_inline_comment.py`:
-  ```bash
-  python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \
-    --owner <OWNER> --repo <REPO> --number <NUMBER> \
-    --comment-id <COMMENT_ID> --body-file <path/to/reply.md>
-  ```
-  Then Step 3 (re-trigger bugbot). Reset `bugbot_clean_at = null` AND
-  `copilot_clean_at = null`, `phase = BUGBOT`, schedule next wakeup,
-  return. Full back-to-back-clean cycle plus all four gates must hold
-  again on new HEAD.
+  dirty). Follow [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
+  Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`, `phase =
+  BUGBOT`, schedule next wakeup, return. Full back-to-back-clean cycle
+  plus all four gates must hold again on new HEAD.
 - **`classification == "dirty"` with empty inline comments matching
   `pull_request_review_id`:** Copilot posted findings only in review body
   (`CHANGES_REQUESTED` or `COMMENTED` with non-empty body, no inline
-  threads). Parse body for actionable findings, spawn `Task`
-  (`subagent_type: "clean-coder"`) for implementation
-  (fix-protocol.md §Single-PR). Full-stop if `Task` unavailable.
-  After push, post top-level review reply acknowledging fixes and citing
-  new HEAD SHA. Reset `bugbot_clean_at = null` AND
+  threads). Parse body for actionable findings, follow [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow)
+  (omit inline replies — post top-level review reply instead). Reset
+  `bugbot_clean_at = null` AND
   `copilot_clean_at = null`, `phase = BUGBOT`, Step 3 on new HEAD,
   schedule next wakeup, return. Convergence requires full
   back-to-back-clean on new HEAD.
@@ -99,21 +88,12 @@ Next tick with `phase == BUGTEAM` and prior state preserved → re-run gate
   current_head`. Mark PR ready (`mark_pr_ready.py`), report convergence
   per §(d), terminate per [stop-conditions.md](stop-conditions.md) / Convergence.
 - **Copilot review `dirty`:** Treat identically to gate (a) dirty path —
-  fix in same PR, restart convergence from BUGBOT. Spawn `Task`
-  (`subagent_type: "clean-coder"`) for implementation
-  (fix-protocol.md §Single-PR). Full-stop if `Task` unavailable.
-  After push, reply inline on each addressed thread via
-  `reply_to_inline_comment.py`:
-  ```bash
-  python "${CLAUDE_SKILL_DIR}/scripts/reply_to_inline_comment.py" \
-    --owner <OWNER> --repo <REPO> --number <NUMBER> \
-    --comment-id <COMMENT_ID> --body-file <path/to/reply.md>
-  ```
+  fix in same PR, restart convergence from BUGBOT. Follow [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
   For body-only findings with empty inline, post top-level review reply
-  citing new HEAD SHA. Then Step 3 (re-trigger bugbot). Reset
-  `bugbot_clean_at = null` AND `copilot_clean_at = null`, `phase =
-  BUGBOT`, Step 3 on new HEAD, schedule next wakeup, return. Full
-  back-to-back-clean cycle plus all four gates must hold again on new HEAD.
+  citing new HEAD SHA. Reset `bugbot_clean_at = null` AND
+  `copilot_clean_at = null`, `phase = BUGBOT`, schedule next wakeup,
+  return. Full back-to-back-clean cycle plus all four gates must hold
+  again on new HEAD.
 - **No Copilot review at `current_head` yet (still propagating):**
   Schedule one more wakeup (270s), re-check next tick. After three consecutive empty waits,
   escalate as hard blocker per [stop-conditions.md](stop-conditions.md).

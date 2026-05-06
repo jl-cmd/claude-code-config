@@ -18,6 +18,7 @@ from config.review_posting_constants import (
     REVIEW_COMMENTS_SIDE,
     REVIEW_EVENT_COMMENT,
     REVIEW_POST_ENDPOINT_TEMPLATE,
+    REVIEW_POST_TIMEOUT_SECONDS,
 )
 from gh_util import run_gh
 
@@ -48,7 +49,7 @@ def post_review(
     payload_text = json.dumps(request_payload)
     gh_result = run_gh(
         ["gh", "api", endpoint_path, "-X", "POST", "--input", "-"],
-        timeout_seconds=120,
+        timeout_seconds=REVIEW_POST_TIMEOUT_SECONDS,
         retry_nonzero=False,
         retry_timeout=False,
         stdin_text=payload_text,

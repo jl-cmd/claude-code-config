@@ -30,6 +30,10 @@ class DescribeBuildReviewsApiPath:
         assert "42" in path
         assert path.startswith("/repos/")
 
+    def test_returns_exact_paginated_reviews_path_for_owner_repo_number(self):
+        api_path = verify_review._build_reviews_api_path("owner", "repo", 42)
+        assert api_path == "/repos/owner/repo/pulls/42/reviews?per_page=100"
+
 
 class DescribeBuildExpectedHeaders:
     def test_returns_both_header_variants_for_loop_3(self):

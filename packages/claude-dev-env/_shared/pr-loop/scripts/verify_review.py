@@ -27,7 +27,7 @@ from gh_util import run_gh
 
 
 def _build_reviews_api_path(owner: str, repo: str, pull_number: int) -> str:
-    return REVIEWS_PATH_TEMPLATE.format(owner=owner, repo=repo, number=pull_number)
+    return REVIEWS_PATH_TEMPLATE.format(owner=owner, repo=repo, pull_number=pull_number)
 
 
 def _build_expected_headers(loop_number: int) -> tuple[str, str]:
@@ -41,6 +41,10 @@ def _is_matching_review(
 ) -> bool:
     body = review_body or ""
     return any(body.startswith(each_header) for each_header in all_expected_headers)
+
+
+def _coerce_optional_string(maybe_value: object) -> str | None:
+    return maybe_value if isinstance(maybe_value, str) else None
 
 
 def _parse_paginated_slurp_response(
@@ -86,7 +90,9 @@ def verify_pr_review(
     matching_reviews = [
         each_review
         for each_review in all_reviews
-        if _is_matching_review(each_review.get("body"), all_expected_headers)
+        if _is_matching_review(
+            _coerce_optional_string(each_review.get("body")), all_expected_headers
+        )
     ]
 
     if not matching_reviews:

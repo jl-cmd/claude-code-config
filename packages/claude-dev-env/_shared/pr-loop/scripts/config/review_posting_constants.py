@@ -5,7 +5,9 @@ EXIT_NO_REVIEW: int = 1
 EXIT_WRONG_COMMIT: int = 2
 EXIT_DUPLICATE_REVIEW: int = 3
 
-REVIEWS_PATH_TEMPLATE: str = "/repos/{owner}/{repo}/pulls/{number}/reviews?per_page=100"
+REVIEWS_PATH_TEMPLATE: str = "/repos/{owner}/{repo}/pulls/{pull_number}/reviews?per_page=100"
+
+REVIEW_POST_TIMEOUT_SECONDS: int = 120
 
 LOOP_AUDIT_HEADER_TEMPLATE: str = "## Loop {loop_number} Audit"
 BUGTEAM_LOOP_HEADER_TEMPLATE: str = "## /bugteam loop {loop_number} "

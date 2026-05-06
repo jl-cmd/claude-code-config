@@ -356,7 +356,11 @@ def main(all_arguments: list[str]) -> int:
         else:
             effective_scope = arguments.scope
             if effective_scope is None:
-                effective_scope = PYTEST_SCOPE_ALL
+                effective_scope = (
+                    PYTEST_SCOPE_CHANGED
+                    if arguments.base_ref is not None
+                    else PYTEST_SCOPE_ALL
+                )
             if effective_scope == PYTEST_SCOPE_CHANGED and arguments.base_ref is None:
                 print(
                     "bugteam_preflight: --scope changed requires --base-ref; "

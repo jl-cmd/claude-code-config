@@ -22,7 +22,7 @@ ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND: tuple[str, str, str, str] = (
     "ls-files",
     "--",
     "**/test_*.py",
-    "*_test.py",
+    "**/*_test.py",
 )
 
 ALL_REPOSITORY_ROOT_MARKER_FILENAMES: tuple[str, str] = (

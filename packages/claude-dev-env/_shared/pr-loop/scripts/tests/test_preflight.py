@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
@@ -415,6 +415,47 @@ def test_main_should_not_double_print_when_git_ls_fails(
     captured = capsys.readouterr()
     assert "bugteam_preflight: pytest configured but no tests found" in captured.err, (
         "Should gracefully skip pytest instead of raw exception print"
+    )
+
+
+def test_should_default_to_changed_scope_when_base_ref_provided() -> None:
+    """--base-ref without --scope must default to 'changed', not 'all'.
+
+    The help text says 'Defaults to changed when --base-ref is provided'.
+    Before the fix, the None -> PYTEST_SCOPE_ALL conversion ran before
+    checking --base-ref, so providing --base-ref without --scope still
+    ran the full suite without calling get_changed_files.
+    """
+    with (
+        patch.object(preflight, "verify_git_hooks_path", return_value=0),
+        patch.object(preflight, "has_pytest_configuration", return_value=True),
+        patch.object(preflight, "has_discoverable_tests", return_value=True),
+        patch.object(preflight, "get_changed_files") as mock_get_changed,
+        patch.object(preflight, "discover_related_tests", return_value=[]),
+        patch.object(preflight, "run_pytest", return_value=0),
+    ):
+        exit_code = preflight.main(["--base-ref", "origin/main"])
+    assert exit_code == 0
+    mock_get_changed.assert_called_once_with(
+        ANY, "origin/main"
+    )
+
+
+def test_should_default_to_all_scope_when_no_base_ref_no_scope(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Omitting both --scope and --base-ref must default to 'all'."""
+    with (
+        patch.object(preflight, "verify_git_hooks_path", return_value=0),
+        patch.object(preflight, "has_pytest_configuration", return_value=True),
+        patch.object(preflight, "has_discoverable_tests", return_value=True),
+        patch.object(preflight, "run_pytest", return_value=0),
+    ):
+        exit_code = preflight.main([])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "running full suite" not in captured.err, (
+        "Default scope=all should run directly without changed-scope messages"
     )
 
 

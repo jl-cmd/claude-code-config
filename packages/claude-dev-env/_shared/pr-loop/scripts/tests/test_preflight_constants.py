@@ -63,7 +63,7 @@ def test_all_git_ls_files_test_discovery_command() -> None:
         "ls-files",
         "--",
         "**/test_*.py",
-        "*_test.py",
+        "**/*_test.py",
     )
 
 

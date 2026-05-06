@@ -105,8 +105,8 @@ The harness does not yet exist; this document defines its contract.
 | 1 | `Bash("python .../scripts/grant_project_claude_permissions.py")` | `SKILL.md` § Step 0 |
 | 2 | `Bash("gh pr view --json number,baseRefName,headRefName,url")` | `SKILL.md` § Step 1 |
 | 3 | `Bash("git rev-parse HEAD")` → captures `starting_sha` | `SKILL.md` § Step 2 — **Loop state** block |
-| 4 | `Bash("mkdir -p <run_temp_dir>")` | `SKILL.md` § AUDIT action |
-| 5 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/loop-1.patch")` | `SKILL.md` § AUDIT action |
+| 4 | `Bash("mkdir -p <run_temp_dir>/pr-42")` | `SKILL.md` § AUDIT action |
+| 5 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/pr-42/loop-1.patch")` | `SKILL.md` § AUDIT action |
 | 6 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop1", run_in_background=true, model="opus", description=..., prompt=<audit XML loop 1>)` | `SKILL.md` § AUDIT action |
 | 7 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
 | 8 | `Read(".bugteam-pr42-loop1.outcomes.xml")` | `SKILL.md` § AUDIT action |
@@ -116,7 +116,7 @@ The harness does not yet exist; this document defines its contract.
 | 12 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" rev-parse HEAD")` → verify HEAD advanced | `SKILL.md` § FIX action (**Verify**) |
 | 13 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" fetch origin <branch>")` → fetch remote state | `SKILL.md` § FIX action (**Verify**) |
 | 14 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" rev-parse origin/<branch>")` → confirm matches HEAD | `SKILL.md` § FIX action (**Verify**) |
-| 15 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/loop-2.patch")` | `SKILL.md` § AUDIT action |
+| 15 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/pr-42/loop-2.patch")` | `SKILL.md` § AUDIT action |
 | 16 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop2", run_in_background=true, ...)` (loop 2) | `SKILL.md` § AUDIT action |
 | 17 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
 | 18 | `Read(".bugteam-pr42-loop2.outcomes.xml")` — zero findings | `SKILL.md` § AUDIT action |

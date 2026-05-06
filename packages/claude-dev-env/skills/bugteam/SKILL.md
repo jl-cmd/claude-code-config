@@ -147,7 +147,9 @@ PR before the shared `rmtree`.
 or `"bugteam-<YYYYMMDDHHMMSS>"` for multi-PR. Lead resolves once to an absolute
 path; every shell gets that literal string.
 
-**Loop state (lead; not a single script):**
+**Loop state (lead; not a single script; per-PR):** The variables
+below are tracked independently for each PR in `all_prs`. Each PR has its
+own cycle, state, and exit reason.
 
 ```bash
 loop_count=0

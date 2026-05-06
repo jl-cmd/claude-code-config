@@ -24,7 +24,7 @@ Capture `<owner>/<repo>`, head branch, base branch, PR number, PR URL. This scop
 
 ### Run specification
 
-- **Run name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` (or `bugteam-<sanitized-head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured once at invocation start and prevents two concurrent invocations on the same PR from colliding.
+- **Run name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` for single-PR invocations, `bugteam-<YYYYMMDDHHMMSS>` for multi-PR invocations (or `bugteam-<sanitized-head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured once at invocation start and prevents two concurrent invocations on the same PR from colliding.
 
 - **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the `run_name` template, replace every character outside `[A-Za-z0-9._-]` with `-`. The whitelist keeps safe portable filename characters only; OS-reserved and shell-special characters (`/ \ : * ? < > | "` plus ASCII control characters `0x00`–`0x1F`) fall outside the whitelist and become `-`. Example: `feat/foo*bar` → `feat-foo-bar`; `run_name` becomes `bugteam-feat-foo-bar-<YYYYMMDDHHMMSS>`. Apply sanitization when `run_name` is first assembled so every downstream use (temp dir, cleanup) sees the safe form.
 

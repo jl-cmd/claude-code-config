@@ -45,6 +45,11 @@ ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND: tuple[str, str, str] = (
     "--all-files",
 )
 
+ALL_GIT_DIFF_NAME_ONLY_SUBCOMMAND: tuple[str, str] = (
+    "diff",
+    "--name-only",
+)
+
 PYTEST_SCOPE_ALL: str = "all"
 
 PYTEST_SCOPE_CHANGED: str = "changed"

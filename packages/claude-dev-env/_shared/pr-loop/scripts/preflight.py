@@ -37,6 +37,7 @@ if _preflight_scripts_path_entry not in sys.path:
 from config.fix_hookspath_constants import HOOKS_PATH_VERIFICATION_SUFFIX
 from config.preflight_constants import (
     ALL_GIT_CONFIG_GET_CORE_HOOKS_PATH_SUBCOMMAND,
+    ALL_GIT_DIFF_NAME_ONLY_SUBCOMMAND,
     ALL_GIT_LS_FILES_TEST_DISCOVERY_SUBCOMMAND,
     ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND,
     BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE,
@@ -207,9 +208,8 @@ def run_pytest(
 def get_changed_files(repository_root: Path, base_ref: str) -> list[Path]:
     command = [
         "git",
-        "diff",
+        *ALL_GIT_DIFF_NAME_ONLY_SUBCOMMAND,
         f"{base_ref}...HEAD",
-        "--name-only",
     ]
     try:
         completed = subprocess.run(
@@ -273,9 +273,12 @@ def _find_related_test_files(changed_path: Path, repository_root: Path) -> list[
         parent / f"{stem}{test_suffix}{python_suffix}",
         adjacent_tests / f"{test_prefix}{stem}{python_suffix}",
         adjacent_tests / f"{stem}{test_suffix}{python_suffix}",
-        top_tests / relative_parent / f"{test_prefix}{stem}{python_suffix}",
-        top_tests / relative_parent / f"{stem}{test_suffix}{python_suffix}",
     ]
+    if relative_parent != Path("."):
+        all_candidates.extend([
+            top_tests / relative_parent / f"{test_prefix}{stem}{python_suffix}",
+            top_tests / relative_parent / f"{stem}{test_suffix}{python_suffix}",
+        ])
     return sorted({each_candidate for each_candidate in all_candidates if each_candidate.is_file()})
 
 

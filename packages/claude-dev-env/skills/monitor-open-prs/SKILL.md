@@ -19,7 +19,7 @@ description: >-
 - When this skill applies — refusal cases and trigger conditions
 - Discovery — live `gh search prs` across both owner scopes
 - Wrapping — `bws run` for GROQ_API_KEY injection
-- Dispatch — `/bugteam <numbers...>` with groq-coder + retrigger
+- Dispatch — `/bugteam --bugbot-retrigger <pr_numbers...>` with groq-coder + retrigger
 - Post-convergence polling — bugbot replies and re-invocation
 - `scripts/discover_open_prs.py` — the discovery helper
 

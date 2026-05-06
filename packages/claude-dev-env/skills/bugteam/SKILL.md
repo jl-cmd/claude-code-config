@@ -132,7 +132,7 @@ Keep: owner/repo, branches, PR number, URL — for all loops.
 
 For each PR in all_prs:
 
-1. Create `<run_temp_dir>/pr-<N>/`.
+1. Create `<run_temp_dir>/pr-<N>/` (`<run_temp_dir>` is defined in Step 2 below).
 2. Run `git worktree add "<run_temp_dir>/pr-<N>/worktree" origin/<headRef>`.
 3. Record the absolute worktree path alongside the PR's other fields.
 
@@ -266,7 +266,7 @@ dirty so the AUDIT runs against the latest diff with that signal in mind:
 ```bash
 dirty_review_count=0
 gh api "repos/<owner>/<repo>/pulls/<number>/reviews?per_page=100" --paginate --slurp \
-  | jq '[.[][] | select(.body | startswith("## /bugteam loop "))] | sort_by(.submitted_at) | reverse'
+  | jq '[.[][] | select((.body // "") | startswith("## /bugteam loop "))] | sort_by(.submitted_at) | reverse'
 ```
 
 Iterate from index 0 (most recent) toward older entries:
@@ -367,8 +367,12 @@ review and merges outcomes from `-b`/`-c` (read
 `.bugteam-pr<N>-loop<L>.outcomes.xml` plus
 `<run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml` and `...-c...`); merge key
 `(file, line, category_letter)`; re-id `loopN-K`. `-b`/`-c` write sibling XML
-only; prompts must pass literal absolute sibling paths. Lead awaits all three
-background-completion notifications before merging outcomes.
+only; prompts must pass literal absolute sibling paths. Output path
+contract: `-b`/`-c` write to `<run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml`
+and `<run_temp_dir>/pr-<N>/loop-<L>-c.outcomes.xml`; `-a` writes to
+`<worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml`.
+Lead awaits all three background-completion notifications before merging
+outcomes.
 
 ### FIX action
 

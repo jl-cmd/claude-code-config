@@ -20,7 +20,7 @@ Each invariant cites the normative section or companion file it derives from. Al
 |---|---|---|
 | I-1 | `Bash` invoking `scripts/grant_project_claude_permissions.py` precedes the first audit `Agent` spawn. | `SKILL.md` § Step 0 |
 | I-2 | `Bash` invoking `scripts/revoke_project_claude_permissions.py` runs exactly once per invocation on every exit path, after teardown. | `SKILL.md` § Step 5 |
-| I-3 | Only background `Agent` spawns — no orchestration tool calls beyond `Agent` and `Read`. | `SKILL.md` § Step 2; § Step 4 |
+| I-3 | Orchestration uses `Agent(..., run_in_background=true)` only — no `TeamCreate`, `TeamDelete`, `SendMessage`, or `Task` tool calls. | `SKILL.md` § Step 2; § Step 4 |
 | I-4 | `Agent` calls are fresh per loop (`run_in_background=true`; new `name` each loop). | `CONSTRAINTS.md` — **Fresh subagent per loop** |
 | I-5 | Audit and fix spawns pass `model="opus"` on every `Agent` call. | `SKILL.md` § AUDIT action; § FIX action; `CONSTRAINTS.md` — **Opus 4.7 at xhigh effort for both subagents** |
 | I-6 | Loop count ≤ 10 audits. 11th audit never fires. | `SKILL.md` YAML `description` (10-loop cap); § Step 3 (**Pre-audit** / **FIX** increment rules) |

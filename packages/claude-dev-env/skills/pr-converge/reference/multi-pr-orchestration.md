@@ -32,22 +32,22 @@ Create once at session start. Each teammate writes result before going idle.
 
 ```json
 {
-"session_id": "20260502050000",
-"prs": {
-"289": {
-"owner": "jl-cmd",
-"repo": "claude-code-config",
-"branch": "feat/shared-pr-loop-extraction",
-"phase": "BUGBOT",
-"current_head": "f9a7d49e",
-"bugbot_clean_at": null,
-"inline_lag_streak": 0,
-"tick_count": 5,
-"last_action": "bugbot_triggered",
-"status": "in_progress",
-"last_updated": "2026-05-02T10:00:00Z"
-}
-}
+  "session_id": "20260502050000",
+  "prs": {
+    "289": {
+      "owner": "jl-cmd",
+      "repo": "claude-code-config",
+      "branch": "feat/shared-pr-loop-extraction",
+      "phase": "BUGBOT",
+      "current_head": "f9a7d49e",
+      "bugbot_clean_at": null,
+      "inline_lag_streak": 0,
+      "tick_count": 5,
+      "last_action": "bugbot_triggered",
+      "status": "in_progress",
+      "last_updated": "2026-05-02T10:00:00Z"
+    }
+  }
 }
 ```
 

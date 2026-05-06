@@ -18,7 +18,7 @@ Each finding an audit produces MUST be one of exactly two shapes.
 
 ```json
 {
-  "id": "loop<N>-<K>",
+  "id": "loop<L>-<K>",
   "file": "path/relative/to/repo/root.py",
   "line": 123,
   "category": "A | B | C | D | E | F | G | H | I | J",
@@ -29,7 +29,7 @@ Each finding an audit produces MUST be one of exactly two shapes.
 }
 ```
 
-`id` is `loop<N>-<K>` where `N` is the loop counter (1-based) and `K` is the 1-based index within the loop. For `/findbugs` which runs once, use `find<K>`.
+`id` is `loop<L>-<K>` where `L` is the loop counter (1-based) and `K` is the 1-based index within the loop. For `/findbugs` which runs once, use `find<K>`.
 
 ### Shape B — structured proof-of-absence
 

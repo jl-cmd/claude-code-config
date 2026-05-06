@@ -60,6 +60,10 @@ def main() -> int:
     parser.add_argument(PR_OWNER_ARG_FLAG, default=None, help=PR_OWNER_ARG_HELP)
     parser.add_argument(PR_REPO_ARG_FLAG, default=None, help=PR_REPO_ARG_HELP)
     parsed = parser.parse_args()
+    has_any = parsed.number is not None or parsed.owner is not None or parsed.repo is not None
+    has_all = parsed.number is not None and parsed.owner is not None and parsed.repo is not None
+    if has_any and not has_all:
+        parser.error("--number, --owner, and --repo must all be provided together for detached-HEAD PR resolution")
     pr_context = view_pr_context(number=parsed.number, owner=parsed.owner, repo=parsed.repo)
     json.dump(pr_context, sys.stdout)
     sys.stdout.write("\n")

@@ -93,7 +93,10 @@ c. Decide (four branches; match first whose predicate holds):
      `state.json`: clean-coder teammate pushes, replies inline, writes
      `state.json`, goes idle; Step 3 on new HEAD runs after via
      orchestrator-spawned follow-up agent (§Fix result → general-purpose).
-     No `state.json` (single-PR): follow [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
+     No `state.json` (single-PR): implement → push → reply inline on each thread
+     via `reply_to_inline_comment.py` → Step 3 in same tick (see
+     [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
+     full contract).
      Schedule next wakeup, return.
    - **`commit_id == current_head` AND review body findings AND inline
      API zero matching for `current_head`:** Transient API lag. Increment

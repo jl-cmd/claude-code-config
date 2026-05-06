@@ -23,15 +23,21 @@ Decide (four branches; match first whose predicate holds):
 
 - **`classification == "dirty"` with non-empty inline comments matching
   `pull_request_review_id`:** Fix protocol input (same shape as bugbot
-  dirty). Follow [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
+  dirty). Implement → push → reply inline on each thread via
+  `reply_to_inline_comment.py` → Step 3 in same tick (see
+  [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
+  full contract).
   Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`, `phase =
   BUGBOT`, schedule next wakeup, return. Full back-to-back-clean cycle
   plus all four gates must hold again on new HEAD.
 - **`classification == "dirty"` with empty inline comments matching
   `pull_request_review_id`:** Copilot posted findings only in review body
   (`CHANGES_REQUESTED` or `COMMENTED` with non-empty body, no inline
-  threads). Parse body for actionable findings, follow [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow)
-  (omit inline replies — post top-level review reply instead). Reset
+  threads). Parse body for actionable findings. Implement → push → post
+  top-level review reply citing new HEAD SHA → Step 3 in same tick (see
+  [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
+  full contract).
+  Reset
   `bugbot_clean_at = null` AND
   `copilot_clean_at = null`, `phase = BUGBOT`, Step 3 on new HEAD,
   schedule next wakeup, return. Convergence requires full

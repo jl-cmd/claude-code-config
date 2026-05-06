@@ -21,7 +21,7 @@ PYTEST_TOML_TABLE_PREFIX: str = "[tool.pytest"
 ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND: tuple[str, str, str, str] = (
     "ls-files",
     "--",
-    "test_*.py",
+    "**/test_*.py",
     "*_test.py",
 )
 
@@ -57,3 +57,5 @@ PYTEST_TEST_FILENAME_PREFIX: str = "test_"
 PYTEST_TEST_FILENAME_SUFFIX: str = "_test"
 
 PYTEST_NO_TESTS_COLLECTED_EXIT_CODE: int = 5
+
+TESTS_DIRECTORY_NAME: str = "tests"

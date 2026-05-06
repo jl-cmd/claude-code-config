@@ -53,6 +53,7 @@ from config.preflight_constants import (
     PYTEST_TEST_FILENAME_SUFFIX,
     PYTEST_TOML_TABLE_PREFIX,
     PYTHON_FILE_SUFFIX,
+    TESTS_DIRECTORY_NAME,
 )
 
 
@@ -158,14 +159,21 @@ def has_discoverable_tests(root: Path) -> bool:
             "bugteam_preflight: git is not installed or not available on PATH.",
             file=sys.stderr,
         )
-        raise
+        return False
     except subprocess.CalledProcessError as error:
+        error_detail = (error.stderr or "").strip()
         print(
-            f"bugteam_preflight: git ls-files failed (exit {error.returncode}):\n"
-            f"{error.stderr.strip()}",
+            f"bugteam_preflight: git ls-files failed (exit {error.returncode}):"
+            + (f"\n{error_detail}" if error_detail else ""),
             file=sys.stderr,
         )
-        raise
+        return False
+    except OSError as error:
+        print(
+            f"bugteam_preflight: failed to run git ls-files: {error}",
+            file=sys.stderr,
+        )
+        return False
     return bool(completed.stdout.strip())
 
 
@@ -237,8 +245,8 @@ def _find_related_test_files(changed_path: Path, repo_root: Path) -> list[Path]:
         return [repo_root / changed_path]
     full_path = repo_root / changed_path
     parent = full_path.parent
-    adjacent_tests = parent / "tests"
-    top_tests = repo_root / "tests"
+    adjacent_tests = parent / TESTS_DIRECTORY_NAME
+    top_tests = repo_root / TESTS_DIRECTORY_NAME
     relative_parent = changed_path.parent
     py_suffix = PYTHON_FILE_SUFFIX
     candidates = [
@@ -339,14 +347,7 @@ def main(all_arguments: list[str]) -> int:
     if hooks_path_exit_code != 0:
         return hooks_path_exit_code
     if not arguments.no_pytest and has_pytest_configuration(repository_root):
-        try:
-            has_tests = has_discoverable_tests(repository_root)
-        except (FileNotFoundError, subprocess.CalledProcessError, OSError) as error:
-            print(
-                f"bugteam_preflight: {error}",
-                file=sys.stderr,
-            )
-            return 1
+        has_tests = has_discoverable_tests(repository_root)
         if not has_tests:
             print(
                 "bugteam_preflight: pytest configured but no tests found; skipping pytest.",
@@ -354,6 +355,13 @@ def main(all_arguments: list[str]) -> int:
             )
         else:
             effective_scope = arguments.scope
+            if effective_scope == PYTEST_SCOPE_CHANGED and arguments.base_ref is None:
+                print(
+                    "bugteam_preflight: --scope changed requires --base-ref; "
+                    "falling back to full suite.",
+                    file=sys.stderr,
+                )
+                effective_scope = PYTEST_SCOPE_ALL
             if effective_scope == PYTEST_SCOPE_ALL and arguments.base_ref is not None:
                 effective_scope = PYTEST_SCOPE_CHANGED
             if effective_scope == PYTEST_SCOPE_CHANGED and arguments.base_ref is not None:

@@ -367,6 +367,57 @@ def test_should_not_return_nonexistent_test_file(tmp_path: Path) -> None:
     assert result == []
 
 
+def test_main_should_warn_when_scope_changed_without_base_ref(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--scope changed with no --base-ref must warn and fall back to full suite."""
+    with (
+        patch.object(preflight, "verify_git_hooks_path", return_value=0),
+        patch.object(preflight, "has_pytest_configuration", return_value=True),
+        patch.object(preflight, "has_discoverable_tests", return_value=True),
+        patch.object(preflight, "run_pytest", return_value=0),
+    ):
+        exit_code = preflight.main(["--scope", "changed"])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "requires --base-ref" in captured.err, (
+        "Missing warning when --scope changed is used without --base-ref"
+    )
+
+
+def test_has_discoverable_tests_should_not_re_raise_on_git_failure(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """has_discoverable_tests must return False instead of re-raising on git failure."""
+    with patch("subprocess.run", side_effect=subprocess.CalledProcessError(128, ["git"])):
+        result = preflight.has_discoverable_tests(Path("/nonexistent"))
+    captured = capsys.readouterr()
+    assert result is False, (
+        "Should return False instead of propagating the exception"
+    )
+    assert "bugteam_preflight:" in captured.err
+    assert "git ls-files failed" in captured.err
+
+
+def test_main_should_not_double_print_when_git_ls_fails(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """has_discoverable_tests must not re-raise so main() avoids duplicate errors."""
+    mock_hooks_result = _make_completed_process(
+        "/home/user/.claude/hooks/git-hooks\n", returncode=0
+    )
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            mock_hooks_result,
+            subprocess.CalledProcessError(128, ["git", "ls-files"]),
+        ]
+        exit_code = preflight.main([])
+    captured = capsys.readouterr()
+    assert "bugteam_preflight: pytest configured but no tests found" in captured.err, (
+        "Should gracefully skip pytest instead of raw exception print"
+    )
+
+
 def test_preflight_bootstrap_matches_code_rules_sys_path_pattern() -> None:
     """Bootstrap must clear duplicate script_directory entries, then guard insert."""
     module_path = Path(__file__).parent.parent / "preflight.py"

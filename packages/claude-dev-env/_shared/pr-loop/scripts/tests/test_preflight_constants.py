@@ -62,7 +62,7 @@ def test_all_git_ls_files_test_discovery_command() -> None:
     assert constants_module.ALL_GIT_LS_FILES_TEST_DISCOVERY_COMMAND == (
         "ls-files",
         "--",
-        "test_*.py",
+        "**/test_*.py",
         "*_test.py",
     )
 

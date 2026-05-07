@@ -85,6 +85,9 @@ def _parse_review_response(
     except json.JSONDecodeError:
         print("Failed to decode review response JSON.", file=sys.stderr)
         return None
+    if not isinstance(parsed_review_object, dict):
+        print("Review response was not a JSON object.", file=sys.stderr)
+        return None
     raw_identifier = parsed_review_object.get("id")
     raw_url = parsed_review_object.get("html_url")
     if not isinstance(raw_identifier, (int, str)) or not isinstance(raw_url, str):

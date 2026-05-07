@@ -55,6 +55,14 @@ class DescribeParseReviewResponse:
     def test_returns_none_on_invalid_json(self):
         assert post_audit_review._parse_review_response("not json") is None
 
+    def test_returns_none_when_response_is_a_json_array(self):
+        raw = json.dumps([{"id": 42, "html_url": "https://github.com/pr"}])
+        assert post_audit_review._parse_review_response(raw) is None
+
+    def test_returns_none_when_response_is_a_json_scalar(self):
+        raw = json.dumps(42)
+        assert post_audit_review._parse_review_response(raw) is None
+
     def test_returns_none_when_id_missing(self):
         raw = json.dumps({"html_url": "https://github.com/pr"})
         assert post_audit_review._parse_review_response(raw) is None

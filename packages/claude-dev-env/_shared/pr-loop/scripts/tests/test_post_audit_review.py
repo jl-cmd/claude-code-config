@@ -275,3 +275,8 @@ class DescribeMainUsesDomainIdentifier:
             in main_source_text
         )
         assert "review_result" not in main_source_text
+
+    def test_main_local_variable_naming_is_pinned(self):
+        main_source_text = inspect.getsource(post_audit_review.main)
+        assert "serialized_review_summary" in main_source_text
+        assert "output_text" not in main_source_text

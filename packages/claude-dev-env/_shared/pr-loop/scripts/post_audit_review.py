@@ -163,10 +163,10 @@ def main(
     if posted_review is None:
         return 1
     review_identifier, review_url, all_comment_entries = posted_review
-    output_text = _build_output_payload(
+    serialized_review_summary = _build_output_payload(
         review_identifier, review_url, all_comment_entries
     )
-    print(output_text)
+    print(serialized_review_summary)
     return 0
 
 

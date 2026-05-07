@@ -25,6 +25,7 @@ _insert_hooks_tree_for_imports()
 
 from config.state_description_blocker_constants import (
     ALL_BLOCK_COMMENT_EXTENSIONS,
+    ALL_BLOCK_COMMENT_ONLY_EXTENSIONS,
     ALL_COMMENT_BEARING_EXTENSIONS,
     ALL_COMMENT_TRANSITION_PATTERNS,
     ALL_HASH_ONLY_EXTENSIONS,
@@ -48,6 +49,8 @@ def is_comment_bearing_file(file_path: str) -> bool:
 def _get_inline_markers(extension: str) -> tuple[str, ...]:
     if extension in ALL_HASH_ONLY_EXTENSIONS:
         return ("#",)
+    if extension in ALL_BLOCK_COMMENT_ONLY_EXTENSIONS:
+        return ()
     return ("//",)
 
 

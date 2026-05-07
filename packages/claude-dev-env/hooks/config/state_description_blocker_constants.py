@@ -59,6 +59,12 @@ ALL_HASH_ONLY_EXTENSIONS: frozenset[str] = frozenset(
     }
 )
 
+ALL_BLOCK_COMMENT_ONLY_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".css",
+    }
+)
+
 ALL_BLOCK_COMMENT_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".js",

@@ -158,7 +158,7 @@ cd into `<worktree_path>` before any git or file operation.
   2. Apply each fix you can address.
   3. Run `python -m py_compile` (or language-equivalent) on every modified file.
   4. Run the project's test suite and confirm all existing tests pass. If a test fails, diagnose the regression and fix it before committing.
-  5. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and obtain its total finding count. Compare against the current post-fix audit's total finding count. If the current count exceeds the previous loop's count, flag all new findings as same-loop fix-targets and revise before committing.
+  5. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and obtain its total finding count. If the number of bugs-to-fix in this round exceeds the previous loop's total, flag the excess as same-loop fix-targets and revise before committing.
   6. git add by explicit path, then git commit with a message summarizing the bugs fixed.
      - If the commit fails because a git hook (pre-commit, commit-msg, etc.) blocked it,
        capture the hook's stderr, write status=hook_blocked for every finding in this loop

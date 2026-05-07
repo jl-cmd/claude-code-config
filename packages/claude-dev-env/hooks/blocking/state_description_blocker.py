@@ -112,9 +112,10 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
 
 
 def _find_inline_comment_start(stripped: str, all_markers: tuple[str, ...]) -> int | None:
-    """Find the start index of an inline comment marker in a code line.
+    """Find the earliest inline comment marker in a code line, across all markers.
     Skips // when preceded by : to avoid treating URLs as inline comments,
     but continues searching for subsequent // that are actual comments."""
+    best_position: int | None = None
     for each_marker in all_markers:
         search_start = 0
         while True:
@@ -124,8 +125,10 @@ def _find_inline_comment_start(stripped: str, all_markers: tuple[str, ...]) -> i
             if each_marker == "//" and stripped[position - 1] == ":":
                 search_start = position + 1
                 continue
-            return position
-    return None
+            if best_position is None or position < best_position:
+                best_position = position
+            break
+    return best_position
 
 
 def find_violations(text: str, file_path: str) -> list[str]:

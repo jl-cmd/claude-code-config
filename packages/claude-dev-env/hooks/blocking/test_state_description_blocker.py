@@ -327,8 +327,8 @@ def test_ignores_c_preprocessor_directive():
 
 
 def test_ignores_hash_in_javascript_inline():
-    """A JavaScript line with # in a string literal should NOT trigger inline comment
-    extraction — # is not a comment marker in JS. Only // should be checked.
+    """A JavaScript line with # in a string literal should NOT trigger inline
+    comment extraction — # is not a comment marker in JS. Only // should be checked.
     Real pattern: `const sel = "#originally-dark"` would falsely match `originally`
     if # were treated as a comment marker."""
     result = _run_hook(
@@ -539,6 +539,23 @@ def test_multi_line_block_comment_close_with_trailing_inline():
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_detects_earliest_inline_marker_in_php():
+    """A PHP line with a // inline comment followed by a # hash should find the //
+    marker (earliest) not the # marker for comment extraction.
+    `echo $x; // previously used #tag` — `previously` in // must be detected."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/index.php",
+            "content": 'echo $x; // previously used #tag',
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "previously" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_additional_context_contains_examples():

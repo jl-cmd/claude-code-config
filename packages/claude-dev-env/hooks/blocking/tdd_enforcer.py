@@ -309,7 +309,7 @@ def main() -> None:
         existing_content = _read_candidate_text(path)
         if existing_content is not None:
             old_str = tool_input.get("old_string", "")
-            new_str = tool_input.get("new_string", "")
+            new_str = tool_input.get("new_string", "") or ""
             if old_str:
                 post_edit_content = existing_content.replace(old_str, new_str, 1)
                 if _is_constants_only_python_content(post_edit_content):

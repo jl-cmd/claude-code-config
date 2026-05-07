@@ -297,6 +297,13 @@ def main() -> None:
         sys.exit(0)
 
     # Block production code - require confirmation
+    # Exempt constants-only config files (no behavior to test) for any tool
+    if ext == ".py" and path.exists():
+        existing_content = _read_candidate_text(path)
+        if existing_content and _is_constants_only_python_content(existing_content):
+            emit_allow()
+            sys.exit(0)
+
     written_content = _extract_written_content(tool_name, tool_input)
     if tool_name == "Write" and ext == ".py" and _is_constants_only_python_content(written_content):
         emit_allow()

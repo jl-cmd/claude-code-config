@@ -81,19 +81,19 @@ def _parse_review_response(
     a failure signal.
     """
     try:
-        response_payload = json.loads(response_text)
+        parsed_review_object = json.loads(response_text)
     except json.JSONDecodeError:
         print("Failed to decode review response JSON.", file=sys.stderr)
         return None
-    raw_identifier = response_payload.get("id")
-    raw_url = response_payload.get("html_url")
+    raw_identifier = parsed_review_object.get("id")
+    raw_url = parsed_review_object.get("html_url")
     if not isinstance(raw_identifier, (int, str)) or not isinstance(raw_url, str):
         print("Review response missing id or html_url.", file=sys.stderr)
         return None
     all_comment_entries: list[dict[str, str]] = []
-    nested_comments = response_payload.get("comments")
-    if isinstance(nested_comments, list):
-        for each_comment in nested_comments:
+    all_nested_comments = parsed_review_object.get("comments")
+    if isinstance(all_nested_comments, list):
+        for each_comment in all_nested_comments:
             if isinstance(each_comment, dict):
                 each_id = each_comment.get("id")
                 each_url = each_comment.get("html_url")
@@ -108,12 +108,12 @@ def _build_output_payload(
     all_comment_entries: list[dict[str, str]],
 ) -> str:
     """Build the JSON output string written to stdout on success."""
-    output_payload: dict[str, object] = {
+    review_summary_payload: dict[str, object] = {
         "review_id": review_identifier,
         "review_url": review_url,
         "comments": all_comment_entries,
     }
-    return json.dumps(output_payload)
+    return json.dumps(review_summary_payload)
 
 
 def main(
@@ -149,7 +149,7 @@ def main(
             }
         )
 
-    review_result = post_review(
+    posted_review = post_review(
         owner=parsed_arguments.owner,
         repo=parsed_arguments.repo,
         pull_number=parsed_arguments.number,
@@ -157,9 +157,9 @@ def main(
         body_text=body_text,
         all_comments=all_comments,
     )
-    if review_result is None:
+    if posted_review is None:
         return 1
-    review_identifier, review_url, all_comment_entries = review_result
+    review_identifier, review_url, all_comment_entries = posted_review
     output_text = _build_output_payload(
         review_identifier, review_url, all_comment_entries
     )

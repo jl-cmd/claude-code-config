@@ -232,3 +232,20 @@ class DescribeVerifyPrReviewCollectionNamingPrefix:
         assert "all_reviews_on_expected_commit = [" in verify_pr_review_source_text
         assert "all_stale_commits = {" in verify_pr_review_source_text
         assert " stale_commits = {" not in verify_pr_review_source_text
+
+
+class DescribeCoerceOptionalStringUsesDomainParameter:
+    """The `_coerce_optional_string` parameter must avoid the banned word
+    `value` and use the domain term `maybe_field` (CODE_RULES §5 banned-name
+    list).
+    """
+
+    def test_coerce_optional_string_parameter_named_maybe_field(self):
+        coerce_signature = inspect.signature(verify_review._coerce_optional_string)
+        assert "maybe_field" in coerce_signature.parameters
+        assert "maybe_value" not in coerce_signature.parameters
+
+    def test_coerce_optional_string_body_references_maybe_field(self):
+        coerce_source_text = inspect.getsource(verify_review._coerce_optional_string)
+        assert "isinstance(maybe_field, str)" in coerce_source_text
+        assert "maybe_value" not in coerce_source_text

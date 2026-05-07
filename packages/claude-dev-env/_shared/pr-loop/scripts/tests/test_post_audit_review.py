@@ -213,3 +213,57 @@ class DescribePostReviewUsesShouldRetryParameterNames:
         assert captured_call_kwargs.get("should_retry_timeout") is False
         assert "retry_nonzero" not in captured_call_kwargs
         assert "retry_timeout" not in captured_call_kwargs
+
+
+class DescribeParseReviewResponseUsesDomainIdentifiers:
+    """Local identifiers in `_parse_review_response` must follow CODE_RULES §5:
+    no banned `response` substring (use `parsed_review_object`) and `all_`
+    prefix on collection variables (use `all_nested_comments`).
+    """
+
+    def test_parse_review_response_uses_domain_identifiers(self):
+        parse_review_response_source_text = inspect.getsource(
+            post_audit_review._parse_review_response
+        )
+        assert "parsed_review_object = json.loads(" in parse_review_response_source_text
+        assert (
+            "all_nested_comments = parsed_review_object.get("
+            in parse_review_response_source_text
+        )
+        assert "response_payload" not in parse_review_response_source_text
+        assert " nested_comments = " not in parse_review_response_source_text
+
+
+class DescribeBuildOutputPayloadUsesDomainIdentifier:
+    """The local payload variable in `_build_output_payload` must avoid the
+    banned word `output` and use the domain-meaningful name
+    `review_summary_payload` (CODE_RULES §5 banned-name list).
+    """
+
+    def test_build_output_payload_uses_review_summary_payload(self):
+        build_output_payload_source_text = inspect.getsource(
+            post_audit_review._build_output_payload
+        )
+        assert (
+            "review_summary_payload: dict[str, object] = {"
+            in build_output_payload_source_text
+        )
+        assert "return json.dumps(review_summary_payload)" in build_output_payload_source_text
+        assert "output_payload: dict" not in build_output_payload_source_text
+        assert "json.dumps(output_payload)" not in build_output_payload_source_text
+
+
+class DescribeMainUsesDomainIdentifier:
+    """The destructured posted-review tuple in `main` must avoid the banned
+    word `result` (CODE_RULES §5 banned-name list) and use `posted_review`.
+    """
+
+    def test_main_uses_posted_review_identifier(self):
+        main_source_text = inspect.getsource(post_audit_review.main)
+        assert "posted_review = post_review(" in main_source_text
+        assert "if posted_review is None:" in main_source_text
+        assert (
+            "review_identifier, review_url, all_comment_entries = posted_review"
+            in main_source_text
+        )
+        assert "review_result" not in main_source_text

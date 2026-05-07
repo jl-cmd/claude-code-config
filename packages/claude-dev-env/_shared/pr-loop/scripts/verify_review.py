@@ -42,8 +42,8 @@ def _is_matching_review(
     return any(body.startswith(each_header) for each_header in all_expected_headers)
 
 
-def _coerce_optional_string(maybe_value: object) -> str | None:
-    return maybe_value if isinstance(maybe_value, str) else None
+def _coerce_optional_string(maybe_field: object) -> str | None:
+    return maybe_field if isinstance(maybe_field, str) else None
 
 
 def _parse_paginated_slurp_response(

@@ -59,6 +59,50 @@ def _is_module_docstring_expression(module_level_node: ast.stmt) -> bool:
     return isinstance(expression_value.value, str)
 
 
+def _collect_imported_names(parsed_tree: ast.Module) -> set[str]:
+    """Return the set of names imported at module level."""
+    imported_names: set[str] = set()
+    for each_node in parsed_tree.body:
+        if isinstance(each_node, ast.Import):
+            for alias in each_node.names:
+                local_name = alias.asname or alias.name.split(".")[0]
+                imported_names.add(local_name)
+        elif isinstance(each_node, ast.ImportFrom):
+            for alias in each_node.names:
+                imported_names.add(alias.asname or alias.name)
+    return imported_names
+
+
+def _rhs_has_unsafe_call(rhs_node: ast.AST, imported_names: set[str]) -> bool:
+    """Return True when rhs_node contains a function call to a non-imported name.
+
+    Calls to imported functions (e.g. ``Path(...)``, ``re.compile(...)``) are
+    safe — they construct values from already-imported names. Calls to undefined
+    or local-only names (``VALUE = compute()``) are unsafe because they introduce
+    import-time side effects that should be gated by TDD.
+    """
+    for each_subnode in ast.walk(rhs_node):
+        if isinstance(each_subnode, ast.Call):
+            function_node = each_subnode.func
+            if isinstance(function_node, ast.Name):
+                if function_node.id not in imported_names:
+                    return True
+            elif isinstance(function_node, ast.Attribute):
+                if isinstance(function_node.value, ast.Name):
+                    if function_node.value.id not in imported_names:
+                        return True
+                else:
+                    return True
+            else:
+                return True
+        elif isinstance(
+            each_subnode,
+            (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, ast.Lambda),
+        ):
+            return True
+    return False
+
+
 def _is_constants_only_python_content(content: str) -> bool:
     if not content.strip():
         return False
@@ -69,8 +113,13 @@ def _is_constants_only_python_content(content: str) -> bool:
     if not parsed_tree.body:
         return False
     allowed_node_types = _constants_only_allowed_node_types()
+    imported_names = _collect_imported_names(parsed_tree)
     for each_top_level_node in parsed_tree.body:
         if isinstance(each_top_level_node, allowed_node_types):
+            if isinstance(each_top_level_node, (ast.Assign, ast.AnnAssign)):
+                rhs = each_top_level_node.value
+                if rhs is not None and _rhs_has_unsafe_call(rhs, imported_names):
+                    return False
             continue
         if _is_module_docstring_expression(each_top_level_node):
             continue

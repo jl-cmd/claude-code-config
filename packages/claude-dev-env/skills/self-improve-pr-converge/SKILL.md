@@ -59,35 +59,23 @@ JSONL session transcript files from prior Claude Code sessions. These are the pr
 
 **Primary search via Everything MCP:**
 
-1. Find recently modified JSONL files:
+1. Find session transcript JSONL files:
    ```
-   mcp__everything__everything_find_recent(
+   mcp__everything__everything_search(
      params={
-       period: "24h" | "48h",
-       path: r"~/.claude/projects",
-       extensions: "jsonl",
-       max_results: 500
+       query: "jsonl",
+       sort: "date-modified-desc",
+       max_results: 200
      }
    )
    ```
-   If no results in 24h, expand to 48h or 72h.
+   Note: Use `query: "jsonl"` (simple extension match). Do NOT use `everything_find_recent` — its period-based filtering may return empty. Do NOT use path-prefixed queries — Everything's query syntax does not support `\\` path separators in the query string. Filter results client-side by path containment (`~/.claude/projects/`) and date.
 
-2. For each candidate file, check content markers via `Select-String -SimpleMatch` (or Bash `grep`) on the file path: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
+2. Filter to session-level transcripts. Exclude paths containing `\subagents\` (per-tick subagent transcripts). Session-level files are `<uuid>.jsonl` directly under a project directory like `Y--Projects-temp-python-automation-eval\`. Include only files with `.claude\projects\` in the path to restrict to Claude Code session transcripts.
 
-3. Exclude files inside `subagents/` directories — these are per-tick subagent transcripts, not session-level logs. Session-level transcripts live directly in the project directory as `<uuid>.jsonl`.
+3. For each candidate, check content markers via PowerShell `Select-String -SimpleMatch`: `bugteam`, `/bugteam exit:`, `last_action`, `starting_sha`, `Loop <N> audit:`, `/eval-bugteam`.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
-
-**Fallback:** If Everything MCP returns no results, use:
-```
-mcp__everything__everything_search(
-  params={
-    query: r"~/.claude/projects *.jsonl",
-    sort: "date-modified-desc",
-    max_results: 500
-  }
-)
-```
 
 ### Supporting data
 
@@ -107,18 +95,16 @@ Search order — try each source until at least one candidate is found:
 **Source A — JSONL session transcripts (raw data, primary):**
 
 1. **Find candidate files** via Everything MCP:
-   
    ```
-   mcp__everything__everything_find_recent(
-     params={period: "24h", path: r"~/.claude/projects", extensions: "jsonl", max_results: 500}
+   mcp__everything__everything_search(
+     params={query: "jsonl", sort: "date-modified-desc", max_results: 200}
    )
    ```
-   
-   If empty, expand: `period: "48h"`, then `period: "72h"`.
-   
-2. **Filter to session-level transcripts.** Exclude paths containing `\subagents\` — those are per-tick subagent transcripts. Session-level files are `<uuid>.jsonl` directly under a project directory.
+   Filter results to include only paths containing `.claude\projects\`.
 
-3. **Grep for markers.** For each candidate, search file content with `Select-String -SimpleMatch` (or `grep` via Bash) for: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
+2. **Filter to session-level transcripts.** Exclude paths containing `\subagents\`. Session-level files are `<uuid>.jsonl` directly under a project directory.
+
+3. **Grep for markers.** For each candidate, search file content with `Select-String -SimpleMatch` (or `grep` via Bash) for: `bugteam`, `pr-converge`, `last_action`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 

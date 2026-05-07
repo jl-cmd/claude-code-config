@@ -40,7 +40,7 @@ Never reference removed implementations, old defaults, prior behaviors, or how s
 
 The `state-description-blocker` hook (PreToolUse on Write\|Edit) enforces these patterns automatically:
 
-`instead of`, `previously`, `now uses`, `now does`, `now handles`, `now supports`, `was previously`, `were previously`, `used to`, `no longer`, `has been updated`, `have been updated`, `has been changed`, `have been changed`, `replaced by`, `replaces`, `changed from`, `switched from`, `switched to`, `migrated from`, `migrated to`
+`instead of`, `previously`, `now uses/does/handles/supports/names/includes`, `was previously`, `were previously`, `was formerly`, `was added`, `used to`, `no longer`, `has/have been updated/changed`, `replaced by`, `replaces`, `superseded by`, `supersedes`, `changed from`, `changes from`, `switched from/to`, `migrated from/to`, `moved to/into`, `extracted as`, `updated to`, `originally`, `as of`
 
 ## What IS allowed
 

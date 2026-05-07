@@ -352,6 +352,23 @@ def test_ignores_double_slash_in_js_url():
     assert result.stdout == ""
 
 
+def test_detects_inline_after_url_on_same_line():
+    """A JS/TS line with a URL followed by a real inline comment containing a
+    violation should still be detected. const url = "https://api.com"; // no longer used
+    — the // before no longer is a real inline comment, not a URL."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/fetch.ts",
+            "content": 'const url = "https://api.com"; // no longer used',
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_ignores_code_before_block_comment():
     """A line with code before /* */ should only scan the comment portion, not the code.
     `cache.replaces(old); /* Use fresh cache */` should NOT trigger on `replaces`

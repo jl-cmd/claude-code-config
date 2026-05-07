@@ -41,11 +41,12 @@ post a fresh PR in a fresh branch based on origin main to the user.
 - **Duplicate `bugbot run` while review queued** — skip Step 3 when the
   latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction;
   wait for review or HEAD change before re-triggering.
-- **Bot logins differ between review-level and inline-comment endpoints** —
-  Copilot reviews (`get_reviews`) use `.user.login`, but inline comments
-  (`get_review_comments`) use `.author.login`. Always use case-insensitive
-  substring matching on the correct field matching the endpoint, never
-  strict equality.
+- **Bot login fields differ by endpoint** — `get_reviews` returns
+  `.user.login` (object), but `get_review_comments` returns `.author`
+  (string, not an object). Threads use `is_outdated` (not `commit_id`) to
+  indicate staleness. Always check the correct fields and use
+  case-insensitive substring matching on login values, never strict
+  equality.
 
 ## First tick of a session
 

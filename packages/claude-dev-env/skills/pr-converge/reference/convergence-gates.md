@@ -17,7 +17,7 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews
   → sort by `.submitted_at` descending
 
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-  → filter where `.author.login` matches Copilot (case-insensitive substring "copilot") AND `.commit_id == current_head`
+  → filter threads where `is_outdated == false` AND any comment has `.author` matching Copilot (case-insensitive substring "copilot")
 ```
 
 Decide (four branches; match first whose predicate holds):

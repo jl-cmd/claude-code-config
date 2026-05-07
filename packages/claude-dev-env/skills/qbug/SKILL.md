@@ -201,7 +201,7 @@ The subagent receives this prompt and loops internally — the lead does not re-
        Post ONE review per loop. Use the payload shape from
        <categories_file>'s sibling SKILL.md § "PR comments" — pass
        the review body as a direct string parameter (not jq/piped files) to
-       `pull_request_review_write(method="create", event="COMMENT", body=<body>, owner=<owner>, repo=<repo>, pullNumber=<pr_number>)`.
+       `pull_request_review_write(method="create", event="COMMENT", body=<body>, owner=<owner>, repo=<repo>, pullNumber=<pr_number>, commitID=<head_sha>)`.
        Review body first line: `## /qbug loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2`.
        If the review POST fails, fall back to one issue comment on
        `add_issue_comment(owner=<owner>, repo=<repo>, issueNumber=<pr_number>, body=<body>)` carrying the full body; mark every

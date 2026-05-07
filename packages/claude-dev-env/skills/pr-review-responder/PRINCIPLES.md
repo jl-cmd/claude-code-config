@@ -253,7 +253,7 @@ One-to-one mapping, clear context.
 **GitHub location**: PR conversation tab
 
 **How to respond**:
-`add_issue_comment(owner, repo, issueNumber={pr_number}, body="✅ **Fixed**: [description]")`
+`add_issue_comment(owner=owner, repo=repo, issueNumber={pr_number}, body="✅ **Fixed**: [description]")`
 
 **Skill behavior**: Detects but cannot auto-respond (lacks line context)
 

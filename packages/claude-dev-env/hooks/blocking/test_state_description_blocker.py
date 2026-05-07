@@ -465,6 +465,23 @@ def test_ignores_comment_with_glob_pattern():
     assert result.stdout == ""
 
 
+def test_single_line_block_comment_closes():
+    """A same-line /* */ block comment like code(); /* note */ should close
+    on the same line. is_in_block_comment must not stay True after the line."""
+    content = "code(); /* previously used */\nclean_code()"
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/cache.ts",
+            "content": content,
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "previously" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_block_comment_with_url_closes_correctly():
     """A block comment line containing // in a URL should still detect */ and close
     the block comment state. `* https://example.com/ */` must not trigger inline

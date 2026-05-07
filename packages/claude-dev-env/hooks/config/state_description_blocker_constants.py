@@ -111,6 +111,7 @@ ALL_COMMENT_BEARING_EXTENSIONS: frozenset[str] = frozenset(
         ".yaml",
         ".yml",
         ".tf",
+        ".css",
         ".scss",
         ".less",
     }

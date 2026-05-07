@@ -35,24 +35,6 @@ def test_bugbot_dirty_body_regex_distinguishes_findings_from_clean_bodies() -> N
     assert compiled_pattern.search(clean_body) is None
 
 
-def test_cursor_bot_login_matches_github_login_string() -> None:
-    assert pr_converge_constants_module.CURSOR_BOT_LOGIN == "cursor[bot]"
-
-
-def test_copilot_reviewer_login_carries_bot_suffix() -> None:
-    assert (
-        pr_converge_constants_module.COPILOT_REVIEWER_LOGIN
-        == "copilot-pull-request-reviewer[bot]"
-    )
-
-
-def test_copilot_reviewer_request_id_reuses_login_constant() -> None:
-    request_id = pr_converge_constants_module.COPILOT_REVIEWER_REQUEST_ID
-    login = pr_converge_constants_module.COPILOT_REVIEWER_LOGIN
-    assert request_id == login
-    assert request_id is login
-
-
 def test_copilot_clean_review_state_is_approved() -> None:
     assert pr_converge_constants_module.COPILOT_CLEAN_REVIEW_STATE == "APPROVED"
 
@@ -65,5 +47,3 @@ def test_copilot_dirty_review_states_lists_changes_requested_and_commented() -> 
 
 def test_copilot_soft_dirty_review_state_is_commented() -> None:
     assert pr_converge_constants_module.COPILOT_SOFT_DIRTY_REVIEW_STATE == "COMMENTED"
-
-

@@ -164,15 +164,15 @@ cd into `<worktree_path>` before any git or file operation.
        capture the hook's stderr, write status=hook_blocked for every finding in this loop
        (the commit was atomic; if it failed, no finding was applied), populate hook_output
        on each outcome, and return WITHOUT retrying. The lead will treat this loop as no-progress.
-	  7. git push with a plain fast-forward push (the default, no flag overrides).
-	  8. For each bug, post a fix reply to its finding_comment_id via
-	     `add_reply_to_pull_request_comment(commentId=<id>, body=<reply_text>,
-	     owner=<O>, repo=<R>, pullNumber=<N>)`:
-	     - "Fixed in <commit_sha>" if the bug was addressed by your commit
-	     - "Could not address this loop: <one-line reason>" if you skipped or failed it
-	     - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
-	     Body text is passed directly as string parameters -- no temp files, no jq, no shell pipes.
-	  9. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
+  7. git push with a plain fast-forward push (the default, no flag overrides).
+  8. For each bug, post a fix reply to its finding_comment_id via
+     `add_reply_to_pull_request_comment(commentId=<id>, body=<reply_text>,
+     owner=<O>, repo=<R>, pullNumber=<N>)`:
+     - "Fixed in <commit_sha>" if the bug was addressed by your commit
+     - "Could not address this loop: <one-line reason>" if you skipped or failed it
+     - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
+     Body text is passed directly as string parameters -- no temp files, no jq, no shell pipes.
+  9. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
 </execution>
 
 <outcome_xml_schema>

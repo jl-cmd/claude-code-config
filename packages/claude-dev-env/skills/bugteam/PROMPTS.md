@@ -101,7 +101,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
          ...
 
      Capture review_url and comment ids/urls from stdout JSON.
-     API reference: https://docs.github.com/en/rest/pulls/comments
+     API reference: https://docs.github.com.com/en/rest/pulls/comments
 
   7. If the script exits non-zero, fall back to a single issue comment:
        jq -Rs '{body: .}' < <temp_fallback.md> \
@@ -221,7 +221,6 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   - git add by explicit path — name each file being staged.
   - Preserve existing comments on lines you do not modify.
   - Type hints on every signature you touch.
-  - **Narrow scope.** Fix only the exact defect at the specified file:line. No restructuring, no inlining helpers, no renames, no "while I'm here" cleanup.
-  - **Preserve helpers.** Do not remove or inline existing helper functions unless the finding explicitly names the helper as the problem.
-  - **No regression.** Never introduce new bugs. If the fix introduces new P0/P1/P2 findings detectable in the post-fix self-audit, the fix is inadequate and must be revised before committing.
+  - **No regression.** After applying all fixes and passing the post-fix self-audit, verify that the total finding count does not exceed the previous loop's finding count. An increase in total findings between loop transitions is a regression and must be revised before committing.
 </constraints>
+```

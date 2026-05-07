@@ -60,7 +60,7 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
     for each_line in lines:
         stripped = each_line.strip()
 
-        if stripped.startswith("#") or stripped.startswith("//"):
+        if any(stripped.startswith(each_marker) for each_marker in inline_markers):
             comment_lines.append(stripped)
             continue
 

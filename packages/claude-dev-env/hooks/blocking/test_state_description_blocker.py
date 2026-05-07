@@ -137,7 +137,7 @@ def test_detects_now_uses_in_comment():
     result = _run_hook(
         "Write",
         {
-            "file_path": "src/client.ts",
+            "file_path": "src/client.py",
             "content": VIOLATION_NOW_USES_COMMENT,
         },
     )
@@ -304,6 +304,20 @@ def test_detects_inline_trailing_comment():
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_ignores_c_preprocessor_directive():
+    """A C/C++ #error directive should NOT be treated as a comment.
+    # is not a comment marker in C — startswith should only check //."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/config.h",
+            "content": '#error "This code previously used replaced API"',
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
 
 
 def test_ignores_hash_in_javascript_inline():

@@ -39,8 +39,8 @@ ALL_COMMENT_TRANSITION_PATTERNS: list[Pattern] = [
     compile(r"\bas of\b", IGNORECASE),
 ]
 
-ALL_CODE_FENCE_PATTERN: Pattern = compile(r"```[\s\S]*?```")
-ALL_INLINE_CODE_PATTERN: Pattern = compile(r"``[^`]+``|`[^`]+`")
+CODE_FENCE_PATTERN: Pattern = compile(r"```[\s\S]*?```")
+INLINE_CODE_PATTERN: Pattern = compile(r"``[^`]+``|`[^`]+`")
 
 ALL_MARKDOWN_EXTENSIONS: frozenset[str] = frozenset(
     {".md", ".mdx", ".markdown", ".rmd"}

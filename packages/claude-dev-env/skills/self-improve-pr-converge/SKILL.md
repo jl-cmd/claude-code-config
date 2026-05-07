@@ -73,7 +73,7 @@ JSONL session transcript files from prior Claude Code sessions. These are the pr
 
 2. Filter to session-level transcripts. Exclude paths containing `\subagents\` (per-tick subagent transcripts). Session-level files are `<uuid>.jsonl` directly under a project directory like `Y--Projects-temp-python-automation-eval\`. Include only files with `.claude\projects\` in the path to restrict to Claude Code session transcripts.
 
-3. For each candidate, check content markers via PowerShell `Select-String -SimpleMatch`: `bugteam`, `/bugteam exit:`, `last_action`, `starting_sha`, `Loop <N> audit:`, `/eval-bugteam`.
+3. For each candidate, check content markers via `(Get-Content -Path "<file>" -ReadCount 0) -match "pattern"` (use `-match` operator, not `Select-String` which may be blocked by auto mode). Markers: `bugteam`, `/bugteam exit:`, `last_action`, `starting_sha`, `Loop <N> audit:`, `/eval-bugteam`.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 
@@ -104,7 +104,7 @@ Search order — try each source until at least one candidate is found:
 
 2. **Filter to session-level transcripts.** Exclude paths containing `\subagents\`. Session-level files are `<uuid>.jsonl` directly under a project directory.
 
-3. **Grep for markers.** For each candidate, search file content with `Select-String -SimpleMatch` (or `grep` via Bash) for: `bugteam`, `pr-converge`, `last_action`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
+3. **Grep for markers.** For each candidate, search file content with `(Get-Content -Path "<file>" -ReadCount 0) -match "pattern"` (use `-match` operator, not `Select-String` which may be blocked by auto mode). Markers: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 

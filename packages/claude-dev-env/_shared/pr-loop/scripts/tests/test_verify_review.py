@@ -252,6 +252,22 @@ class DescribeCoerceOptionalStringUsesDomainParameter:
         assert "maybe_value" not in coerce_source_text
 
 
+class DescribeMainUsesParsedArgumentsName:
+    """The `main()` entry point must avoid the `args` abbreviation per
+    CODE_RULES §5 (no-abbreviations) and use `parsed_arguments` to match the
+    sibling `post_audit_review.py` script.
+    """
+
+    def test_main_source_uses_parsed_arguments_identifier(self):
+        main_source_text = inspect.getsource(verify_review.main)
+        assert "parsed_arguments = " in main_source_text
+        assert "args = " not in main_source_text
+
+    def test_main_source_does_not_reference_bare_args_attribute(self):
+        main_source_text = inspect.getsource(verify_review.main)
+        assert "args." not in main_source_text
+
+
 class DescribeVerifyPrReviewStatusFieldImportsConstant:
     """The `status` field of the JSON success payload must be sourced from
     `STATUS_OK` in `config.review_posting_constants` rather than an inline

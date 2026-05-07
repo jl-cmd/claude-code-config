@@ -155,14 +155,14 @@ def main() -> int:
     parser.add_argument("--commit-id", required=True, dest="commit_id")
     parser.add_argument("--loop", required=True, type=int)
 
-    args = parser.parse_args()
+    parsed_arguments = parser.parse_args()
 
     return verify_pr_review(
-        owner=args.owner,
-        repo=args.repo,
-        pull_number=args.number,
-        expected_commit_id=args.commit_id,
-        loop_number=args.loop,
+        owner=parsed_arguments.owner,
+        repo=parsed_arguments.repo,
+        pull_number=parsed_arguments.number,
+        expected_commit_id=parsed_arguments.commit_id,
+        loop_number=parsed_arguments.loop,
     )
 
 

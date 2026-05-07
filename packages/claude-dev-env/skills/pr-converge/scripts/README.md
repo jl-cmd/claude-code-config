@@ -66,7 +66,7 @@ Read mergeability fields from the PR:
 
     pull_request_read(method="get", pullNumber=NUMBER, owner=OWNER, repo=REPO)
 
-Fields: `.mergeable`, `.mergeStateStatus`, `.headRefOid`.
+Fields: `.mergeable`, `.mergeable_state`, `.headRefOid`.
 
 ### Copilot reviews: `pull_request_read(method="get_reviews")`
 

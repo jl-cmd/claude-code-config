@@ -1,0 +1,56 @@
+# PR Converge
+
+One tick per invocation. Bugbot ↔ eval-bugteam ↔ Copilot loop on a draft PR
+until all three are clean on the same `HEAD` and mergeable.
+
+## Pre-flight
+
+`ScheduleWakeup` not in this turn's tool registry → abort. Report
+`eval-pr-converge requires ScheduleWakeup; aborting` and return.
+
+## Gotchas
+
+- **`ScheduleWakeup` not in subagent tool registries** — background
+  `general-purpose` tick cannot schedule re-entry; only parent session
+  with `ScheduleWakeup` in registry can call it.
+- **Review body and inline comments desync for same `commit_id`** —
+  "dirty body, zero inline rows at `current_head`" is **`inline_lag`**,
+  not **`dirty`**. Bump `inline_lag_streak`, wait 90s, retry fetch.
+- **`state.json` without §Concurrency lock loses merges** when teammates
+  finish in same wall-clock window.
+- **`tick_count` must not double-increment** — conversation state line
+  only when **no** `state.json`; with `state.json`, only the
+  orchestrator bump increments.
+- **Duplicate `bugbot run` while review queued** — skip Step 3 when the
+  latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction;
+  wait for review or HEAD change before re-triggering.
+- **Bot logins differ between review-level and inline-comment endpoints** —
+  Copilot reviews come from `copilot-pull-request-reviewer[bot]`, but its
+  inline comments are authored by `Copilot`. Always use case-insensitive
+  substring matching on `user.login`, never strict equality.
+
+## First tick of a session
+
+Read [`reference/state-schema.md`](reference/state-schema.md),
+[`reference/ground-rules.md`](reference/ground-rules.md), then
+[`reference/per-tick.md`](reference/per-tick.md).
+
+## Match situation, read spoke
+
+| Situation | Read |
+|---|---|
+| Starting any tick | [`reference/per-tick.md`](reference/per-tick.md) |
+| Bugbot or audit finding to fix and push | [`reference/fix-protocol.md`](reference/fix-protocol.md) |
+| eval-bugteam reports convergence AND round_1_clean_at == current_head | [`reference/convergence-gates.md`](reference/convergence-gates.md) |
+| Multi-PR session — state.json exists | [`reference/multi-pr-orchestration.md`](reference/multi-pr-orchestration.md) |
+| Scheduling the next wakeup | [`workflows/schedule-wakeup-loop.md`](workflows/schedule-wakeup-loop.md) |
+| Hard blocker, convergence reached, or user stops loop | [`reference/stop-conditions.md`](reference/stop-conditions.md) |
+| Need to invoke a Python script | [`scripts/README.md`](scripts/README.md) |
+| Tick is ambiguous against the spokes above | [`reference/examples.md`](reference/examples.md) |
+
+## Folder map
+
+- `SKILL.md` — this hub.
+- `reference/` — workflow detail per situation.
+- `workflows/` — pacing implementations.
+- `scripts/` — Python wrappers for `gh` API calls plus their tests.

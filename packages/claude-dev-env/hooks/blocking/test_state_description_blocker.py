@@ -327,8 +327,8 @@ def test_ignores_c_preprocessor_directive():
 
 
 def test_ignores_hash_in_javascript_inline():
-    """A JavaScript line with # in a string literal should NOT trigger inline
-    comment extraction — # is not a comment marker in JS. Only // should be checked.
+    """A JavaScript line with # in a string literal should NOT trigger inline comment
+    extraction — # is not a comment marker in JS. Only // should be checked.
     Real pattern: `const sel = "#originally-dark"` would falsely match `originally`
     if # were treated as a comment marker."""
     result = _run_hook(
@@ -343,8 +343,8 @@ def test_ignores_hash_in_javascript_inline():
 
 
 def test_ignores_double_slash_in_js_url():
-    """A JavaScript/TypeScript line with a URL containing // should NOT trigger
-    inline comment extraction on the URL. The :// protocol marker should be
+    """A JavaScript/TypeScript line with a URL containing // should NOT trigger inline
+    comment extraction on the URL. The :// protocol marker should be
     recognized and skipped. Real pattern: `fetch("https://api.example.com/replaces")`
     should not false-positive on `replaces` in the URL path."""
     result = _run_hook(
@@ -504,6 +504,25 @@ def test_block_comment_with_url_closes_correctly():
     assert result.stdout == ""
 
 
+def test_same_line_block_comment_with_trailing_inline():
+    """A line with a same-line /* */ block comment followed by a // inline comment
+    containing a violation should detect the violation. The `continue` after same-line
+    /* */ extraction must not skip the trailing inline comment check.
+    `code(); /* clean */ // no longer used` — the `no longer` in // must be detected."""
+    content = 'code(); /* clean */ // no longer used'
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/fetch.ts",
+            "content": content,
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_additional_context_contains_examples():
     result = _run_hook(
         "Write",
@@ -514,6 +533,7 @@ def test_additional_context_contains_examples():
     )
     assert result.returncode == 0
     output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
     ctx = output["hookSpecificOutput"].get("additionalContext", "")
     assert "BAD:" in ctx
     assert "GOOD:" in ctx

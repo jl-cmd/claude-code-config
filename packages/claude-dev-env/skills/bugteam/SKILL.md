@@ -212,7 +212,7 @@ pull_request_review_write(
 body=<reply_text>, owner=<owner>, repo=<repo>, pullNumber=<number>)`
 
 **Review POST fails:** issue comment fallback:
-`add_issue_comment(owner=<owner>, repo=<repo>, issue_number=<number>,
+`add_issue_comment(owner=<owner>, repo=<repo>, issueNumber=<number>,
 body=<fallback_text>)`
 
 `<head_sha_at_post_time>`: `git rev-parse HEAD` in subagent cwd immediately

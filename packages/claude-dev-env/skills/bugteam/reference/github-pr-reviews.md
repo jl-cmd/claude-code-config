@@ -49,7 +49,7 @@ Top-level PR comment via issue-comments (`issue_number` is the PR number):
 ```
 add_issue_comment(
   owner=<owner>, repo=<repo>,
-  issue_number=<pull_number>,
+  issueNumber=<pull_number>,
   body=<full_fallback_markdown>
 )
 ```
@@ -83,4 +83,4 @@ If the review POST fails (rate limit, network, malformed payload), fall back to 
 
 - Per-loop batched review: `pull_request_review_write(method="create", event="COMMENT", body=..., commit_id=..., owner=..., repo=..., pullNumber=..., comments=[...])` — wraps `POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews`
 - Fix reply: `add_reply_to_pull_request_comment(commentId=..., body=..., owner=..., repo=..., pullNumber=...)` — wraps `POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies`
-- Review-POST failure fallback: `add_issue_comment(owner=..., repo=..., issue_number=..., body=...)` — wraps `POST /repos/{owner}/{repo}/issues/{issue_number}/comments`
+- Review-POST failure fallback: `add_issue_comment(owner=..., repo=..., issueNumber=..., body=...)` — wraps `POST /repos/{owner}/{repo}/issues/{issue_number}/comments`

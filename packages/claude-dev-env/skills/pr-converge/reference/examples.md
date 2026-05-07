@@ -58,7 +58,7 @@ HEAD, schedules next wakeup]
 </example>
 
 <example> Back-to-back clean, mergeability CLEAN, no Copilot review on
-`current_head`. Claude requests Copilot via `add_issue_comment(owner=OWNER, repo=REPO, issue_number=NUMBER, body="@copilot review")`,
+`current_head`. Claude requests Copilot via `add_issue_comment(owner=OWNER, repo=REPO, issueNumber=NUMBER, body="@copilot review")`,
 waits one tick. Next tick: Copilot review `state: APPROVED`. Claude: [sets
 `copilot_clean_at = current_head`; runs `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`; reports "PR
 #N converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>,

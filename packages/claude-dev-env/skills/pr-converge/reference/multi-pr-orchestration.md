@@ -125,7 +125,7 @@ Bugfind subagent completes (findings or clean):
      duplicate work.
   2. Else: update `state.json` (per §Concurrency) with `last_action:
      "audit_clean"`, `status: "awaiting_bugbot"`, `phase: "BUGBOT"`, then
-     trigger bugbot via `add_issue_comment(owner, repo, issue_number, body="bugbot run")`.
+     trigger bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
   3. Goes idle.
 
 ### Fix result → general-purpose per PR
@@ -135,7 +135,7 @@ When bugfix (clean-coder) subagent completes after push:
 - Spawn one `general-purpose` subagent per PR via
   `Agent(subagent_type="general-purpose", run_in_background=true)`. Subagent:
   1. Reads `state.json` for its PR.
-  2. Triggers bugbot via `add_issue_comment(owner, repo, issue_number, body="bugbot run")`.
+  2. Triggers bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
   3. Polls `pull_request_read(method="get_reviews")` every 60s (up to 10 polls) until review
      anchored to `current_head` appears with `commit_id == current_head`.
   4. **Poll / classify loop** (repeat from 4a whenever 4c retries):

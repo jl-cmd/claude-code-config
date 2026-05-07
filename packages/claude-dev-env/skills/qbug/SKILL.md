@@ -66,7 +66,7 @@ Pre-flight checks (in order):
 
 ## Step 1: Resolve PR scope (lead)
 
-1. Call `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` via the lead's available MCP tools (`N` comes from the parent skill's PR context, or fall back to `gh pr view --json number --jq '.number'`). Extract `number`, `baseRefName`, `headRefName`, `url` from the response.
+1. Call `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` via the lead's available MCP tools (`N` comes from the parent skill's PR context, or fall back to `search_issues` MCP with the current branch name to recover the PR number). Extract `number`, `baseRefName`, `headRefName`, `url` from the response.
 2. Else `git merge-base HEAD origin/<default>` then `git diff <merge-base>...HEAD`
 3. Else refuse per § When this skill applies.
 

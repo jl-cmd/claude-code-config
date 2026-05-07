@@ -30,13 +30,13 @@ description: >-
 Refusals — first match wins; respond with the quoted line exactly and stop:
 
 - **bws not on PATH.** `bws not installed. /monitor-open-prs injects GROQ_API_KEY via Bitwarden Secrets Manager.`
-- **GitHub API not accessible.** `get_me` failed. /monitor-open-prs needs active GitHub MCP credentials.
+- **GitHub API not accessible.** `get_me failed. /monitor-open-prs needs active GitHub MCP credentials.`
 - **Dirty tree on the caller's repo.** `Uncommitted changes detected. Stash, commit, or revert before /monitor-open-prs.`
 - **Required subagents missing.** Confirm `code-quality-agent`, `clean-coder`, and `groq-coder` exist. Else: `Required subagent type <name> not installed.`
 
 ## Discovery
 
-Call `scripts/discover_open_prs.discover_open_prs(all_owners=["jl-cmd", "JonEcho"])` to merge the live open-PR list across both scopes. The helper shells out to `gh search prs --owner <owner> --state open --json number,repository,url,headRefName,baseRefName` once per owner and flattens the result to a uniform dict shape with keys `number`, `owner`, `repo`, `head_ref`, `base_ref`, `url`. Empty scopes contribute empty lists; an entirely empty sweep returns `[]` and exits cleanly.
+Call `scripts/discover_open_prs.discover_open_prs(all_owners=["jl-cmd", "JonEcho"])` to merge the live open-PR list across both scopes. The helper queries each owner scope via `search_issues` MCP with `type:pr state:open owner:<owner>` and flattens the result to a uniform dict shape with keys `number`, `owner`, `repo`, `head_ref`, `base_ref`, `url`. Empty scopes contribute empty lists; an entirely empty sweep returns `[]` and exits cleanly.
 
 ## Secret Wrapping
 

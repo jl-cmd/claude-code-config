@@ -75,7 +75,7 @@ cd into `<worktree_path>` before any git or file operation.
      and the `comments[]` child entries (each with its own `id` and `html_url`).
      Match child entries to anchored findings in index order.
   5. If the review POST fails, use `add_issue_comment(owner=<O>, repo=<R>,
-     issue_number=<N>, body=<full_text>)` as fallback.
+     issueNumber=<N>, body=<full_text>)` as fallback.
   Body text is passed directly as string parameters to the MCP tool calls —
   no temp files, no jq, no shell pipes.
 </comment_posting>

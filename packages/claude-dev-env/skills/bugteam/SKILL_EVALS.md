@@ -224,7 +224,7 @@ Patch this table to match observation and annotate each correction.
 - Every finding's outcome XML carries `used_fallback="true"` and the issue-comment URL as `finding_comment_url`.
 - Cycle continues to the FIX action without aborting.
 
-**Open item for the real run.** The issue-comments fallback uses `add_issue_comment(owner=..., repo=..., issue_number=42, body=...)` (`SKILL.md` § Step 2.5 **Review POST fails**; full narrative in `reference/github-pr-reviews.md` § **Review POST failure fallback**). Before running Eval 10 for real, confirm the teammate obeys this shape — the fixture must assert the `add_issue_comment` tool call.
+**Open item for the real run.** The issue-comments fallback uses `add_issue_comment(owner=..., repo=..., issueNumber=42, body=...)` (`SKILL.md` § Step 2.5 **Review POST fails**; full narrative in `reference/github-pr-reviews.md` § **Review POST failure fallback**). Before running Eval 10 for real, confirm the teammate obeys this shape — the fixture must assert the `add_issue_comment` tool call.
 
 ---
 

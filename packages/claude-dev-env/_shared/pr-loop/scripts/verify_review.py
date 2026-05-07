@@ -25,22 +25,7 @@ from config.review_posting_constants import (
     REVIEWS_PATH_TEMPLATE,
     STATUS_OK,
 )
-from gh_util import run_gh
-
-
-def _positive_int(raw_value: str) -> int:
-    """Argparse type that accepts only positive integers.
-
-    Zero and negative values silently produce non-matching loop headers and
-    exit EXIT_NO_REVIEW, masquerading as 'no review found' rather than 'bad
-    input'. Reject early at the argparse layer instead.
-    """
-    parsed_int = int(raw_value)
-    if parsed_int < 1:
-        raise argparse.ArgumentTypeError(
-            f"value must be a positive integer, got {parsed_int}"
-        )
-    return parsed_int
+from gh_util import _positive_int, run_gh
 
 
 def _build_reviews_api_path(owner: str, repo: str, pull_number: int) -> str:

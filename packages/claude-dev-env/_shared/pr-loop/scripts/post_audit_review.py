@@ -25,21 +25,7 @@ from config.review_posting_constants import (
     REVIEW_API_TIMEOUT_SECONDS,
     REVIEW_POST_ENDPOINT_TEMPLATE,
 )
-from gh_util import run_gh
-
-
-def _positive_int(raw_value: str) -> int:
-    """Argparse type that accepts only positive integers.
-
-    Zero and negative pull-request numbers silently produce malformed gh
-    API paths. Reject early at the argparse layer.
-    """
-    parsed_int = int(raw_value)
-    if parsed_int < 1:
-        raise argparse.ArgumentTypeError(
-            f"value must be a positive integer, got {parsed_int}"
-        )
-    return parsed_int
+from gh_util import _positive_int, run_gh
 
 
 def post_review(

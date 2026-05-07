@@ -132,8 +132,12 @@ def _apply_edit_to_content(existing_content: str, old_str: str, new_str: str) ->
 def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_input: dict) -> bool:
     """Check if post-edit content remains constants-only after Edit or MultiEdit.
 
-    Called only for Edit/MultiEdit — the Write path is handled directly in main().
+    Both the existing content and the post-edit result must be constants-only
+    to prevent edits on files with behavior from bypassing the TDD gate.
     """
+    if not _is_constants_only_python_content(existing_content):
+        return False
+
     if tool_name == "Edit":
         old_str = tool_input.get("old_string", "")
         new_str = tool_input.get("new_string", "") or ""

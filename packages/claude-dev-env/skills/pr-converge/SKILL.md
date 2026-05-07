@@ -42,9 +42,10 @@ post a fresh PR in a fresh branch based on origin main to the user.
   latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction;
   wait for review or HEAD change before re-triggering.
 - **Bot logins differ between review-level and inline-comment endpoints** —
-  Copilot reviews come from `copilot-pull-request-reviewer[bot]`, but its
-  inline comments are authored by `Copilot`. Always use case-insensitive
-  substring matching on `user.login`, never strict equality.
+  Copilot reviews (`get_reviews`) use `.user.login`, but inline comments
+  (`get_review_comments`) use `.author.login`. Always use case-insensitive
+  substring matching on the correct field matching the endpoint, never
+  strict equality.
 
 ## First tick of a session
 

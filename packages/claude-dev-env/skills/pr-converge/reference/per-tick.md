@@ -74,7 +74,7 @@ review on `current_head`:
 
    ```
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-   → filter where `.user.login` matches cursor/bugbot (case-insensitive substring)
+   → filter where `.author.login` matches cursor/bugbot (case-insensitive substring)
      AND `.commit_id == current_head`
      AND thread not resolved (check `.body` for BUGBOT markers, or `.pull_request_review_id` matches the newest bugbot review)
    ```

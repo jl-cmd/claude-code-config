@@ -16,7 +16,7 @@ from pathlib import Path
 
 _hooks_root_path_string = str(Path(__file__).resolve().parent.parent)
 if _hooks_root_path_string not in sys.path:
-    sys.path.insert(0, _hooks_root_path_string)
+    sys.path.insert( 0, _hooks_root_path_string)
 
 from config.messages import USER_FACING_TDD_NOTICE
 
@@ -60,7 +60,7 @@ def _is_module_docstring_expression(module_level_node: ast.stmt) -> bool:
 
 
 def _safe_constant_functions() -> frozenset[str]:
-    """Fully-qualified callable names treated as safe value constructors."""
+    """Unqualified function names treated as safe value constructors."""
     return frozenset({"Path", "frozenset"})
 
 
@@ -122,6 +122,41 @@ def _is_constants_only_python_content(content: str) -> bool:
             continue
         return False
     return True
+
+
+def _apply_edit_to_content(existing_content: str, old_str: str, new_str: str) -> str:
+    """Replace the first occurrence of old_str with new_str in the content."""
+    return existing_content.replace(old_str, new_str, 1)
+
+
+def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_input: dict) -> bool:
+    """Check if the post-edit content after applying one or more edits remains constants-only."""
+    if tool_name == "Write":
+        written_content = tool_input.get("content", "") or ""
+        return _is_constants_only_python_content(written_content)
+
+    if tool_name == "Edit":
+        old_str = tool_input.get("old_string", "")
+        new_str = tool_input.get("new_string", "") or ""
+        if not old_str:
+            return False
+        post_edit_content = _apply_edit_to_content(existing_content, old_str, new_str)
+        return _is_constants_only_python_content(post_edit_content)
+
+    if tool_name == "MultiEdit":
+        all_edits = tool_input.get("edits", []) or []
+        post_edit_content = existing_content
+        for each_edit in all_edits:
+            if not isinstance(each_edit, dict):
+                return False
+            each_old = each_edit.get("old_string", "")
+            each_new = each_edit.get("new_string", "") or ""
+            if not each_old:
+                return False
+            post_edit_content = _apply_edit_to_content(post_edit_content, each_old, each_new)
+        return _is_constants_only_python_content(post_edit_content)
+
+    return False
 
 
 def _tests_directory_name() -> str:
@@ -350,17 +385,13 @@ def main() -> None:
         emit_allow()
         sys.exit(0)
 
-    # Exempt Edit on constants-only files when post-edit content remains constants-only
-    if tool_name == "Edit" and ext == ".py" and path.exists():
+    # Exempt Edit/MultiEdit on constants-only files when post-edit content remains constants-only
+    if tool_name in ("Edit", "MultiEdit") and ext == ".py" and path.exists():
         existing_content = _read_candidate_text(path)
         if existing_content is not None:
-            old_str = tool_input.get("old_string", "")
-            new_str = tool_input.get("new_string", "") or ""
-            if old_str:
-                post_edit_content = existing_content.replace(old_str, new_str, 1)
-                if _is_constants_only_python_content(post_edit_content):
-                    emit_allow()
-                    sys.exit(0)
+            if _is_post_edit_constants_only(existing_content, tool_name, tool_input):
+                emit_allow()
+                sys.exit(0)
 
     all_candidates = candidate_test_paths_for(path)
     if has_fresh_test(all_candidates, _freshness_seconds()):

@@ -166,26 +166,40 @@ For each actionable gap, write:
 
 ### Step 6: Temp-skill evaluation
 
-Before modifying production skill files, the improvement must be validated:
+Before modifying production skill files, the improvement must be validated against the baseline using GitHub MCP tools exclusively — no git or gh CLI operations.
 
-1. Identify an eval PR from the extracted data — a PR that had a full bugteam run in the date window with a known loop count, known finding regressions, and known final outcome. Record its starting SHA, PR number, and loop metrics as the **baseline**.
-2. Create a temp copy of the target skill: for changes to `bugteam/SKILL.md`, create `bugteam-SKILL.md.temp-<feature>`. For changes to `_shared/pr-loop/fix-protocol.md`, create `fix-protocol.md.temp-<feature>`. Keep the production skill untouched.
-3. Apply the improvement to the temp copy.
-4. Run the temp skill against the same PR from the same starting SHA. This is the test run — it produces a fresh cycle under the proposed improvement.
-5. Capture the same metrics from the test run:
+1. **Identify eval PR.** From the extracted data, pick a PR with a full bugteam run in the date window, known loop count, known finding regressions, and known final outcome. Record its number, base SHA, and loop metrics as the **baseline**.
 
-| Metric | Baseline | Test run | Verdict |
-|--------|----------|----------|---------|
-| Loop count | (from extraction) | (from test run) | Improvement? |
-| Finding regressions (increase between consecutive loops) | (from extraction) | (from test run) | Improvement? |
-| Scope violations | (from extraction) | (from test run) | Improvement? |
-| Verified-clean depth | (from extraction) | (from test run) | Improvement? |
+2. **Read baseline skill files.** Use `mcp__plugin_github_github__get_file_contents(owner, repo, path, ref="refs/heads/main")` to read the target skill file at the baseline state. The baseline SHA maps to the main branch tip when the data was captured.
+
+3. **Create temp copy.** Write the baseline content to a local temp file: `<file>.temp-<feature>`. Keep the production skill untouched.
+
+4. **Apply improvement.** Edit the temp copy with the proposed constraint text.
+
+5. **Evaluate constraint effectiveness against the PR.** Read the PR's diff and apply the proposed constraints as the evaluation rubric. Use GitHub MCP tools:
+   - `mcp__plugin_github_github__pull_request_read(method="get_diff", owner, repo, pullNumber)` to get the PR diff that was active during the baseline run
+   - `mcp__plugin_github_github__pull_request_read(method="get_files", owner, repo, pullNumber)` to list changed files
+   - `mcp__plugin_github_github__get_commit(sha=<baseline_base_sha>, owner, repo)` to confirm the commit state
+   
+   For each gap-detection test that failed in the baseline, determine whether the proposed constraint text would have prevented the failure:
+   - Check if the constraint text is specific enough to cover the observed failure mode
+   - Check if the constraint text would have been triggered by the PR diff's contents
+   - Check if the constraint text is enforceable at the point in the workflow where the failure occurred
+
+6. **Capture comparison metrics.** Score the proposed improvement against each metric:
+
+   | Metric | Baseline | Projected with improvement | Verdict |
+   |--------|----------|---------------------------|---------|
+   | Loop count | (from extraction) | Prevented / Not addressed | Improvement? |
+   | Finding regressions | (from extraction) | Prevented / Not addressed | Improvement? |
+   | Scope violations | (from extraction) | Prevented / Not addressed | Improvement? |
+   | Verified-clean depth | (from extraction) | Prevented / Not addressed | Improvement? |
 
 ### Step 7: Promote or discard
 
-- **Promote:** If the test run outperforms the baseline on at least 2 metrics and is not worse on any metric, apply the improvement to the production skill file. Commit as a single commit.
-- **Discard:** If metrics are unchanged or worse, remove the temp copy. Log the result to `self-improve-eval-data/<date>/discarded-improvements.json`.
-- **Mixed signal:** If one metric improved and one regressed, log to `self-improve-eval-data/<date>/ambiguous-improvements.json` and skip promotion. Do not commit.
+- **Promote:** The proposed improvement addresses at least 2 of the 4 metrics (scored as "Prevented" in Step 6) and the constraint text is at least as specific as any existing constraint it supplements. Apply the improvement to the production skill file. Commit as a single commit.
+- **Discard:** The improvement addresses 0-1 metrics. Remove the temp copy. Log the result to `self-improve-eval-data/<date>/discarded-improvements.json` with the constraint text and the metrics it would not have prevented.
+- **Mixed signal:** Not applicable with constraint-effectiveness evaluation. If the improvement addresses 2+ metrics, promote. If fewer, discard.
 
 ### Step 8: PR and report
 
@@ -284,23 +298,21 @@ Yesterday's session transcript is the baseline — no need to re-run it. The tra
 
 1. **Baseline extraction.** From the candidate session with the targeted PR, extract: loop count, per-loop finding counts, per-loop scope violations (from step 2), verified-clean depth (from outcome XMLs), and any deleted helpers (from FIX commit diffs). Write to `self-improve-eval-data/<date>/baseline-<pr-number>.json`.
 
-2. **Temp skill creation.** Apply the proposed improvement(s) to a temporary copy of the target skill file: `<file>.temp-<feature>`. The production skill is not modified.
+2. **Temp skill creation.** Write the target skill file's baseline content (fetched via `mcp__plugin_github_github__get_file_contents` at `refs/heads/main`) to a temp copy: `<file>.temp-<feature>`. Apply the proposed improvement to the temp copy. The production skill is not modified.
 
-3. **Temp skill execution.** Run the temp skill against the same PR from the same starting SHA. The starting SHA is recorded in the baseline. If the PR has advanced, find the exact commit from baseline and check out the worktree at that point.
+3. **Constraint-effectiveness evaluation.** Use `mcp__plugin_github_github__pull_request_read(method="get_diff", ...)` to read the PR's diff. Evaluate whether the proposed constraint text would have prevented each gap-detection test failure observed in the baseline. Record each metric as "Prevented" or "Not addressed". Write to `self-improve-eval-data/<date>/test-run-<pr-number>-<feature>.json`.
 
-4. **Capture test-run metrics.** Same metrics as baseline: loop count, per-loop finding counts, scope violations, verified-clean depth, helper deletions. Write to `self-improve-eval-data/<date>/test-run-<pr-number>-<feature>.json`.
-
-5. **Comparison table.** Compute deltas. Promote only when ≥2 metrics improve and none regress.
+4. **Comparison table.** Compute which metrics the improvement would have prevented. Promote when ≥2 metrics are "Prevented".
 
 ### Metric comparison table
 
 ```
-| Metric | Baseline | Test run | Verdict |
-|--------|----------|----------|---------|
-| Loop count | <N> | <N> | Improvement / Same / Worse |
-| Finding regressions | <count> | <count> | Improvement / Same / Worse |
-| Scope violations | <count> | <count> | Improvement / Same / Worse |
-| Verified-clean depth | <score> | <score> | Improvement / Same / Worse |
+| Metric | Baseline | Projected with improvement | Verdict |
+|--------|----------|---------------------------|---------|
+| Loop count | <count> | Prevented / Not addressed | Improvement / Same |
+| Finding regressions | <count> | Prevented / Not addressed | Improvement / Same |
+| Scope violations | <count> | Prevented / Not addressed | Improvement / Same |
+| Verified-clean depth | <score> | Prevented / Not addressed | Improvement / Same |
 ```
 
 ### Baseline JSON schema (`baseline-<pr-number>.json`)

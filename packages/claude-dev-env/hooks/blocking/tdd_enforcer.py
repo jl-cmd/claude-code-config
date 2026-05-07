@@ -130,11 +130,10 @@ def _apply_edit_to_content(existing_content: str, old_str: str, new_str: str) ->
 
 
 def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_input: dict) -> bool:
-    """Check if the post-edit content after applying one or more edits remains constants-only."""
-    if tool_name == "Write":
-        written_content = tool_input.get("content", "") or ""
-        return _is_constants_only_python_content(written_content)
+    """Check if post-edit content remains constants-only after Edit or MultiEdit.
 
+    Called only for Edit/MultiEdit — the Write path is handled directly in main().
+    """
     if tool_name == "Edit":
         old_str = tool_input.get("old_string", "")
         new_str = tool_input.get("new_string", "") or ""

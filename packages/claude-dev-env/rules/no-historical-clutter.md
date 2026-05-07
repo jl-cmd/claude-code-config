@@ -1,16 +1,20 @@
 ---
-paths: **/*.md
+paths: **/*
 ---
 
-# No Historical Clutter in Documentation
+# No Historical Clutter in Documentation or Comments
 
-**When this applies:** Any Write or Edit to `.md` files.
+**When this applies:** Any Write or Edit to files containing comments or documentation.
+
+**Hook enforcement:** `state-description-blocker` (PreToolUse on Write|Edit) blocks historical/comparative language automatically. See `hooks.json` for registration.
 
 ## Rule
 
 Never reference removed implementations, old defaults, prior behaviors, or how something "used to be" when updating documentation. The current state is all that matters.
 
 ## Examples of prohibited patterns
+
+### In documentation (.md files)
 
 | Pattern | Why it's clutter |
 |---------|-----------------|
@@ -20,6 +24,23 @@ Never reference removed implementations, old defaults, prior behaviors, or how s
 | "migrated from Z to W" | If Z is fully removed, the migration story is git history, not documentation |
 | "the old implementation did A" | If A is gone, the reader gains nothing from knowing it existed |
 | "originally" / "used to be" | Same — dead context |
+
+### In code comments
+
+| Pattern | Good replacement |
+|---------|-----------------|
+| `# Uses X instead of Y` | `# Uses X` |
+| `# Previously configured via Z` | `# Configured via Z` |
+| `# Now uses the new API client` | `# Uses the new API client` |
+| `# No longer supports legacy mode` | `# Supports modern mode only` |
+| `// Switched to async processing` | `// Processes asynchronously` |
+| `# Replaced by the cache layer` | `# Cache layer handles reads` |
+
+### Hook-detected patterns
+
+The `state-description-blocker` hook (PreToolUse on Write\|Edit) enforces these patterns automatically:
+
+`instead of`, `previously`, `now uses`, `now does`, `now handles`, `now supports`, `was previously`, `were previously`, `used to`, `no longer`, `has been updated`, `have been updated`, `has been changed`, `have been changed`, `replaced by`, `replaces`, `changed from`, `switched from`, `switched to`, `migrated from`, `migrated to`
 
 ## What IS allowed
 

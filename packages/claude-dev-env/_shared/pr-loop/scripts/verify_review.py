@@ -16,6 +16,7 @@ if str(Path(__file__).absolute().parent) not in sys.path:
 from config.review_posting_constants import (
     BUGTEAM_LOOP_HEADER_TEMPLATE,
     EXIT_DUPLICATE_REVIEW,
+    EXIT_FETCH_FAILED,
     EXIT_NO_REVIEW,
     EXIT_OK,
     EXIT_WRONG_COMMIT,
@@ -109,12 +110,12 @@ def verify_pr_review(
     gh_result = run_gh(all_command)
     if gh_result.returncode != 0:
         print("Failed to fetch reviews via gh command", file=sys.stderr)
-        return EXIT_NO_REVIEW
+        return EXIT_FETCH_FAILED
 
     all_reviews = _parse_paginated_slurp_response(gh_result.stdout)
     if all_reviews is None:
         print("Failed to parse paginated reviews response", file=sys.stderr)
-        return EXIT_NO_REVIEW
+        return EXIT_FETCH_FAILED
 
     all_expected_headers = _build_expected_headers(loop_number)
     all_matching_reviews = [

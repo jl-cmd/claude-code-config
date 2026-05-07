@@ -356,7 +356,7 @@ def _parse_arguments(all_arguments: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--line",
         action="append",
-        type=int,
+        type=_positive_int,
         required=False,
         default=[],
         help="Line number for the finding (repeat per finding).",

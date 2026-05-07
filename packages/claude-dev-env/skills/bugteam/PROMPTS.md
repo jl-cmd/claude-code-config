@@ -97,10 +97,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
      Capture review_url and comment ids/urls from stdout JSON.
      API reference: https://docs.github.com/en/rest/pulls/comments
 
-  7. If the script exits non-zero, check stderr for a review URL.
-     If present, the review summary was already posted — use that URL
-     and list only the failed comment findings in a follow-up issue comment.
-     If no review URL in stderr, fall back to a single issue comment:
+  7. If the script exits non-zero, fall back to a single issue comment:
        jq -Rs '{body: .}' < <temp_fallback.md> \
        | gh api repos/<owner>/<repo>/issues/<number>/comments -X POST --input -
      Include the review summary + all findings inline.

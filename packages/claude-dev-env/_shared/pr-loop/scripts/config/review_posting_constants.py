@@ -4,6 +4,7 @@ EXIT_OK: int = 0
 EXIT_NO_REVIEW: int = 1
 EXIT_WRONG_COMMIT: int = 2
 EXIT_DUPLICATE_REVIEW: int = 3
+EXIT_FETCH_FAILED: int = 4
 
 REVIEWS_PATH_TEMPLATE: str = "/repos/{owner}/{repo}/pulls/{pull_number}/reviews?per_page=100"
 

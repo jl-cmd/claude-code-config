@@ -2,7 +2,7 @@
 
 from re import IGNORECASE, Pattern, compile
 
-ALL_COMMENT_TRANSITION_PATTERNS: list[Pattern] = [
+ALL_COMMENT_TRANSITION_PATTERNS: list[Pattern[str]] = [
     compile(r"\binstead of\b", IGNORECASE),
     compile(r"\bpreviously\b", IGNORECASE),
     compile(r"\bnow uses\b", IGNORECASE),
@@ -39,8 +39,8 @@ ALL_COMMENT_TRANSITION_PATTERNS: list[Pattern] = [
     compile(r"\bas of\b", IGNORECASE),
 ]
 
-CODE_FENCE_PATTERN: Pattern = compile(r"```[\s\S]*?```")
-INLINE_CODE_PATTERN: Pattern = compile(r"``[^`]+``|`[^`]+`")
+CODE_FENCE_PATTERN: Pattern[str] = compile(r"```[\s\S]*?```")
+INLINE_CODE_PATTERN: Pattern[str] = compile(r"``[^`]+``|`[^`]+`")
 
 ALL_MARKDOWN_EXTENSIONS: frozenset[str] = frozenset(
     {".md", ".mdx", ".markdown", ".rmd"}

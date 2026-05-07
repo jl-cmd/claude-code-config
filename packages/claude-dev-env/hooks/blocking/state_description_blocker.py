@@ -236,6 +236,7 @@ def main() -> None:
 def _emit_hook_result(all_hook_data: dict, output_stream: io.TextIOBase) -> None:
     """Write the hook result JSON to the given output stream."""
     output_stream.write(json.dumps(all_hook_data) + "\n")
+    output_stream.flush()
 
 
 if __name__ == "__main__":

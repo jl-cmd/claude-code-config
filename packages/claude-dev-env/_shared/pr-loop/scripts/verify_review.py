@@ -107,12 +107,12 @@ def verify_pr_review(
         "--slurp",
     ]
 
-    gh_result = run_gh(all_command)
-    if gh_result.returncode != 0:
+    gh_response = run_gh(all_command)
+    if gh_response.returncode != 0:
         print("Failed to fetch reviews via gh command", file=sys.stderr)
         return EXIT_FETCH_FAILED
 
-    all_reviews = _parse_paginated_slurp_response(gh_result.stdout)
+    all_reviews = _parse_paginated_slurp_response(gh_response.stdout)
     if all_reviews is None:
         print("Failed to parse paginated reviews response", file=sys.stderr)
         return EXIT_FETCH_FAILED

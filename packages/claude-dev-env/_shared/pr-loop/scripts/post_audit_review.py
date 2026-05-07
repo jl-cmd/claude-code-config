@@ -76,25 +76,25 @@ def post_review(
         "comments": all_comments,
     }
     payload_text = json.dumps(request_payload)
-    post_result = run_gh(
+    post_response = run_gh(
         ["gh", "api", review_endpoint_path, "-X", "POST", "--input", "-"],
         timeout_seconds=REVIEW_API_TIMEOUT_SECONDS,
         should_retry_nonzero=False,
         should_retry_timeout=False,
         stdin_text=payload_text,
     )
-    if post_result.is_timed_out:
+    if post_response.is_timed_out:
         print(
             "Review POST timed out -- review may already exist. "
             "Check PR for conflicts before fallback.",
             file=sys.stderr,
         )
         return None
-    if post_result.returncode != 0:
-        error_text = (post_result.stderr or "").strip() or post_result.stdout.strip()
+    if post_response.returncode != 0:
+        error_text = (post_response.stderr or "").strip() or post_response.stdout.strip()
         print(f"Review POST failed: {error_text}", file=sys.stderr)
         return None
-    parsed_review = _parse_review_response(post_result.stdout)
+    parsed_review = _parse_review_response(post_response.stdout)
     if parsed_review is None:
         return None
     review_identifier, review_url = parsed_review
@@ -155,7 +155,7 @@ def _fetch_inline_review_comments(
     for each_delay in all_attempt_delays:
         if each_delay > 0:
             time.sleep(each_delay)
-        fetch_result = run_gh(
+        fetch_response = run_gh(
             [
                 "gh",
                 "api",
@@ -167,16 +167,16 @@ def _fetch_inline_review_comments(
             should_retry_nonzero=True,
             should_retry_timeout=True,
         )
-        if fetch_result.returncode != 0:
+        if fetch_response.returncode != 0:
             error_text = (
-                (fetch_result.stderr or "").strip() or fetch_result.stdout.strip()
+                (fetch_response.stderr or "").strip() or fetch_response.stdout.strip()
             )
             print(
                 f"Inline review comments GET failed: {error_text}",
                 file=sys.stderr,
             )
             return [], False
-        maybe_parsed_entries = _parse_inline_comments_response(fetch_result.stdout)
+        maybe_parsed_entries = _parse_inline_comments_response(fetch_response.stdout)
         if maybe_parsed_entries is None:
             return [], False
         last_parsed_entries = maybe_parsed_entries

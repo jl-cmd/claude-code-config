@@ -14,7 +14,7 @@ This is the **first** action of every `/bugteam` invocation, before any subagent
 
 Same resolution path as `/findbugs`:
 
-1. `gh pr view --json number,baseRefName,headRefName,url` from the working directory.
+1. `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` — extracts `number`, `baseRefName`, `headRefName`, `url` from response.
 2. Fall back to `git merge-base HEAD origin/<default>` then `git diff <merge-base>...HEAD`.
 3. Neither → refuse per refusal cases in `SKILL.md`.
 

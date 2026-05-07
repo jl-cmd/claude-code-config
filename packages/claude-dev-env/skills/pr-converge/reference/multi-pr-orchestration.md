@@ -25,7 +25,7 @@ Create once at session start. Each teammate writes result before going idle.
 
 **Directory lifecycle:** Keep `<TMPDIR>/pr-converge-<session_id>/` until every
 `prs[...]` is `converged` or `blocked`, or user stops. Then delete folder.
-`mark_pr_ready.py` / `gh pr ready` on GitHub is canonical record. See
+`update_pull_request(draft=false)` on GitHub is canonical record. See
 [Memory](#memory) for optional append-only log.
 
 **Barebones schema:**
@@ -116,7 +116,7 @@ Bugfind subagent completes (findings or clean):
 - **PRs with zero findings:** spawn one `general-purpose` subagent per PR via
   `Agent(subagent_type="general-purpose", run_in_background=true)`. Subagent:
   1. `bugbot_clean_at == current_head` (back-to-back clean): run
-     `mark_pr_ready.py`, append convergence row to
+     `update_pull_request(pullNumber=PR_NUMBER, owner=OWNER, repo=REPO, draft=false)`, append convergence row to
      `<TMPDIR>/pr-converge-<session_id>/converged.log` per §Memory, then
      write `state.json` (per §Concurrency) with `status: "converged"`,
      `last_action: "converged"` (or `marked_ready`), `phase: "BUGBOT"`,
@@ -186,7 +186,7 @@ When bugfix (clean-coder) subagent completes after push:
 Run directory `<TMPDIR>/pr-converge-<session_id>/` holds `state.json` and
 optional `converged.log`. Keep from first create until every PR under `prs`
 is `converged` or `blocked`, or **Stop conditions** ends loop. Safe to
-delete folder after — `mark_pr_ready.py` / `gh pr ready` on GitHub is
+delete folder after — `update_pull_request(draft=false)` on GitHub is
 canonical record. Folder skill, not a plugin package; do **not** rely
 on `${CLAUDE_PLUGIN_DATA}`. OS/disk cleanup of `<TMPDIR>` (reboot, policy)
 can remove files mid-run — environmental risk.
@@ -196,7 +196,7 @@ can remove files mid-run — environmental risk.
 - **Path:** sibling of `state.json`.
 - **Format:** one tab-separated row per converged PR: ISO8601 UTC,
   owner/repo#number, bugbot SHA, bugteam SHA.
-- **Append site:** agent running `mark_pr_ready.py`. Append **before**
+- **Append site:** agent running `update_pull_request(pullNumber=PR_NUMBER, owner=OWNER, repo=REPO, draft=false)`. Append **before**
   locked `state.json` publish so log row survives failed merge.
 - **Never read inside loop.** User / follow-up tooling only.
 

@@ -80,10 +80,11 @@ Once gates (a) and (b) both pass (Copilot clean at `current_head` *or* no
 Copilot review yet, AND `mergeStateStatus == "CLEAN"`), request Copilot
 review:
 
-```bash
-python "${CLAUDE_SKILL_DIR}/scripts/request_copilot_review.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER>
 ```
+add_issue_comment(owner=OWNER, repo=REPO, issue_number=NUMBER, body="@copilot review")
+```
+
+When the `request_copilot_review` MCP tool is available, use it directly: `request_copilot_review(owner=OWNER, repo=REPO, pullNumber=NUMBER)`.
 
 After request, schedule next wakeup and return — next tick checks response.
 
@@ -91,7 +92,7 @@ Next tick with `phase == BUGTEAM` and prior state preserved → re-run gate
 (a) first. Decide:
 
 - **Copilot review `clean` (state `APPROVED`):** Set `copilot_clean_at =
-  current_head`. Mark PR ready (`mark_pr_ready.py`), report convergence
+  current_head`. Mark PR ready (`update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`), report convergence
   per §(d), terminate per [stop-conditions.md](stop-conditions.md) / Convergence.
 - **Copilot review `dirty`:** Treat identically to gate (a) dirty path —
   spawn Agent (subagent_type: clean-coder) to fix in same PR, restart convergence from BUGBOT. Follow [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
@@ -109,13 +110,11 @@ Next tick with `phase == BUGTEAM` and prior state preserved → re-run gate
 Only when all four gates pass — bugbot CLEAN ∧ bugteam CLEAN ∧
 `mergeStateStatus == "CLEAN"` ∧ Copilot CLEAN at HEAD — run:
 
-```bash
-python "${CLAUDE_SKILL_DIR}/scripts/mark_pr_ready.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER>
-```
+Use the `update_pull_request` MCP tool:
 
-When scripts unavailable, `gh pr ready <NUMBER> --repo <OWNER>/<REPO>` is
-equivalent. With `state.json`, append convergence row to
+    update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)
+
+With `state.json`, append convergence row to
 `<TMPDIR>/pr-converge-<session_id>/converged.log` per `multi-pr-orchestration.md` §Memory; else skip.
 Report: `PR #<NUMBER> converged: bugbot CLEAN at <SHA>, bugteam CLEAN at
 <SHA>, mergeStateStatus CLEAN, copilot CLEAN at <SHA>; marked ready for

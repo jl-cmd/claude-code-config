@@ -24,6 +24,7 @@ def _insert_hooks_tree_for_imports() -> None:
 _insert_hooks_tree_for_imports()
 
 from config.state_description_blocker_constants import (
+    ALL_BLOCK_COMMENT_EXTENSIONS,
     ALL_COMMENT_BEARING_EXTENSIONS,
     ALL_COMMENT_TRANSITION_PATTERNS,
     ALL_HASH_ONLY_EXTENSIONS,
@@ -56,6 +57,7 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
     lines = text.splitlines()
 
     is_in_block_comment = False
+    supports_block_comments = extension in ALL_BLOCK_COMMENT_EXTENSIONS
     inline_markers = _get_inline_markers(extension)
     for each_line in lines:
         stripped = each_line.strip()
@@ -72,16 +74,17 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
                 comment_lines.append(stripped[inline_index:])
                 continue
 
-        if "/*" in stripped:
-            is_in_block_comment = True
-        if is_in_block_comment:
-            slash_star_index = stripped.find("/*")
-            if slash_star_index >= 0:
-                comment_lines.append(stripped[slash_star_index:])
-            else:
-                comment_lines.append(stripped)
-            if "*/" in stripped:
-                is_in_block_comment = False
+        if supports_block_comments:
+            if "/*" in stripped:
+                is_in_block_comment = True
+            if is_in_block_comment:
+                slash_star_index = stripped.find("/*")
+                if slash_star_index >= 0:
+                    comment_lines.append(stripped[slash_star_index:])
+                else:
+                    comment_lines.append(stripped)
+                if "*/" in stripped:
+                    is_in_block_comment = False
 
     return comment_lines
 

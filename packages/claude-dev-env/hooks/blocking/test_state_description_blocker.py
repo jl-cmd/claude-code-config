@@ -415,6 +415,22 @@ def test_ignores_instead_of_in_code_string_with_inline_comment():
     assert result.stdout == ""
 
 
+def test_ignores_glob_pattern_with_star_in_python():
+    """A Python line with /* (glob pattern) should NOT set is_in_block_comment.
+    Python doesn't support /* */ block comments. `glob("src/*")` must not cause
+    subsequent lines to be treated as block comment content."""
+    content = 'files = glob("src/*")\nprint("previously done")  # clean comment'
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/main.py",
+            "content": content,
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
 def test_ignores_comment_with_glob_pattern():
     """A single-line comment containing /* should NOT set is_in_block_comment for
     subsequent lines. Without this guard, `# Uses /* glob syntax` would set block-

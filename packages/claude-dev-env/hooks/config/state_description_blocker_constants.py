@@ -58,6 +58,30 @@ ALL_HASH_ONLY_EXTENSIONS: frozenset[str] = frozenset(
     }
 )
 
+ALL_BLOCK_COMMENT_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".java",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".rs",
+        ".go",
+        ".swift",
+        ".kt",
+        ".scala",
+        ".php",
+        ".css",
+        ".scss",
+        ".less",
+        ".sql",
+    }
+)
+
 ALL_COMMENT_BEARING_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".py",

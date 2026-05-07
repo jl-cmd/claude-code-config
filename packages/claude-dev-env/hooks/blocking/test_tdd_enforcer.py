@@ -25,17 +25,14 @@ FRESHNESS_SECONDS = _PRODUCTION_MODULE._freshness_seconds()
 STALE_MTIME_OFFSET_SECONDS = FRESHNESS_SECONDS + 60
 
 
-class _RunHookWithPayload:
-    def __call__(self, payload: dict) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [sys.executable, str(SCRIPT_PATH)],
-            input=json.dumps(payload),
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-
-_run_hook_with_payload = _RunHookWithPayload()
+def _run_hook_with_payload(payload: dict) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT_PATH)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
 
 def _make_write_payload(file_path: Path, content: str = "") -> dict:

@@ -62,29 +62,35 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
     for each_line in lines:
         stripped = each_line.strip()
 
-        if not is_in_block_comment and any(
+        if supports_block_comments:
+            if "/*" in stripped and not is_in_block_comment:
+                is_in_block_comment = True
+                slash_star_index = stripped.find("/*")
+                close_star_index = stripped.find("*/", slash_star_index + len("/*"))
+                if close_star_index >= 0:
+                    comment_lines.append(
+                        stripped[slash_star_index : close_star_index + 2]
+                    )
+                    is_in_block_comment = False
+                else:
+                    comment_lines.append(stripped[slash_star_index:])
+                continue
+            if is_in_block_comment:
+                comment_lines.append(stripped)
+                if "*/" in stripped:
+                    is_in_block_comment = False
+                continue
+
+        if any(
             stripped.startswith(each_marker) for each_marker in inline_markers
         ):
             comment_lines.append(stripped)
             continue
 
-        if not is_in_block_comment:
-            inline_index = _find_inline_comment_start(stripped, inline_markers)
-            if inline_index is not None and inline_index > 0:
-                comment_lines.append(stripped[inline_index:])
-                continue
-
-        if supports_block_comments:
-            if "/*" in stripped and not is_in_block_comment:
-                is_in_block_comment = True
-                slash_star_index = stripped.find("/*")
-                comment_lines.append(stripped[slash_star_index:])
-                if "*/" in stripped:
-                    is_in_block_comment = False
-            elif is_in_block_comment:
-                comment_lines.append(stripped)
-                if "*/" in stripped:
-                    is_in_block_comment = False
+        inline_index = _find_inline_comment_start(stripped, inline_markers)
+        if inline_index is not None and inline_index > 0:
+            comment_lines.append(stripped[inline_index:])
+            continue
 
     return comment_lines
 

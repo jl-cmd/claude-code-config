@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 def _insert_hooks_tree_for_imports() -> None:
-    hooks_tree = Path(__file__).resolve().parent.parent
+    hooks_tree = Path(__file__).absolute().parent.parent
     hooks_tree_string = str(hooks_tree)
     if hooks_tree_string not in sys.path:
         sys.path.insert(0, hooks_tree_string)
@@ -70,6 +70,12 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
         stripped = each_line.strip()
 
         if has_block_comments:
+            if any(
+                stripped.startswith(each_marker)
+                for each_marker in all_inline_markers
+            ):
+                all_comment_lines.append(stripped)
+                continue
             if "/*" in stripped and not is_in_block_comment:
                 is_in_block_comment = True
                 slash_star_index = stripped.find("/*")

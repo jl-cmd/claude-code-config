@@ -20,7 +20,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 <scope>
   <diff_path>Absolute path to the per-PR patch file: <run_temp_dir>/pr-<N>/loop-<L>.patch (same path as gh pr diff redirect in AUDIT)</diff_path>
   <scope_rule>Audit only lines added or modified in the diff. Pre-existing code on untouched lines is out of scope.</scope_rule>
-  <changed_files_rule>Build the list of changed file paths from the diff. Open each one with Read and audit cross-file consistency. Read every changed test file and cross-reference test assertions, expected values, and mock setup against the production code's config constants and function signatures. When a test file asserts a value that diverges from config, file a finding under category J.</changed_files_rule>
+  <changed_files_rule>Build the list of changed file paths from the diff. Open each one with Read and audit cross-file consistency. Read every changed test file and cross-reference test assertions, expected values, and mock setup against the production code’s config constants and function signatures. When a test file asserts a value that diverges from config, file a finding under category J.</changed_files_rule>
 </scope>
 
 <bug_categories>
@@ -28,8 +28,11 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   one finding OR a verified-clean entry with the evidence used to clear it.
   A category is verified-clean only when one complete execution path through
   the changed code has been traced from entry to exit. Surface-level scanning
-  is insufficient evidence. The evidence field must name the function and the
-  path traced:
+  is insufficient evidence. The evidence field must name (1) the specific
+  function examined, (2) the code path traced from entry to exit, and (3) the
+  specific check performed. Generic phrases such as "verified clean",
+  "no issues found", "pattern appears correct", "looks good", "seems fine",
+  and "no problems detected" do not satisfy the verified-clean requirement.
   A. API contract verification (signatures, return types, async/await correctness)
   B. Selector / query / engine compatibility
   C. Resource cleanup and lifecycle (file handles, connections, processes, locks)
@@ -57,15 +60,15 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 
   Validator (-a) and single-opus auditors: run all steps below. Posting is
   done via scripts under <script_dir>; raw jq pipelines are permitted only
-  in step 7's issue-comment fallback.
+  in step 7’s issue-comment fallback.
 
   1. Audit the diff against the 10 categories above. Buffer the findings
      in memory; all posting happens at step 6 once anchors are validated.
   2. Assign each finding a stable finding_id of exactly the form `loop<L>-<K>`
      where <K> is 1-based within this loop.
-  3. For each finding, capture a verbatim excerpt from the target file at the cited line. Populate the `<excerpt>` element in the outcome XML with it. Validate every finding's (file, line) against the captured diff. Split
+  3. For each finding, capture a verbatim excerpt from the target file at the cited line. Populate the `<excerpt>` element in the outcome XML with it. Validate every finding’s (file, line) against the captured diff. Split
      findings into two buckets: anchored (line is in the diff) and
-     unanchored (line is not in the diff — goes into the review body's
+     unanchored (line is not in the diff — goes into the review body’s
      "Findings without a diff anchor" section per Step 2.5).
   4. Build the review summary markdown. Write to a temp file:
 
@@ -118,7 +121,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 
 <output_format>
   For the (-a) validator: write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml inside
-  the PR's worktree directory (<worktree_path>). For sibling auditors (-b through -k): write to <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed in prompt). Sibling auditors do not post PR reviews; set review_url, finding_comment_id, and finding_comment_url to empty strings, and used_fallback to "false". Omit unanchored findings from sibling output — only the validator handles those. Return only that path on stdout. The schema:
+  the PR’s worktree directory (<worktree_path>). For sibling auditors (-b through -k): write to <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed in prompt). Sibling auditors do not post PR reviews; set review_url, finding_comment_id, and finding_comment_url to empty strings, and used_fallback to "false". Omit unanchored findings from sibling output — only the validator handles those. Return only that path on stdout. The schema:
 </output_format>
 ```
 
@@ -146,7 +149,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 </bugteam_audit>
 ```
 
-After the teammate writes the XML and returns, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` from the PR's worktree directory with the `Read` tool, parses it, and populates `loop_comment_index` from `<finding>` elements.
+After the teammate writes the XML and returns, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` from the PR’s worktree directory with the `Read` tool, parses it, and populates `loop_comment_index` from `<finding>` elements.
 
 ## FIX spawn-prompt XML (bugfix teammate)
 
@@ -182,19 +185,20 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   1. Read each referenced file before editing.
   2. Apply each fix you can address.
   3. Run `python -m py_compile` (or language-equivalent) on every modified file.
-  4. git add by explicit path, then git commit with a message summarizing the bugs fixed.
+  4. Run the project’s test suite and confirm all existing tests pass. Do not introduce new bugs or break existing functionality. If a test fails, diagnose the regression and fix it before committing.
+  5. git add by explicit path, then git commit with a message summarizing the bugs fixed.
      - If the commit fails because a git hook (pre-commit, commit-msg, etc.) blocked it,
-       capture the hook's stderr, write status=hook_blocked for every finding in this loop
+       capture the hook’s stderr, write status=hook_blocked for every finding in this loop
        (the commit was atomic; if it failed, no finding was applied), populate hook_output
        on each outcome, and return WITHOUT retrying. The lead will treat this loop as no-progress.
-  5. git push with a plain fast-forward push (the default, no flag overrides).
-  6. For each bug, post a fix reply to its finding_comment_id via the
+  6. git push with a plain fast-forward push (the default, no flag overrides).
+  7. For each bug, post a fix reply to its finding_comment_id via the
      Step 2.5 reply CLI shape:
      - "Fixed in <commit_sha>" if the bug was addressed by your commit
      - "Could not address this loop: <one-line reason>" if you skipped or failed it
      - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
      Use the Fix reply CLI shape from Step 2.5 (`jq -Rs | gh api .../comments/<id>/replies --input -`). Write every reply body to a temp file first.
-  7. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
+  8. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
 </execution>
 
 <outcome_xml_schema>
@@ -221,7 +225,8 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   - git add by explicit path — name each file being staged.
   - Preserve existing comments on lines you do not modify.
   - Type hints on every signature you touch.
-  - **Narrow scope.** Fix only the exact defect at the specified file:line. No restructuring, no inlining helpers, no renames, no "while I'm here" cleanup.
+  - **Narrow scope.** Fix only the exact defect at the specified file:line. No restructuring, no inlining helpers, no renames, no "while I’m here" cleanup.
   - **Preserve helpers.** Do not remove or inline existing helper functions unless the finding explicitly names the helper as the problem.
+  - **No regressions.** After fixing, run the project’s test suite and confirm all existing tests pass. Do not introduce new bugs or break existing functionality. If a test fails, diagnose the regression and fix it before committing.
 </constraints>
 ```

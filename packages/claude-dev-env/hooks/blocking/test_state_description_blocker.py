@@ -352,6 +352,24 @@ def test_ignores_double_slash_in_js_url():
     assert result.stdout == ""
 
 
+def test_block_comment_continuation_with_nested_glob():
+    """A continuation line inside a /* */ block comment that contains /* in its
+    content should append the full line, not truncate from the nested /* onward.
+    * List: no longer supported /* pattern — violation should still be detected."""
+    content = "/*\n * List: no longer supported /* pattern\n */"
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/cache.ts",
+            "content": content,
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_detects_inline_after_url_on_same_line():
     """A JS/TS line with a URL followed by a real inline comment containing a
     violation should still be detected. const url = "https://api.com"; // no longer used

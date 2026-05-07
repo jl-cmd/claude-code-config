@@ -55,6 +55,7 @@ ALL_HASH_ONLY_EXTENSIONS: frozenset[str] = frozenset(
         ".sql",
         ".yaml",
         ".yml",
+        ".tf",
     }
 )
 

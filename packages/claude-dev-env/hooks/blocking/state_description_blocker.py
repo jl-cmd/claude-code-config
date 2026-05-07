@@ -75,14 +75,12 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
                 continue
 
         if supports_block_comments:
-            if "/*" in stripped:
+            if "/*" in stripped and not is_in_block_comment:
                 is_in_block_comment = True
-            if is_in_block_comment:
                 slash_star_index = stripped.find("/*")
-                if slash_star_index >= 0:
-                    comment_lines.append(stripped[slash_star_index:])
-                else:
-                    comment_lines.append(stripped)
+                comment_lines.append(stripped[slash_star_index:])
+            elif is_in_block_comment:
+                comment_lines.append(stripped)
                 if "*/" in stripped:
                     is_in_block_comment = False
 

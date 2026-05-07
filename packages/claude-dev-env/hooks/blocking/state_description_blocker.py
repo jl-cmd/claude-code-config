@@ -85,6 +85,10 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
                         stripped[slash_star_index : close_star_index + 2]
                     )
                     is_in_block_comment = False
+                    after_close = stripped[close_star_index + 2:].lstrip()
+                    if not after_close:
+                        continue
+                    stripped = after_close
                 else:
                     all_comment_lines.append(stripped[slash_star_index:])
                     continue

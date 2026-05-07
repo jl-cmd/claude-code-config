@@ -73,7 +73,7 @@ JSONL session transcript files from prior Claude Code sessions. These are the pr
 
 2. Filter to session-level transcripts. Exclude paths containing `\subagents\` (per-tick subagent transcripts). Session-level files are `<uuid>.jsonl` directly under a project directory like `Y--Projects-temp-python-automation-eval\`. Include only files with `.claude\projects\` in the path to restrict to Claude Code session transcripts.
 
-3. For each candidate, check content markers via `(Get-Content -Path "<file>" -ReadCount 0) -match "pattern"` (use `-match` operator, not `Select-String` which may be blocked by auto mode). Markers: `bugteam`, `/bugteam exit:`, `last_action`, `starting_sha`, `Loop <N> audit:`, `/eval-bugteam`.
+3. For each candidate, check content markers via `(Get-Content -Path "<file>" -ReadCount 0) -match "pattern"` (use `-match` operator, not `Select-String` which may be blocked by auto mode — gate through the `PowerShell` tool). Markers: `bugteam`, `/bugteam exit:`, `last_action`, `starting_sha`, `/eval-bugteam`.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 
@@ -104,7 +104,7 @@ Search order — try each source until at least one candidate is found:
 
 2. **Filter to session-level transcripts.** Exclude paths containing `\subagents\`. Session-level files are `<uuid>.jsonl` directly under a project directory.
 
-3. **Grep for markers.** For each candidate, search file content with `(Get-Content -Path "<file>" -ReadCount 0) -match "pattern"` (use `-match` operator, not `Select-String` which may be blocked by auto mode). Markers: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
+3. **Grep for markers.** For each candidate, search file content with `(Get-Content -Path "<file>" -ReadCount 0) -match "pattern"` (use `-match` operator, not `Select-String` which may be blocked by auto mode — gate through the `PowerShell` tool). Markers: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 
@@ -123,18 +123,15 @@ If all sources return empty: refuse with "No bugteam/pr-converge sessions found 
 
 ### Step 2: Extract structured data per session
 
-For each candidate session, read the transcript content. Extract:
+JSONL session transcripts store each conversation turn as one JSON object per line. The `assistant` and `user` types embed message text in `message.content` (either a plain string or a list of `{"type": "text", "text": "..."}` items). Use the bundled extraction script to parse each line and extract bugteam metrics.
 
-- **PR number and repo**: from invocation context (e.g. "PR #384", repo URL, gh commands)
-- **Starting SHA**: from step 2 loop state or initial context
-- **Loop log**: per-loop finding counts, P0/P1/P2 breakdowns
-- **Per-loop FIX commits**: commit SHAs from fix agent output (format "Fixed in <sha>")
-- **bugs_to_fix file lists**: extracted from FIX agent prompts or outcome XMLs
-- **Outcome XMLs**: if inline in the transcript, extract `<finding>` and `<verified_clean>` entries
-- **Final outcome**: converged / cap reached / stuck / error
-- **Changed files**: from diff discussions or final commit range
+Run the script against each candidate session path via the `PowerShell` tool:
 
-Store per-session metrics in a structured form (in-memory; write nothing to disk yet unless `--preserve-extractions` flag is set).
+```
+PowerShell(python scripts\extract_bugteam_metrics.py <path_to_session.jsonl> [<more_sessions...>])
+```
+
+The script outputs per-session loop finding counts, bugbot re-trigger counts, the final outcome, and gap-test results. Store the output in-memory (write nothing to disk unless `--preserve-extractions` is set).
 
 ### Step 3: Run gap-detection tests
 

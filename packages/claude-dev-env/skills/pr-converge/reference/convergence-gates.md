@@ -80,10 +80,10 @@ Copilot review yet, AND `mergeable_state == "clean"`), request Copilot
 review:
 
 ```
-add_issue_comment(owner=OWNER, repo=REPO, issueNumber=NUMBER, body="@copilot review")
+request_copilot_review(owner=OWNER, repo=REPO, pullNumber=NUMBER)
 ```
 
-When the `request_copilot_review` MCP tool is available, use it directly: `request_copilot_review(owner=OWNER, repo=REPO, pullNumber=NUMBER)`.
+When the `request_copilot_review` MCP tool is unavailable, use `add_issue_comment` as fallback: `add_issue_comment(owner=OWNER, repo=REPO, issueNumber=NUMBER, body="@copilot review")`.
 
 After request, schedule next wakeup and return — next tick checks response.
 

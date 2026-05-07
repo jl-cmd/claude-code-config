@@ -306,6 +306,37 @@ def test_detects_inline_trailing_comment():
     assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def test_ignores_instead_of_in_code_string_with_inline_comment():
+    """A code line containing 'instead of' inside a string literal with a trailing
+    comment should NOT be blocked — only the comment portion after # is scanned.
+    This prevents false-positives from `msg = 'instead of' # comment` patterns."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/main.py",
+            "content": "msg = 'instead of'  # Use the default timeout",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_ignores_comment_with_glob_pattern():
+    """A single-line comment containing /* should NOT set is_in_block_comment for
+    subsequent lines. Without this guard, `# Uses /* glob syntax` would set block-
+    comment state and all subsequent code lines would be falsely treated as comments."""
+    content = "# Uses /* glob syntax\nnext_line = calc()  # clean comment"
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/main.py",
+            "content": content,
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
 def test_additional_context_contains_examples():
     result = _run_hook(
         "Write",

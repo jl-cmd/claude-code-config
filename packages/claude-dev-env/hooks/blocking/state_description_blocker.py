@@ -52,20 +52,32 @@ def _extract_comment_lines(text: str) -> list[str]:
     for each_line in lines:
         stripped = each_line.strip()
 
+        if stripped.startswith("#") or stripped.startswith("//"):
+            comment_lines.append(stripped)
+            continue
+
+        inline_index = _find_inline_comment_start(stripped)
+        if inline_index is not None and inline_index > 0:
+            comment_lines.append(stripped[inline_index:])
+            continue
+
         if "/*" in stripped:
             is_in_block_comment = True
         if is_in_block_comment:
             comment_lines.append(stripped)
             if "*/" in stripped:
                 is_in_block_comment = False
-            continue
-
-        if stripped.startswith("#") or stripped.startswith("//"):
-            comment_lines.append(stripped)
-        elif "#" in stripped or "//" in stripped:
-            comment_lines.append(stripped)
 
     return comment_lines
+
+
+def _find_inline_comment_start(stripped: str) -> int | None:
+    """Find the start index of an inline comment marker (# or //) in a code line."""
+    for each_marker in ("#", "//"):
+        position = stripped.find(each_marker)
+        if position > 0:
+            return position
+    return None
 
 
 def find_violations(text: str, file_path: str) -> list[str]:

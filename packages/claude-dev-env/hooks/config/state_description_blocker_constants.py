@@ -3,7 +3,7 @@
 from re import IGNORECASE, Pattern, compile
 
 ALL_COMMENT_TRANSITION_PATTERNS: list[Pattern] = [
-    compile(r"instead of", IGNORECASE),
+    compile(r"\binstead of\b", IGNORECASE),
     compile(r"\bpreviously\b", IGNORECASE),
     compile(r"\bnow uses\b", IGNORECASE),
     compile(r"\bnow does\b", IGNORECASE),

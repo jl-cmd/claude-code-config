@@ -17,13 +17,22 @@ import os
 import sys
 from pathlib import Path
 
-from scan_session_markers import scan_file
-from extract_bugteam_metrics import (
+
+def _ensure_scripts_on_path() -> None:
+    scripts_dir = os.path.dirname(os.path.abspath(__file__))
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+
+
+_ensure_scripts_on_path()
+
+from scan_session_markers import scan_file  # noqa: E402
+from extract_bugteam_metrics import (  # noqa: E402
     extract_session,
     run_all_gap_tests,
     GAP_EVIDENCE_THRESHOLD,
 )
-from config.constants import HEADER_WIDTH, JSON_INDENT_WIDTH
+from config.constants import HEADER_WIDTH, JSON_INDENT_WIDTH  # noqa: E402
 
 
 def main() -> None:

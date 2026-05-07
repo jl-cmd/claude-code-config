@@ -76,10 +76,10 @@ JSONL session transcript files from prior Claude Code sessions. These are the pr
 3. Run the bundled runner script against all candidate paths. It performs marker scanning, extraction, and gap-detection in one call:
 
    ```
-   PowerShell(& 'scripts\run_self_improve.py' <paths...>)
+   Bash(python <worktree-root>/.../scripts/run_self_improve.py <paths...>)
    ```
 
-   The script outputs a single JSON report to stdout with markers found, session metrics, and gap-test results. No temp files needed — capture the output from the tool result.
+   Outputs a single JSON report to stdout with markers found, session metrics, and gap-test results. No temp files needed — capture from the tool result.
 
 4. Collect results into `candidate_sessions[]` with path, mtime, and matched markers.
 
@@ -113,15 +113,10 @@ Search order — try each source until at least one candidate is found:
 3. **Run the pipeline.** Use the bundled runner to scan markers, extract metrics, and run gap-detection tests in one call:
 
    ```
-   PowerShell(& '..\..\..\..\..\..\..\Y:Projects\temp\python-automation-eval\.venv\Scripts\python.exe' scripts\run_self_improve.py <paths...>)
+   Bash(python <worktree-root>/packages/claude-dev-env/skills/self-improve-pr-converge/scripts/run_self_improve.py <paths...>)
    ```
 
-   Or from within the `scripts/` directory:
-   ```
-   PowerShell(& '..\..\..\..\..\..\..\Y:Projects\temp\python-automation-eval\.venv\Scripts\python.exe' run_self_improve.py <paths...>)
-   ```
-
-   The runner outputs a single JSON report to stdout. Read the tool result directly — no temp file needed.
+   The runner's `sys.path` is self-contained — it runs correctly from any working directory when given absolute file paths. Outputs a single JSON report to stdout with fields: `status`, `confirmed_gap_count`, `session_metrics[]`, `gap_tests[]`, `markers_found[]`. Read the tool result directly — no temp file needed.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 

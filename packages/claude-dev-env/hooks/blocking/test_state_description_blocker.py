@@ -336,6 +336,22 @@ def test_ignores_hash_in_javascript_inline():
     assert result.stdout == ""
 
 
+def test_ignores_double_slash_in_js_url():
+    """A JavaScript/TypeScript line with a URL containing // should NOT trigger
+    inline comment extraction on the URL. The :// protocol marker should be
+    recognized and skipped. Real pattern: `fetch("https://api.example.com/replaces")`
+    should not false-positive on `replaces` in the URL path."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/fetch.ts",
+            "content": 'fetch("https://api.example.com/replaces")',
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
 def test_ignores_code_before_block_comment():
     """A line with code before /* */ should only scan the comment portion, not the code.
     `cache.replaces(old); /* Use fresh cache */` should NOT trigger on `replaces`

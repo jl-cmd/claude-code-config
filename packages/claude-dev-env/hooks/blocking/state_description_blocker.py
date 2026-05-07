@@ -85,10 +85,13 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
 
 
 def _find_inline_comment_start(stripped: str, all_markers: tuple[str, ...]) -> int | None:
-    """Find the start index of an inline comment marker in a code line."""
+    """Find the start index of an inline comment marker in a code line.
+    Skips // when preceded by : to avoid treating URLs as inline comments."""
     for each_marker in all_markers:
         position = stripped.find(each_marker)
         if position > 0:
+            if each_marker == "//" and position >= 1 and stripped[position - 1] == ":":
+                continue
             return position
     return None
 

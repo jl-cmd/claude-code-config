@@ -25,13 +25,13 @@ _insert_hooks_tree_for_imports()
 from config.state_description_blocker_constants import (
     ALL_BLOCK_COMMENT_EXTENSIONS,
     ALL_BLOCK_COMMENT_ONLY_EXTENSIONS,
-    ALL_CODE_FENCE_PATTERN,
     ALL_COMMENT_BEARING_EXTENSIONS,
     ALL_COMMENT_TRANSITION_PATTERNS,
     ALL_HASH_AND_SLASH_EXTENSIONS,
     ALL_HASH_ONLY_EXTENSIONS,
-    ALL_INLINE_CODE_PATTERN,
     ALL_MARKDOWN_EXTENSIONS,
+    CODE_FENCE_PATTERN,
+    INLINE_CODE_PATTERN,
 )
 
 
@@ -137,8 +137,8 @@ def find_violations(text: str, file_path: str) -> list[str]:
         return []
 
     if is_markdown_file(file_path):
-        scan_text = ALL_CODE_FENCE_PATTERN.sub("", scan_text)
-        scan_text = ALL_INLINE_CODE_PATTERN.sub("", scan_text)
+        scan_text = CODE_FENCE_PATTERN.sub("", scan_text)
+        scan_text = INLINE_CODE_PATTERN.sub("", scan_text)
 
     if not scan_text.strip():
         return []

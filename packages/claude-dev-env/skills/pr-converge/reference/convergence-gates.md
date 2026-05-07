@@ -11,12 +11,13 @@ Fetch latest Copilot reviewer (`copilot-pull-request-reviewer[bot]`) review
 plus inline comments anchored to most recent Copilot review on
 `current_head`:
 
-```bash
-python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_reviews.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER>
+```
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews", perPage=100)
+  → filter `.user.login` for copilot (case-insensitive substring "copilot")
+  → sort by `.submitted_at` descending
 
-python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_inline_comments.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
+  → filter where `.user.login` matches Copilot AND `.commit_id == current_head`
 ```
 
 Decide (four branches; match first whose predicate holds):
@@ -24,7 +25,7 @@ Decide (four branches; match first whose predicate holds):
 - **`classification == "dirty"` with non-empty inline comments matching
   `pull_request_review_id`:** Fix protocol input (same shape as bugbot
   dirty). Spawn Agent (subagent_type: clean-coder) to implement → push → reply inline on each thread via
-  `reply_to_inline_comment.py` → Step 3 in same tick (see
+  `add_reply_to_pull_request_comment` MCP → Step 3 in same tick (see
   [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
   full contract).
   Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`, `phase =
@@ -34,9 +35,7 @@ Decide (four branches; match first whose predicate holds):
   `pull_request_review_id`:** Copilot posted findings only in review body
   (`CHANGES_REQUESTED` or `COMMENTED` with non-empty body, no inline
   threads). Parse body for actionable findings. Spawn Agent (subagent_type: clean-coder) to implement → push → post
-  top-level review reply citing new HEAD SHA → Step 3 in same tick (see
-  [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
-  full contract).
+  top-level review reply using `pull_request_review_write(method: "create", event: "COMMENT", body)` citing new HEAD SHA → Step 3 in same tick.
   Reset
   `bugbot_clean_at = null` AND
   `copilot_clean_at = null`, `phase = BUGBOT`, Step 3 on new HEAD,
@@ -51,16 +50,16 @@ Decide (four branches; match first whose predicate holds):
 
 Resolve PR's mergeability state:
 
-```bash
-python "${CLAUDE_SKILL_DIR}/scripts/check_pr_mergeability.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER>
+```
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get")
+  → `.mergeable_state`, `.mergeable`
 ```
 
-Persist `mergeStateStatus` into `merge_state_status`. Decide:
+Persist `mergeable_state` into `merge_state_status`. Decide:
 
-- **`mergeStateStatus == "CLEAN"` AND `mergeable == "MERGEABLE"`:**
+- **`mergeable_state == "clean"` AND `mergeable == true`:**
   Continue to gate (c).
-- **`mergeStateStatus == "DIRTY"` (or `mergeable == "CONFLICTING"`):** Do
+- **`mergeable_state == "dirty"` (or `mergeable == false`):** Do
   **not** mark ready. Invoke **`rebase`** skill
   ([`../../rebase/SKILL.md`](../../rebase/SKILL.md)) Phase 1–4 against PR's
   base ref. After rebase + force-with-lease push, new HEAD invalidates
@@ -68,16 +67,16 @@ Persist `mergeStateStatus` into `merge_state_status`. Decide:
   `copilot_clean_at = null`, `merge_state_status = null`, `phase = BUGBOT`,
   Step 3 on new HEAD, schedule next wakeup, return. Loop re-runs from
   scratch on new HEAD.
-- **`mergeStateStatus` is `BLOCKED`, `BEHIND`, or `UNKNOWN` for
+- **`mergeable_state` is `"blocked"`, `"behind"`, or `"unknown"` for
   non-conflict reasons** (required checks pending, branch behind base
   without conflicts GitHub cannot auto-resolve): **hard blocker** per
   [stop-conditions.md](stop-conditions.md) — do not invent a fix. Report specific
-  `mergeStateStatus`, omit loop pacing.
+  `mergeable_state`, omit loop pacing.
 
 ## (c) Post-convergence Copilot review request
 
 Once gates (a) and (b) both pass (Copilot clean at `current_head` *or* no
-Copilot review yet, AND `mergeStateStatus == "CLEAN"`), request Copilot
+Copilot review yet, AND `mergeable_state == "clean"`), request Copilot
 review:
 
 ```
@@ -108,7 +107,7 @@ Next tick with `phase == BUGTEAM` and prior state preserved → re-run gate
 ## (d) Mark ready and report
 
 Only when all four gates pass — bugbot CLEAN ∧ bugteam CLEAN ∧
-`mergeStateStatus == "CLEAN"` ∧ Copilot CLEAN at HEAD — run:
+`mergeable_state == "clean"` ∧ Copilot CLEAN at HEAD — run:
 
 Use the `update_pull_request` MCP tool:
 
@@ -117,5 +116,5 @@ Use the `update_pull_request` MCP tool:
 With `state.json`, append convergence row to
 `<TMPDIR>/pr-converge-<session_id>/converged.log` per `multi-pr-orchestration.md` §Memory; else skip.
 Report: `PR #<NUMBER> converged: bugbot CLEAN at <SHA>, bugteam CLEAN at
-<SHA>, mergeStateStatus CLEAN, copilot CLEAN at <SHA>; marked ready for
+<SHA>, mergeable_state CLEAN, copilot CLEAN at <SHA>; marked ready for
 review`. **Omit loop pacing** per **Convergence** of active pacing workflow.

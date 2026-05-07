@@ -62,7 +62,7 @@ Read [`reference/state-schema.md`](reference/state-schema.md),
 | Multi-PR session — `state.json` exists at `<TMPDIR>/pr-converge-<session_id>/` | [`reference/multi-pr-orchestration.md`](reference/multi-pr-orchestration.md) |
 | Scheduling the next wakeup | [`workflows/schedule-wakeup-loop.md`](workflows/schedule-wakeup-loop.md) |
 | Hard blocker, convergence reached, or user stops loop | [`reference/stop-conditions.md`](reference/stop-conditions.md) |
-| Need to invoke a Python script (bugbot trigger, copilot fetch, mergeability check, …) | [`scripts/README.md`](scripts/README.md) |
+| All GitHub interactions use `plugin:github:github` MCP tools | [`reference/per-tick.md`](reference/per-tick.md) |
 | Tick is ambiguous against the spokes above | [`reference/examples.md`](reference/examples.md) |
 
 ## Folder map
@@ -70,4 +70,3 @@ Read [`reference/state-schema.md`](reference/state-schema.md),
 - `SKILL.md` — this hub.
 - `reference/` — workflow detail per situation.
 - `workflows/` — pacing implementations.
-- `scripts/` — Python wrappers for `gh` API calls plus their tests.

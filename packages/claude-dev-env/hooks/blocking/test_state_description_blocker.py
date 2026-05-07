@@ -306,6 +306,37 @@ def test_detects_inline_trailing_comment():
     assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def test_ignores_hash_in_javascript_inline():
+    """A JavaScript line with # in a string literal should NOT trigger inline comment
+    extraction — # is not a comment marker in JS. Only // should be checked.
+    Real pattern: `const sel = "#originally-dark"` would falsely match `originally`
+    if # were treated as a comment marker."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/main.js",
+            "content": 'const selector = "#originally-dark"  // Use dark as default',
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_ignores_code_before_block_comment():
+    """A line with code before /* */ should only scan the comment portion, not the code.
+    `cache.replaces(old); /* Use fresh cache */` should NOT trigger on `replaces`
+    in the code portion."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/cache.ts",
+            "content": "cache.replaces(old); /* Use fresh cache */",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
 def test_ignores_url_with_double_slash_in_python():
     """A Python line with a URL containing // should NOT trigger inline comment
     extraction — // is floor division in Python, not a comment marker.

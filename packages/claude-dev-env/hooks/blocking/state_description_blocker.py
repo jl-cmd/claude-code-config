@@ -47,7 +47,7 @@ def is_comment_bearing_file(file_path: str) -> bool:
 def _get_inline_markers(extension: str) -> tuple[str, ...]:
     if extension in ALL_HASH_ONLY_EXTENSIONS:
         return ("#",)
-    return ("#", "//")
+    return ("//",)
 
 
 def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
@@ -72,7 +72,11 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
         if "/*" in stripped:
             is_in_block_comment = True
         if is_in_block_comment:
-            comment_lines.append(stripped)
+            slash_star_index = stripped.find("/*")
+            if slash_star_index >= 0:
+                comment_lines.append(stripped[slash_star_index:])
+            else:
+                comment_lines.append(stripped)
             if "*/" in stripped:
                 is_in_block_comment = False
 

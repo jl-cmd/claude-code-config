@@ -58,6 +58,9 @@ def main(all_arguments: list[str]) -> int:
 
     flattened = []
     for each_run in bugbot_runs:
+        check_output = each_run.get("output")
+        if not isinstance(check_output, dict):
+            check_output = {}
         flattened.append(
             {
                 "id": each_run.get("id"),
@@ -68,10 +71,8 @@ def main(all_arguments: list[str]) -> int:
                 "completed_at": each_run.get("completed_at"),
                 "html_url": each_run.get("html_url"),
                 "details_url": each_run.get("details_url"),
-                "annotations_count": each_run.get("output", {}).get(
-                    "annotations_count", 0
-                ),
-                "summary": each_run.get("output", {}).get("summary", ""),
+                "annotations_count": check_output.get("annotations_count", 0),
+                "summary": check_output.get("summary", ""),
             }
         )
 

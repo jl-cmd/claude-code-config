@@ -139,5 +139,3 @@ CHECK_RUNS_JQ_FILTER: str = ".check_runs"
 CHECK_RUN_ANNOTATIONS_PATH_TEMPLATE: str = (
     "/repos/{owner}/{repo}/check-runs/{check_run_id}/annotations"
 )
-PR_HEAD_SHA_JQ_FILTER: str = ".head.sha"
-PR_ENDPOINT_TEMPLATE: str = "/repos/{owner}/{repo}/pulls/{pull_number}"

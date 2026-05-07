@@ -55,14 +55,21 @@ Paths are repo-root-relative. All reside in `claude-code-config`:
 
 ### Session transcripts (data for gap detection)
 
-- All project directories under `~/.claude/projects/*/` — scan each for `*.jsonl` files
-- Filter by modification date (last 24h for daily runs)
-- Grep for markers before reading full content: `bugteam`, `pr-converge`, `loop <N> audit`, `/eval-bugteam`, `/eval-pr-converge`
+JSONL session transcript files from prior Claude Code sessions. These are the primary data source for bugteam/pr-converge run results.
+
+**Primary search path:** `~/.claude/projects/*/*.jsonl`
+
+- Enumerate directories under `~/.claude/projects/` using `-Force` (directories and files can be hidden or have restricted visibility — plain `Get-ChildItem` may return empty).
+- For each project directory, list all `*.jsonl` files modified within the date window.
+- Grep for markers before reading full content: `bugteam`, `pr-converge`, `loop <N> audit`, `/eval-bugteam`, `/eval-pr-converge`.
+
+**Fallback if primary search returns empty:** Recursively scan `~/.claude/projects/` with `-Force -ErrorAction SilentlyContinue`, limiting depth to 3 levels. Project directories may have restricted visibility that suppresses plain `Get-ChildItem` output — `-Force` enumerates them regardless.
 
 ### Supporting data
 
-- Git history on both repos (claude-code-config, python-automation-eval) — commit SHAs, file lists, diffs, PR numbers
-- Obsidian vault `sessions/` — structured frontmatter (project, date, status) for narrowing search windows
+- **Obsidian vault `sessions/`** — structured session reports with frontmatter fields `project`, `date`, `status`. Use for narrowing the search window (which project, which date range) before diving into raw JSONL transcripts. An available Obsidian MCP backend is preferred over raw filesystem access.
+- **Git history on both repos** (claude-code-config, python-automation-eval) — commit SHAs, file lists, diffs, PR numbers
+- **Plan files at `~/.claude/plans/*.md`** — may contain aggregated run summaries from prior eval sessions
 
 ## The Process
 
@@ -72,12 +79,29 @@ Set `window_start = now - 24h`. All session transcript filtering uses this bound
 
 ### Step 1: Find candidate sessions
 
-1. List all directories under `~/.claude/projects/`.
-2. For each directory, list `*.jsonl` files modified within the date window (use filesystem mtime).
-3. For each candidate file, grep for markers: `bugteam`, `pr-converge`, `loop audit`, `/eval-bugteam`, `/eval-pr-converge`.
-4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
+Search order — try each source until at least one candidate is found:
 
-If `candidate_sessions[]` is empty: refuse with "No bugteam/pr-converge sessions found in the last 24 hours."
+**Source A — Obsidian vault sessions (preferred for structured data):**
+
+1. Search the Obsidian vault `sessions/` for notes with frontmatter `project` matching known eval/automation project names and `date` within the date window.
+2. If found, read the session notes directly — they already contain structured loop logs, outcomes, and findings.
+3. Use `mcp__obsidian__search_notes` with `searchFrontmatter: true` and query terms like `bugteam`, `pr-converge`, `eval-bugteam`.
+
+**Source B — JSONL session transcripts (raw data):**
+
+1. List project directories under `~/.claude/projects/` using `-Force` (directories may have hidden attributes that suppress plain listings).
+2. For each directory, list `*.jsonl` files modified within the date window.
+3. If no files found via the glob, try direct known-path probes for each project name you know about (see Data sources section for patterns).
+4. For each candidate file, grep for markers: `bugteam`, `pr-converge`, `loop audit`, `/eval-bugteam`, `/eval-pr-converge`.
+5. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
+
+**Source C — Plan files:**
+
+1. Scan `~/.claude/plans/*.md` modified within the date window.
+2. Grep for markers: `bugteam`, `pr-converge`, `eval-bugteam`, `eval-pr-converge`, `loop_count`.
+3. Plan files may contain aggregated run summaries even when raw transcripts are unavailable.
+
+If all sources return empty: refuse with "No bugteam/pr-converge sessions found in the last 24 hours."
 
 ### Step 2: Extract structured data per session
 
@@ -283,6 +307,7 @@ Yesterday's session transcript is the baseline — no need to re-run it. The tra
 
 - **Boundary.** Modifies only `bugteam/`, `pr-converge/`, `findbugs/`, `fixbugs/` skill files and `_shared/pr-loop/`. Does not modify its own skill file or trigger configuration.
 - **Transcript reading discipline.** Do not read entire 100K+ line JSONL files before filtering. Check mtime first, grep for keywords, then read only the portions containing relevant markers.
+- **Filesystem enumeration quirks.** `~/.claude/projects/` directories and their contents may have restricted visibility. Always use `-Force` for `Get-ChildItem` and `-Hidden` for equivalent Unix commands. If `Get-ChildItem` returns empty after `-Force`, use `Test-Path` on known subdirectory names as a direct probe.
 - **Evidence threshold is non-negotiable.** A single occurrence is not actionable, no matter how egregious. Two distinct sessions with the same failure before acting.
 - **Scheduling.** This skill defines the workflow. The trigger is configured externally via Claude Desktop scheduled tasks — the skill does not set up its own trigger.
 - **Temp files.** Clean up temp skill files (`*.temp-*`) and eval data files after promotion or discard, except for the structured log files in `self-improve-eval-data/<date>/` which are preserved for audit trail.

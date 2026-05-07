@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 
 sys.modules.pop("config", None)
-if str(Path(__file__).absolute().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).absolute().parent))
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config.bugbot_check_constants import (
     BUGBOT_CHECK_NAME,

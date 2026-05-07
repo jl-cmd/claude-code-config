@@ -21,8 +21,6 @@ from config.pr_converge_constants import (
     BUGBOT_CHECK_NAME,
     CHECK_RUNS_JQ_FILTER,
     CHECK_RUNS_PATH_TEMPLATE,
-    PR_ENDPOINT_TEMPLATE,
-    PR_HEAD_SHA_JQ_FILTER,
     PR_NUMBER_ARG_FLAG,
     PR_NUMBER_ARG_HELP,
     PR_OWNER_ARG_FLAG,
@@ -31,23 +29,7 @@ from config.pr_converge_constants import (
     PR_REPO_ARG_HELP,
 )
 
-
-def _resolve_head_sha(owner: str, repo: str, pull_number: int) -> str | None:
-    pr_endpoint = PR_ENDPOINT_TEMPLATE.format(
-        owner=owner, repo=repo, pull_number=pull_number
-    )
-    completed = subprocess.run(
-        ["gh", "api", pr_endpoint, "--jq", PR_HEAD_SHA_JQ_FILTER],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    if completed.returncode != 0:
-        error_text = completed.stderr.strip() or completed.stdout.strip()
-        print(f"Failed to resolve PR head SHA: {error_text}", file=sys.stderr)
-        return None
-    return completed.stdout.strip()
+from resolve_pr_head import resolve_pr_head
 
 
 def _fetch_bugbot_check_runs(
@@ -88,7 +70,7 @@ def main() -> int:
     parser.add_argument(PR_REPO_ARG_FLAG, required=True, help=PR_REPO_ARG_HELP)
     parsed = parser.parse_args()
 
-    head_sha = _resolve_head_sha(parsed.owner, parsed.repo, parsed.number)
+    head_sha = resolve_pr_head(owner=parsed.owner, repo=parsed.repo, number=parsed.number)
     if head_sha is None:
         return 1
 

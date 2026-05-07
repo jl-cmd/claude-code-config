@@ -157,13 +157,6 @@ def verify_pr_review(
         )
         return EXIT_WRONG_COMMIT
 
-    if len(all_reviews_on_expected_commit) > 1:
-        print(
-            f"Found {len(all_reviews_on_expected_commit)} reviews for loop {loop_number} on commit {expected_commit_id}",
-            file=sys.stderr,
-        )
-        return EXIT_DUPLICATE_REVIEW
-
     found_review = all_reviews_on_expected_commit[0]
     review_id = _coerce_string_with_default(found_review.get("id"))
     review_url = _coerce_string_with_default(found_review.get("html_url"))

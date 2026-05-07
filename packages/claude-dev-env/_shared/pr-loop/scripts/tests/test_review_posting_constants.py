@@ -39,3 +39,12 @@ def test_review_comments_endpoint_template_renders_with_review_id() -> None:
         owner="o", repo="r", pull_number=42, review_id=99
     )
     assert rendered_path == "/repos/o/r/pulls/42/reviews/99/comments?per_page=100"
+
+
+def test_status_ok_constant_pins_orchestrator_contract_string() -> None:
+    """Producer/consumer contract: verify_review.py emits this exact string;
+    the orchestrator reads it. Pinning here prevents silent drift between
+    the two sides of the boundary.
+    """
+    assert constants_module.STATUS_OK == "ok"
+    assert isinstance(constants_module.STATUS_OK, str)

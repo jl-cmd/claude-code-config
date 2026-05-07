@@ -71,7 +71,7 @@ def post_review(
     parsed_review = _parse_review_response(post_result.stdout)
     if parsed_review is None:
         return None
-    review_identifier, review_url, _ = parsed_review
+    review_identifier, review_url = parsed_review
     if not all_comments:
         return (review_identifier, review_url, [])
     all_inline_comment_entries = _fetch_inline_review_comments(
@@ -130,9 +130,11 @@ def _fetch_inline_review_comments(
 def _parse_inline_comments_response(raw_stdout: str) -> list[dict[str, str]]:
     """Parse paginated-slurp inline comments output into id/url entries.
 
-    Mirrors the defensive shape used by `_parse_paginated_slurp_response` in
-    verify_review.py: the root must be a list-of-pages, each page a list,
-    each item a dict with both id and html_url. Anything else returns [].
+    The root must be a list-of-pages. Pages that are not lists are skipped;
+    items inside a page that are not dicts (or that lack a coercible id and
+    a string html_url) are skipped. The function returns whatever well-formed
+    entries it could collect, or [] when none are present (or when the root
+    JSON failed to decode or was not itself a list).
     """
     try:
         parsed_pages = json.loads(raw_stdout)
@@ -158,15 +160,14 @@ def _parse_inline_comments_response(raw_stdout: str) -> list[dict[str, str]]:
 
 def _parse_review_response(
     response_text: str,
-) -> tuple[str, str, list[dict[str, str]]] | None:
-    """Extract review id, html_url, and any nested comment info from a review POST response.
+) -> tuple[str, str] | None:
+    """Extract review id and html_url from a review POST response.
 
     Per the GitHub REST API, the POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews
     response does not include inline comments — they are returned via a separate
-    GET /reviews/{id}/comments call. A successful response with a parseable review
-    object means GitHub created the inline comments server-side from the request
-    payload; absence of a nested ``comments`` field is therefore expected and not
-    a failure signal.
+    GET /reviews/{id}/comments call (see `_fetch_inline_review_comments`). A
+    successful response with a parseable review object means GitHub created the
+    inline comments server-side from the request payload.
     """
     try:
         parsed_review_object = json.loads(response_text)
@@ -181,16 +182,7 @@ def _parse_review_response(
     if not isinstance(raw_identifier, (int, str)) or not isinstance(raw_url, str):
         print("Review response missing id or html_url.", file=sys.stderr)
         return None
-    all_comment_entries: list[dict[str, str]] = []
-    all_nested_comments = parsed_review_object.get("comments")
-    if isinstance(all_nested_comments, list):
-        for each_comment in all_nested_comments:
-            if isinstance(each_comment, dict):
-                each_id = each_comment.get("id")
-                each_url = each_comment.get("html_url")
-                if isinstance(each_id, (int, str)) and isinstance(each_url, str):
-                    all_comment_entries.append({"id": str(each_id), "url": each_url})
-    return (str(raw_identifier), raw_url, all_comment_entries)
+    return (str(raw_identifier), raw_url)
 
 
 def _build_output_payload(

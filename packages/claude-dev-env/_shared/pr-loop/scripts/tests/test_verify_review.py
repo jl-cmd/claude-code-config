@@ -250,3 +250,49 @@ class DescribeCoerceOptionalStringUsesDomainParameter:
         coerce_source_text = inspect.getsource(verify_review._coerce_optional_string)
         assert "isinstance(maybe_field, str)" in coerce_source_text
         assert "maybe_value" not in coerce_source_text
+
+
+class DescribeVerifyPrReviewStatusFieldImportsConstant:
+    """The `status` field of the JSON success payload must be sourced from
+    `STATUS_OK` in `config.review_posting_constants` rather than an inline
+    literal in the function body (CODE_RULES.md magic-values rule).
+    """
+
+    def test_verify_pr_review_uses_status_ok_constant(self):
+        verify_pr_review_source_text = inspect.getsource(verify_review.verify_pr_review)
+        assert "STATUS_OK" in verify_pr_review_source_text
+        assert '"status": "ok"' not in verify_pr_review_source_text
+
+    def test_verify_review_module_imports_status_ok(self):
+        assert hasattr(verify_review, "STATUS_OK")
+        assert verify_review.STATUS_OK == "ok"
+
+    def test_verify_pr_review_emits_status_ok_in_success_payload(self):
+        sample_review = {
+            "id": 99,
+            "body": "## Loop 3 Audit",
+            "commit_id": "abc1234",
+            "html_url": "https://github.com/own/rep/pull/1#review-99",
+        }
+        captured_stdout: list[str] = []
+
+        def capture_print(serialized: str) -> None:
+            captured_stdout.append(serialized)
+
+        with patch.object(
+            verify_review,
+            "run_gh",
+            return_value=type(
+                "GhResult",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": json.dumps([[sample_review]]),
+                    "stderr": "",
+                    "is_timed_out": False,
+                },
+            )(),
+        ), patch("builtins.print", side_effect=capture_print):
+            verify_review.verify_pr_review("own", "rep", 1, "abc1234", 3)
+        emitted_payload = json.loads(captured_stdout[0])
+        assert emitted_payload["status"] == verify_review.STATUS_OK

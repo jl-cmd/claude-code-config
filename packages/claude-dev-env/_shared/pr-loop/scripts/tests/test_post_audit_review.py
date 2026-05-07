@@ -22,35 +22,35 @@ post_audit_review = _load_module("post_audit_review", "post_audit_review.py")
 
 
 class DescribeParseReviewResponse:
-    def test_extracts_review_id_url_and_empty_comments_when_no_nested_comments(self):
+    def test_extracts_review_id_and_url_as_two_tuple(self):
         raw = json.dumps({"id": 42, "html_url": "https://github.com/pr#review-42"})
-        result = post_audit_review._parse_review_response(raw)
-        assert result is not None
-        review_id, review_url, all_comment_entries = result
-        assert review_id == "42"
+        parsed_review = post_audit_review._parse_review_response(raw)
+        assert parsed_review is not None
+        review_identifier, review_url = parsed_review
+        assert review_identifier == "42"
         assert review_url == "https://github.com/pr#review-42"
-        assert all_comment_entries == []
 
-    def test_extracts_nested_comment_infos(self):
+    def test_returns_two_tuple_signature_and_ignores_nested_comments(self):
+        """The POST /reviews response never echoes inline comments; the third
+        tuple element was dead code consumed by `_fetch_inline_review_comments`
+        instead. Pin the new 2-tuple shape and confirm a `comments` field in
+        the input is silently ignored.
+        """
         raw = json.dumps(
             {
                 "id": 42,
                 "html_url": "https://github.com/pr#review-42",
                 "comments": [
-                    {"id": 101, "html_url": "https://github.com/pr#comment-101"},
-                    {"id": 102, "html_url": "https://github.com/pr#comment-102"},
+                    {"id": 101, "html_url": "https://github.com/pr#comment-101"}
                 ],
             }
         )
-        result = post_audit_review._parse_review_response(raw)
-        assert result is not None
-        review_id, review_url, all_comment_entries = result
-        assert review_id == "42"
+        parsed_review = post_audit_review._parse_review_response(raw)
+        assert parsed_review is not None
+        assert len(parsed_review) == 2
+        review_identifier, review_url = parsed_review
+        assert review_identifier == "42"
         assert review_url == "https://github.com/pr#review-42"
-        assert all_comment_entries == [
-            {"id": "101", "url": "https://github.com/pr#comment-101"},
-            {"id": "102", "url": "https://github.com/pr#comment-102"},
-        ]
 
     def test_returns_none_on_invalid_json(self):
         assert post_audit_review._parse_review_response("not json") is None
@@ -71,24 +71,6 @@ class DescribeParseReviewResponse:
         raw = json.dumps({"id": 1, "html_url": 99})
         assert post_audit_review._parse_review_response(raw) is None
 
-    def test_skips_malformed_nested_comments(self):
-        raw = json.dumps(
-            {
-                "id": 42,
-                "html_url": "https://github.com/pr#review-42",
-                "comments": [
-                    {"id": 101, "html_url": "https://github.com/pr#comment-101"},
-                    {"id": "not-a-number", "html_url": 99},
-                ],
-            }
-        )
-        result = post_audit_review._parse_review_response(raw)
-        assert result is not None
-        review_id, review_url, all_comment_entries = result
-        assert all_comment_entries == [
-            {"id": "101", "url": "https://github.com/pr#comment-101"},
-        ]
-
     def test_returns_success_when_post_response_omits_comments_field(self):
         """The GitHub REST API POST /reviews response does NOT include inline
         comments — they are returned via a separate GET /reviews/{id}/comments
@@ -96,12 +78,11 @@ class DescribeParseReviewResponse:
         regardless of how many comments were sent in the request payload.
         """
         raw = json.dumps({"id": 42, "html_url": "https://github.com/pr#review-42"})
-        result = post_audit_review._parse_review_response(raw)
-        assert result is not None
-        review_id, review_url, all_comment_entries = result
-        assert review_id == "42"
+        parsed_review = post_audit_review._parse_review_response(raw)
+        assert parsed_review is not None
+        review_identifier, review_url = parsed_review
+        assert review_identifier == "42"
         assert review_url == "https://github.com/pr#review-42"
-        assert all_comment_entries == []
 
 
 class DescribeBuildOutputPayload:
@@ -320,8 +301,7 @@ class DescribePostReviewUsesShouldRetryParameterNames:
 
 class DescribeParseReviewResponseUsesDomainIdentifiers:
     """Local identifiers in `_parse_review_response` must follow CODE_RULES §5:
-    no banned `response` substring (use `parsed_review_object`) and `all_`
-    prefix on collection variables (use `all_nested_comments`).
+    no banned `response` substring — use `parsed_review_object`.
     """
 
     def test_parse_review_response_uses_domain_identifiers(self):
@@ -329,12 +309,31 @@ class DescribeParseReviewResponseUsesDomainIdentifiers:
             post_audit_review._parse_review_response
         )
         assert "parsed_review_object = json.loads(" in parse_review_response_source_text
-        assert (
-            "all_nested_comments = parsed_review_object.get("
-            in parse_review_response_source_text
-        )
         assert "response_payload" not in parse_review_response_source_text
-        assert " nested_comments = " not in parse_review_response_source_text
+
+    def test_parse_review_response_returns_two_tuple_signature(self):
+        """The third tuple element (parsed nested comments) was dead code: the
+        POST /reviews response never includes inline comments, and the caller
+        discarded the element. Pin the 2-tuple return type.
+        """
+        parse_review_response_signature = inspect.signature(
+            post_audit_review._parse_review_response
+        )
+        return_annotation_text = str(parse_review_response_signature.return_annotation)
+        assert "tuple[str, str]" in return_annotation_text
+        assert "list[dict[str, str]]" not in return_annotation_text
+
+    def test_parse_review_response_does_not_parse_nested_comments(self):
+        """The dead-code branch reading the (always-empty) `comments` field
+        of the POST response must be removed. Inline comments now arrive via
+        `_fetch_inline_review_comments`.
+        """
+        parse_review_response_source_text = inspect.getsource(
+            post_audit_review._parse_review_response
+        )
+        assert "all_nested_comments" not in parse_review_response_source_text
+        assert "all_comment_entries" not in parse_review_response_source_text
+        assert ".get(\"comments\")" not in parse_review_response_source_text
 
 
 class DescribeBuildOutputPayloadUsesDomainIdentifier:

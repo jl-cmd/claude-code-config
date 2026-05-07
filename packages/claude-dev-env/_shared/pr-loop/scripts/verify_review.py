@@ -21,6 +21,7 @@ from config.review_posting_constants import (
     EXIT_WRONG_COMMIT,
     LOOP_AUDIT_HEADER_TEMPLATE,
     REVIEWS_PATH_TEMPLATE,
+    STATUS_OK,
 )
 from gh_util import run_gh
 
@@ -136,7 +137,7 @@ def verify_pr_review(
     review_id = found_review.get("id")
     review_url = found_review.get("html_url", "")
     confirmed_review = {
-        "status": "ok",
+        "status": STATUS_OK,
         "review_id": str(review_id) if review_id is not None else "",
         "review_url": review_url,
     }

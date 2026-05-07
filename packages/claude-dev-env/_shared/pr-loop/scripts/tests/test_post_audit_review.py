@@ -127,27 +127,40 @@ class DescribeBuildOutputPayload:
         assert len(payload["comments"]) == 2
 
 
+def _make_gh_result(
+    *, returncode: int, stdout: str, stderr: str = "", is_timed_out: bool = False
+) -> object:
+    return type(
+        "GhResult",
+        (),
+        {
+            "returncode": returncode,
+            "stdout": stdout,
+            "stderr": stderr,
+            "is_timed_out": is_timed_out,
+        },
+    )()
+
+
 class DescribePostReview:
     def test_returns_review_info_on_success(self):
-        response = json.dumps(
+        post_response_text = json.dumps(
             {
                 "id": 99,
                 "html_url": "https://github.com/pr#review-99",
-                "comments": [
-                    {"id": 101, "html_url": "https://github.com/pr#comment-101"}
-                ],
             }
         )
+        get_response_text = json.dumps(
+            [[{"id": 101, "html_url": "https://github.com/pr#comment-101"}]]
+        )
+        all_returned_results = [
+            _make_gh_result(returncode=0, stdout=post_response_text),
+            _make_gh_result(returncode=0, stdout=get_response_text),
+        ]
         with patch.object(
-            post_audit_review,
-            "run_gh",
-            return_value=type(
-                "GhResult",
-                (),
-                {"returncode": 0, "stdout": response, "stderr": "", "is_timed_out": False},
-            )(),
+            post_audit_review, "run_gh", side_effect=all_returned_results
         ):
-            result = post_audit_review.post_review(
+            posted_review = post_audit_review.post_review(
                 owner="own",
                 repo="rep",
                 pull_number=1,
@@ -157,8 +170,8 @@ class DescribePostReview:
                     {"path": "file.py", "line": 42, "side": "RIGHT", "body": "finding"}
                 ],
             )
-        assert result is not None
-        review_id, review_url, all_comment_entries = result
+        assert posted_review is not None
+        review_id, review_url, all_comment_entries = posted_review
         assert review_id == "99"
         assert review_url == "https://github.com/pr#review-99"
         assert all_comment_entries == [
@@ -169,13 +182,11 @@ class DescribePostReview:
         with patch.object(
             post_audit_review,
             "run_gh",
-            return_value=type(
-                "GhResult",
-                (),
-                {"returncode": 1, "stdout": "", "stderr": "gh error", "is_timed_out": False},
-            )(),
+            return_value=_make_gh_result(
+                returncode=1, stdout="", stderr="gh error"
+            ),
         ):
-            result = post_audit_review.post_review(
+            posted_review = post_audit_review.post_review(
                 owner="own",
                 repo="rep",
                 pull_number=1,
@@ -183,7 +194,91 @@ class DescribePostReview:
                 body_text="review body",
                 all_comments=[],
             )
-        assert result is None
+        assert posted_review is None
+
+    def test_fetches_inline_comments_via_followup_get(self):
+        post_response_text = json.dumps(
+            {"id": 42, "html_url": "https://github.com/pr#review-42"}
+        )
+        get_response_text = json.dumps(
+            [
+                [
+                    {"id": 201, "html_url": "https://github.com/pr#comment-201"},
+                    {"id": 202, "html_url": "https://github.com/pr#comment-202"},
+                ]
+            ]
+        )
+        all_returned_results = [
+            _make_gh_result(returncode=0, stdout=post_response_text),
+            _make_gh_result(returncode=0, stdout=get_response_text),
+        ]
+        with patch.object(
+            post_audit_review, "run_gh", side_effect=all_returned_results
+        ):
+            posted_review = post_audit_review.post_review(
+                owner="own",
+                repo="rep",
+                pull_number=1,
+                commit_id="abc",
+                body_text="review body",
+                all_comments=[
+                    {"path": "file.py", "line": 1, "side": "RIGHT", "body": "f1"},
+                    {"path": "file.py", "line": 2, "side": "RIGHT", "body": "f2"},
+                ],
+            )
+        assert posted_review is not None
+        _, _, all_comment_entries = posted_review
+        assert all_comment_entries == [
+            {"id": "201", "url": "https://github.com/pr#comment-201"},
+            {"id": "202", "url": "https://github.com/pr#comment-202"},
+        ]
+
+    def test_followup_get_failure_returns_parent_review_with_empty_comments(self):
+        post_response_text = json.dumps(
+            {"id": 42, "html_url": "https://github.com/pr#review-42"}
+        )
+        all_returned_results = [
+            _make_gh_result(returncode=0, stdout=post_response_text),
+            _make_gh_result(returncode=1, stdout="", stderr="follow-up GET failed"),
+        ]
+        with patch.object(
+            post_audit_review, "run_gh", side_effect=all_returned_results
+        ):
+            posted_review = post_audit_review.post_review(
+                owner="own",
+                repo="rep",
+                pull_number=1,
+                commit_id="abc",
+                body_text="review body",
+                all_comments=[
+                    {"path": "file.py", "line": 1, "side": "RIGHT", "body": "f1"},
+                ],
+            )
+        assert posted_review is not None
+        review_id, review_url, all_comment_entries = posted_review
+        assert review_id == "42"
+        assert review_url == "https://github.com/pr#review-42"
+        assert all_comment_entries == []
+
+    def test_followup_get_skipped_when_no_comments_were_posted(self):
+        post_response_text = json.dumps(
+            {"id": 42, "html_url": "https://github.com/pr#review-42"}
+        )
+        with patch.object(
+            post_audit_review,
+            "run_gh",
+            return_value=_make_gh_result(returncode=0, stdout=post_response_text),
+        ) as patched_run_gh:
+            posted_review = post_audit_review.post_review(
+                owner="own",
+                repo="rep",
+                pull_number=1,
+                commit_id="abc",
+                body_text="review body",
+                all_comments=[],
+            )
+        assert posted_review is not None
+        assert patched_run_gh.call_count == 1
 
 
 class DescribePostReviewUsesShouldRetryParameterNames:

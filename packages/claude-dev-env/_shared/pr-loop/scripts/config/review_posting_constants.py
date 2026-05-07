@@ -16,5 +16,9 @@ REVIEW_POST_ENDPOINT_TEMPLATE: str = (
     "/repos/{owner}/{repo}/pulls/{pull_number}/reviews"
 )
 
+REVIEW_COMMENTS_ENDPOINT_TEMPLATE: str = (
+    "/repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments?per_page=100"
+)
+
 REVIEW_EVENT_COMMENT: str = "COMMENT"
 REVIEW_COMMENTS_SIDE: str = "RIGHT"

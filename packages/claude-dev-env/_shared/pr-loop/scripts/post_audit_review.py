@@ -15,6 +15,7 @@ if str(Path(__file__).absolute().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).absolute().parent))
 
 from config.review_posting_constants import (
+    REVIEW_COMMENTS_ENDPOINT_TEMPLATE,
     REVIEW_COMMENTS_SIDE,
     REVIEW_EVENT_COMMENT,
     REVIEW_POST_ENDPOINT_TEMPLATE,
@@ -34,10 +35,12 @@ def post_review(
 ) -> tuple[str, str, list[dict[str, str]]] | None:
     """Post a PR review with inline comments, return (review_id, review_url, comment_infos).
 
-    Each comment_infos entry is {"id": str, "url": str} extracted from the
-    response's nested comment objects when available.
+    Per the GitHub REST API, POST /reviews does not echo the inline child
+    comments in its response. After the POST succeeds, fetch the inline
+    comments via GET /reviews/{review_id}/comments and merge them into the
+    return value so callers can route per-finding replies.
     """
-    endpoint_path = REVIEW_POST_ENDPOINT_TEMPLATE.format(
+    review_endpoint_path = REVIEW_POST_ENDPOINT_TEMPLATE.format(
         owner=owner, repo=repo, pull_number=pull_number
     )
     request_payload: dict[str, object] = {
@@ -47,25 +50,110 @@ def post_review(
         "comments": all_comments,
     }
     payload_text = json.dumps(request_payload)
-    gh_result = run_gh(
-        ["gh", "api", endpoint_path, "-X", "POST", "--input", "-"],
+    post_result = run_gh(
+        ["gh", "api", review_endpoint_path, "-X", "POST", "--input", "-"],
         timeout_seconds=REVIEW_POST_TIMEOUT_SECONDS,
         should_retry_nonzero=False,
         should_retry_timeout=False,
         stdin_text=payload_text,
     )
-    if gh_result.is_timed_out:
+    if post_result.is_timed_out:
         print(
             "Review POST timed out -- review may already exist. "
             "Check PR for conflicts before fallback.",
             file=sys.stderr,
         )
         return None
-    if gh_result.returncode != 0:
-        error_text = (gh_result.stderr or "").strip() or gh_result.stdout.strip()
+    if post_result.returncode != 0:
+        error_text = (post_result.stderr or "").strip() or post_result.stdout.strip()
         print(f"Review POST failed: {error_text}", file=sys.stderr)
         return None
-    return _parse_review_response(gh_result.stdout)
+    parsed_review = _parse_review_response(post_result.stdout)
+    if parsed_review is None:
+        return None
+    review_identifier, review_url, _ = parsed_review
+    if not all_comments:
+        return (review_identifier, review_url, [])
+    all_inline_comment_entries = _fetch_inline_review_comments(
+        owner=owner,
+        repo=repo,
+        pull_number=pull_number,
+        review_identifier=review_identifier,
+    )
+    return (review_identifier, review_url, all_inline_comment_entries)
+
+
+def _fetch_inline_review_comments(
+    *,
+    owner: str,
+    repo: str,
+    pull_number: int,
+    review_identifier: str,
+) -> list[dict[str, str]]:
+    """Fetch inline child comments for a posted review via paginated GET.
+
+    On any failure (non-zero gh exit, malformed JSON), log to stderr and
+    return an empty list. The parent review POST already succeeded, so a
+    follow-up failure is non-fatal — callers may still route generic replies
+    against the parent review url.
+    """
+    comments_endpoint_path = REVIEW_COMMENTS_ENDPOINT_TEMPLATE.format(
+        owner=owner,
+        repo=repo,
+        pull_number=pull_number,
+        review_id=review_identifier,
+    )
+    fetch_result = run_gh(
+        [
+            "gh",
+            "-R",
+            f"{owner}/{repo}",
+            "api",
+            comments_endpoint_path,
+            "--paginate",
+            "--slurp",
+        ],
+        timeout_seconds=REVIEW_POST_TIMEOUT_SECONDS,
+        should_retry_nonzero=True,
+        should_retry_timeout=True,
+    )
+    if fetch_result.returncode != 0:
+        error_text = (fetch_result.stderr or "").strip() or fetch_result.stdout.strip()
+        print(
+            f"Inline review comments GET failed: {error_text}",
+            file=sys.stderr,
+        )
+        return []
+    return _parse_inline_comments_response(fetch_result.stdout)
+
+
+def _parse_inline_comments_response(raw_stdout: str) -> list[dict[str, str]]:
+    """Parse paginated-slurp inline comments output into id/url entries.
+
+    Mirrors the defensive shape used by `_parse_paginated_slurp_response` in
+    verify_review.py: the root must be a list-of-pages, each page a list,
+    each item a dict with both id and html_url. Anything else returns [].
+    """
+    try:
+        parsed_pages = json.loads(raw_stdout)
+    except json.JSONDecodeError:
+        print("Failed to decode inline comments response JSON.", file=sys.stderr)
+        return []
+    if not isinstance(parsed_pages, list):
+        print("Inline comments response was not a JSON list.", file=sys.stderr)
+        return []
+    all_inline_entries: list[dict[str, str]] = []
+    for each_page in parsed_pages:
+        if not isinstance(each_page, list):
+            continue
+        for each_comment in each_page:
+            if not isinstance(each_comment, dict):
+                continue
+            each_id = each_comment.get("id")
+            each_url = each_comment.get("html_url")
+            if isinstance(each_id, (int, str)) and isinstance(each_url, str):
+                all_inline_entries.append({"id": str(each_id), "url": each_url})
+    return all_inline_entries
 
 
 def _parse_review_response(

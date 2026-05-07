@@ -51,8 +51,9 @@ class DescribeIsMatchingReview:
         )
 
     def test_matches_bugteam_loop_header(self):
-        headers = ("## Loop 1 Audit", "## /bugteam loop 1")
-        assert verify_review._is_matching_review("## /bugteam loop 1", headers)
+        all_expected_headers = verify_review._build_expected_headers(1)
+        bugteam_loop_header = all_expected_headers[1]
+        assert verify_review._is_matching_review(bugteam_loop_header, all_expected_headers)
 
     def test_rejects_unrelated_body(self):
         headers = ("## Loop 2 Audit", "## /bugteam loop 2")

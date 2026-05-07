@@ -197,7 +197,7 @@ Before modifying production skill files, the improvement must be validated again
 
 ### Step 7: Promote or discard
 
-- **Promote:** The proposed improvement addresses at least 2 of the 4 metrics (scored as "Prevented" in Step 6) and passes all three enforceability gates (actionable, verifiable, negative scope). Apply the improvement to the production skill file. Commit as a single commit.
+- **Promote:** The proposed improvement addresses at least 2 of the 4 metrics (scored as "Prevented" in Step 6) and passes all three enforceability gates (actionable, verifiable, negative scope). Push the improved file via `mcp__plugin_github_github__push_files(owner, repo, branch="feat/self-improve/<feature>", files=[{path, content}], message="fix: ...")`. Do NOT use Write or Edit on the worktree — `write_existing_file_blocker.py` blocks local edits to existing files. The push creates or updates the branch; Step 8 creates the PR against that branch.
 - **Discard:** The improvement addresses 0-1 metrics, or fails any enforceability gate. Remove the temp copy. Log the result to `self-improve-eval-data/<date>/discarded-improvements.json` with the constraint text, which gates failed, and the metrics it would not have prevented.
 - **Mixed signal:** Not applicable with constraint-effectiveness evaluation. If the improvement addresses 2+ metrics, promote. If fewer, discard.
 
@@ -344,3 +344,4 @@ Yesterday's session transcript is the baseline — no need to re-run it. The tra
 - **Temp files.** Clean up temp skill files (`*.temp-*`) and eval data files after promotion or discard, except for the structured log files in `self-improve-eval-data/<date>/` which are preserved for audit trail.
 - **Baseline eval-data.** The `self-improve-eval-data/` directory lives alongside this SKILL.md and stores baseline JSON files, test-run results, and structured logs. Each run creates a `<date>/` subdirectory.
 - **One PR per run.** The skill produces at most one PR per invocation. If multiple improvements are promoted, they go into a single PR.
+- **Worktree isolation.** When spawning subagents to execute this skill (e.g., parallel runs), pass `isolation="worktree"` on the `Agent` tool call so each agent gets its own clean worktree. This prevents dirty-tree conflicts between parallel agents and avoids test-run changes polluting the shared worktree.

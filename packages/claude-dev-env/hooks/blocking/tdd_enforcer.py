@@ -59,37 +59,35 @@ def _is_module_docstring_expression(module_level_node: ast.stmt) -> bool:
     return isinstance(expression_value.value, str)
 
 
-def _collect_imported_names(parsed_tree: ast.Module) -> set[str]:
-    """Return the set of names imported at module level."""
-    imported_names: set[str] = set()
-    for each_node in parsed_tree.body:
-        if isinstance(each_node, ast.Import):
-            for alias in each_node.names:
-                local_name = alias.asname or alias.name.split(".")[0]
-                imported_names.add(local_name)
-        elif isinstance(each_node, ast.ImportFrom):
-            for alias in each_node.names:
-                imported_names.add(alias.asname or alias.name)
-    return imported_names
+def _safe_constant_functions() -> frozenset[str]:
+    """Fully-qualified callable names treated as safe value constructors."""
+    return frozenset({"Path", "frozenset"})
 
 
-def _rhs_has_unsafe_call(rhs_node: ast.AST, imported_names: set[str]) -> bool:
-    """Return True when rhs_node contains a function call to a non-imported name.
+def _safe_constant_attribute_calls() -> frozenset[tuple[str, str]]:
+    """(module, attr) pairs treated as safe value constructors."""
+    return frozenset({("re", "compile")})
 
-    Calls to imported functions (e.g. ``Path(...)``, ``re.compile(...)``) are
-    safe — they construct values from already-imported names. Calls to undefined
-    or local-only names (``VALUE = compute()``) are unsafe because they introduce
-    import-time side effects that should be gated by TDD.
+
+def _rhs_has_unsafe_call(rhs_node: ast.AST) -> bool:
+    """Return True when rhs_node contains a function call outside the safe allowlist.
+
+    Safe calls are value constructors (``Path(...)``, ``re.compile(...)``)
+    that create objects without side effects. Any other call pattern is
+    treated as unsafe import-time behavior.
     """
+    safe_functions = _safe_constant_functions()
+    safe_attribute_calls = _safe_constant_attribute_calls()
     for each_subnode in ast.walk(rhs_node):
         if isinstance(each_subnode, ast.Call):
             function_node = each_subnode.func
             if isinstance(function_node, ast.Name):
-                if function_node.id not in imported_names:
+                if function_node.id not in safe_functions:
                     return True
             elif isinstance(function_node, ast.Attribute):
                 if isinstance(function_node.value, ast.Name):
-                    if function_node.value.id not in imported_names:
+                    pair = (function_node.value.id, function_node.attr)
+                    if pair not in safe_attribute_calls:
                         return True
                 else:
                     return True
@@ -113,12 +111,11 @@ def _is_constants_only_python_content(content: str) -> bool:
     if not parsed_tree.body:
         return False
     allowed_node_types = _constants_only_allowed_node_types()
-    imported_names = _collect_imported_names(parsed_tree)
     for each_top_level_node in parsed_tree.body:
         if isinstance(each_top_level_node, allowed_node_types):
             if isinstance(each_top_level_node, (ast.Assign, ast.AnnAssign)):
                 rhs = each_top_level_node.value
-                if rhs is not None and _rhs_has_unsafe_call(rhs, imported_names):
+                if rhs is not None and _rhs_has_unsafe_call(rhs):
                     return False
             continue
         if _is_module_docstring_expression(each_top_level_node):

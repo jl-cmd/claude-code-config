@@ -223,5 +223,5 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   - Type hints on every signature you touch.
   - **Narrow scope.** Fix only the exact defect at the specified file:line. No restructuring, no inlining helpers, no renames, no "while I'm here" cleanup.
   - **Preserve helpers.** Do not remove or inline existing helper functions unless the finding explicitly names the helper as the problem.
+  - **No regression.** Never introduce new bugs. If the fix introduces new P0/P1/P2 findings detectable in the post-fix self-audit, the fix is inadequate and must be revised before committing.
 </constraints>
-```

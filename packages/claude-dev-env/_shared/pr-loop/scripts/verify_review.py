@@ -133,6 +133,13 @@ def verify_pr_review(
         )
         return EXIT_NO_REVIEW
 
+    if len(all_matching_reviews) > 1:
+        print(
+            f"Found {len(all_matching_reviews)} matching reviews for loop {loop_number} across commits",
+            file=sys.stderr,
+        )
+        return EXIT_DUPLICATE_REVIEW
+
     all_reviews_on_expected_commit = [
         each_review
         for each_review in all_matching_reviews

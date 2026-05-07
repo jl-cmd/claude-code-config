@@ -47,7 +47,7 @@ class DescribeIsMatchingReview:
     def test_matches_loop_audit_header(self):
         headers = ("## Loop 3 Audit", "## /bugteam loop 3")
         assert verify_review._is_matching_review(
-            "## Loop 3 Audit — Merged Findings", headers
+            "## Loop 3 Audit - Merged Findings", headers
         )
 
     def test_matches_bugteam_loop_header(self):
@@ -89,7 +89,7 @@ class DescribeVerifyPrReview:
     def test_returns_exit_ok_when_exactly_one_review_matches(self):
         sample_review = {
             "id": 99,
-            "body": "## Loop 3 Audit — Merged Findings",
+            "body": "## Loop 3 Audit - Merged Findings",
             "commit_id": "abc1234",
             "html_url": "https://github.com/own/rep/pull/1#review-99",
         }
@@ -158,7 +158,7 @@ class DescribeVerifyPrReview:
             exit_code = verify_review.verify_pr_review("own", "rep", 1, "abc1234", 3)
         assert exit_code == 2
 
-    def test_wrong_commit_path_iterates_all_matching_reviews(self):
+    def test_returns_exit_duplicate_when_multiple_matching_reviews_across_commits(self):
         first_stale = {
             "id": 1,
             "body": "## Loop 3 Audit",
@@ -188,7 +188,39 @@ class DescribeVerifyPrReview:
             exit_code = verify_review.verify_pr_review(
                 "own", "rep", 1, "expected_sha", 3
             )
-        assert exit_code == 2
+        assert exit_code == verify_review.EXIT_DUPLICATE_REVIEW
+
+    def test_returns_exit_duplicate_when_mixed_expected_and_stale_matching_reviews(self):
+        expected_review = {
+            "id": 1,
+            "body": "## Loop 3 Audit",
+            "commit_id": "expected_sha",
+            "html_url": "url-1",
+        }
+        stale_review = {
+            "id": 2,
+            "body": "## /bugteam loop 3 ",
+            "commit_id": "stale_sha",
+            "html_url": "url-2",
+        }
+        with patch.object(
+            verify_review,
+            "run_gh",
+            return_value=type(
+                "GhResult",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": json.dumps([[expected_review, stale_review]]),
+                    "stderr": "",
+                    "is_timed_out": False,
+                },
+            )(),
+        ):
+            exit_code = verify_review.verify_pr_review(
+                "own", "rep", 1, "expected_sha", 3
+            )
+        assert exit_code == verify_review.EXIT_DUPLICATE_REVIEW
 
     def test_returns_exit_duplicate_when_multiple_matching_reviews(self):
         review_a = {
@@ -199,7 +231,7 @@ class DescribeVerifyPrReview:
         }
         review_b = {
             "id": 2,
-            "body": "## Loop 3 Audit — Second",
+            "body": "## Loop 3 Audit - Second",
             "commit_id": "abc1234",
             "html_url": "url2",
         }
@@ -218,7 +250,7 @@ class DescribeVerifyPrReview:
             )(),
         ):
             exit_code = verify_review.verify_pr_review("own", "rep", 1, "abc1234", 3)
-        assert exit_code == 3
+        assert exit_code == verify_review.EXIT_DUPLICATE_REVIEW
 
 
 class DescribeVerifyPrReviewCollectionNamingPrefix:
@@ -456,7 +488,7 @@ class DescribeStaleCommitsCoercesNullCommitId:
     """`all_stale_commits` must coerce a null/non-string commit_id to
     MISSING_STRING_FIELD. When `commit_id` is present but null, dict.get
     returns None (the default only fires for absent keys), producing
-    {None} in the diagnostic log rather than {''}.
+    {None} in the diagnostic log rather than {""}.
     """
 
     def test_null_commit_id_coerced_to_missing_string_field(self):

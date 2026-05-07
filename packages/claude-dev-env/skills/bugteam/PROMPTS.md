@@ -29,7 +29,11 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   A category is verified-clean only when one complete execution path through
   the changed code has been traced from entry to exit. Surface-level scanning
   is insufficient evidence. The evidence field must name the function and the
-  path traced:
+  path traced.
+  -- REJECT SHALLOW EVIDENCE. "no issues found", "verified clean", "looks good",
+  "seems fine", "pattern appears correct" are NOT acceptable as evidence. When
+  evidence contains any of these phrases, the category is not verified-clean --
+  re-audit with a concrete trace that names the function and path checked.
   A. API contract verification (signatures, return types, async/await correctness)
   B. Selector / query / engine compatibility
   C. Resource cleanup and lifecycle (file handles, connections, processes, locks)
@@ -51,9 +55,9 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 </constraints>
 
 <posting>
-  Sibling auditors (-b through -k): run only steps 1–3 (audit, assign IDs,
+  Sibling auditors (-b through -k): run only steps 1-3 (audit, assign IDs,
   capture excerpt, validate anchors), then write outcome XML per <output_format> and return.
-  Skip steps 4–8 — sibling auditors do not post PR reviews.
+  Skip steps 4-8 — sibling auditors do not post PR reviews.
 
   Validator (-a) and single-opus auditors: run all steps below. Posting is
   done via scripts under <script_dir>; raw jq pipelines are permitted only
@@ -223,5 +227,6 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   - Type hints on every signature you touch.
   - **Narrow scope.** Fix only the exact defect at the specified file:line. No restructuring, no inlining helpers, no renames, no "while I'm here" cleanup.
   - **Preserve helpers.** Do not remove or inline existing helper functions unless the finding explicitly names the helper as the problem.
+  - **Zero new defects.** Before committing, diff the pre-fix and post-fix file contents and run a full self-audit. Any new line of logic not directly required to fix the bugs_to_fix entries must be reverted. The total finding count after this fix commit MUST be flat or decreased relative to the previous loop's count. A regression means the fix introduced bugs — do not commit those lines.
 </constraints>
 ```

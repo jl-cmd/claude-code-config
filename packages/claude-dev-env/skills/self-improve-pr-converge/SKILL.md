@@ -57,17 +57,40 @@ Paths are repo-root-relative. All reside in `claude-code-config`:
 
 JSONL session transcript files from prior Claude Code sessions. These are the primary data source for bugteam/pr-converge run results.
 
-**Primary search path:** `~/.claude/projects/*/*.jsonl`
+**Primary search via Everything MCP:**
 
-- Enumerate directories under `~/.claude/projects/` using `-Force` (directories and files can be hidden or have restricted visibility — plain `Get-ChildItem` may return empty).
-- For each project directory, list all `*.jsonl` files modified within the date window.
-- Grep for markers before reading full content: `bugteam`, `pr-converge`, `loop <N> audit`, `/eval-bugteam`, `/eval-pr-converge`.
+1. Find recently modified JSONL files:
+   ```
+   mcp__everything__everything_find_recent(
+     params={
+       period: "24h" | "48h",
+       path: r"~/.claude/projects",
+       extensions: "jsonl",
+       max_results: 500
+     }
+   )
+   ```
+   If no results in 24h, expand to 48h or 72h.
 
-**Fallback if primary search returns empty:** Recursively scan `~/.claude/projects/` with `-Force -ErrorAction SilentlyContinue`, limiting depth to 3 levels. Project directories may have restricted visibility that suppresses plain `Get-ChildItem` output — `-Force` enumerates them regardless.
+2. For each candidate file, check content markers via `Select-String -SimpleMatch` (or Bash `grep`) on the file path: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
+
+3. Exclude files inside `subagents/` directories — these are per-tick subagent transcripts, not session-level logs. Session-level transcripts live directly in the project directory as `<uuid>.jsonl`.
+
+4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
+
+**Fallback:** If Everything MCP returns no results, use:
+```
+mcp__everything__everything_search(
+  params={
+    query: r"~/.claude/projects *.jsonl",
+    sort: "date-modified-desc",
+    max_results: 500
+  }
+)
+```
 
 ### Supporting data
 
-- **Obsidian vault `sessions/`** — structured session reports with frontmatter fields `project`, `date`, `status`. Use for narrowing the search window (which project, which date range) before diving into raw JSONL transcripts. An available Obsidian MCP backend is preferred over raw filesystem access.
 - **Git history on both repos** (claude-code-config, python-automation-eval) — commit SHAs, file lists, diffs, PR numbers
 - **Plan files at `~/.claude/plans/*.md`** — may contain aggregated run summaries from prior eval sessions
 
@@ -81,25 +104,34 @@ Set `window_start = now - 24h`. All session transcript filtering uses this bound
 
 Search order — try each source until at least one candidate is found:
 
-**Source A — Obsidian vault sessions (preferred for structured data):**
+**Source A — JSONL session transcripts (raw data, primary):**
 
-1. Search the Obsidian vault `sessions/` for notes with frontmatter `project` matching known eval/automation project names and `date` within the date window.
-2. If found, read the session notes directly — they already contain structured loop logs, outcomes, and findings.
-3. Use `mcp__obsidian__search_notes` with `searchFrontmatter: true` and query terms like `bugteam`, `pr-converge`, `eval-bugteam`.
+1. **Find candidate files** via Everything MCP:
+   
+   ```
+   mcp__everything__everything_find_recent(
+     params={period: "24h", path: r"~/.claude/projects", extensions: "jsonl", max_results: 500}
+   )
+   ```
+   
+   If empty, expand: `period: "48h"`, then `period: "72h"`.
+   
+2. **Filter to session-level transcripts.** Exclude paths containing `\subagents\` — those are per-tick subagent transcripts. Session-level files are `<uuid>.jsonl` directly under a project directory.
 
-**Source B — JSONL session transcripts (raw data):**
+3. **Grep for markers.** For each candidate, search file content with `Select-String -SimpleMatch` (or `grep` via Bash) for: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
 
-1. List project directories under `~/.claude/projects/` using `-Force` (directories may have hidden attributes that suppress plain listings).
-2. For each directory, list `*.jsonl` files modified within the date window.
-3. If no files found via the glob, try direct known-path probes for each project name you know about (see Data sources section for patterns).
-4. For each candidate file, grep for markers: `bugteam`, `pr-converge`, `loop audit`, `/eval-bugteam`, `/eval-pr-converge`.
-5. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
+4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 
-**Source C — Plan files:**
+**Source B — Plan files:**
 
-1. Scan `~/.claude/plans/*.md` modified within the date window.
-2. Grep for markers: `bugteam`, `pr-converge`, `eval-bugteam`, `eval-pr-converge`, `loop_count`.
-3. Plan files may contain aggregated run summaries even when raw transcripts are unavailable.
+1. Find plan files via Everything MCP:
+   ```
+   mcp__everything__everything_find_recent(
+     params={period: "24h", path: r"~/.claude/plans", extensions: "md", max_results: 50}
+   )
+   ```
+2. Grep for markers: `bugteam`, `pr-converge`, `eval-bugteam`, `loop_count`.
+3. Plan files may contain aggregated run summaries when raw transcripts are unavailable.
 
 If all sources return empty: refuse with "No bugteam/pr-converge sessions found in the last 24 hours."
 
@@ -307,7 +339,7 @@ Yesterday's session transcript is the baseline — no need to re-run it. The tra
 
 - **Boundary.** Modifies only `bugteam/`, `pr-converge/`, `findbugs/`, `fixbugs/` skill files and `_shared/pr-loop/`. Does not modify its own skill file or trigger configuration.
 - **Transcript reading discipline.** Do not read entire 100K+ line JSONL files before filtering. Check mtime first, grep for keywords, then read only the portions containing relevant markers.
-- **Filesystem enumeration quirks.** `~/.claude/projects/` directories and their contents may have restricted visibility. Always use `-Force` for `Get-ChildItem` and `-Hidden` for equivalent Unix commands. If `Get-ChildItem` returns empty after `-Force`, use `Test-Path` on known subdirectory names as a direct probe.
+- **Everything MCP is the primary filesystem tool.** Prefer `mcp__everything__` tools over `Get-ChildItem` or `ls` for finding session files.
 - **Evidence threshold is non-negotiable.** A single occurrence is not actionable, no matter how egregious. Two distinct sessions with the same failure before acting.
 - **Scheduling.** This skill defines the workflow. The trigger is configured externally via Claude Desktop scheduled tasks — the skill does not set up its own trigger.
 - **Temp files.** Clean up temp skill files (`*.temp-*`) and eval data files after promotion or discard, except for the structured log files in `self-improve-eval-data/<date>/` which are preserved for audit trail.

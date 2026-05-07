@@ -31,7 +31,7 @@ Refusals — first match wins; respond with the quoted line exactly and stop:
 
 - **bws not on PATH.** `bws not installed. /monitor-open-prs injects GROQ_API_KEY via Bitwarden Secrets Manager.`
 - **GitHub API not accessible.** `get_me` failed. /monitor-open-prs needs active GitHub MCP credentials.
-- **Dirty tree on the caller's repo.** `Uncommitted changes detected. Stash, commit, or revert before /monitor-open-prs.``
+- **Dirty tree on the caller's repo.** `Uncommitted changes detected. Stash, commit, or revert before /monitor-open-prs.`
 - **Required subagents missing.** Confirm `code-quality-agent`, `clean-coder`, and `groq-coder` exist. Else: `Required subagent type <name> not installed.`
 
 ## Discovery

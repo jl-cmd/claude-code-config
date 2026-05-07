@@ -107,7 +107,7 @@ Bugfind subagent completes (findings or clean):
   2. Applies TDD fixes (test first, then production).
   3. Commits, pushes one fix commit.
   4. Replies inline on each addressed finding via
-     `reply_to_inline_comment.py`.
+     `add_reply_to_pull_request_comment(owner, repo, pullNumber, commentId, body)`.
   5. Writes `state.json` (per §Concurrency): `last_action: "fix_pushed"`,
      `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase:
      "BUGBOT"`, `status: "awaiting_bugbot"`, `last_updated` ISO-8601 UTC.
@@ -125,7 +125,7 @@ Bugfind subagent completes (findings or clean):
      duplicate work.
   2. Else: update `state.json` (per §Concurrency) with `last_action:
      "audit_clean"`, `status: "awaiting_bugbot"`, `phase: "BUGBOT"`, then
-     trigger bugbot via `trigger_bugbot.py`.
+     trigger bugbot via `add_issue_comment(owner, repo, issue_number, body="bugbot run")`.
   3. Goes idle.
 
 ### Fix result → general-purpose per PR
@@ -135,11 +135,11 @@ When bugfix (clean-coder) subagent completes after push:
 - Spawn one `general-purpose` subagent per PR via
   `Agent(subagent_type="general-purpose", run_in_background=true)`. Subagent:
   1. Reads `state.json` for its PR.
-  2. Triggers bugbot via `trigger_bugbot.py`.
-  3. Polls `fetch_bugbot_reviews.py` every 60s (up to 10 polls) until review
-     anchored to `current_head` appears.
+  2. Triggers bugbot via `add_issue_comment(owner, repo, issue_number, body="bugbot run")`.
+  3. Polls `pull_request_read(method="get_reviews")` every 60s (up to 10 polls) until review
+     anchored to `current_head` appears with `commit_id == current_head`.
   4. **Poll / classify loop** (repeat from 4a whenever 4c retries):
-     - **4a.** Fetch inline comments via `fetch_bugbot_inline_comments.py`.
+     - **4a.** Fetch inline comments via `pull_request_read(method="get_review_comments")` filtered by review ID and `commit_id == current_head`.
      - **4b.** Classify — three outcomes (same as `SKILL.md` Step 2 BUGBOT):
        - **`clean`:** review body clean, zero unaddressed inline findings.
        - **`dirty`:** ≥1 unaddressed inline finding for `current_head`

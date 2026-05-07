@@ -93,7 +93,7 @@ def _repo_boundary_sentinels() -> frozenset[str]:
 def _test_function_patterns() -> tuple[re.Pattern[str], ...]:
     return (
         re.compile(r"\bdef\s+test_"),
-        re.compile(r"\b(?:it|test|describe)\s*(\("),
+        re.compile(r"\b(?:it|test|describe)\s*\("),
     )
 
 
@@ -310,7 +310,7 @@ def main() -> None:
         if existing_content is not None:
             old_str = tool_input.get("old_string", "")
             new_str = tool_input.get("new_string", "")
-            if old_str and new_str:
+            if old_str:
                 post_edit_content = existing_content.replace(old_str, new_str, 1)
                 if _is_constants_only_python_content(post_edit_content):
                     emit_allow()

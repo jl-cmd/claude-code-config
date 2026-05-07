@@ -144,8 +144,8 @@ def find_violations(text: str, file_path: str) -> list[str]:
         return []
 
     all_detected: list[str] = []
-    transition_patterns = ALL_COMMENT_TRANSITION_PATTERNS
-    for each_pattern in transition_patterns:
+    all_transition_patterns = ALL_COMMENT_TRANSITION_PATTERNS
+    for each_pattern in all_transition_patterns:
         all_matches = each_pattern.findall(scan_text)
         if all_matches:
             all_detected.append(all_matches[0].strip().lower())

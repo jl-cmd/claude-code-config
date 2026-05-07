@@ -242,6 +242,67 @@ def test_should_allow_edit_to_change_constant_value_in_constants_only_file(
     assert _decision_from(completed) == "allow"
 
 
+def _make_multiedit_payload(file_path: Path, edits: list[dict]) -> dict:
+    return {
+        "tool_name": "MultiEdit",
+        "tool_input": {
+            "file_path": str(file_path),
+            "edits": edits,
+        },
+    }
+
+
+def test_should_allow_multiedit_to_change_constant_value_in_constants_only_file(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    constants_file = sandbox / "constants.py"
+    constants_file.write_text(
+        '"""Module-level constants."""\n'
+        "MAXIMUM_RETRIES: int = 3\n"
+        "DEFAULT_TIMEOUT_SECONDS: float = 30.0\n"
+    )
+
+    completed = _run_hook_with_payload(
+        _make_multiedit_payload(
+            constants_file,
+            edits=[
+                {
+                    "old_string": "MAXIMUM_RETRIES: int = 3",
+                    "new_string": "MAXIMUM_RETRIES: int = 5",
+                },
+            ],
+        )
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_multiedit_that_adds_function_to_constants_only_file(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    constants_file = sandbox / "constants.py"
+    constants_file.write_text(
+        '"""Module-level constants."""\n'
+        "MAXIMUM_RETRIES: int = 3\n"
+    )
+
+    completed = _run_hook_with_payload(
+        _make_multiedit_payload(
+            constants_file,
+            edits=[
+                {
+                    "old_string": "MAXIMUM_RETRIES: int = 3",
+                    "new_string": "MAXIMUM_RETRIES: int = 3\n\ndef reset() -> None:\n    return None",
+                },
+            ],
+        )
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
 def test_should_deny_edit_that_adds_function_to_constants_only_file(
     tmp_path: Path,
 ) -> None:

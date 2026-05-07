@@ -181,10 +181,12 @@ Before modifying production skill files, the improvement must be validated again
    - `mcp__plugin_github_github__pull_request_read(method="get_files", owner, repo, pullNumber)` to list changed files
    - `mcp__plugin_github_github__get_commit(sha=<baseline_base_sha>, owner, repo)` to confirm the commit state
    
-   For each gap-detection test that failed in the baseline, determine whether the proposed constraint text would have prevented the failure:
-   - Check if the constraint text is specific enough to cover the observed failure mode
-   - Check if the constraint text would have been triggered by the PR diff's contents
-   - Check if the constraint text is enforceable at the point in the workflow where the failure occurred
+   For each gap-detection test that failed in the baseline, determine whether the proposed constraint text would have prevented the failure. A metric scores as "Prevented" only when all three enforceability gates pass:
+   - **Actionable.** The constraint tells the agent to DO a concrete thing (a specific check, a specific exclusion, a specific verification step). General exhortations ("be careful", "don't introduce bugs", "maintain quality") are not actionable.
+   - **Verifiable.** A reviewer or automated tool could check whether the constraint was followed (e.g., "modify only files listed in bugs_to_fix" is verifiable via diff; "preserve existing comments" is verifiable via diff; "don't regress" is not verifiable before commit).
+   - **Negative scope.** The constraint names what is out of bounds — files not to touch, helpers not to inline, patterns to preserve. Outcome-only constraints ("the fix must be clean") without a negative scope are not enforceable on their own.
+
+   If any gate fails, the metric scores as "Not addressed" regardless of apparent relevance to the failure mode.
 
 6. **Capture comparison metrics.** Score the proposed improvement against each metric:
 
@@ -197,8 +199,8 @@ Before modifying production skill files, the improvement must be validated again
 
 ### Step 7: Promote or discard
 
-- **Promote:** The proposed improvement addresses at least 2 of the 4 metrics (scored as "Prevented" in Step 6) and the constraint text is at least as specific as any existing constraint it supplements. Apply the improvement to the production skill file. Commit as a single commit.
-- **Discard:** The improvement addresses 0-1 metrics. Remove the temp copy. Log the result to `self-improve-eval-data/<date>/discarded-improvements.json` with the constraint text and the metrics it would not have prevented.
+- **Promote:** The proposed improvement addresses at least 2 of the 4 metrics (scored as "Prevented" in Step 6) and passes all three enforceability gates (actionable, verifiable, negative scope). Apply the improvement to the production skill file. Commit as a single commit.
+- **Discard:** The improvement addresses 0-1 metrics, or fails any enforceability gate. Remove the temp copy. Log the result to `self-improve-eval-data/<date>/discarded-improvements.json` with the constraint text, which gates failed, and the metrics it would not have prevented.
 - **Mixed signal:** Not applicable with constraint-effectiveness evaluation. If the improvement addresses 2+ metrics, promote. If fewer, discard.
 
 ### Step 8: PR and report
@@ -300,7 +302,7 @@ Yesterday's session transcript is the baseline — no need to re-run it. The tra
 
 2. **Temp skill creation.** Write the target skill file's baseline content (fetched via `mcp__plugin_github_github__get_file_contents` at `refs/heads/main`) to a temp copy: `<file>.temp-<feature>`. Apply the proposed improvement to the temp copy. The production skill is not modified.
 
-3. **Constraint-effectiveness evaluation.** Use `mcp__plugin_github_github__pull_request_read(method="get_diff", ...)` to read the PR's diff. Evaluate whether the proposed constraint text would have prevented each gap-detection test failure observed in the baseline. Record each metric as "Prevented" or "Not addressed". Write to `self-improve-eval-data/<date>/test-run-<pr-number>-<feature>.json`.
+3. **Constraint-effectiveness evaluation.** Use `mcp__plugin_github_github__pull_request_read(method="get_diff", ...)` to read the PR's diff. Apply the three enforceability gates (actionable, verifiable, negative scope) from Step 6. A metric scores "Prevented" only when all three gates pass. Write to `self-improve-eval-data/<date>/test-run-<pr-number>-<feature>.json`.
 
 4. **Comparison table.** Compute which metrics the improvement would have prevented. Promote when ≥2 metrics are "Prevented".
 

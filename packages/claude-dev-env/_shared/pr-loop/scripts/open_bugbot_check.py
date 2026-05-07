@@ -59,10 +59,13 @@ def _fetch_annotations(
         print("Failed to fetch check-run annotations", file=sys.stderr)
         return None
     try:
-        return json.loads(gh_result.stdout)
+        annotations = json.loads(gh_result.stdout)
     except json.JSONDecodeError:
         print("Failed to parse annotations response", file=sys.stderr)
         return None
+    if not isinstance(annotations, list):
+        return None
+    return annotations
 
 
 def main(all_arguments: list[str]) -> int:

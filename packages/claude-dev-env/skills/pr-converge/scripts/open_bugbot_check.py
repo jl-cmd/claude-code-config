@@ -83,9 +83,12 @@ def _fetch_annotations(
     if completed.returncode != 0:
         return []
     try:
-        return json.loads(completed.stdout)
+        annotations = json.loads(completed.stdout)
     except json.JSONDecodeError:
         return []
+    if not isinstance(annotations, list):
+        return []
+    return annotations
 
 
 def main() -> int:

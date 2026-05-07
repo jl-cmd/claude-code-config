@@ -327,8 +327,8 @@ def test_ignores_c_preprocessor_directive():
 
 
 def test_ignores_hash_in_javascript_inline():
-    """A JavaScript line with # in a string literal should NOT trigger inline
-    comment extraction — # is not a comment marker in JS. Only // should be checked.
+    """A JavaScript line with # in a string literal should NOT trigger inline comment
+    extraction — # is not a comment marker in JS. Only // should be checked.
     Real pattern: `const sel = "#originally-dark"` would falsely match `originally`
     if # were treated as a comment marker."""
     result = _run_hook(
@@ -343,8 +343,8 @@ def test_ignores_hash_in_javascript_inline():
 
 
 def test_ignores_double_slash_in_js_url():
-    """A JavaScript/TypeScript line with a URL containing // should NOT trigger
-    inline comment extraction on the URL. The :// protocol marker should be
+    """A JavaScript/TypeScript line with a URL containing // should NOT trigger inline
+    comment extraction on the URL. The :// protocol marker should be
     recognized and skipped. Real pattern: `fetch("https://api.example.com/replaces")`
     should not false-positive on `replaces` in the URL path."""
     result = _run_hook(
@@ -514,6 +514,24 @@ def test_same_line_block_comment_with_trailing_inline():
         "Write",
         {
             "file_path": "src/fetch.ts",
+            "content": content,
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_multi_line_block_comment_close_with_trailing_inline():
+    """A multi-line /* */ block comment where the closing line has a // inline comment
+    containing a violation should detect the violation. The `continue` after block
+    comment close line must not skip the trailing inline comment check."""
+    content = "/*\n * end */ // no longer used"
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/cache.ts",
             "content": content,
         },
     )

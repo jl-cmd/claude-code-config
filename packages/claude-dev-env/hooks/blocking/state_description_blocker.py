@@ -89,7 +89,7 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
                     is_in_block_comment = False
                 else:
                     all_comment_lines.append(stripped)
-                continue
+                    continue
 
         if any(
             stripped.startswith(each_marker) for each_marker in all_inline_markers

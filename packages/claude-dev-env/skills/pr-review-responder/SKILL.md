@@ -37,7 +37,6 @@ Before doing ANYTHING:
 - [ ] FORBIDDEN: Assuming you know what the comments say
 - [ ] FORBIDDEN: Using default pagination (30 results, causes missed comments)
 - [x] REQUIRED: `pull_request_read(method="get_review_comments", pullNumber={pr_number}, owner="{owner}", repo="{repo}")`
-- [x] REQUIRED: Check for additional pages if 100+ comments
 
 **WHY:** Missing comments forces extra review rounds. Default pagination (30) silently drops comments.
 

@@ -35,7 +35,7 @@ Decide (four branches; match first whose predicate holds):
   `pull_request_review_id`:** Copilot posted findings only in review body
   (`CHANGES_REQUESTED` or `COMMENTED` with non-empty body, no inline
   threads). Parse body for actionable findings. Spawn Agent (subagent_type: clean-coder) to implement → push → post
-  top-level review reply using `pull_request_review_write(method: "create", event: "COMMENT", body)` citing new HEAD SHA → Step 3 in same tick.
+  top-level review reply using `pull_request_review_write(method="create", event="COMMENT", body)` citing new HEAD SHA → Step 3 in same tick.
   Reset
   `bugbot_clean_at = null` AND
   `copilot_clean_at = null`, `phase = BUGBOT`, Step 3 on new HEAD,
@@ -80,7 +80,7 @@ Copilot review yet, AND `mergeable_state == "clean"`), request Copilot
 review:
 
 ```
-add_issue_comment(owner=OWNER, repo=REPO, issue_number=NUMBER, body="@copilot review")
+add_issue_comment(owner=OWNER, repo=REPO, issueNumber=NUMBER, body="@copilot review")
 ```
 
 When the `request_copilot_review` MCP tool is available, use it directly: `request_copilot_review(owner=OWNER, repo=REPO, pullNumber=NUMBER)`.

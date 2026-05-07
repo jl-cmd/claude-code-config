@@ -39,7 +39,7 @@ Adds the same **traffic** fields whether they live in **`state.json`** or in the
 | `current_head` | str | PR `headRefOid` / `git rev-parse` for the PR under work (each tick; from `view_pr_context.py` when no file store) |
 | `bugbot_clean_at` | str \| null | HEAD SHA at which Cursor Bugbot last reported clean, or `null` (reset on every push) |
 | `copilot_clean_at` | str \| null | HEAD SHA at which the GitHub Copilot reviewer (`copilot-pull-request-reviewer[bot]`) last reported clean (review `state == "APPROVED"`), or `null`. Reset on every push. Convergence gates require this equals `current_head` after bugbot+bugteam are clean (see `skills/pr-converge/SKILL.md` § Convergence gates). |
-| `merge_state_status` | str \| null | Last-observed `mergeStateStatus` from `pull_request_read(method="get", ...)` (e.g., `CLEAN`, `DIRTY`, `BLOCKED`, `BEHIND`, `UNKNOWN`), or `null` before the first check. Reset on every push. `DIRTY` triggers the rebase invocation; non-`CLEAN` non-`DIRTY` is a hard blocker per pr-converge `Stop conditions`. |
+| `merge_state_status` | str \| null | Last-observed `mergeable_state` from `pull_request_read(method="get", ...)` (e.g., `clean`, `dirty`, `blocked`, `behind`, `unknown`), or `null` before the first check. Reset on every push. `dirty` triggers the rebase invocation; non-`clean` non-`dirty` is a hard blocker per pr-converge `Stop conditions`. |
 | `inline_lag_streak` | int | Consecutive ticks where bugbot's review body claims findings but inline-comments API returns zero rows for `current_head` |
 | `tick_count` | int | Observability only — **no ceiling**; loop ends on convergence or **Stop conditions** in `pr-converge` |
 

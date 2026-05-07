@@ -24,7 +24,7 @@ If the current branch has no associated PR and no diff against the default branc
 
 Determine the audit target in this order:
 
-1. **Open PR for current branch.** Call `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` for the current branch. If a PR exists, capture its number, base ref, head ref, and URL.
+1. **Open PR for current branch.** Call `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` for the current branch (`N` comes from the parent skill's context, or fall back to `gh pr view --json number --jq '.number'`). If a PR exists, capture its number, base ref, head ref, and URL.
 2. **No PR but a remote default branch exists.** Diff against the default branch's merge-base: `git merge-base HEAD origin/<default>` then `git diff <merge-base>...HEAD`. Treat this as the audit scope.
 3. **Neither.** Respond exactly: `No PR or upstream diff found. Push the branch or open a PR first.` and stop.
 

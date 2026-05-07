@@ -67,7 +67,7 @@ When the review POST fails, call `add_issue_comment` with the full review body:
 add_issue_comment(
     owner=owner,
     repo=repo,
-    issue_number=pull_number,
+    issueNumber=pull_number,
     body=fallback_body
 )
 ```

@@ -34,12 +34,12 @@ If that subagent is missing, fall back to `general-purpose` with the same brief 
 
 **Steps:**
 
-1. Capture cumulative diff: `pull_request_read(method=”get_diff”, pullNumber=N, owner=O, repo=R)` → write output to `.bugteam-final.diff` with `Write` tool.
-2. Capture original body: `pull_request_read(method=”get”, pullNumber=N, owner=O, repo=R)` → extract `.body` from response, write to `.bugteam-original-body.md` with `Write` tool.
+1. Capture cumulative diff: `pull_request_read(method="get_diff", pullNumber=N, owner=O, repo=R)` → write output to `.bugteam-final.diff` with `Write` tool.
+2. Capture original body: `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` → extract `.body` from response, write to `.bugteam-original-body.md` with `Write` tool.
 3. Agent brief:
    - **Inputs:** diff path, original body path, head branch, base branch.
    - **Constraint:** describe what the PR delivers from the cumulative diff — behavior, user-visible effect, merge rationale. Process metadata (loops, fix counts, findings) stays in review comments.
-   - **Preservation rule:** if the original body has manually curated sections (linked issues, screenshots, test plan, “Risk Assessment”, etc.), preserve them verbatim and only rewrite narrative around them.
+   - **Preservation rule:** if the original body has manually curated sections (linked issues, screenshots, test plan, "Risk Assessment", etc.), preserve them verbatim and only rewrite narrative around them.
    - **Output:** new body markdown.
 4. Write `.bugteam-final-body.md`.
 5. `update_pull_request(pullNumber=N, owner=O, repo=R, body=<body_text>)`.

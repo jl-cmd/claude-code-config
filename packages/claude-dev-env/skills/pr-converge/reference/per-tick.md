@@ -42,7 +42,7 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `
 
 If owner/repo/number are not yet known, extract them from the PR URL.
 
-Capture `number`, `headRefOid` (= `current_head`), owner/repo, branch.
+Capture `number`, `head.sha` (= `current_head`), owner/repo, branch.
 
 ## Step 2: Branch on `phase`
 

@@ -66,7 +66,7 @@ Pre-flight checks (in order):
 
 ## Step 1: Resolve PR scope (lead)
 
-1. Call `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` via the lead's available MCP tools. Extract `number`, `baseRefName`, `headRefName`, `url` from the response.
+1. Call `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` via the lead's available MCP tools (`N` comes from the parent skill's PR context, or fall back to `gh pr view --json number --jq '.number'`). Extract `number`, `baseRefName`, `headRefName`, `url` from the response.
 2. Else `git merge-base HEAD origin/<default>` then `git diff <merge-base>...HEAD`
 3. Else refuse per § When this skill applies.
 
@@ -199,13 +199,12 @@ The subagent receives this prompt and loops internally — the lead does not re-
        persistence schema.
 
        Post ONE review per loop. Use the payload shape from
-       <categories_file>'s sibling SKILL.md § "PR comments" — build
-       the JSON with jq `--rawfile` / `-Rs` reading per-finding body
-       files, pipe to
+       <categories_file>'s sibling SKILL.md § "PR comments" — pass
+       the review body as a direct string parameter (not jq/piped files) to
        `pull_request_review_write(method="create", event="COMMENT", body=<body>, owner=<owner>, repo=<repo>, pullNumber=<pr_number>)`.
        Review body first line: `## /qbug loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2`.
        If the review POST fails, fall back to one issue comment on
-       `create_issue_comment(owner=<owner>, repo=<repo>, issueNumber=<pr_number>, body=<body>)` carrying the full body; mark every
+       `add_issue_comment(owner=<owner>, repo=<repo>, issueNumber=<pr_number>, body=<body>)` carrying the full body; mark every
        finding `used_fallback=true`.
 
        Harvest `html_url` for the parent review and each child comment

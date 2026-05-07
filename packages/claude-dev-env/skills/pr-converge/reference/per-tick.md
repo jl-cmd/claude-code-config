@@ -151,20 +151,9 @@ never falsely terminates:
 
 ## Step 3: Re-trigger bugbot
 
-Prefer portable script (temp body file, `gh pr comment --body-file`):
+Use the `add_issue_comment` MCP tool:
 
-```bash
-python "${CLAUDE_SKILL_DIR}/scripts/trigger_bugbot.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER>
-```
-
-**Bundled PowerShell alternative** (same gh-body-file contract):
-
-```bash
-POST_BUGBOT_RUN="$HOME/.claude/skills/pr-converge/scripts/post-bugbot-run.ps1"
-pwsh -NoProfile -ExecutionPolicy Bypass -File "$POST_BUGBOT_RUN" \
-"https://github.com/<OWNER>/<REPO>/pull/<NUMBER>"
-```
+    add_issue_comment(owner="OWNER", repo="REPO", issue_number=NUMBER, body="bugbot run")
 
 `bugbot run` is empirically the only re-trigger Cursor Bugbot recognizes;
 alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.

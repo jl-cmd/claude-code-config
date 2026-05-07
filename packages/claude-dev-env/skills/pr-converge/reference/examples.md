@@ -25,7 +25,7 @@ convergence or stop]
 </example>
 
 <example> BUGTEAM phase, bugteam reports convergence and `bugbot_clean_at
-== current_head`. Claude: [runs `gh pr ready <NUMBER>`, reports "PR
+== current_head`. Claude: [runs `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`, reports "PR
 converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>; marked ready for
 review", applies **Convergence** from `workflows/schedule-wakeup-loop.md`]
 </example>
@@ -58,9 +58,9 @@ HEAD, schedules next wakeup]
 </example>
 
 <example> Back-to-back clean, mergeability CLEAN, no Copilot review on
-`current_head`. Claude requests Copilot via `request_copilot_review.py`,
+`current_head`. Claude requests Copilot via `add_issue_comment(owner=OWNER, repo=REPO, issue_number=NUMBER, body="@copilot review")`,
 waits one tick. Next tick: Copilot review `state: APPROVED`. Claude: [sets
-`copilot_clean_at = current_head`; runs `mark_pr_ready.py`; reports "PR
+`copilot_clean_at = current_head`; runs `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`; reports "PR
 #N converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>,
 mergeStateStatus CLEAN, copilot CLEAN; marked ready for review"]
 </example>

@@ -3,7 +3,7 @@
 - **Convergence** (back-to-back clean ∧ no outstanding Copilot findings
   on `current_head` ∧ `mergeStateStatus == "CLEAN"` with `mergeable ==
   "MERGEABLE"` ∧ post-convergence Copilot request returned `clean` at
-  `current_head`): prefer `mark_pr_ready.py`; else `gh pr ready`. With
+  `current_head`): use `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`. With
   `state.json`, append convergence row to
   `<TMPDIR>/pr-converge-<session_id>/converged.log` per `multi-pr-orchestration.md` §Memory; else
   skip. Report [convergence-gates.md](convergence-gates.md) (d) summary, then **omit loop pacing**

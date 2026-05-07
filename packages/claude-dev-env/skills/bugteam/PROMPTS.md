@@ -15,7 +15,7 @@ Keep the spawn prompt self-contained: reference only the PR scope, audit rubric,
   <worktree_path>absolute path from Step 1 per-PR workspace</worktree_path>
 </context>
 
-cd into `<worktree_path>` before any git, gh, or file operation.
+cd into `<worktree_path>` before any git or file operation.
 
 <scope>
   <diff_path>Absolute path to the per-PR patch file: <run_temp_dir>/pr-<N>/loop-<L>.patch (same path as gh pr diff redirect in AUDIT)</diff_path>
@@ -45,23 +45,22 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 </constraints>
 
 <comment_posting>
-  Sibling auditors (-b through -k): run only steps 1–3 (audit, assign IDs,
+  Sibling auditors (-b through -k): run only steps 1–2 (audit, assign IDs,
   capture excerpt, validate anchors), then write outcome XML per <output_format> and return.
-  Skip steps 4–8 — sibling auditors do not post PR reviews.
+  Skip steps 3–5 — sibling auditors do not post PR reviews.
 
   Validator (-a) and single-opus auditors: run all steps below.
 
   1. Audit the diff against the 10 categories above. Buffer the findings
-     in memory; all posting happens at step 6 once anchors are validated.
+     in memory; all posting happens at step 4 once anchors are validated.
   2. Assign each finding a stable finding_id of exactly the form `loop<L>-<K>`
      where <K> is 1-based within this loop.
-  3. For each finding, capture a verbatim excerpt from the target file at the cited line. Populate the `<excerpt>` element in the outcome XML with it. Validate every finding's (file, line) against the captured diff. Split
-     findings into two buckets: anchored (line is in the diff) and
-     unanchored (line is not in the diff — goes into the review body's
-     "Findings without a diff anchor" section per Step 2.5).
-  4. Build the review body per Step 2.5's review-body shape, filling in the
-     P0/P1/P2 counts and the unanchored-findings list (if any).
-  5. For each anchored finding, write its body to its own temp file:
+  3. For each finding, capture a verbatim excerpt from the target file at the cited
+     line. Populate the `<excerpt>` element in the outcome XML with it. Validate
+     every finding's (file, line) against the captured diff. Split findings into two
+     buckets: anchored (line is in the diff) and unanchored (line is not in the diff
+     — goes into the review body's "Findings without a diff anchor" section per
+     Step 2.5). Format each finding body as:
 
        **[severity] one-line title**
        Category: <letter> (<category name>)
@@ -69,16 +68,16 @@ cd into `<worktree_path>` before any git, gh, or file operation.
 
        _From /bugteam audit loop <L>._
 
-  6. Post ONE review via Step 2.5's per-loop review CLI shape. Harvest the
-     parent review `html_url` from the response JSON and the `comments[]`
-     child entries (each with its own `id` and `html_url`). Match child
-     entries to anchored findings in index order.
-  7. If the review POST itself fails, use Step 2.5's Review POST failure
-     fallback (single issue comment with full body and all findings inline).
-  8. Write every body (review body, each finding body, any fallback body)
-     to its own temp file. Load each file into the JSON payload via jq's
-     `--rawfile` or `-Rs`, then pipe the jq output to `gh api ... --input -`
-     so every body reaches GitHub as file contents inside the JSON payload.
+  4. Post ONE review via `pull_request_review_write(method="create",
+     event="COMMENT", body=<review_body>, owner=<O>, repo=<R>,
+     pullNumber=<N>, comments=[...])`. See Step 2.5 in SKILL.md for the full
+     parameter shape. Harvest the parent review `html_url` from the response
+     and the `comments[]` child entries (each with its own `id` and `html_url`).
+     Match child entries to anchored findings in index order.
+  5. If the review POST fails, use `add_issue_comment(owner=<O>, repo=<R>,
+     issue_number=<N>, body=<full_text>)` as fallback.
+  Body text is passed directly as string parameters to the MCP tool calls —
+  no temp files, no jq, no shell pipes.
 </comment_posting>
 
 <output_format>
@@ -126,7 +125,7 @@ After the teammate writes the XML and returns, the lead reads `.bugteam-pr<N>-lo
   <worktree_path>absolute path from Step 1 per-PR workspace</worktree_path>
 </context>
 
-cd into `<worktree_path>` before any git, gh, or file operation.
+cd into `<worktree_path>` before any git or file operation.
 
 <bugs_to_fix>
   [for each P0/P1/P2 finding from last_findings:]
@@ -153,12 +152,13 @@ cd into `<worktree_path>` before any git, gh, or file operation.
        (the commit was atomic; if it failed, no finding was applied), populate hook_output
        on each outcome, and return WITHOUT retrying. The lead will treat this loop as no-progress.
   5. git push with a plain fast-forward push (the default, no flag overrides).
-  6. For each bug, post a fix reply to its finding_comment_id via the
-     Step 2.5 reply CLI shape:
+  6. For each bug, post a fix reply to its finding_comment_id via
+     `add_reply_to_pull_request_comment(commentId=<id>, body=<reply_text>,
+     owner=<O>, repo=<R>, pullNumber=<N>)`:
      - "Fixed in <commit_sha>" if the bug was addressed by your commit
      - "Could not address this loop: <one-line reason>" if you skipped or failed it
      - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
-     Use the Fix reply CLI shape from Step 2.5 (`jq -Rs | gh api .../comments/<id>/replies --input -`). Write every reply body to a temp file first.
+     Body text is passed directly as string parameters -- no temp files, no jq, no shell pipes.
   7. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
 </execution>
 

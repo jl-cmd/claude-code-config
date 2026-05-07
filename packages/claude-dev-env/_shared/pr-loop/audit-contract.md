@@ -121,7 +121,7 @@ Sequence:
 4. Compute `fix_diff` against pre-fix contents for the modified set.
 5. Run `bugteam_code_rules_gate.py` with explicit paths for every modified file.
 6. Spawn a scoped audit of `fix_diff` with full A–J rigor, Shape A/B contract, adversarial pass, AND Haiku secondary in parallel (paranoid mode on post-fix).
-7. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and compare its total finding count against the current post-fix audit's total finding count. If the post-fix count exceeds the previous loop's count, flag all new findings as same-loop fix-targets and revise. An increase in total findings across loop transitions is a regression.
+7. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and compare its total finding count against the current post-fix audit's total finding count. If this is the first loop (L <= 1) or the file does not exist, skip this comparison. If the post-fix count exceeds the previous loop's count, flag all new findings as same-loop fix-targets and revise. An increase in total findings across loop transitions is a regression.
 8. Any new findings become same-loop fix-targets. Internal iteration count increments by one.
 9. After 3 internal iterations with fresh findings each time, exit `stuck: post-fix audit not converging`.
 10. Only when `gate_findings` empty AND `post_fix_findings` empty: `git add`, commit, push.

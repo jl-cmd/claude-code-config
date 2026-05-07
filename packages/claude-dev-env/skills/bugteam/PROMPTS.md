@@ -158,7 +158,7 @@ cd into `<worktree_path>` before any git or file operation.
   2. Apply each fix you can address.
   3. Run `python -m py_compile` (or language-equivalent) on every modified file.
   4. Run the project's test suite and confirm all existing tests pass. If a test fails, diagnose the regression and fix it before committing.
-  5. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and obtain its total finding count. If the number of bugs-to-fix in this round exceeds the previous loop's total, flag the excess as same-loop fix-targets and revise before committing.
+  5. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and obtain its total finding count. If this is the first loop (L <= 1) or the file does not exist, skip this comparison. Otherwise, re-read each changed file and verify the fix has not introduced new violations. If the post-fix finding count exceeds the previous loop's count, flag all new findings as same-loop fix-targets and revise before committing.
   6. git add by explicit path, then git commit with a message summarizing the bugs fixed.
      - If the commit fails because a git hook (pre-commit, commit-msg, etc.) blocked it,
        capture the hook's stderr, write status=hook_blocked for every finding in this loop
@@ -201,5 +201,5 @@ cd into `<worktree_path>` before any git or file operation.
   - Type hints on every signature you touch.
   - **Narrow scope.** Fix only the exact defect at the specified file:line. No restructuring, no inlining helpers, no renames, no "while I'm here" cleanup.
   - **Preserve helpers.** Do not remove or inline existing helper functions unless the finding explicitly names the helper as the problem.
-  - **No regression.** Before committing, compare the post-fix finding count against the previous loop's total finding count (from `<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`). The commit must produce a finding count that is flat or decreased relative to the previous loop. An increase means the fix introduced new bugs — revise before committing. Do not commit a regression.
+  - **No regression.** Before committing, compare the post-fix finding count against the previous loop's total finding count (from `<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`). On the first loop (L <= 1) or when the file does not exist, skip this guard. The commit must produce a finding count that is flat or decreased relative to the previous loop. An increase means the fix introduced new bugs — revise before committing. Do not commit a regression.
 </constraints>

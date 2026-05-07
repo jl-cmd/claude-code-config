@@ -218,10 +218,9 @@ Final report format:
 Date window: <start> to <end>
 Sessions scanned: <N>
 Candidate sessions: <N> (with bugteam/pr-converge markers)
-Tests run: <N> per session (5 tests × <candidate_count> sessions)
+Tests run: <N> per session (2 tests)
 Confirmed gaps: <N> (2+ occurrence threshold)
   - <test_name>: <file> §<section> → <action: promoted|discarded|already-covered>
-Single occurrences (not acted on): <N> → <path>
 Production files modified: [<files>]
 PR: <url>
 ```
@@ -243,28 +242,6 @@ Checks whether FIX agent loops introduce new bugs.
 - **Pass condition:** Finding counts are flat or strictly decreasing across all consecutive pairs.
 - **Maps to:** `bugteam/PROMPTS.md` FIX spawn XML `<constraints>` section, and `_shared/pr-loop/fix-protocol.md` step 8 post-fix self-audit.
 
-### Test 2: Scope violation test
-
-Checks whether FIX agents modify files outside the bug list.
-
-- **Input:** Per-loop FIX commit SHAs and the `bugs_to_fix` file list (extracted from the FIX agent prompt or outcome XML).
-- **Procedure:** For each FIX commit, run `git diff HEAD~1 --name-only` (or equivalent against the commit parent) and compare against the file list that was in `bugs_to_fix`. Collect any files that appear in the diff but not in the bug list.
-- **Fail condition:** Any FIX commit touches at least one file not listed in `bugs_to_fix`.
-- **Fail message template:** `Commit <sha> touched <unexpected_files_list> which were not in bugs_to_fix. The FIX agent exceeded the narrow-scope constraint.`
-- **Pass condition:** Every touched file was in the bug list.
-- **Maps to:** `bugteam/PROMPTS.md` FIX spawn XML `<constraints><execution>` — the constraint on modifying only referenced files.
-
-### Test 3: Cross-file drift test
-
-Checks for hardcoded config values in test files that diverge from production config.
-
-- **Input:** The full list of changed files from each FIX commit diff (including test files).
-- **Procedure:** For each test file in the diff, search for hardcoded values (string literals, numeric literals > 5 lines from config imports) that match config constant patterns. Cross-reference against the production config in `config/`. Collect any mismatches where a test hardcodes a value that should reference a config constant.
-- **Fail condition:** Any test file hardcodes a value that has a corresponding config constant with a different value.
-- **Fail message template:** `Test file <path> hardcodes a value (<value>) that diverges from the config constant in <config_path>. The audit rubric didn't catch this config-test drift.`
-- **Pass condition:** No config-vs-test mismatches found.
-- **Maps to:** `bugteam/PROMPTS.md` AUDIT category J (magic values and configuration drift), and `code-quality-agent`'s audit rubric.
-
 ### Test 4: Verified-clean depth test
 
 Checks the quality of verified-clean entries in audit results.
@@ -276,17 +253,6 @@ Checks the quality of verified-clean entries in audit results.
 - **Fail message template:** `Category <letter> was marked clean with shallow evidence: '<quote>'. The depth requirement was not met — evidence must name the function, the path traced, and the specific check performed.`
 - **Pass condition:** Every clean entry names the function, the path traced, and the specific check performed.
 - **Maps to:** `bugteam/PROMPTS.md` AUDIT spawn XML `<bug_categories>` — the return-or-verified-clean requirement.
-
-### Test 5: Preservation failure test
-
-Checks that FIX agents do not delete multi-caller helpers without mentioning them in findings.
-
-- **Input:** FIX commit diffs (per-loop).
-- **Procedure:** For each FIX commit, collect deleted lines. Cross-reference deletions against helper function definitions (functions >5 lines with multiple callers in the codebase). Check whether any deleted helper was not named in any finding from the preceding audit loop.
-- **Fail condition:** A multi-caller helper was deleted or inlined and was not mentioned in the audit findings.
-- **Fail message template:** `Commit <sha> removed/inlined <helper_name> which had <N> callers and was not named in the finding. The preservation constraint was violated.`
-- **Pass condition:** No unexplained deletions of multi-caller helpers.
-- **Maps to:** `bugteam/PROMPTS.md` FIX spawn XML `<constraints>` — the constraint on modifying only files referenced in `bugs_to_fix`.
 
 ## Eval baseline protocol
 

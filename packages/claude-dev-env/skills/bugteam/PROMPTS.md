@@ -99,7 +99,7 @@ cd into `<worktree_path>` before any git, gh, or file operation.
     <description>2-3 sentence description with concrete trace</description>
   </finding>
   <verified_clean>
-    <category letter="<letter>" name="<name>" evidence="brief evidence + cleared conclusion"/>
+    <category letter="<letter>" name="<name>" files_opened="[path1, path2, ...]" evidence="adversarial probes performed and how each was ruled out, with specific lines quoted and functions traced"/>
   </verified_clean>
 </bugteam_audit>
 ```
@@ -152,7 +152,8 @@ cd into `<worktree_path>` before any git, gh, or file operation.
      - "Could not address this loop: <one-line reason>" if you skipped or failed it
      - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
      Use the Fix reply CLI shape from Step 2.5 (`jq -Rs | gh api .../comments/<id>/replies --input -`). Write every reply body to a temp file first.
-  7. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
+  7. Read the previous loop's outcome from `<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml` to obtain its total finding count. Compute the current post-fix finding count from the self-audit. If the current count exceeds the previous count, flag all new findings as same-loop fix-targets and revise before proceeding.
+  8. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
 </execution>
 
 <outcome_xml_schema>
@@ -179,6 +180,6 @@ cd into `<worktree_path>` before any git, gh, or file operation.
   - git add by explicit path — name each file being staged.
   - Preserve existing comments on lines you do not modify.
   - Type hints on every signature you touch.
-  - **No regression.** After applying all fixes and passing the post-fix self-audit, verify that the total finding count does not exceed the previous loop's finding count. An increase in total findings between loop transitions is a regression and must be revised before committing.
+  - **No regression.** After the post-fix self-audit, read `<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml` for the previous loop's total finding count. Compare against the current post-fix finding count. If the current count exceeds the previous count, flag all new findings as same-loop fix-targets and revise before committing. The commit must produce a finding count that is flat or decreased relative to the previous loop.
 </constraints>
 ```

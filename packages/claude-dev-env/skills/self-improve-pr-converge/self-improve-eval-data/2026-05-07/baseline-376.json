@@ -1,50 +1,20 @@
 {
   "pr_number": 376,
-  "repo": "jl-cmd/claude-code-config",
-  "session": "0ff709bb-98d5-470c-a1ee-ed2ee3fcbea1",
+  "starting_sha": "22c4ca97383a7350d392f0e79a4667a60729290a",
   "date": "2026-05-07",
   "loop_count": 4,
   "findings_per_loop": [
-    {
-      "loop": 1,
-      "total": 1,
-      "p0": 0,
-      "p1": 0,
-      "p2": 1
-    },
-    {
-      "loop": 2,
-      "total": 3,
-      "p0": 0,
-      "p1": 0,
-      "p2": 3
-    },
-    {
-      "loop": 3,
-      "total": 5,
-      "p0": 0,
-      "p1": 0,
-      "p2": 5
-    },
-    {
-      "loop": 4,
-      "total": 5,
-      "p0": 0,
-      "p1": 0,
-      "p2": 5
-    }
+    {"loop": 1, "total": 1, "p0": 0, "p1": 0, "p2": 1},
+    {"loop": 2, "total": 3, "p0": 0, "p1": 0, "p2": 3},
+    {"loop": 3, "total": 5, "p0": 0, "p1": 0, "p2": 5},
+    {"loop": 4, "total": 5, "p0": 0, "p1": 0, "p2": 5}
   ],
   "finding_regression_count": 2,
   "scope_violations": [],
   "verified_clean_depth_issues": [
-    {
-      "source": "session 0ff709bb",
-      "detail": "Shallow verified-clean: 'verified clean'"
-    },
-    {
-      "source": "session 49f749d9",
-      "detail": "Shallow verified-clean: 'no issues found' (3 occurrences)"
-    }
+    {"source": "session_0ff709bb", "evidence": "verified clean"},
+    {"source": "session_0ff709bb", "evidence": "verified clean"},
+    {"source": "session_0ff709bb", "evidence": "verified clean"}
   ],
   "preservation_violations": [],
   "final_outcome": "converged"

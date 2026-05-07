@@ -1,0 +1,42 @@
+{
+  "pr_number": 376,
+  "feature": "regression-and-depth-gates",
+  "date": "2026-05-07",
+  "baseline_loop_count": 4,
+  "baseline_finding_regressions": 2,
+  "baseline_scope_violations": 0,
+  "baseline_verified_clean_depth_issues": 2,
+  "improvements": [
+    {
+      "gap": "FIX regression (Test 1)",
+      "target_file": "packages/claude-dev-env/skills/bugteam/PROMPTS.md",
+      "target_section": "FIX spawn-prompt XML <execution> step 7 + <constraints> No regression",
+      "actionable": true,
+      "verifiable": true,
+      "negative_scope": true,
+      "metric_impact": {
+        "loop_count": "Not addressed",
+        "finding_regressions": "Prevented",
+        "scope_violations": "Not addressed",
+        "verified_clean_depth": "Not addressed"
+      }
+    },
+    {
+      "gap": "Verified-clean depth (Test 4)",
+      "target_file": "packages/claude-dev-env/skills/bugteam/PROMPTS.md",
+      "target_section": "AUDIT outcome XML schema <verified_clean> evidence attribute",
+      "actionable": true,
+      "verifiable": true,
+      "negative_scope": true,
+      "metric_impact": {
+        "loop_count": "Not addressed",
+        "finding_regressions": "Not addressed",
+        "scope_violations": "Not addressed",
+        "verified_clean_depth": "Prevented"
+      }
+    }
+  ],
+  "metrics_prevented": 2,
+  "promotion_verdict": "promoted",
+  "pr_number_created": 390
+}

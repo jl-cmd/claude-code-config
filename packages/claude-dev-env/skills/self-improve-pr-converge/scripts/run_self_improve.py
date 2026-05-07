@@ -145,10 +145,7 @@ def main() -> None:
 
     print(f"\n  Confirmed gaps: {confirmed}", file=sys.stderr)
     print(f"  Single occurrences: {len(single_occurrences)}", file=sys.stderr)
-    print(
-        f"  Note: Tests 2, 3, 5 are not implemented in the extraction script.",
-        file=sys.stderr,
-    )
+    print("  Tests: 1 (FIX regression), 4 (verified-clean depth)", file=sys.stderr)
 
     report_output = {
         "status": "actionable" if confirmed else "no-action",
@@ -178,7 +175,7 @@ def main() -> None:
         ],
         "gap_tests": report_parts,
         "single_occurrences": single_occurrences,
-        "note": "Tests 2, 3, 5 not implemented in extraction script",
+        "note": "Tests: 1 (FIX regression), 4 (verified-clean depth)",
     }
 
     print(file=sys.stderr)

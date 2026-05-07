@@ -64,10 +64,11 @@ def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
             comment_lines.append(stripped)
             continue
 
-        inline_index = _find_inline_comment_start(stripped, inline_markers)
-        if inline_index is not None and inline_index > 0:
-            comment_lines.append(stripped[inline_index:])
-            continue
+        if not is_in_block_comment:
+            inline_index = _find_inline_comment_start(stripped, inline_markers)
+            if inline_index is not None and inline_index > 0:
+                comment_lines.append(stripped[inline_index:])
+                continue
 
         if "/*" in stripped:
             is_in_block_comment = True

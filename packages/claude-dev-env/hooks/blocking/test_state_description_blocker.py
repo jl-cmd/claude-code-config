@@ -398,6 +398,22 @@ def test_ignores_comment_with_glob_pattern():
     assert result.stdout == ""
 
 
+def test_block_comment_with_url_closes_correctly():
+    """A block comment line containing // in a URL should still detect */ and close
+    the block comment state. `* https://example.com/ */` must not trigger inline
+    comment extraction on // and skip the */ close check."""
+    content = "/*\n * https://example.com/api/v1 */\nnormal_code()"
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/cache.ts",
+            "content": content,
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
 def test_additional_context_contains_examples():
     result = _run_hook(
         "Write",

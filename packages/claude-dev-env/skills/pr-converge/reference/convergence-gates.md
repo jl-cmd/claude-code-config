@@ -58,7 +58,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/check_pr_mergeability.py" \
 
 Persist `mergeStateStatus` into `merge_state_status`. Decide:
 
-- **`mergeStateStatus == "CLEAN"` AND `mergeable == "MERGEABLE"`:**
+- **`mergeStateStatus == "clean"` AND `mergeable == "MERGEABLE"`:**
   Continue to gate (c).
 - **`mergeStateStatus == "DIRTY"` (or `mergeable == "CONFLICTING"`):** Do
   **not** mark ready. Invoke **`rebase`** skill
@@ -77,7 +77,7 @@ Persist `mergeStateStatus` into `merge_state_status`. Decide:
 ## (c) Post-convergence Copilot review request
 
 Once gates (a) and (b) both pass (Copilot clean at `current_head` *or* no
-Copilot review yet, AND `mergeStateStatus == "CLEAN"`), request Copilot
+Copilot review yet, AND `mergeStateStatus == "clean"`), request Copilot
 review:
 
 ```bash
@@ -107,7 +107,7 @@ Next tick with `phase == BUGTEAM` and prior state preserved → re-run gate
 ## (d) Mark ready and report
 
 Only when all four gates pass — bugbot CLEAN ∧ bugteam CLEAN ∧
-`mergeStateStatus == "CLEAN"` ∧ Copilot CLEAN at HEAD — run:
+`mergeStateStatus == "clean"` ∧ Copilot CLEAN at HEAD — run:
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/mark_pr_ready.py" \
@@ -118,5 +118,5 @@ When scripts unavailable, `gh pr ready <NUMBER> --repo <OWNER>/<REPO>` is
 equivalent. With `state.json`, append convergence row to
 `<TMPDIR>/pr-converge-<session_id>/converged.log` per `multi-pr-orchestration.md` §Memory; else skip.
 Report: `PR #<NUMBER> converged: bugbot CLEAN at <SHA>, bugteam CLEAN at
-<SHA>, mergeStateStatus CLEAN, copilot CLEAN at <SHA>; marked ready for
+<SHA>, mergeStateStatus clean, copilot CLEAN at <SHA>; marked ready for
 review`. **Omit loop pacing** per **Convergence** of active pacing workflow.

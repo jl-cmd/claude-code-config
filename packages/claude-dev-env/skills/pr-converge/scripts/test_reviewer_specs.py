@@ -5,6 +5,7 @@ Covers:
 - bugbot_spec.classify_review uses the dirty-body regex
 - copilot_spec.classify_review dispatches off review state plus body
 - claude_spec.classify_review dispatches off review state plus body
+- specs are imported by ``reviewer_fetch_core``
 """
 
 from __future__ import annotations

@@ -1,11 +1,10 @@
-"""Reviewer specifications shared by the per-reviewer fetch entry-point scripts.
+"""Reviewer specifications shared by the review-fetch pipeline.
 
 A ReviewerSpec carries the two knobs that vary across the bugbot, copilot, and
 claude reviewers: the case-insensitive substring used to match the reviewer's
 GitHub login, and the callable that classifies a single review payload as
 ``"clean"`` or ``"dirty"``. The spec instances declared at module scope are
-imported by the thin entry-point wrappers (``fetch_bugbot_reviews.py`` etc.)
-and by ``reviewer_fetch_core``.
+imported by the single entry point ``reviewer_fetch_core``.
 """
 
 from __future__ import annotations

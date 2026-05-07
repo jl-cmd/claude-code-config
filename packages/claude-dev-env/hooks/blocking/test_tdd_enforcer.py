@@ -263,6 +263,43 @@ def test_should_deny_edit_that_adds_function_to_constants_only_file(
     assert _decision_from(completed) == "deny"
 
 
+def test_should_deny_python_file_with_assignment_calling_undefined_function(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    unsafe_file = sandbox / "unsafe.py"
+    unsafe_content = (
+        '"""Config with unsafe call."""\n'
+        "VALUE: str = compute()\n"
+    )
+    unsafe_file.write_text(unsafe_content)
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(unsafe_file, unsafe_content)
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_allow_python_file_with_assignment_calling_imported_function(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    safe_file = sandbox / "safe.py"
+    safe_content = (
+        '"""Config with imported call."""\n'
+        "from pathlib import Path\n"
+        "BASE_PATH = Path(r'C:\\\\data')\n"
+    )
+    safe_file.write_text(safe_content)
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(safe_file, safe_content)
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
 def test_should_deny_python_file_when_any_function_definition_is_present(tmp_path: Path) -> None:
     sandbox = _sandbox(tmp_path)
     mixed_file = sandbox / "mixed.py"

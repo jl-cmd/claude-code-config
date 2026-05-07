@@ -1,7 +1,8 @@
 """Configuration constants for the pr-converge skill scripts.
 
-Path templates accept ``str.format(**kwargs)`` substitution; bugbot strings
-match the literal phrasing the Cursor Bugbot reviewer emits.
+Login/state constants identify reviewers and classify review states; reflow
+constants control the SKILL.md reflow logic; regex/bugbot constants match
+the literal phrasing the Cursor Bugbot reviewer emits.
 """
 
 import re
@@ -39,55 +40,6 @@ BUGBOT_DIRTY_BODY_REGEX: str = (
     r"Cursor Bugbot has reviewed your changes and found \d+ potential issue"
 )
 
-GH_REVIEWS_PATH_TEMPLATE: str = (
-    "repos/{owner}/{repo}/pulls/{number}/reviews?per_page=100"
-)
-
-GH_INLINE_COMMENTS_PATH_TEMPLATE: str = (
-    "repos/{owner}/{repo}/pulls/{number}/comments?per_page=100"
-)
-
-GH_PR_OBJECT_PATH_TEMPLATE: str = "repos/{owner}/{repo}/pulls/{number}"
-
-GH_INLINE_COMMENT_REPLY_PATH_TEMPLATE: str = (
-    "repos/{owner}/{repo}/pulls/{number}/comments/{comment_id}/replies"
-)
-
-GH_REQUESTED_REVIEWERS_PATH_TEMPLATE: str = (
-    "repos/{owner}/{repo}/pulls/{number}/requested_reviewers"
-)
-
-GH_REQUESTED_REVIEWERS_FIELD_TEMPLATE: str = "reviewers[]={reviewer_id}"
-
-BUGBOT_RUN_TRIGGER_PHRASE: str = "bugbot run\n"
-
-BUGBOT_RUN_TEMPFILE_SUFFIX: str = ".md"
-
-BUGBOT_RUN_TEMPFILE_PREFIX: str = "pr-converge-bugbot-run-"
-
-PR_CONTEXT_FIELDS: str = "number,url,headRefOid,baseRefName,headRefName,isDraft"
-
-PR_DETACHED_HEAD_ARGS_ERROR: str = "--owner and --repo require --number; all three must be provided together for detached-HEAD PR resolution"
-
-PR_NUMBER_ARG_FLAG: str = "--number"
-
-PR_NUMBER_ARG_HELP: str = "PR number"
-
-PR_OWNER_ARG_FLAG: str = "--owner"
-
-PR_OWNER_ARG_HELP: str = "GitHub repository owner"
-
-PR_REPO_ARG_FLAG: str = "--repo"
-
-PR_REPO_ARG_HELP: str = "GitHub repository name"
-
-GH_REPO_FLAG: str = "--repo"
-
-MERGEABILITY_FIELDS: str = "mergeable,mergeStateStatus,headRefOid"
-
-GH_FIELD_BODY_AT_PREFIX: str = "body=@"
-
-GH_REPO_ARG_TEMPLATE: str = "{owner}/{repo}"
 
 SKILL_REFLOW_MAXIMUM_WIDTH: int = 80
 

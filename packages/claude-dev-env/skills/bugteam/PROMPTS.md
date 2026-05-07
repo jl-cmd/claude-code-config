@@ -203,3 +203,4 @@ cd into `<worktree_path>` before any git or file operation.
   - **Preserve helpers.** Do not remove or inline existing helper functions unless the finding explicitly names the helper as the problem.
   - **No regression.** Before committing, compare the post-fix finding count against the previous loop's total finding count (from `<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`). On the first loop (L <= 1) or when the file does not exist, skip this guard. The commit must produce a finding count that is flat or decreased relative to the previous loop. An increase means the fix introduced new bugs — revise before committing. Do not commit a regression.
 </constraints>
+```

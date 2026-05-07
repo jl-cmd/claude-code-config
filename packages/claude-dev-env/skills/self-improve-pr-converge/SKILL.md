@@ -73,7 +73,7 @@ JSONL session transcript files from prior Claude Code sessions. These are the pr
 
 2. Filter to session-level transcripts. Exclude paths containing `\subagents\` (per-tick subagent transcripts). Session-level files are `<uuid>.jsonl` directly under a project directory like `Y--Projects-temp-python-automation-eval\`. Include only files with `.claude\projects\` in the path to restrict to Claude Code session transcripts.
 
-3. For each candidate, check content markers via `(Get-Content -Path "<file>" -ReadCount 0) -match "pattern"` (use `-match` operator, not `Select-String` which may be blocked by auto mode — gate through the `PowerShell` tool). Markers: `bugteam`, `/bugteam exit:`, `last_action`, `starting_sha`, `/eval-bugteam`.
+3. Scan for markers. Run `python scripts\scan_session_markers.py <paths...> --output <temp_path>` to stream-check each file for markers: `bugteam`, `/bugteam exit:`, `last_action`, `starting_sha`, `/eval-bugteam`. The script outputs JSON with per-file results; review then clear the temp file.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 
@@ -104,7 +104,11 @@ Search order — try each source until at least one candidate is found:
 
 2. **Filter to session-level transcripts.** Exclude paths containing `\subagents\`. Session-level files are `<uuid>.jsonl` directly under a project directory.
 
-3. **Grep for markers.** For each candidate, search file content with `(Get-Content -Path "<file>" -ReadCount 0) -match "pattern"` (use `-match` operator, not `Select-String` which may be blocked by auto mode — gate through the `PowerShell` tool). Markers: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`.
+3. **Scan for markers.** Run the bundled marker-scan script against candidate files, writing results to a temp file:
+   ```
+   python scripts\scan_session_markers.py <paths...> --output <temp_path>
+   ```
+   The script streams each JSONL file line-by-line (never loads the full file), extracts only conversation text using the same JSONL parser as the metrics script, and checks for session markers: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`. Output is a JSON summary with per-file matched markers, file size, and line count. Review the output, then clean up the temp file.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 

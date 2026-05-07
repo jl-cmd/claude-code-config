@@ -12,6 +12,17 @@ ALL_OUTCOME_MARKERS = [
     "no-action",
 ]
 
+JSON_INDENT_WIDTH = 2
+
+ALL_SESSION_MARKERS = [
+    "bugteam",
+    "pr-converge",
+    "Loop",
+    "/eval-bugteam",
+    "/eval-pr-converge",
+    "/bugteam exit:",
+]
+
 ALL_SHALLOW_PATTERNS = [
     "no issues found",
     "pattern appears correct",

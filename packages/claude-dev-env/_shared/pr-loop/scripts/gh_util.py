@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Sequence
 
 sys.modules.pop("config", None)
-if str(Path(__file__).resolve().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+if str(Path(__file__).absolute().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).absolute().parent))
 
 from config.gh_util_constants import (
     ALL_AUTH_ERROR_MARKERS,
@@ -54,11 +54,18 @@ def run_gh(
     all_command: Sequence[str],
     *,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    should_retry_nonzero: bool = True,
+    should_retry_timeout: bool = True,
+    stdin_text: str | None = None,
 ) -> GhResult:
     """Run a gh command with timeout + transient retry handling.
 
     Retries are attempted only for transient failures (network/server/rate-limit style
     messages). Auth/scope failures are returned immediately to fail closed.
+
+    The should_retry_nonzero and should_retry_timeout parameters disable retries
+    for POST operations where retrying could create duplicate reviews or comments
+    on GitHub.
     """
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
@@ -72,6 +79,7 @@ def run_gh(
                 capture_output=True,
                 text=True,
                 timeout=timeout_seconds,
+                input=stdin_text,
             )
         except subprocess.TimeoutExpired as error:
             error_stderr = _ensure_text(error.stderr)
@@ -85,7 +93,7 @@ def run_gh(
                 stderr=message,
                 is_timed_out=True,
             )
-            if each_attempt < max_attempts - 1:
+            if should_retry_timeout and each_attempt < max_attempts - 1:
                 time.sleep(
                     DEFAULT_BACKOFF_SECONDS
                     * (EXPONENTIAL_BACKOFF_BASE**each_attempt)
@@ -105,7 +113,7 @@ def run_gh(
         combined = f"{gh_result.stderr}\n{gh_result.stdout}".strip()
         if _is_auth_error(combined):
             return gh_result
-        if each_attempt < max_attempts - 1 and _is_transient_error(combined):
+        if should_retry_nonzero and each_attempt < max_attempts - 1 and _is_transient_error(combined):
             time.sleep(
                 DEFAULT_BACKOFF_SECONDS * (EXPONENTIAL_BACKOFF_BASE**each_attempt)
             )

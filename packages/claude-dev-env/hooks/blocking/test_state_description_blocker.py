@@ -306,6 +306,22 @@ def test_detects_inline_trailing_comment():
     assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
+def test_ignores_url_with_double_slash_in_python():
+    """A Python line with a URL containing // should NOT trigger inline comment
+    extraction — // is floor division in Python, not a comment marker.
+    Real pattern: `url = "https://api.example.com/replaces/v1"` would falsely
+    extract `//api.example.com/replaces/v1"` as a comment and match `replaces`."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/main.py",
+            "content": 'url = "https://api.example.com/replaces/v1"',
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
 def test_ignores_instead_of_in_code_string_with_inline_comment():
     """A code line containing 'instead of' inside a string literal with a trailing
     comment should NOT be blocked — only the comment portion after # is scanned.

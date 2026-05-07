@@ -26,6 +26,7 @@ _insert_hooks_tree_for_imports()
 from config.state_description_blocker_constants import (
     ALL_COMMENT_BEARING_EXTENSIONS,
     ALL_COMMENT_TRANSITION_PATTERNS,
+    ALL_HASH_ONLY_EXTENSIONS,
     ALL_MARKDOWN_EXTENSIONS,
 )
 
@@ -43,12 +44,19 @@ def is_comment_bearing_file(file_path: str) -> bool:
     return _get_file_extension(file_path) in ALL_COMMENT_BEARING_EXTENSIONS
 
 
-def _extract_comment_lines(text: str) -> list[str]:
+def _get_inline_markers(extension: str) -> tuple[str, ...]:
+    if extension in ALL_HASH_ONLY_EXTENSIONS:
+        return ("#",)
+    return ("#", "//")
+
+
+def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
     """Extract comment lines from source code — Python (#), JS/TS/C/Rust/Go (//), and block comments."""
     comment_lines: list[str] = []
     lines = text.splitlines()
 
     is_in_block_comment = False
+    inline_markers = _get_inline_markers(extension)
     for each_line in lines:
         stripped = each_line.strip()
 
@@ -56,7 +64,7 @@ def _extract_comment_lines(text: str) -> list[str]:
             comment_lines.append(stripped)
             continue
 
-        inline_index = _find_inline_comment_start(stripped)
+        inline_index = _find_inline_comment_start(stripped, inline_markers)
         if inline_index is not None and inline_index > 0:
             comment_lines.append(stripped[inline_index:])
             continue
@@ -71,9 +79,9 @@ def _extract_comment_lines(text: str) -> list[str]:
     return comment_lines
 
 
-def _find_inline_comment_start(stripped: str) -> int | None:
-    """Find the start index of an inline comment marker (# or //) in a code line."""
-    for each_marker in ("#", "//"):
+def _find_inline_comment_start(stripped: str, all_markers: tuple[str, ...]) -> int | None:
+    """Find the start index of an inline comment marker in a code line."""
+    for each_marker in all_markers:
         position = stripped.find(each_marker)
         if position > 0:
             return position
@@ -89,7 +97,7 @@ def find_violations(text: str, file_path: str) -> list[str]:
     if is_markdown_file(file_path):
         scan_text = text
     elif is_comment_bearing_file(file_path):
-        comment_lines = _extract_comment_lines(text)
+        comment_lines = _extract_comment_lines(text, _get_file_extension(file_path))
         scan_text = "\n".join(comment_lines)
     else:
         return []

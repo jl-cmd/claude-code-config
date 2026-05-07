@@ -43,6 +43,23 @@ ALL_MARKDOWN_EXTENSIONS: frozenset[str] = frozenset(
     {".md", ".mdx", ".markdown", ".rmd"}
 )
 
+ALL_HASH_ONLY_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".py",
+        ".rb",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".ps1",
+        ".psm1",
+        ".sql",
+        ".yaml",
+        ".yml",
+        ".tf",
+        ".php",
+    }
+)
+
 ALL_COMMENT_BEARING_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".py",
@@ -71,8 +88,6 @@ ALL_COMMENT_BEARING_EXTENSIONS: frozenset[str] = frozenset(
         ".yaml",
         ".yml",
         ".tf",
-        ".json",
-        ".css",
         ".scss",
         ".less",
     }

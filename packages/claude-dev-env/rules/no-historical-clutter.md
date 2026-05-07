@@ -10,7 +10,7 @@ paths: **/*
 
 ## Rule
 
-Never reference removed implementations, old defaults, prior behaviors, or how something "used to be" when updating documentation. The current state is all that matters.
+Never reference removed implementations, old defaults, prior behaviors, or how something `"used to be"` when updating documentation. The current state is all that matters.
 
 ## Examples of prohibited patterns
 

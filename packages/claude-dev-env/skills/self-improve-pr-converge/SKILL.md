@@ -73,9 +73,15 @@ JSONL session transcript files from prior Claude Code sessions. These are the pr
 
 2. Filter to session-level transcripts. Exclude paths containing `\subagents\` (per-tick subagent transcripts). Session-level files are `<uuid>.jsonl` directly under a project directory like `Y--Projects-temp-python-automation-eval\`. Include only files with `.claude\projects\` in the path to restrict to Claude Code session transcripts.
 
-3. Scan for markers. Run `python scripts\scan_session_markers.py <paths...> --output <temp_path>` to stream-check each file for markers: `bugteam`, `/bugteam exit:`, `last_action`, `starting_sha`, `/eval-bugteam`. The script outputs JSON with per-file results; review then clear the temp file.
+3. Run the bundled runner script against all candidate paths. It performs marker scanning, extraction, and gap-detection in one call:
 
-4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
+   ```
+   PowerShell(& 'scripts\run_self_improve.py' <paths...>)
+   ```
+
+   The script outputs a single JSON report to stdout with markers found, session metrics, and gap-test results. No temp files needed — capture the output from the tool result.
+
+4. Collect results into `candidate_sessions[]` with path, mtime, and matched markers.
 
 ### Supporting data
 
@@ -104,11 +110,18 @@ Search order — try each source until at least one candidate is found:
 
 2. **Filter to session-level transcripts.** Exclude paths containing `\subagents\`. Session-level files are `<uuid>.jsonl` directly under a project directory.
 
-3. **Scan for markers.** Run the bundled marker-scan script against candidate files, writing results to a temp file:
+3. **Run the pipeline.** Use the bundled runner to scan markers, extract metrics, and run gap-detection tests in one call:
+
    ```
-   python scripts\scan_session_markers.py <paths...> --output <temp_path>
+   PowerShell(& '..\..\..\..\..\..\..\Y:Projects\temp\python-automation-eval\.venv\Scripts\python.exe' scripts\run_self_improve.py <paths...>)
    ```
-   The script streams each JSONL file line-by-line (never loads the full file), extracts only conversation text using the same JSONL parser as the metrics script, and checks for session markers: `bugteam`, `pr-converge`, `Loop`, `/eval-bugteam`, `/eval-pr-converge`, `/bugteam exit:`. Output is a JSON summary with per-file matched markers, file size, and line count. Review the output, then clean up the temp file.
+
+   Or from within the `scripts/` directory:
+   ```
+   PowerShell(& '..\..\..\..\..\..\..\Y:Projects\temp\python-automation-eval\.venv\Scripts\python.exe' run_self_improve.py <paths...>)
+   ```
+
+   The runner outputs a single JSON report to stdout. Read the tool result directly — no temp file needed.
 
 4. Collect matched files into `candidate_sessions[]` with path, mtime, and matched markers.
 
@@ -127,25 +140,15 @@ If all sources return empty: refuse with "No bugteam/pr-converge sessions found 
 
 ### Step 2: Extract structured data per session
 
-JSONL session transcripts store each conversation turn as one JSON object per line. The `assistant` and `user` types embed message text in `message.content` (either a plain string or a list of `{"type": "text", "text": "..."}` items). Use the bundled extraction script to parse each line and extract bugteam metrics.
-
-Run the script against each candidate session path via the `PowerShell` tool:
-
-```
-PowerShell(python scripts\extract_bugteam_metrics.py <path_to_session.jsonl> [<more_sessions...>])
-```
-
-The script outputs per-session loop finding counts, bugbot re-trigger counts, the final outcome, and gap-test results. Store the output in-memory (write nothing to disk unless `--preserve-extractions` is set).
+Already handled by the unified runner in Step 1 — the `run_self_improve.py` script performs marker scanning, extraction, and gap-detection in one call. Skip this step unless running with `--extract-only` for debug purposes.
 
 ### Step 3: Run gap-detection tests
 
-For each session with extracted data, run all 5 tests defined in the [Test reference](#test-reference) section below. Collect results:
+Already performed by the unified runner. Read the JSON output from Step 1:
 
-- Per test, per session: `{test_name, session_path, result: "pass"|"fail", evidence, metric_values}`
-- Apply the **evidence threshold**: a gap is confirmed only when the same test fails in 2+ distinct sessions (within or across the date window). Single failures are logged as "observed once, not yet confirmed" and suppressed from improvement output.
-- Log single-occurrence failures to `self-improve-eval-data/<date>/single-occurrences.json`.
-
-If no gaps are confirmed: refuse with "No actionable gaps found. Evidence threshold not met." Print the single-occurrence log path.
+- If `status: "no-action"` with reason matching no-sessions or no-gaps → refuse per the When-this-applies rules.
+- If `confirmed_gap_count > 0` → proceed to Step 4. The `gap_tests` array lists which tests confirmed, with evidence per occurrence.
+- If `confirmed_gap_count == 0` but `single_occurrences` exist → log them to `self-improve-eval-data/<date>/single-occurrences.json`, then refuse with "No actionable gaps found. Evidence threshold not met."
 
 ### Step 4: Cross-reference against existing skill text
 

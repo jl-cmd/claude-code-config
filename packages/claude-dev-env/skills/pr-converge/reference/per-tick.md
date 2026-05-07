@@ -37,7 +37,7 @@ state line when **no** `state.json` (single-PR only). With `state.json`, do
 **not** increment here — orchestrator's per-tick bump is sole increment.
 
 ```bash
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `.head.sha`, `.head.ref`
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `.head.sha`
 ```
 
 If owner/repo/number are not yet known, extract them from the PR URL.
@@ -51,7 +51,7 @@ Capture `number`, `head.sha` (= `current_head`), owner/repo, branch.
 a. Fetch Cursor Bugbot reviews newest-first, walk back until first clean:
 
    ```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews", perPage=100)
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
    → filter `.user.login` for cursor/bugbot, sort by `.submitted_at` descending
    ```
 

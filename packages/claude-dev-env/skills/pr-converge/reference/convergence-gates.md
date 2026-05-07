@@ -12,7 +12,7 @@ plus inline comments anchored to most recent Copilot review on
 `current_head`:
 
 ```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews", perPage=100)
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
   → filter `.user.login` for copilot (case-insensitive substring "copilot")
   → sort by `.submitted_at` descending
 

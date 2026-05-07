@@ -27,7 +27,7 @@ pull_request_review_write(
 
 Single-line anchors: `{path, line, side: "RIGHT", body}`. Multi-line anchors add `start_line` and `start_side: "RIGHT"`.
 
-Zero findings still post one review. Body line: `## /<workflow> loop <N> audit: 0P0 / 0P1 / 0P2 -> clean`. `comments: []`.
+Zero findings still post one review. Body line: `## /<workflow> loop <N> audit: 0P0 / 0P1 / 0P2 → clean`. `comments: []`.
 
 ## Review body template
 

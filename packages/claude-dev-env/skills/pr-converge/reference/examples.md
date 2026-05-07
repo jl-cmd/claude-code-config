@@ -62,7 +62,7 @@ HEAD, schedules next wakeup]
 waits one tick. Next tick: Copilot review `state: APPROVED`. Claude: [sets
 `copilot_clean_at = current_head`; runs `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`; reports "PR
 #N converged: bugbot CLEAN at <SHA>, bugteam CLEAN at <SHA>,
-mergeStateStatus CLEAN, copilot CLEAN; marked ready for review"]
+mergeable_state clean, copilot CLEAN; marked ready for review"]
 </example>
 
 <example> Back-to-back clean, mergeability CLEAN, post-convergence Copilot

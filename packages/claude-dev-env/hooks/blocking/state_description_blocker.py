@@ -156,8 +156,16 @@ def main() -> None:
     except json.JSONDecodeError:
         sys.exit(0)
 
+    if not isinstance(input_data, dict):
+        sys.exit(0)
+
     tool_name = input_data.get("tool_name", "")
+    if not isinstance(tool_name, str):
+        sys.exit(0)
+
     tool_input = input_data.get("tool_input", {})
+    if not isinstance(tool_input, dict):
+        sys.exit(0)
 
     if tool_name not in ("Write", "Edit"):
         sys.exit(0)
@@ -198,7 +206,7 @@ def main() -> None:
                 "only the current state. For example:\n"
                 '  BAD: "Uses X instead of Y"  →  GOOD: "Uses X"\n'
                 '  BAD: "Previously configured via Z"  →  GOOD: "Configured via Z"\n'
-                "See no-historical-clutter.md for full rules."
+                "See ~/.claude/rules/no-historical-clutter.md for full rules."
             ),
         },
         "systemMessage": "Agent wrote comparative/historical language - describe current state only",

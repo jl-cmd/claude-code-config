@@ -22,15 +22,21 @@ VIOLATION_MD_PREVIOUSLY = "# Config\n\nPreviously set via env var."
 VIOLATION_MD_NOW_USES = "# Auth\n\nNow uses OAuth2."
 
 
-def _run_hook(tool_name: str, tool_input: dict) -> subprocess.CompletedProcess:
-    payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
-    return subprocess.run(
-        [sys.executable, HOOK_SCRIPT_PATH],
-        input=payload,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+class _RunHook:
+    """Helper to test the hook via subprocess."""
+
+    def __call__(self, tool_name: str, tool_input: dict) -> subprocess.CompletedProcess:
+        payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
+        return subprocess.run(
+            [sys.executable, HOOK_SCRIPT_PATH],
+            input=payload,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+
+_run_hook = _RunHook()
 
 
 def test_block_clean_python_comment_passes():
@@ -321,8 +327,8 @@ def test_ignores_c_preprocessor_directive():
 
 
 def test_ignores_hash_in_javascript_inline():
-    """A JavaScript line with # in a string literal should NOT trigger inline comment
-    extraction — # is not a comment marker in JS. Only // should be checked.
+    """A JavaScript line with # in a string literal should NOT trigger inline
+    comment extraction — # is not a comment marker in JS. Only // should be checked.
     Real pattern: `const sel = "#originally-dark"` would falsely match `originally`
     if # were treated as a comment marker."""
     result = _run_hook(
@@ -511,3 +517,48 @@ def test_additional_context_contains_examples():
     ctx = output["hookSpecificOutput"].get("additionalContext", "")
     assert "BAD:" in ctx
     assert "GOOD:" in ctx
+
+
+def test_handles_non_dict_stdin():
+    """A non-dict root JSON object on stdin (e.g. a JSON array) should exit
+    cleanly without raising — the hook must guard against malformed payloads."""
+    payload = json.dumps(["not", "a", "dict"])
+    result = subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_handles_non_dict_tool_input():
+    """A tool_input that is not a dict should exit cleanly — the hook must
+    guard against tool_input.get() on a non-dict value."""
+    payload = json.dumps({"tool_name": "Write", "tool_input": "not_a_dict"})
+    result = subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_handles_non_string_tool_name():
+    """A tool_name that is not a string should exit cleanly — the hook must
+    guard against tool_name not being a string."""
+    payload = json.dumps({"tool_name": 123, "tool_input": {"file_path": "src/main.py"}})
+    result = subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""

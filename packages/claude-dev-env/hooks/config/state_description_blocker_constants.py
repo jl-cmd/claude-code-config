@@ -55,7 +55,6 @@ ALL_HASH_ONLY_EXTENSIONS: frozenset[str] = frozenset(
         ".zsh",
         ".ps1",
         ".psm1",
-        ".sql",
         ".yaml",
         ".yml",
         ".tf",
@@ -88,7 +87,6 @@ ALL_BLOCK_COMMENT_EXTENSIONS: frozenset[str] = frozenset(
         ".css",
         ".scss",
         ".less",
-        ".sql",
     }
 )
 
@@ -116,7 +114,6 @@ ALL_COMMENT_BEARING_EXTENSIONS: frozenset[str] = frozenset(
         ".zsh",
         ".ps1",
         ".psm1",
-        ".sql",
         ".yaml",
         ".yml",
         ".tf",

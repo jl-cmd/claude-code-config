@@ -13,21 +13,8 @@ from config.bugbot_check_constants import (
     BUGBOT_CHECK_NAME,
     CHECK_RUNS_JQ_FILTER,
     CHECK_RUNS_PATH_TEMPLATE,
-    PR_ENDPOINT_TEMPLATE,
-    PR_HEAD_SHA_JQ_FILTER,
 )
-from gh_util import run_gh
-
-
-def _resolve_head_sha(owner: str, repo: str, pull_number: int) -> str | None:
-    pr_endpoint = PR_ENDPOINT_TEMPLATE.format(
-        owner=owner, repo=repo, pull_number=pull_number
-    )
-    gh_result = run_gh(["gh", "api", pr_endpoint, "--jq", PR_HEAD_SHA_JQ_FILTER])
-    if gh_result.returncode != 0:
-        print("Failed to resolve PR head SHA", file=sys.stderr)
-        return None
-    return gh_result.stdout.strip()
+from gh_util import resolve_head_sha, run_gh
 
 
 def _fetch_bugbot_check_runs(
@@ -61,7 +48,7 @@ def main(all_arguments: list[str]) -> int:
     parser.add_argument("--number", required=True, type=int)
     parsed = parser.parse_args(all_arguments)
 
-    head_sha = _resolve_head_sha(parsed.owner, parsed.repo, parsed.number)
+    head_sha = resolve_head_sha(parsed.owner, parsed.repo, parsed.number)
     if head_sha is None:
         return 1
 

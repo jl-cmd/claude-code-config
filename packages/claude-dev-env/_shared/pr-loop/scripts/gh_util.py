@@ -23,6 +23,11 @@ from config.gh_util_constants import (
     INLINE_REVIEW_COMMENTS_PATH_TEMPLATE,
 )
 
+from config.bugbot_check_constants import (
+    PR_ENDPOINT_TEMPLATE,
+    PR_HEAD_SHA_JQ_FILTER,
+)
+
 
 @dataclass(frozen=True)
 class GhResult:
@@ -181,6 +186,26 @@ def _parse_paginated_json_array_documents(
         flattened.extend(decoded_document)
         cursor_index = end_index
     return flattened
+
+
+def resolve_head_sha(
+    owner: str, repo: str, pull_number: int, *, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS
+) -> str | None:
+    """Resolve the head SHA of a pull request.
+
+    Returns the SHA string on success or None when the API call fails.
+    """
+    pr_endpoint = PR_ENDPOINT_TEMPLATE.format(
+        owner=owner, repo=repo, pull_number=pull_number
+    )
+    gh_result = run_gh(
+        ["gh", "api", pr_endpoint, "--jq", PR_HEAD_SHA_JQ_FILTER],
+        timeout_seconds=timeout_seconds,
+    )
+    if gh_result.returncode != 0:
+        print("Failed to resolve PR head SHA", file=sys.stderr)
+        return None
+    return gh_result.stdout.strip()
 
 
 def parse_owner_repo(repository: str) -> tuple[str, str]:

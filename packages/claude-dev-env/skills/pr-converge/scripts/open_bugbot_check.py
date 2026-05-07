@@ -98,8 +98,10 @@ def main() -> int:
     parser.add_argument(PR_REPO_ARG_FLAG, required=True, help=PR_REPO_ARG_HELP)
     parsed = parser.parse_args()
 
-    head_sha = resolve_pr_head(owner=parsed.owner, repo=parsed.repo, number=parsed.number)
-    if head_sha is None:
+    try:
+        head_sha = resolve_pr_head(owner=parsed.owner, repo=parsed.repo, number=parsed.number)
+    except subprocess.CalledProcessError:
+        print("Failed to resolve PR head SHA", file=sys.stderr)
         return 1
 
     bugbot_run = _find_latest_bugbot_run(parsed.owner, parsed.repo, head_sha)

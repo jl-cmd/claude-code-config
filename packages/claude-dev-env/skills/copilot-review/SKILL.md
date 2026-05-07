@@ -79,7 +79,7 @@ Pass this verbatim to the subagent (substituting the bracketed values):
 > - Implement the fix.
 > - Stage the fix and create one new commit on the existing branch: `git add <files> && git commit -m "fix(review): ..."`.
 > - Push the new commit: `git push origin [BRANCH]`.
-> - Reply inline on each comment thread with `add_reply_to_pull_request_comment(owner="[OWNER]", repo="[REPO]", pullNumber=[NUMBER], body="...", commentId=<comment_id&gt;)`, referencing the new commit SHA.
+> - Reply inline on each comment thread with `add_reply_to_pull_request_comment(owner="[OWNER]", repo="[REPO]", pullNumber=[NUMBER], body="...", commentId=<comment_id>)`, referencing the new commit SHA.
 >
 > When a pre-push, pre-commit, or other hook rejects the change, solve it. Read the hook's error message, diagnose the root cause in the code or test, and fix that. Then rerun the commit or push. Hooks exist to catch real problems; treat each rejection as new evidence to act on.
 >

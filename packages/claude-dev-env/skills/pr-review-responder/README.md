@@ -93,7 +93,7 @@ Usage: `/respond`
 ## Troubleshooting
 
 **"No PR found for this branch"**:
-- Create PR first using MCP: `create_pull_request(owner, repo, title, body, head, base)`
+- Create PR first using MCP: `create_pull_request(owner=owner, repo=repo, title=title, body=body, head=head, base=base)`
 - Ensure the branch has an associated open PR
 
 **"No review comments found"**:

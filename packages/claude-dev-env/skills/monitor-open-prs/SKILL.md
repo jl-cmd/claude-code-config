@@ -12,12 +12,12 @@ description: >-
 
 # Monitor Open PRs
 
-**Core principle:** One sweep covers every open PR across both owner scopes. Claude discovers PRs live via `search_issues` MCP queries across each owner scope, dispatches `/bugteam` per PR with `BUGTEAM_FIX_IMPLEMENTER=groq-coder` and `--bugbot-retrigger`, then polls Cursor's bugbot replies until each PR is quiet for a full backoff cycle.
+**Core principle:** One sweep covers every open PR across both owner scopes. Claude discovers PRs live via `scripts/discover_open_prs.py` which shells out to `gh search prs --owner <owner> --state open --json ...`, dispatches `/bugteam` per PR with `BUGTEAM_FIX_IMPLEMENTER=groq-coder` and `--bugbot-retrigger`, then polls Cursor's bugbot replies until each PR is quiet for a full backoff cycle.
 
 ## Contents
 
 - When this skill applies — refusal cases and trigger conditions
-- Discovery — live `search_issues` MCP queries across both owner scopes
+- Discovery — `scripts/discover_open_prs.py` queries via `gh search prs` across both owner scopes
 - Wrapping — `bws run` for GROQ_API_KEY injection
 - Dispatch — `/bugteam --bugbot-retrigger <pr_numbers...>` with groq-coder + retrigger
 - Post-convergence polling — bugbot replies and re-invocation
@@ -36,7 +36,7 @@ Refusals — first match wins; respond with the quoted line exactly and stop:
 
 ## Discovery
 
-Call `scripts/discover_open_prs.discover_open_prs(all_owners=["jl-cmd", "JonEcho"])` to merge the live open-PR list across both scopes. The helper queries each owner scope via `search_issues` MCP with `type:pr state:open owner:<owner>` and flattens the result to a uniform dict shape with keys `number`, `owner`, `repo`, `head_ref`, `base_ref`, `url`. Empty scopes contribute empty lists; an entirely empty sweep returns `[]` and exits cleanly.
+Call `scripts/discover_open_prs.discover_open_prs(all_owners=["jl-cmd", "JonEcho"])` to merge the live open-PR list across both scopes. The helper shells out to `gh search prs --owner <owner> --state open --json number,repository,url,headRefName,baseRefName` for each owner scope and flattens the result to a uniform dict shape with keys `number`, `owner`, `repo`, `head_ref`, `base_ref`, `url`. Empty scopes contribute empty lists; an entirely empty sweep returns `[]` and exits cleanly.
 
 ## Secret Wrapping
 

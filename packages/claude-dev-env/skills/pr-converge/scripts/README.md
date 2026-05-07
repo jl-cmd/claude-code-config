@@ -10,7 +10,7 @@ Read PR metadata:
 
     pull_request_read(method="get", pullNumber=NUMBER, owner=OWNER, repo=REPO)
 
-Fields: `.number`, `.url`, `.head.sha`, `.baseRefName`, `.headRefName`, `.isDraft`.
+Fields: `.number`, `.url`, `.head.sha`, `.base.ref`, `.head.ref`, `.isDraft`.
 
 ### Bugbot reviews: `pull_request_read(method="get_reviews")`
 

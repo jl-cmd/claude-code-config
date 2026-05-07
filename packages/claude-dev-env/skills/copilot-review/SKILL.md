@@ -26,10 +26,10 @@ The user is on a PR branch, wants Copilot (the GitHub Copilot reviewer bot) to k
 From the current repo:
 
 ```bash
-# MCP: pull_request_read(method="get") returns {number, url, headRefOid, baseRefName, headRefName, isDraft}
+# MCP: pull_request_read(method="get") returns {number, url, head.sha, base.ref, head.ref, isDraft}
 ```
 
-Capture `number`, `headRefOid`, owner/repo (from `url`), and branch name. Pass these to the subagent so it does not rediscover them.
+Capture `number`, `head.sha`, owner/repo (from `url`), and branch name. Pass these to the subagent so it does not rediscover them.
 
 ### Step 2: Spawn the background subagent
 

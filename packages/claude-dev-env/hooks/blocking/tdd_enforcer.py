@@ -13,6 +13,7 @@ import sys
 import time
 from pathlib import Path
 
+
 _hooks_root_path_string = str(Path(__file__).resolve().parent.parent)
 if _hooks_root_path_string not in sys.path:
     sys.path.insert(0, _hooks_root_path_string)
@@ -92,7 +93,7 @@ def _repo_boundary_sentinels() -> frozenset[str]:
 def _test_function_patterns() -> tuple[re.Pattern[str], ...]:
     return (
         re.compile(r"\bdef\s+test_"),
-        re.compile(r"\b(?:it|test|describe)\s*\("),
+        re.compile(r"\b(?:it|test|describe)\s*(\("),
     )
 
 
@@ -297,17 +298,23 @@ def main() -> None:
         sys.exit(0)
 
     # Block production code - require confirmation
-    # Exempt constants-only config files (no behavior to test) for any tool
-    if ext == ".py" and path.exists():
-        existing_content = _read_candidate_text(path)
-        if existing_content and _is_constants_only_python_content(existing_content):
-            emit_allow()
-            sys.exit(0)
-
+    # Exempt constants-only content for Write (full content provided)
     written_content = _extract_written_content(tool_name, tool_input)
     if tool_name == "Write" and ext == ".py" and _is_constants_only_python_content(written_content):
         emit_allow()
         sys.exit(0)
+
+    # Exempt Edit on constants-only files when post-edit content remains constants-only
+    if tool_name == "Edit" and ext == ".py" and path.exists():
+        existing_content = _read_candidate_text(path)
+        if existing_content is not None:
+            old_str = tool_input.get("old_string", "")
+            new_str = tool_input.get("new_string", "")
+            if old_str and new_str:
+                post_edit_content = existing_content.replace(old_str, new_str, 1)
+                if _is_constants_only_python_content(post_edit_content):
+                    emit_allow()
+                    sys.exit(0)
 
     all_candidates = candidate_test_paths_for(path)
     if has_fresh_test(all_candidates, _freshness_seconds()):

@@ -25,14 +25,17 @@ FRESHNESS_SECONDS = _PRODUCTION_MODULE._freshness_seconds()
 STALE_MTIME_OFFSET_SECONDS = FRESHNESS_SECONDS + 60
 
 
-def _run_hook_with_payload(payload: dict) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(SCRIPT_PATH)],
-        input=json.dumps(payload),
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+class _RunHookWithPayload:
+    def __call__(self, payload: dict) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT_PATH)],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+_run_hook_with_payload = _RunHookWithPayload()
 
 
 def _make_write_payload(file_path: Path, content: str = "") -> dict:
@@ -190,6 +193,17 @@ def test_should_deny_edit_when_pragma_sentinel_present_in_new_string_without_tes
     assert _decision_from(completed) == "deny"
 
 
+def _make_edit_payload(file_path: Path, old_string: str, new_string: str) -> dict:
+    return {
+        "tool_name": "Edit",
+        "tool_input": {
+            "file_path": str(file_path),
+            "old_string": old_string,
+            "new_string": new_string,
+        },
+    }
+
+
 def test_should_allow_python_file_with_only_module_level_constants(tmp_path: Path) -> None:
     sandbox = _sandbox(tmp_path)
     constants_file = sandbox / "constants.py"
@@ -207,6 +221,49 @@ def test_should_allow_python_file_with_only_module_level_constants(tmp_path: Pat
     )
 
     assert _decision_from(completed) == "allow"
+
+
+def test_should_allow_edit_to_change_constant_value_in_constants_only_file(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    constants_file = sandbox / "constants.py"
+    constants_file.write_text(
+        '"""Module-level constants."""\n'
+        "MAXIMUM_RETRIES: int = 3\n"
+        "DEFAULT_TIMEOUT_SECONDS: float = 30.0\n"
+    )
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            constants_file,
+            old_string="MAXIMUM_RETRIES: int = 3",
+            new_string="MAXIMUM_RETRIES: int = 5",
+        )
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_edit_that_adds_function_to_constants_only_file(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    constants_file = sandbox / "constants.py"
+    constants_file.write_text(
+        '"""Module-level constants."""\n'
+        "MAXIMUM_RETRIES: int = 3\n"
+    )
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            constants_file,
+            old_string="MAXIMUM_RETRIES: int = 3",
+            new_string="MAXIMUM_RETRIES: int = 3\n\ndef reset() -> None:\n    return None",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"
 
 
 def test_should_deny_python_file_when_any_function_definition_is_present(tmp_path: Path) -> None:

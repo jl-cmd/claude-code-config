@@ -28,6 +28,7 @@ from config.state_description_blocker_constants import (
     ALL_CODE_FENCE_PATTERN,
     ALL_COMMENT_BEARING_EXTENSIONS,
     ALL_COMMENT_TRANSITION_PATTERNS,
+    ALL_HASH_AND_SLASH_EXTENSIONS,
     ALL_HASH_ONLY_EXTENSIONS,
     ALL_INLINE_CODE_PATTERN,
     ALL_MARKDOWN_EXTENSIONS,
@@ -50,6 +51,8 @@ def is_comment_bearing_file(file_path: str) -> bool:
 def _get_inline_markers(extension: str) -> tuple[str, ...]:
     if extension in ALL_HASH_ONLY_EXTENSIONS:
         return ("#",)
+    if extension in ALL_HASH_AND_SLASH_EXTENSIONS:
+        return ("#", "//")
     if extension in ALL_BLOCK_COMMENT_ONLY_EXTENSIONS:
         return ()
     return ("//",)
@@ -57,49 +60,49 @@ def _get_inline_markers(extension: str) -> tuple[str, ...]:
 
 def _extract_comment_lines(text: str, extension: str = "") -> list[str]:
     """Extract comment lines from source code — Python (#), JS/TS/C/Rust/Go (//), and block comments."""
-    comment_lines: list[str] = []
-    lines = text.splitlines()
+    all_comment_lines: list[str] = []
+    all_lines = text.splitlines()
 
     is_in_block_comment = False
-    supports_block_comments = extension in ALL_BLOCK_COMMENT_EXTENSIONS
-    inline_markers = _get_inline_markers(extension)
-    for each_line in lines:
+    has_block_comments = extension in ALL_BLOCK_COMMENT_EXTENSIONS
+    all_inline_markers = _get_inline_markers(extension)
+    for each_line in all_lines:
         stripped = each_line.strip()
 
-        if supports_block_comments:
+        if has_block_comments:
             if "/*" in stripped and not is_in_block_comment:
                 is_in_block_comment = True
                 slash_star_index = stripped.find("/*")
                 close_star_index = stripped.find("*/", slash_star_index + len("/*"))
                 if close_star_index >= 0:
-                    comment_lines.append(
+                    all_comment_lines.append(
                         stripped[slash_star_index : close_star_index + 2]
                     )
                     is_in_block_comment = False
                 else:
-                    comment_lines.append(stripped[slash_star_index:])
+                    all_comment_lines.append(stripped[slash_star_index:])
                     continue
             if is_in_block_comment:
                 close_index = stripped.find("*/")
                 if close_index >= 0:
-                    comment_lines.append(stripped[: close_index + 2])
+                    all_comment_lines.append(stripped[: close_index + 2])
                     is_in_block_comment = False
                 else:
-                    comment_lines.append(stripped)
+                    all_comment_lines.append(stripped)
                 continue
 
         if any(
-            stripped.startswith(each_marker) for each_marker in inline_markers
+            stripped.startswith(each_marker) for each_marker in all_inline_markers
         ):
-            comment_lines.append(stripped)
+            all_comment_lines.append(stripped)
             continue
 
-        inline_index = _find_inline_comment_start(stripped, inline_markers)
+        inline_index = _find_inline_comment_start(stripped, all_inline_markers)
         if inline_index is not None and inline_index > 0:
-            comment_lines.append(stripped[inline_index:])
+            all_comment_lines.append(stripped[inline_index:])
             continue
 
-    return comment_lines
+    return all_comment_lines
 
 
 def _find_inline_comment_start(stripped: str, all_markers: tuple[str, ...]) -> int | None:
@@ -128,8 +131,8 @@ def find_violations(text: str, file_path: str) -> list[str]:
     if is_markdown_file(file_path):
         scan_text = text
     elif is_comment_bearing_file(file_path):
-        comment_lines = _extract_comment_lines(text, _get_file_extension(file_path))
-        scan_text = "\n".join(comment_lines)
+        all_comment_lines = _extract_comment_lines(text, _get_file_extension(file_path))
+        scan_text = "\n".join(all_comment_lines)
     else:
         return []
 
@@ -140,14 +143,14 @@ def find_violations(text: str, file_path: str) -> list[str]:
     if not scan_text.strip():
         return []
 
-    detected: list[str] = []
+    all_detected: list[str] = []
     transition_patterns = ALL_COMMENT_TRANSITION_PATTERNS
     for each_pattern in transition_patterns:
         all_matches = each_pattern.findall(scan_text)
         if all_matches:
-            detected.append(all_matches[0].strip().lower())
+            all_detected.append(all_matches[0].strip().lower())
 
-    return detected
+    return all_detected
 
 
 def main() -> None:
@@ -185,11 +188,11 @@ def main() -> None:
     if not content_to_check:
         sys.exit(0)
 
-    detected_patterns = find_violations(content_to_check, file_path)
-    if not detected_patterns:
+    all_detected_patterns = find_violations(content_to_check, file_path)
+    if not all_detected_patterns:
         sys.exit(0)
 
-    formatted = ", ".join(f'"{p}"' for p in detected_patterns)
+    formatted = ", ".join(f'"{p}"' for p in all_detected_patterns)
 
     block_payload = {
         "hookSpecificOutput": {

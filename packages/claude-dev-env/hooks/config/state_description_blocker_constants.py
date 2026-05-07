@@ -67,6 +67,12 @@ ALL_BLOCK_COMMENT_ONLY_EXTENSIONS: frozenset[str] = frozenset(
     }
 )
 
+ALL_HASH_AND_SLASH_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".php",
+    }
+)
+
 ALL_BLOCK_COMMENT_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".js",

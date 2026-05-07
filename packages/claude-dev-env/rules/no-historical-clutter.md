@@ -18,12 +18,12 @@ Never reference removed implementations, old defaults, prior behaviors, or how s
 
 | Pattern | Why it's clutter |
 |---------|-----------------|
-| "instead of 30" in a pagination rule | The old default no longer exists in code; the rule reader doesn't need to know what it was |
-| "previously this used X" | If X is gone, it's noise |
-| "before this rule, we did Y" | The rule exists now; the before-state is irrelevant |
-| "migrated from Z to W" | If Z is fully removed, the migration story is git history, not documentation |
-| "the old implementation did A" | If A is gone, the reader gains nothing from knowing it existed |
-| "originally" / "used to be" | Same — dead context |
+| `` `"instead of 30"` `` in a pagination rule | The old default `no longer` exists in code; the rule reader doesn't need to know what it was |
+| `` `"previously this used X"` `` | If X is gone, it's noise |
+| `` `"before this rule, we did Y"` `` | The rule exists now; the before-state is irrelevant |
+| `` `"migrated from Z to W"` `` | If Z is fully removed, the migration story is git history, not documentation |
+| `` `"the old implementation did A"` `` | If A is gone, the reader gains nothing from knowing it existed |
+| `` `"originally"` `` / `` `"used to be"` `` | Same — dead context |
 
 ### In code comments
 

@@ -15,7 +15,7 @@ pull_request_review_write(
     method="create",
     event="COMMENT",
     body=review_body,
-    commit_id=head_sha,
+    commitID=head_sha,
     owner=owner,
     repo=repo,
     pullNumber=pull_number,

@@ -21,7 +21,7 @@ pull_request_review_write(
   method="create",
   event="COMMENT",
   body=<review_body_markdown>,
-  commit_id=<head_sha_at_post_time>,
+  commitID=<head_sha_at_post_time>,
   owner=<owner>, repo=<repo>, pullNumber=<pull_number>,
   comments=[
     {path: <file_1>, line: <line_1>, side: "RIGHT", body: <finding_1_markdown>}
@@ -81,6 +81,6 @@ If the review POST fails (rate limit, network, malformed payload), fall back to 
 
 ## MCP tool reference
 
-- Per-loop batched review: `pull_request_review_write(method="create", event="COMMENT", body=..., commit_id=..., owner=..., repo=..., pullNumber=..., comments=[...])` — wraps `POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews`
+- Per-loop batched review: `pull_request_review_write(method="create", event="COMMENT", body=..., commitID=..., owner=..., repo=..., pullNumber=..., comments=[...])` — wraps `POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews`
 - Fix reply: `add_reply_to_pull_request_comment(commentId=..., body=..., owner=..., repo=..., pullNumber=...)` — wraps `POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies`
 - Review-POST failure fallback: `add_issue_comment(owner=..., repo=..., issueNumber=..., body=...)` — wraps `POST /repos/{owner}/{repo}/issues/{issue_number}/comments`

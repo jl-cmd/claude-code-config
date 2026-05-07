@@ -199,7 +199,7 @@ pull_request_review_write(
   method="create",
   event="COMMENT",
   body=<review_body_text>,
-  commit_id=<head_sha_at_post_time>,
+  commitID=<head_sha_at_post_time>,
   owner=<owner>, repo=<repo>, pullNumber=<number>,
   comments=[
     {path: <path_1>, line: <line_1>, side: "RIGHT", body: <finding_body_1>}

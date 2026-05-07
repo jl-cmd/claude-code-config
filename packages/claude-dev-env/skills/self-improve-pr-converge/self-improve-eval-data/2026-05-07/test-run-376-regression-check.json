@@ -1,0 +1,44 @@
+{
+  "date": "2026-05-07",
+  "eval_pr": 376,
+  "baseline_file": "baseline-376.json",
+  "improvements": [
+    {
+      "name": "cross-loop-regression-check",
+      "target_file": "_shared/pr-loop/audit-contract.md",
+      "target_section": "Post-fix self-audit",
+      "gates": {
+        "actionable": true,
+        "verifiable": true,
+        "negative_scope": true
+      },
+      "metrics": {
+        "loop_count": "Prevented",
+        "finding_regressions": "Prevented",
+        "scope_violations": "Not addressed",
+        "verified_clean_depth": "Not addressed"
+      },
+      "metrics_prevented": 2,
+      "verdict": "promote"
+    },
+    {
+      "name": "verified-clean-depth",
+      "target_file": "skills/bugteam/PROMPTS.md",
+      "target_section": "AUDIT outcome XML schema",
+      "gates": {
+        "actionable": true,
+        "verifiable": true,
+        "negative_scope": true
+      },
+      "metrics": {
+        "loop_count": "Not addressed",
+        "finding_regressions": "Not addressed",
+        "scope_violations": "Not addressed",
+        "verified_clean_depth": "Prevented"
+      },
+      "metrics_prevented": 1,
+      "verdict": "discard"
+    }
+  ],
+  "combined_promotable_gaps": 1
+}

@@ -1,0 +1,18 @@
+{
+  "pr_number": 376,
+  "feature": "no-regression",
+  "target_file": "packages/claude-dev-env/skills/bugteam/PROMPTS.md",
+  "proposed_constraint": "**No regression.** After applying all fixes and passing the post-fix self-audit, verify that the total finding count does not exceed the previous loop's finding count. An increase in total findings between loop transitions is a regression and must be revised before committing.",
+  "enforceability_gates": {
+    "actionable": true,
+    "verifiable": true,
+    "negative_scope": true
+  },
+  "metrics": {
+    "loop_count": "Prevented",
+    "finding_regressions": "Prevented",
+    "scope_violations": "Not addressed",
+    "verified_clean_depth": "Not addressed"
+  },
+  "promoted": true
+}

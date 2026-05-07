@@ -1,0 +1,76 @@
+{
+  "date": "2026-05-07",
+  "discarded_improvements": [
+    {
+      "test": "test_1_fix_regression",
+      "reason": "Scores 1/4 metrics Prevented, below the 2/4 promotion threshold",
+      "metrics_total": 4,
+      "evidence": [
+        {
+          "detail": "L2(3) > L1(1)",
+          "session": "0ff709bb-98d5-470c-a1ee-ed2ee3fcbea1",
+          "pr": 376
+        },
+        {
+          "detail": "L3(5) > L2(3)",
+          "session": "0ff709bb-98d5-470c-a1ee-ed2ee3fcbea1",
+          "pr": 376
+        },
+        {
+          "detail": "L3(2) > L2(0)",
+          "session": "7efecfd5-32c2-4b97-bdeb-f31307ac7f1d",
+          "pr": [
+            100,
+            102,
+            384,
+            385,
+            374,
+            103
+          ]
+        },
+        {
+          "detail": "L3(3) > L2(0)",
+          "session": "9a3dcf70-d5ab-4da3-b252-f5f59db68cb0",
+          "pr": 101
+        }
+      ],
+      "gates_passed": [
+        "actionable",
+        "verifiable",
+        "negative_scope"
+      ],
+      "target_section": "FIX spawn XML <constraints>",
+      "metrics_prevented": [
+        "finding_regressions"
+      ],
+      "target_file": "packages/claude-dev-env/skills/bugteam/PROMPTS.md",
+      "constraint": "No regression: verify finding count is flat or decreasing"
+    },
+    {
+      "test": "test_4_verified_clean_depth",
+      "reason": "Scores 1/4 metrics Prevented, below the 2/4 promotion threshold",
+      "metrics_total": 4,
+      "evidence": [
+        {
+          "detail": "Shallow verified-clean: 'no issues found'",
+          "session": "49f749d9-5714-4c42-8b02-a88ec58a700c"
+        },
+        {
+          "detail": "Shallow verified-clean: 'verified clean' (x2)",
+          "session": "0ff709bb-98d5-470c-a1ee-ed2ee3fcbea1"
+        }
+      ],
+      "gates_passed": [
+        "actionable",
+        "verifiable",
+        "negative_scope"
+      ],
+      "target_section": "AUDIT spawn XML <bug_categories> and <verified_clean> schema",
+      "metrics_prevented": [
+        "verified_clean_depth"
+      ],
+      "target_file": "packages/claude-dev-env/skills/bugteam/PROMPTS.md",
+      "constraint": "Evidence must name function, path traced, and specific check performed"
+    }
+  ]
+}

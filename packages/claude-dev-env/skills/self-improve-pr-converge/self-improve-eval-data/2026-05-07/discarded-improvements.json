@@ -1,0 +1,23 @@
+{
+  "date": "2026-05-07",
+  "gaps": [
+    {
+      "test": "test_1_fix_regression",
+      "file": "_shared/pr-loop/audit-contract.md",
+      "section": "Post-fix self-audit",
+      "action": "promoted",
+      "occurrences": 3,
+      "sessions": ["0ff709bb-98d5-470c-a1ee-ed2ee3fcbea1", "7efecfd5-32c2-4b97-bdeb-f31307ac7f1d"],
+      "constraint_text": "Compare the post-fix finding count against the previous loop's total finding count..."
+    },
+    {
+      "test": "test_4_verified_clean_depth",
+      "file": "skills/bugteam/PROMPTS.md",
+      "section": "AUDIT outcome XML schema",
+      "action": "discarded",
+      "occurrences": 4,
+      "sessions": ["0ff709bb-98d5-470c-a1ee-ed2ee3fcbea1", "49f749d9-5714-4c42-8b02-a88ec58a700c"],
+      "reason": "Scored 1/4 metrics Prevented (below 2/4 promotion threshold)"
+    }
+  ]
+}

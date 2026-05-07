@@ -56,14 +56,13 @@ def _extract_comment_lines(text: str) -> list[str]:
             is_in_block_comment = True
         if is_in_block_comment:
             comment_lines.append(stripped)
-        if "*/" in stripped:
-            is_in_block_comment = False
-            continue
-
-        if is_in_block_comment:
+            if "*/" in stripped:
+                is_in_block_comment = False
             continue
 
         if stripped.startswith("#") or stripped.startswith("//"):
+            comment_lines.append(stripped)
+        elif "#" in stripped or "//" in stripped:
             comment_lines.append(stripped)
 
     return comment_lines

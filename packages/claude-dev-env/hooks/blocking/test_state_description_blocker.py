@@ -16,9 +16,7 @@ CLEAN_COMMENT = "# Configured with a 30-second timeout"
 VIOLATION_INSTEAD_OF_COMMENT = "# Uses X instead of Y"
 VIOLATION_PREVIOUSLY_COMMENT = "# Previously configured via Z"
 VIOLATION_NOW_USES_COMMENT = "# Now uses the new API client"
-VIOLATION_NO_LONGER = "# No longer supports legacy mode"
-VIOLATION_USED_TO = "# Used to be hardcoded"
-VIOLATION_SWITCHED_TO = "# Switched to async processing"
+VIOLATION_COMMENT_WITH_CLOSE_BLOCK = "# No longer functional — the */ route was deprecated"
 VIOLATION_MD_INSTEAD = "# API\n\nUses GraphQL instead of REST."
 VIOLATION_MD_PREVIOUSLY = "# Config\n\nPreviously set via env var."
 VIOLATION_MD_NOW_USES = "# Auth\n\nNow uses OAuth2."
@@ -229,6 +227,83 @@ def test_system_message_and_suppress_output():
     assert output["suppressOutput"] is True
     assert isinstance(output["systemMessage"], str)
     assert len(output["systemMessage"]) > 0
+
+
+def test_detects_no_longer_in_comment():
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/config.py",
+            "content": "# No longer supports legacy mode",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_detects_used_to_in_comment():
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/config.py",
+            "content": "# Used to be hardcoded",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "used to" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_detects_switched_to_in_comment():
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/config.py",
+            "content": "# Switched to async processing",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "switched to" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_detects_comment_with_close_block_token():
+    """A single-line # comment containing */ (e.g. docs referencing a deprecated */ route)
+    should still be scanned for violations — the `*/` must not trigger a spurious
+    block-comment `continue` that skips the single-line comment check.
+    Real pattern: midjourney-docs 'no longer works' + route path with */."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/config.py",
+            "content": VIOLATION_COMMENT_WITH_CLOSE_BLOCK,
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_detects_inline_trailing_comment():
+    """A code line with a trailing inline comment containing historical language should
+    be blocked. Real pattern: ARCHITECTURE.md 'no longer needed' reference in migration
+    context — simulates `x = val  # previously needed but now handled elsewhere`."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "src/main.py",
+            "content": "max_retries = 3  # No longer needed since async retry handles it",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "no longer" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_additional_context_contains_examples():

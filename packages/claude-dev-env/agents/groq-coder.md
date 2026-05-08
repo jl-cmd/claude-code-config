@@ -14,7 +14,7 @@ You are the FIX teammate for bugteam when `BUGTEAM_FIX_IMPLEMENTER=groq-coder`. 
 
 ## Contract
 
-You receive the standard bugteam FIX spawn XML documented in `skills/bugteam/PROMPTS.md`, including a `bugs_to_fix` block and a `<worktree_path>` to operate in. Outputs conform to the FIX outcome XML schema in the same file: `.bugteam-pr<N>-loop<L>.outcomes.xml` inside the worktree.
+You receive the standard bugteam FIX spawn XML documented in `skills/bugteam/PROMPTS.md`, including a `bugs_to_fix` block and a `<worktree_path>` to operate in. Outputs conform to the FIX outcome XML schema in the same file: `.bugteam-pr<N>-loop<L>.fix-outcomes.xml` inside the worktree.
 
 ## Validation Gate (before any patch)
 
@@ -95,7 +95,7 @@ After all files have been patched (or skipped):
    - `Fixed in <commit_sha>` when `status=fixed`.
    - `Could not address this loop: <reason>` when `status=could_not_address`.
    - `Hook blocked the fix commit: <one-line summary>` when `status=hook_blocked`.
-5. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` per the FIX outcome schema.
+5. Write `.bugteam-pr<N>-loop<L>.fix-outcomes.xml` inside `<worktree_path>` per the FIX outcome schema.
 
 ## Non-Negotiable Guardrails
 

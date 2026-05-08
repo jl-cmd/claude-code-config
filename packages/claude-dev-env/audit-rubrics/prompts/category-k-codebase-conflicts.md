@@ -7,6 +7,61 @@ ID prefix: `find`.
 
 This PR's first commit modified exactly one substring inside the hedging-language hook's block-response payload — replacing the closing instruction at lines 137-138 (inside the `block_response["reason"]` f-string) with new text directing the model to do additional research or prompt the user via `AskUserQuestion` with options + context. The wider file structure was left unchanged. The audit goal: identify any unchanged parallel site whose existing wording contradicts the new line 138 wording so they would interpolate into the same string and reach the model together.
 
+## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
+
+**K1. Multi-site name renames**
+- The diff at lines 137-138 introduces no rename — the symbol names `skill_reference`, `block_response`, `formatted_term_list`, `RESEARCH_MODE_SKILL_SEARCH_PATHS` are all unchanged.
+- Verify by scanning the full file for any identifier that appears in the new line 138 wording but is also defined elsewhere.
+
+**K2. Duplicated constants / defaults**
+- The string token `"I don't know"` is the load-bearing duplicated literal across this PR. Search the file at SHA 95ba07d6 for every occurrence: line 126 (inside the `else` branch's `skill_reference` literal: `"...verify with sources or reply 'I don't know'"`) and the pre-diff line 138 (the OLD `"Either VERIFY it with a source or replace it with 'I don't know'."`).
+- The diff updated occurrence #2 (line 138) but NOT occurrence #1 (line 126). Both occurrences exist in strings that interpolate into the SAME `block_response["reason"]` field — the model receives both texts.
+- Verify whether the operator-facing primary instruction and the fallback instruction now disagree about whether `"I don't know"` is an allowed escape.
+
+**K3. Primary path vs fallback path** ⭐ canonical K case
+- The file's `if resolved_skill_path is not None:` branch (line 121) is the PRIMARY path; the `else:` branch (lines 123-127) is the FALLBACK (no-research-mode-skill-installed) path. Both produce values for the same variable `skill_reference`.
+- Both paths' output flows into the SAME f-string at line 134 (`f"{skill_reference}\n\n"`), and from there into the SAME `block_response["reason"]` value sent to Claude.
+- The diff at lines 137-138 updated the wording the *primary* path's downstream message ends with (closes the `"reply 'I don't know'"` escape; replaces with `"prompt the user via AskUserQuestion..."`). The fallback path's `skill_reference` text at lines 124-126 STILL contains `"verify with sources or reply 'I don't know'"` — unchanged from main.
+- When the no-research-mode-skill fallback runs, the model receives: (a) the unchanged fallback text saying `"reply 'I don't know'"` is an option, AND (b) the new line 138 text saying `"AskUserQuestion"` is the path.
+- Cite line 126 (unchanged-but-should-have-changed) and line 138 (changed) as the conflict pair. Describe the contradiction the model sees.
+
+**K4. Feature flag / version gate consistency**
+- No flags, no version gates in this file. The path-search list (`RESEARCH_MODE_SKILL_SEARCH_PATHS`) is environmental, not flag-gated.
+- Verify by scanning the file for `if FLAG`, `if version`, environment-variable checks beyond `expanduser("~")`.
+
+**K5. Producer-vs-consumer type contracts**
+- `skill_reference` is typed as `str` in both branches (the primary uses `f"under the research-mode constraints..."`; the fallback uses a parenthesized string concatenation). Both interpolate cleanly into the line 134 f-string.
+- `block_response` is `dict[str, Any]`-shaped; consumed by `json.dumps` on line 145. No producer/consumer type drift introduced by the diff.
+
+**K6. Code vs documentation sync**
+- Top-of-file docstring (lines 2-6) says: `"When detected, Claude is forced to re-check and respond with verified facts."`
+- The new line 138 text explicitly extends this to a second branch — `"prompt the user via AskUserQuestion with some potential options + context if you are unable to find anything online"` — i.e., the hook is no longer just about verified facts; it now also legitimizes user-elicited disambiguation as a valid response.
+- Verify whether the docstring still describes the post-diff behavior.
+
+**K7. Code vs test sync**
+- The test file at the same SHA contains an assertion: `assert "verify with sources or reply" in parsed_response["reason"]` (line 100 of the test file).
+- This assertion was satisfied by the PRE-diff state because both line 126 (`"verify with sources or reply 'I don't know'"`) and line 138 (`"Either VERIFY it with a source or replace it with 'I don't know'"`) contained the substring `"verify with sources or reply"` — wait, only line 126 contains that exact substring. Verify whether the test passes at SHA 95ba07d6 against (a) line 126's untouched fallback text or (b) some other source.
+- If the test passes solely because line 126 was NOT updated, then the test is a load-bearing witness to the K3 conflict — it asserts the very fallback text that the PR's intent (close the "I don't know" escape) was meant to remove.
+- The merged version (SHA 8bcd5154) updates the test assertion to `"verify with sources or prompt the user via AskUserQuestion"`, which only matches if line 126 is ALSO updated to that wording. The K3 fix and the K7 fix landed together in the merge commit; at SHA 95ba07d6 the test still passes against the unchanged fallback.
+
+**K8. Cross-file / cross-language contract sync**
+- Single-language (Python) change; cross-language not applicable for this PR.
+- Cross-file: the only other affected file is the test file (already covered by K7). No CSS / TS / JSON / config files touched.
+
+**K9. Schema / data-shape propagation**
+- `block_response` dict shape is unchanged; the same four keys (`decision`, `reason`, `systemMessage`, `suppressOutput`) are emitted as before. The hook protocol contract is preserved.
+- Verify no schema drift in the JSON the hook prints to stdout.
+
+## Cross-bucket questions to answer at the end
+
+Q1: Is there a pattern in this diff where the primary site is updated but a parallel site (any sub-bucket) stays stale? Cite both lines.
+Q2: What's the worst contradiction introduced by this PR — the one most likely to silently produce contradictory guardrail behavior at runtime when the no-research-mode-skill fallback fires? Cite `packages/claude-dev-env/hooks/blocking/hedging_language_blocker.py:<line>` for both the changed and unchanged sites.
+Q3: Which existing test in `test_hedging_language_blocker.py` would have caught the K3 contradiction had it been calibrated to the post-diff intent, and which existing test instead passes "for the wrong reason" because the fallback was not updated alongside the primary?
+
+## Output
+
+Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket K1-K9, produce Shape A or Shape B (with ≥3 probes). Each Shape A finding must cite BOTH the diff line that was changed AND the parallel line that was missed — the conflict is between the two, not in either alone. Cross-bucket Q1-Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 parallel sites that should have been updated alongside the diff — find them." Open Questions section for ambiguities. Read-only. No edits, no commits.
+
 ## Diff (the buggy commit's change vs base)
 
 ```diff
@@ -190,58 +245,3 @@ def test_hedging_reason_contains_not_installed_notice_when_skill_absent():
     assert "SKILL.md" not in parsed_response["reason"]
     assert RESEARCH_MODE_SKILL_BODY_MARKER not in parsed_response["reason"]
 ```
-
-## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
-
-**K1. Multi-site name renames**
-- The diff at lines 137-138 introduces no rename — the symbol names `skill_reference`, `block_response`, `formatted_term_list`, `RESEARCH_MODE_SKILL_SEARCH_PATHS` are all unchanged.
-- Verify by scanning the full file for any identifier that appears in the new line 138 wording but is also defined elsewhere.
-
-**K2. Duplicated constants / defaults**
-- The string token `"I don't know"` is the load-bearing duplicated literal across this PR. Search the file at SHA 95ba07d6 for every occurrence: line 126 (inside the `else` branch's `skill_reference` literal: `"...verify with sources or reply 'I don't know'"`) and the pre-diff line 138 (the OLD `"Either VERIFY it with a source or replace it with 'I don't know'."`).
-- The diff updated occurrence #2 (line 138) but NOT occurrence #1 (line 126). Both occurrences exist in strings that interpolate into the SAME `block_response["reason"]` field — the model receives both texts.
-- Verify whether the operator-facing primary instruction and the fallback instruction now disagree about whether `"I don't know"` is an allowed escape.
-
-**K3. Primary path vs fallback path** ⭐ canonical K case
-- The file's `if resolved_skill_path is not None:` branch (line 121) is the PRIMARY path; the `else:` branch (lines 123-127) is the FALLBACK (no-research-mode-skill-installed) path. Both produce values for the same variable `skill_reference`.
-- Both paths' output flows into the SAME f-string at line 134 (`f"{skill_reference}\n\n"`), and from there into the SAME `block_response["reason"]` value sent to Claude.
-- The diff at lines 137-138 updated the wording the *primary* path's downstream message ends with (closes the `"reply 'I don't know'"` escape; replaces with `"prompt the user via AskUserQuestion..."`). The fallback path's `skill_reference` text at lines 124-126 STILL contains `"verify with sources or reply 'I don't know'"` — unchanged from main.
-- When the no-research-mode-skill fallback runs, the model receives: (a) the unchanged fallback text saying `"reply 'I don't know'"` is an option, AND (b) the new line 138 text saying `"AskUserQuestion"` is the path.
-- Cite line 126 (unchanged-but-should-have-changed) and line 138 (changed) as the conflict pair. Describe the contradiction the model sees.
-
-**K4. Feature flag / version gate consistency**
-- No flags, no version gates in this file. The path-search list (`RESEARCH_MODE_SKILL_SEARCH_PATHS`) is environmental, not flag-gated.
-- Verify by scanning the file for `if FLAG`, `if version`, environment-variable checks beyond `expanduser("~")`.
-
-**K5. Producer-vs-consumer type contracts**
-- `skill_reference` is typed as `str` in both branches (the primary uses `f"under the research-mode constraints..."`; the fallback uses a parenthesized string concatenation). Both interpolate cleanly into the line 134 f-string.
-- `block_response` is `dict[str, Any]`-shaped; consumed by `json.dumps` on line 145. No producer/consumer type drift introduced by the diff.
-
-**K6. Code vs documentation sync**
-- Top-of-file docstring (lines 2-6) says: `"When detected, Claude is forced to re-check and respond with verified facts."`
-- The new line 138 text explicitly extends this to a second branch — `"prompt the user via AskUserQuestion with some potential options + context if you are unable to find anything online"` — i.e., the hook is no longer just about verified facts; it now also legitimizes user-elicited disambiguation as a valid response.
-- Verify whether the docstring still describes the post-diff behavior.
-
-**K7. Code vs test sync**
-- The test file at the same SHA contains an assertion: `assert "verify with sources or reply" in parsed_response["reason"]` (line 100 of the test file).
-- This assertion was satisfied by the PRE-diff state because both line 126 (`"verify with sources or reply 'I don't know'"`) and line 138 (`"Either VERIFY it with a source or replace it with 'I don't know'"`) contained the substring `"verify with sources or reply"` — wait, only line 126 contains that exact substring. Verify whether the test passes at SHA 95ba07d6 against (a) line 126's untouched fallback text or (b) some other source.
-- If the test passes solely because line 126 was NOT updated, then the test is a load-bearing witness to the K3 conflict — it asserts the very fallback text that the PR's intent (close the "I don't know" escape) was meant to remove.
-- The merged version (SHA 8bcd5154) updates the test assertion to `"verify with sources or prompt the user via AskUserQuestion"`, which only matches if line 126 is ALSO updated to that wording. The K3 fix and the K7 fix landed together in the merge commit; at SHA 95ba07d6 the test still passes against the unchanged fallback.
-
-**K8. Cross-file / cross-language contract sync**
-- Single-language (Python) change; cross-language not applicable for this PR.
-- Cross-file: the only other affected file is the test file (already covered by K7). No CSS / TS / JSON / config files touched.
-
-**K9. Schema / data-shape propagation**
-- `block_response` dict shape is unchanged; the same four keys (`decision`, `reason`, `systemMessage`, `suppressOutput`) are emitted as before. The hook protocol contract is preserved.
-- Verify no schema drift in the JSON the hook prints to stdout.
-
-## Cross-bucket questions to answer at the end
-
-Q1: Is there a pattern in this diff where the primary site is updated but a parallel site (any sub-bucket) stays stale? Cite both lines.
-Q2: What's the worst contradiction introduced by this PR — the one most likely to silently produce contradictory guardrail behavior at runtime when the no-research-mode-skill fallback fires? Cite `packages/claude-dev-env/hooks/blocking/hedging_language_blocker.py:<line>` for both the changed and unchanged sites.
-Q3: Which existing test in `test_hedging_language_blocker.py` would have caught the K3 contradiction had it been calibrated to the post-diff intent, and which existing test instead passes "for the wrong reason" because the fallback was not updated alongside the primary?
-
-## Output
-
-Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket K1-K9, produce Shape A or Shape B (with ≥3 probes). Each Shape A finding must cite BOTH the diff line that was changed AND the parallel line that was missed — the conflict is between the two, not in either alone. Cross-bucket Q1-Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 parallel sites that should have been updated alongside the diff — find them." Open Questions section for ambiguities. Read-only. No edits, no commits.

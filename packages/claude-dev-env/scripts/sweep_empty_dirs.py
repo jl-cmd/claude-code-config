@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse
+import errno
 import os
 import sys
 import time
@@ -41,6 +42,8 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
     for each_directory_path, _, _ in os.walk(
         root, onerror=_log_walk_error, topdown=False
     ):
+        if each_directory_path == root:
+            continue
         now = time.time()
         try:
             created = os.path.getctime(each_directory_path)
@@ -58,8 +61,13 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
                 removed.append(each_directory_path)
             except FileNotFoundError:
                 pass
-            except OSError:
-                print(f"warning: could not remove {each_directory_path}", file=sys.stderr)
+            except OSError as each_error:
+                if each_error.errno != errno.ENOTEMPTY:
+                    print(
+                        f"warning: could not remove {each_directory_path}"
+                        f" — {each_error}",
+                        file=sys.stderr,
+                    )
 
     return removed
 

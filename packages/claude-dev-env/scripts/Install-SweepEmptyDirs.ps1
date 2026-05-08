@@ -93,12 +93,8 @@ if (-not $?) {
     exit 1
 }
 
-# Sanitize target path before interpolation
+# Sanitize target path before interpolation (TrimEnd is safe for admin shares with $)
 $Target = [System.IO.Path]::TrimEndingDirectorySeparator($Target)
-if ($Target -match '\$') {
-    Write-Error "Target path must not contain `$` characters."
-    exit 1
-}
 
 $Action = New-ScheduledTaskAction -Execute $PythonPath -Argument """$ScriptPath"" --once --age $AgeSeconds ""$Target"""
 $Trigger = New-ScheduledTaskTrigger -Once -At $StartAt -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration ([TimeSpan]::MaxValue)

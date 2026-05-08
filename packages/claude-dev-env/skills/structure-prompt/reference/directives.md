@@ -10,7 +10,7 @@ Common performance directives:
 - "You are an expert"
 - "Be thorough"
 - "Be comprehensive"
-- "Be careful"
+- "Be careful" / "carefully"
 - "Do your best"
 - "Please"
 - "Kindly"
@@ -23,7 +23,8 @@ Each directive maps to a measurable constraint or to omission:
 |---|---|
 | "Be thorough" | A surface enumeration. e.g., "Inspect: input validation, auth, secret handling." |
 | "Be comprehensive" | A count target. e.g., "Produce at least 8 findings." |
-| "Be careful" | A locator requirement. e.g., "Cite file:line for every claim." |
+| "Be careful" / "carefully" | A locator requirement. e.g., "Cite file:line for every claim." |
+| "Think step by step" / "Let's think step by step" | omitted |
 | "Take a deep breath" | omitted |
 | "Please" / "Kindly" | omitted |
 | "You are an expert" | omitted (covered by the mission line) |

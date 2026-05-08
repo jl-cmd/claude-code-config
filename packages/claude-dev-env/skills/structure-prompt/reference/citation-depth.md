@@ -30,9 +30,9 @@ Before:
 - `os.walk(root, onerror=_log_walk_error, topdown=False)` — `_log_walk_error` matches the exact signature stdlib calls.
 ```
 
-After:
+After (3 occurrences: definition, plus two call sites):
 ```
-- `os.walk(root, onerror=_log_walk_error, topdown=False)` — `_log_walk_error` matches the exact signature stdlib calls (`sweep_empty_dirs.py:33-35`, definition at `sweep_empty_dirs.py:23`).
+- `os.walk(root, onerror=_log_walk_error, topdown=False)` — `_log_walk_error` matches the exact signature stdlib calls (`sweep_empty_dirs.py:23, sweep_empty_dirs.py:33`).
 ```
 
 Before:
@@ -40,7 +40,7 @@ Before:
 - `Get-ScheduledTask`, `New-ScheduledTaskTrigger`, `New-ScheduledTaskAction`, `Register-ScheduledTask`, `Unregister-ScheduledTask` — verify each call's parameter shape.
 ```
 
-After:
+After (one occurrence per cmdlet):
 ```
 - `Get-ScheduledTask` (`Install-SweepEmptyDirs.ps1:248`), `New-ScheduledTaskTrigger` (`Install-SweepEmptyDirs.ps1:297`), `New-ScheduledTaskAction` (`Install-SweepEmptyDirs.ps1:296`), `Register-ScheduledTask` (`Install-SweepEmptyDirs.ps1:300`), `Unregister-ScheduledTask` (`Install-SweepEmptyDirs.ps1:267`) — verify each call's parameter shape.
 ```

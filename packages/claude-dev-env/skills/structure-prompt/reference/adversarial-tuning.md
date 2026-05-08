@@ -35,7 +35,7 @@ When the category sits outside this list, derive the noun from the framework's m
 1. Find the adversarial-pass sentence in the output spec.
 2. Identify the generic noun in that sentence.
 3. Replace it with the specific noun from the table or framework.
-4. Keep the rest of the sentence intact (count, severity tier, "find them").
+4. Keep the rest of the sentence intact: count (e.g., "3"), severity tier (e.g., "P1") when the original phrase carries one, and the closing "find them".
 
 ## Examples
 
@@ -55,4 +55,4 @@ After (Category C):
 
 When the adversarial phrase already names a specific failure mode, the noun stays. The skill changes only generic nouns.
 
-The count (3) and severity tier (P1) stay intact — the rubric calibration data covers those, and tuning is out of scope for this spoke.
+The count (e.g., 3) and severity tier (e.g., P1) stay intact when the original phrase carries them. Some categories name a noun that doesn't fit the P-tier model — Codebase Conflicts ("parallel sites that should have been updated alongside the diff") is the canonical example. For those, the original phrase typically omits the severity tier; the skill leaves it omitted. The rule is preservation, not insertion.

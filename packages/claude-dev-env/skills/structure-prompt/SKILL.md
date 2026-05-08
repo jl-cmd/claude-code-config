@@ -31,7 +31,7 @@ Read [`reference/block-classification.md`](reference/block-classification.md), t
 | Framework has 5+ sub-buckets and no ⭐ canonical-case marker | [`reference/canonical-case.md`](reference/canonical-case.md) |
 | Output spec contains generic adversarial-pass phrasing ("missed at least N P1 bugs/findings") | [`reference/adversarial-tuning.md`](reference/adversarial-tuning.md) |
 | Input has typos, mixed bullet styles, untagged code blocks, or whitespace runs | [`reference/cleanup.md`](reference/cleanup.md) |
-| Tick is ambiguous against the spokes above | [`reference/examples.md`](reference/examples.md) |
+| Situation doesn't match any spoke above | [`reference/examples.md`](reference/examples.md) |
 | Emitting the rewritten prompt | [`reference/output-contract.md`](reference/output-contract.md) |
 
 ## Folder map

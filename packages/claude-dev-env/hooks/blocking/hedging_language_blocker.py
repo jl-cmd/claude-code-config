@@ -123,7 +123,7 @@ def main() -> None:
     else:
         skill_reference = (
             "under research-mode constraints "
-            "(no research-mode skill installed; verify with sources or reply 'I don't know')"
+            "(no research-mode skill installed; verify with sources or prompt the user via AskUserQuestion with potential options + context)"
         )
 
     block_response = {

@@ -39,4 +39,4 @@ packages/claude-dev-env/.env
 # Self-improve eval data artifacts
 packages/claude-dev-env/skills/self-improve-pr-converge/self-improve-eval-data/
 packages/claude-dev-env/skills/self-improve-pr-converge/scripts/self-improve-eval-data/
-*.temp-*
+**/self-improve-eval-data/*.temp-*

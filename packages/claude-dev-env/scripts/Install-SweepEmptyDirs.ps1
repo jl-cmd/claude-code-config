@@ -23,7 +23,7 @@ param(
 
     [Parameter(ParameterSetName = "install")]
     [ValidateRange(1, [int]::MaxValue)]
-    [int]$AgeSeconds = 120,  # matches config/sweep_config.py DEFAULT_AGE_SECONDS
+    [int]$AgeSeconds = 120,  # matches config/timing.py DEFAULT_AGE_SECONDS
 
     [Parameter(ParameterSetName = "install")]
     [DateTime]$StartAt = (Get-Date),

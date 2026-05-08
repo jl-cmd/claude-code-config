@@ -49,6 +49,8 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
         except PermissionError:
             print(f"warning: permission denied — {each_directory_path}", file=sys.stderr)
             continue
+        except OSError:
+            continue
         if now - created > min_age_seconds:
             try:
                 os.rmdir(each_directory_path)

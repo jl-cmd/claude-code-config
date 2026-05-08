@@ -14,6 +14,8 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+from unittest.mock import patch
+
 from sweep_empty_dirs import sweep  # noqa: E402
 
 
@@ -74,12 +76,22 @@ def test_empty_root_does_not_crash() -> None:
         assert os.path.isdir(tmp)
 
 
-def test_skips_nonempty_dir() -> None:
+def test_skips_dir_when_getctime_raises_os_error() -> None:
+    """Sweep must not crash when os.path.getctime raises an unexpected OSError
+    (e.g., broken junction point, disconnected network path)."""
     with tempfile.TemporaryDirectory() as tmp:
-        nonempty_dir = os.path.join(tmp, "has_stuff")
-        os.mkdir(nonempty_dir)
-        Path(nonempty_dir, "keepme.txt").write_text("hello")
+        problem_dir = os.path.join(tmp, "broken")
+        os.mkdir(problem_dir)
 
-        removed = sweep(tmp, min_age_seconds=0)
-        assert nonempty_dir not in removed
-        assert os.path.isdir(nonempty_dir)
+        original_getctime = os.path.getctime
+
+        def _failing_getctime(path: str) -> float:
+            if "broken" in path:
+                raise OSError("simulated broken junction")
+            return original_getctime(path)
+
+        with patch("os.path.getctime", side_effect=_failing_getctime):
+            removed = sweep(tmp, min_age_seconds=120)
+
+        assert problem_dir not in removed
+        assert os.path.isdir(problem_dir)

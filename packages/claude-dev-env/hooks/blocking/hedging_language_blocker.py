@@ -134,7 +134,7 @@ def main() -> None:
             f"These words signal unverified claims. You MUST rewrite your response "
             f"{skill_reference}\n\n"
             f"Do NOT simply remove the hedging word and keep the unverified claim. "
-            f"Either VERIFY it with a source or replace it with 'I don't know'.\n\n"
+            f"Do more research to VERIFY it with a source, or prompt the user via AskUserQuestion with some potential options + context if you are unable to find anything online.\n\n"
             f"You MUST re-output the complete, revised response with the corrections applied."
         ),
         "systemMessage": USER_FACING_NOTICE,

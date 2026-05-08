@@ -94,7 +94,7 @@ if (-not $?) {
 }
 
 # Sanitize target path before interpolation
-$Target = $Target.TrimEnd('\')
+$Target = [System.IO.Path]::TrimEndingDirectorySeparator($Target)
 if ($Target -match '\$') {
     Write-Error "Target path must not contain `$` characters."
     exit 1

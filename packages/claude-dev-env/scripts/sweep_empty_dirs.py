@@ -12,15 +12,15 @@ import os
 import sys
 import time
 
-from config.sweep_config import DEFAULT_AGE_SECONDS
-from config.sweep_config import DEFAULT_POLL_INTERVAL
+from config.timing import DEFAULT_AGE_SECONDS
+from config.timing import DEFAULT_POLL_INTERVAL
 
 
-def _positive_int(value: str) -> int:
+def _positive_int(raw_argument: str) -> int:
     """Argparse type: require value >= 1."""
-    parsed = int(value)
+    parsed = int(raw_argument)
     if parsed < 1:
-        raise argparse.ArgumentTypeError(f"must be >= 1, got {value}")
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {raw_argument}")
     return parsed
 
 

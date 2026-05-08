@@ -76,7 +76,13 @@ if (-not (Test-Path $Target)) {
     exit 1
 }
 
-$Action = New-ScheduledTaskAction -Execute "python" -Argument "$ScriptPath --once --age $AgeSeconds '$Target'"
+$_py = Get-Command py -ErrorAction SilentlyContinue
+$PythonPath = if ($_py) { $_py.Source } else { (Get-Command python).Source }
+if (-not $PythonPath) {
+    Write-Error "Cannot find Python (py or python) on PATH."
+    exit 1
+}
+$Action = New-ScheduledTaskAction -Execute $PythonPath -Argument "$ScriptPath --once --age $AgeSeconds ""$Target"""
 $Trigger = New-ScheduledTaskTrigger -Daily -At "00:00" -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes)
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 

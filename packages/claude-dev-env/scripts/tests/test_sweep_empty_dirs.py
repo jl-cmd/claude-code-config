@@ -71,6 +71,12 @@ def test_deletes_nested_empty_dirs() -> None:
         assert os.path.join(tmp, "parent") in removed
 
 
+def test_empty_root_does_not_crash() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        _set_creation_time_windows(tmp, time.time() - 300)
+        sweep(tmp, min_age_seconds=120)
+
+
 def test_skips_nonempty_dir() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         nonempty_dir = os.path.join(tmp, "has_stuff")

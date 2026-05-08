@@ -12,8 +12,12 @@ import os
 import sys
 import time
 
-from config.sweep_config import DEFAULT_AGE_SECONDS as _DEFAULT_AGE_SECONDS
-from config.sweep_config import DEFAULT_POLL_INTERVAL as _DEFAULT_POLL_INTERVAL
+from config.sweep_config import DEFAULT_AGE_SECONDS
+from config.sweep_config import DEFAULT_POLL_INTERVAL
+
+
+def _log_walk_error(os_error: OSError) -> None:
+    print(f"warning: cannot scan {os_error.filename} — {os_error.strerror}", file=sys.stderr)
 
 
 def sweep(root: str, min_age_seconds: int) -> list[str]:
@@ -27,15 +31,20 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
     now = time.time()
     removed: list[str] = []
 
-    for each_directory_path, _, _ in os.walk(root, topdown=False):
+    for each_directory_path, _, _ in os.walk(
+        root, onerror=_log_walk_error, topdown=False
+    ):
         try:
             created = os.path.getctime(each_directory_path)
-            if now - created >= min_age_seconds:
+        except OSError:
+            continue
+        if now - created >= min_age_seconds:
+            try:
                 os.rmdir(each_directory_path)
                 print(f"deleted: {each_directory_path}")
                 removed.append(each_directory_path)
-        except OSError:
-            pass
+            except OSError:
+                pass
 
     return removed
 
@@ -48,8 +57,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--age",
         type=int,
-        default=_DEFAULT_AGE_SECONDS,
-        help=f"Minimum age in seconds (default: {_DEFAULT_AGE_SECONDS} = 2 minutes)",
+        default=DEFAULT_AGE_SECONDS,
+        help=f"Minimum age in seconds (default: {DEFAULT_AGE_SECONDS} = 2 minutes)",
     )
     parser.add_argument(
         "--once",
@@ -59,8 +68,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--interval",
         type=int,
-        default=_DEFAULT_POLL_INTERVAL,
-        help=f"Poll interval in seconds when looping (default: {_DEFAULT_POLL_INTERVAL})",
+        default=DEFAULT_POLL_INTERVAL,
+        help=f"Poll interval in seconds when looping (default: {DEFAULT_POLL_INTERVAL})",
     )
     return parser
 

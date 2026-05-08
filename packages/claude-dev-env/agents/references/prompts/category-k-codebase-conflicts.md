@@ -3,12 +3,6 @@ Audit [REPO/ARTIFACT] [TARGET ID] for **Category K only** (codebase conflicts �
 [ARTIFACT METADATA — including the BEFORE state of changed surfaces, so the agent can compare before vs after]
 ID prefix: `find`.
 
-## Source material ([N] files/sections, all lines in scope)
-
-[INLINE THE FULL DIFF — including BOTH the changed lines AND surrounding context that shows what stayed the same.]
-
-[ALSO INCLUDE any unchanged files in the codebase that the agent must search for parallel sites. For a small repo, inline a project tree. For a large repo, identify the most likely affected files via `git grep <renamed-symbol>` or equivalent and inline those.]
-
 ## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
 
 **K1. Multi-site name renames**
@@ -66,3 +60,9 @@ Q3: Which renamed/changed surface has the most parallel sites in the codebase, a
 Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket [K1]–[KN], produce Shape A or Shape B (with ≥3 probes). Each Shape A finding must cite BOTH the diff line that was changed AND the parallel line that was missed — the conflict is between the two, not in either alone. Cross-bucket Q1–Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 parallel sites that should have been updated alongside the diff — find them." Open Questions section. Read-only. No edits, no commits.
 
 Note: Category K Shape A findings are unusual in that they always cite TWO line locations (the changed line and the unchanged-but-should-have-changed line). The `failure_mode` should describe the contradiction between the two states.
+
+## Source material ([N] files/sections, all lines in scope)
+
+[INLINE THE FULL DIFF — including BOTH the changed lines AND surrounding context that shows what stayed the same.]
+
+[ALSO INCLUDE any unchanged files in the codebase that the agent must search for parallel sites. For a small repo, inline a project tree. For a large repo, identify the most likely affected files via `git grep <renamed-symbol>` or equivalent and inline those.]

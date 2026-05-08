@@ -3,10 +3,6 @@ Audit [REPO/ARTIFACT] [TARGET ID] for **Category C only** (resource cleanup and 
 [ARTIFACT METADATA]
 ID prefix: `find`.
 
-## Source material ([N] files/sections, all lines in scope)
-
-[INLINE THE FULL ARTIFACT HERE — do not ask the agent to fetch.]
-
 ## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
 
 **C1. File handles / file objects**
@@ -57,3 +53,7 @@ Q3: Where would an exception thrown from inside a `try` block cause a resource t
 ## Output
 
 Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket [C1]–[CN], produce Shape A or Shape B (with ≥3 probes). Cross-bucket Q1–Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P1 leaks across these [N] sub-buckets — find them." Open Questions section. Read-only. No edits, no commits.
+
+## Source material ([N] files/sections, all lines in scope)
+
+[INLINE THE FULL ARTIFACT HERE — do not ask the agent to fetch.]

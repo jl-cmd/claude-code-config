@@ -3,10 +3,6 @@ Audit [REPO/ARTIFACT] [TARGET ID] for **Category F only** (silent failures). Ski
 [ARTIFACT METADATA]
 ID prefix: `find`.
 
-## Source material ([N] files/sections, all lines in scope)
-
-[INLINE THE FULL ARTIFACT HERE — do not ask the agent to fetch.]
-
 ## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
 
 **F1. Catch-all except clauses**
@@ -55,3 +51,7 @@ Q3: Where would a future error-handling refactor most likely *introduce* a silen
 ## Output
 
 Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket [F1]–[FN], produce Shape A or Shape B (with ≥3 probes). Cross-bucket Q1–Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P1 silent failures across these [N] sub-buckets — find them." Open Questions section. Read-only. No edits, no commits.
+
+## Source material ([N] files/sections, all lines in scope)
+
+[INLINE THE FULL ARTIFACT HERE — do not ask the agent to fetch.]

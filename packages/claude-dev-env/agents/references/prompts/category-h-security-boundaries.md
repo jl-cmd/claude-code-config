@@ -3,10 +3,6 @@ Audit [REPO/ARTIFACT] [TARGET ID] for **Category H only** (security boundaries).
 [ARTIFACT METADATA — including the trust model: who is the attacker, what input do they control?]
 ID prefix: `find`.
 
-## Source material ([N] files/sections, all lines in scope)
-
-[INLINE THE FULL ARTIFACT HERE — do not ask the agent to fetch.]
-
 ## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
 
 **H1. SQL injection**
@@ -68,3 +64,7 @@ Q3: Which input vector is most fragile to a future API addition (e.g., a new end
 Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket [H1]–[HN], produce Shape A or Shape B (with ≥3 probes). Cross-bucket Q1–Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P0/P1 vulnerabilities across these [N] sub-buckets — find them." Open Questions section. Read-only. No edits, no commits.
 
 Note: Category H findings tend toward P0/P1 since they're security-relevant — adjust the adversarial-pass quota severity accordingly.
+
+## Source material ([N] files/sections, all lines in scope)
+
+[INLINE THE FULL ARTIFACT HERE — do not ask the agent to fetch.]

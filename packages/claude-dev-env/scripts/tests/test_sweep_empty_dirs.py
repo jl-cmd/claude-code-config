@@ -70,8 +70,8 @@ def test_deletes_nested_empty_dirs() -> None:
 
 def test_empty_root_does_not_crash() -> None:
     with tempfile.TemporaryDirectory() as tmp:
-        _set_creation_time_windows(tmp, time.time() - 300)
         sweep(tmp, min_age_seconds=120)
+        assert os.path.isdir(tmp)
 
 
 def test_skips_nonempty_dir() -> None:

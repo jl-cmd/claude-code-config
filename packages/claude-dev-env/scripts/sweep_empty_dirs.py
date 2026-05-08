@@ -69,7 +69,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("root", help="Root directory to scan")
     parser.add_argument(
         "--age",
-        type=int,
+        type=_positive_int,
         default=DEFAULT_AGE_SECONDS,
         help=f"Minimum age in seconds (default: {DEFAULT_AGE_SECONDS} = 2 minutes)",
     )

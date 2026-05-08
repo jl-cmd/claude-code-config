@@ -1,3 +1,77 @@
+Audit [REPO/ARTIFACT] [TARGET_ID] for **Category A only** (API contract verification). Skip B–K. Sub-bucket forced-exhaustion mode: Category A is decomposed into 7 sub-buckets below. Each sub-bucket REQUIRES at least one Shape A finding OR exactly one Shape B proof-of-absence with **at least 3 adversarial probes** specific to that sub-bucket. A sub-bucket returning neither is a protocol gap.
+
+[ARTIFACT METADATA: title / change description / head SHA or revision identifier / scope summary]
+ID prefix: `find`.
+
+## Source material ([N] files/sections, all lines in scope)
+
+[INLINE THE FULL ARTIFACT HERE — see ../source-material-section-types.md for chunking guidance.]
+
+## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
+
+**A1. Function/method signatures vs internal call sites**
+- Enumerate every defined function or method's parameter list: count, names, defaults, kw-only barriers (Python `*`), positional-only barriers (`/`), variadic markers (`*args`, `**kwargs`).
+- For every internal call within the artifact, verify the binding matches the callee's signature: positional count, keyword names, required-vs-optional, default fall-through.
+- Flag positional arguments passed to keyword-only parameters and vice versa.
+- Flag calls that omit a required parameter relying on a default that does not exist on the current branch.
+- Verify decorators (`@staticmethod`, `@classmethod`, `@property`) do not silently shift the parameter binding (e.g., `self` / `cls` insertion).
+
+**A2. Return-type annotation vs every code path**
+- For each annotated function, walk every code path: explicit `return X`, fall-through to implicit `None`, exception-handler exit, generator `yield` paths, async coroutine return value.
+- Verify each path's actual return value is assignable to the declared annotation; flag `-> bool` functions that can return `None`, `-> list[T]` functions that can return `None` on an early exit, etc.
+- For functions that raise instead of returning on some path, confirm the annotation does not promise a value the caller will dereference.
+- Inspect `try/except/finally` chains for paths that return from `finally` and override `try`/`except` returns.
+- For async functions, confirm the annotation refers to the awaited type, not the coroutine wrapper.
+
+**A3. CLI/argument-parser declaration → downstream Namespace contract**
+- For every `add_argument(...)` (or equivalent CLI declaration), verify the auto-derived or explicit `dest=` matches the attribute name accessed downstream on the parsed namespace.
+- Verify `type=` (or schema coercion) matches every downstream consumer's expectation — e.g., a value handed to a function requiring `int` is declared `type=int`, not the default `str`.
+- Switch flags (`action="store_true"` / `store_false`) produce booleans; non-switch arguments produce typed values; flag the mismatch where a switch is treated as a value or vice versa.
+- Default values resolve correctly when the flag is omitted; flag any code path that assumes the user supplied the argument.
+- Required-vs-optional declaration matches the downstream code's null-handling.
+
+**A4. Stdlib/library callback contracts**
+- Identify every callback handed to a library function (e.g., `os.walk(onerror=...)`, sort `key=`, `filter`, `map`, `re.sub(repl=callable)`, signal handlers, threading callbacks). Verify each callback's signature matches what the library calls it with — arity, positional-vs-keyword, return type the library consumes.
+- For every stdlib function the artifact calls, verify argument types and exception contracts: which exceptions can each call raise, and is each caller prepared (or deliberately not prepared) for them.
+- Verify kwargs to stdlib functions are spelled correctly for the targeted runtime version (deprecated/renamed kwargs, version-introduced kwargs).
+- Flag callbacks whose return value the library consumes but the implementation returns `None` (or vice versa).
+- Confirm callback exception behavior: which exceptions in the callback bubble out, which are swallowed by the library, which terminate iteration.
+
+**A5. Subprocess / external-process invocation contract**
+- For every `subprocess.run` / `subprocess.Popen` / equivalent call, verify the `args` shape: list-of-strings vs single string vs `shell=True` semantics.
+- Verify kwargs are valid for the targeted runtime version (`capture_output`, `text`, `encoding`, `check`, `timeout`); flag combinations that conflict (`stdout=PIPE` + `capture_output=True`).
+- Exception contract under `check=True` (raises `CalledProcessError` on non-zero exit) — verify callers either propagate or handle, with no silent swallow that masks failure.
+- Verify quoting/escaping of arguments crossing the subprocess boundary, especially when interpolating untrusted strings.
+- Verify the resolved executable path is real on the target platform, not assumed (`which` / `Get-Command` failure paths).
+
+**A6. Shell/host-language cmdlet or function parameter sets and binding**
+- For every shell or host-language function/cmdlet declaration with parameter sets (PowerShell `param(...)` with `ParameterSetName=`, Bash `getopts`, etc.), verify the declaration matches every invocation pattern. Confirm a default parameter set is declared if no-arg invocation is reachable.
+- For every cmdlet/builtin invocation, verify the parameter combination is valid per the cmdlet's documented parameter sets — flag combinations that mix flags from disjoint parameter sets.
+- Flag missing `-ErrorAction` (or equivalent) declarations on calls whose null-checks downstream assume swallowed errors.
+- Verify each cmdlet/builtin argument's type coercion at the boundary matches what the cmdlet expects.
+- Confirm pipeline-bound parameters (`ValueFromPipeline`, `ValueFromPipelineByPropertyName`) match what upstream emits.
+
+**A7. Cross-language / cross-process argv and serialization boundary**
+- Trace every value crossing a language or process boundary (shell argv → Python `sys.argv`, environment variables, JSON/IPC payloads, file-format round-trips). Verify the producer's serialization matches the consumer's parser.
+- Flag trailing-backslash, embedded-space, embedded-quote, and Unicode hazards on Windows argv composition (Microsoft C-runtime argv parser rules) and POSIX shell word-splitting.
+- Verify argument-order conventions match across the boundary — e.g., flag order, positional placement, separator handling (`--`).
+- Cross-language default-value drift: a default declared on one side that differs from the default on the other side; verify either both are sourced from a single config or both are intentionally mirrored.
+- Cross-language type drift: integer width, signed/unsigned, floating-point precision, string encoding (UTF-8 vs UTF-16), null/empty-string semantics.
+
+## Cross-bucket questions to answer at the end
+
+Q1: Are there any contracts that span two sub-buckets that single-bucket analysis would miss?
+Q2: What is the worst contract-drift hazard introduced by this artifact? Cite file:line.
+Q3: Where would a future refactor most likely break a cross-bucket or cross-language contract? Name the line(s) most fragile.
+
+## Output
+
+Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket A1–A7, produce Shape A or Shape B (with ≥3 adversarial probes). Cross-bucket Q1–Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P1 bugs across these 7 sub-buckets — find them." Open Questions section for ambiguities. Read-only. No edits, no commits.
+
+---
+
+# Worked example: jl-cmd/claude-code-config PR #394 (May 2026 audit experiment)
+
 Audit jl-cmd/claude-code-config PR #394 for **Category A only** (API contract verification). Skip B–J. Sub-bucket forced-exhaustion mode: Category A is decomposed into 7 sub-buckets below. Each sub-bucket REQUIRES at least one Shape A finding OR exactly one Shape B proof-of-absence with **at least 3 adversarial probes** specific to that sub-bucket. A sub-bucket returning neither is a protocol gap.
 
 PR: feat(scripts): add sweep-empty-dirs utility and scheduled-task installer

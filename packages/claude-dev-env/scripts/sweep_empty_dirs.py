@@ -17,27 +17,25 @@ from config.sweep_config import DEFAULT_POLL_INTERVAL as _DEFAULT_POLL_INTERVAL
 
 
 def sweep(root: str, min_age_seconds: int) -> list[str]:
-    """Remove empty directories under *root* older than *min_age_seconds*."""
+    """Remove empty directories under *root* older than *min_age_seconds*.
+
+    Walks bottom-up so nested empty directories are cleaned from the leaves
+    inward.  Relies on os.rmdir to fail harmlessly for non-empty directories
+    instead of checking snapshotted subdirectory lists.
+    """
 
     now = time.time()
     removed: list[str] = []
 
-    for each_dirpath, each_dirnames, each_filenames in os.walk(root, topdown=True):
-        if not os.path.isdir(each_dirpath):
-            continue
-
-        if each_filenames or each_dirnames:
-            continue
-
-        created = os.path.getctime(each_dirpath)
-        if now - created >= min_age_seconds:
-            try:
-                os.rmdir(each_dirpath)
-                print(f"deleted: {each_dirpath}")
-            except OSError as exc:
-                print(f"failed: {each_dirpath} — {exc}", file=sys.stderr)
-                continue
-            removed.append(each_dirpath)
+    for each_directory_path, _, _ in os.walk(root, topdown=False):
+        try:
+            created = os.path.getctime(each_directory_path)
+            if now - created >= min_age_seconds:
+                os.rmdir(each_directory_path)
+                print(f"deleted: {each_directory_path}")
+                removed.append(each_directory_path)
+        except OSError:
+            pass
 
     return removed
 
@@ -69,21 +67,24 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     parser = _build_parser()
-    args = parser.parse_args()
+    arguments = parser.parse_args()
 
-    if not os.path.isdir(args.root):
-        print(f"error: not a directory: {args.root}", file=sys.stderr)
+    if not os.path.isdir(arguments.root):
+        print(f"error: not a directory: {arguments.root}", file=sys.stderr)
         sys.exit(1)
 
-    if args.once:
-        sweep(args.root, args.age)
+    if arguments.once:
+        sweep(arguments.root, arguments.age)
         return
 
-    print(f"watching {args.root} every {args.interval}s (age threshold: {args.age}s)")
+    print(
+        f"watching {arguments.root} every {arguments.interval}s"
+        f" (age threshold: {arguments.age}s)"
+    )
     try:
         while True:
-            sweep(args.root, args.age)
-            time.sleep(args.interval)
+            sweep(arguments.root, arguments.age)
+            time.sleep(arguments.interval)
     except KeyboardInterrupt:
         print("\nstopped.")
 

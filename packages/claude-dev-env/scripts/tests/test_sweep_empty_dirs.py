@@ -53,6 +53,24 @@ def test_skips_empty_dir_newer_than_threshold() -> None:
         assert os.path.isdir(fresh_dir)
 
 
+def test_deletes_nested_empty_dirs() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        leaf = os.path.join(tmp, "parent", "child", "leaf")
+        os.makedirs(leaf)
+        _set_creation_time_windows(
+            os.path.join(tmp, "parent"), time.time() - 300
+        )
+        _set_creation_time_windows(
+            os.path.join(tmp, "parent", "child"), time.time() - 300
+        )
+        _set_creation_time_windows(leaf, time.time() - 300)
+
+        removed = sweep(tmp, min_age_seconds=120)
+        assert leaf in removed
+        assert os.path.join(tmp, "parent", "child") in removed
+        assert os.path.join(tmp, "parent") in removed
+
+
 def test_skips_nonempty_dir() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         nonempty_dir = os.path.join(tmp, "has_stuff")

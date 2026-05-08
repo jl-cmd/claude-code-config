@@ -36,27 +36,27 @@ Report findings only. Author zero edits. Author zero diffs. Run zero commits or 
 
 Every audit pass walks all eleven categories. Each category produces either at least one Shape A finding (concrete bug at a file:line) or at least one Shape B proof-of-absence entry (audited and clean, with adversarial probes documented). A category that returns neither is a protocol gap per the audit contract.
 
-For each category's full description, examples, sub-bucket decomposition, and concrete checks, read the matching reference file in `references/category_rubrics/`:
+For each category's full description, examples, sub-bucket decomposition, and concrete checks, read the matching rubric in `../audit-rubrics/category_rubrics/`:
 
 | Letter | Category | Reference file |
 |---|---|---|
-| A | API contract verification | `references/category_rubrics/category-a-api-contracts.md` |
-| B | Selector / query / engine compatibility | `references/category_rubrics/category-b-selector-engine-compat.md` |
-| C | Resource cleanup and lifecycle | `references/category_rubrics/category-c-resource-cleanup.md` |
-| D | Variable scoping, ordering, and unbound references | `references/category_rubrics/category-d-scoping-and-ordering.md` |
-| E | Dead code and unused imports | `references/category_rubrics/category-e-dead-code.md` |
-| F | Silent failures | `references/category_rubrics/category-f-silent-failures.md` |
-| G | Off-by-one, bounds, integer overflow | `references/category_rubrics/category-g-bounds-and-overflow.md` |
-| H | Security boundaries | `references/category_rubrics/category-h-security-boundaries.md` |
-| I | Concurrency hazards | `references/category_rubrics/category-i-concurrency.md` |
-| J | CODE_RULES.md compliance | `references/category_rubrics/category-j-code-rules-compliance.md` |
-| K | Codebase conflicts (incomplete propagation) | `references/category_rubrics/category-k-codebase-conflicts.md` |
+| A | API contract verification | `../audit-rubrics/category_rubrics/category-a-api-contracts.md` |
+| B | Selector / query / engine compatibility | `../audit-rubrics/category_rubrics/category-b-selector-engine-compat.md` |
+| C | Resource cleanup and lifecycle | `../audit-rubrics/category_rubrics/category-c-resource-cleanup.md` |
+| D | Variable scoping, ordering, and unbound references | `../audit-rubrics/category_rubrics/category-d-scoping-and-ordering.md` |
+| E | Dead code and unused imports | `../audit-rubrics/category_rubrics/category-e-dead-code.md` |
+| F | Silent failures | `../audit-rubrics/category_rubrics/category-f-silent-failures.md` |
+| G | Off-by-one, bounds, integer overflow | `../audit-rubrics/category_rubrics/category-g-bounds-and-overflow.md` |
+| H | Security boundaries | `../audit-rubrics/category_rubrics/category-h-security-boundaries.md` |
+| I | Concurrency hazards | `../audit-rubrics/category_rubrics/category-i-concurrency.md` |
+| J | CODE_RULES.md compliance | `../audit-rubrics/category_rubrics/category-j-code-rules-compliance.md` |
+| K | Codebase conflicts (incomplete propagation) | `../audit-rubrics/category_rubrics/category-k-codebase-conflicts.md` |
 
 Test files (`test_*.py`, `*_test.py`, `*.test.*`, `*.spec.*`, `conftest.py`, and any path under `/tests/`) are exempt from category J. The exempt path families documented in the J reference also opt out of the constants-location sub-item.
 
 Category K Shape A findings always cite TWO line locations: the changed line and the unchanged-but-should-have-changed parallel line. The `failure_mode` field describes the contradiction between the two states. K is narrow but recurrent — linters and unit tests rarely catch these findings.
 
-For reusable Variant C audit prompts scoped to a single category, see `references/prompts/`. The Category A prompt (`references/prompts/category-a-api-contracts.md`) is the literal text from the May 2026 audit experiment that produced 8–10 findings on PR #394 — the canonical worked example.
+For reusable Variant C audit prompts scoped to a single category, see `../audit-rubrics/prompts/`. The Category A prompt (`../audit-rubrics/prompts/category-a-api-contracts.md`) is the literal text from the May 2026 audit experiment that produced 8–10 findings on PR #394 — the canonical worked example.
 
 ## Output Schema
 

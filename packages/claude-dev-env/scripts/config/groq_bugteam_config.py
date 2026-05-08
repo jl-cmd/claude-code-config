@@ -34,7 +34,7 @@ number MUST refer to the NEW side of the diff (post-change line number).
 Investigate these eleven categories. Skip a category silently when you find
 nothing; do not emit verified-clean entries. For the canonical rubric and
 sub-bucket decomposition for each category, see
-packages/claude-dev-env/agents/references/category_rubrics/.
+packages/claude-dev-env/audit-rubrics/category_rubrics/.
 
 A. API contract verification (signatures, return types, async/await)
 B. Selector / query / engine compatibility

@@ -1,3 +1,105 @@
+Audit [REPO/ARTIFACT] [TARGET_ID] for **Category J only** (CODE_RULES.md compliance). Skip A–I, K. Sub-bucket forced-exhaustion mode: Category J is decomposed into 12 sub-buckets below. Each sub-bucket REQUIRES at least one Shape A finding OR exactly one Shape B proof-of-absence with **at least 3 adversarial probes** specific to that sub-bucket. A sub-bucket returning neither is a protocol gap.
+
+[ARTIFACT METADATA]
+- Artifact: [PR title / commit subject / file set / patch series]
+- Head SHA / Revision: [SHA or revision identifier]
+- Scope: [files / line ranges / packages in scope]
+- Languages in scope: [e.g., Python, PowerShell, TypeScript]
+- Production vs test split: [explicit list of which files are production and which are test files; test files are exempt from most J sub-buckets]
+
+ID prefix: `find`.
+
+## Source material
+
+Inline the artifact (full diff or full file contents) under a clearly delimited block below this section. Use the chunking guide in [`../source-material-section-types.md`](../source-material-section-types.md) to choose the right Source-material section type (full-diff, file-set, patch-series, or excerpt-with-context). Mark every line range that is in scope; mark explicitly which files are test files (exempt) and which are production.
+
+Replace this paragraph with the chunked source material before issuing the prompt.
+
+## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
+
+**J1. Magic values in production function bodies**
+- Walk every numeric or non-trivial literal other than `0`, `1`, `-1` inside production function bodies.
+- Test files are exempt. Module-level declarations are J3-scope, not J1-scope.
+- For each literal found, decide: structural value that belongs in `config/` (flag) vs. truly local arithmetic constant tied to the line's logic (defendable).
+- Adversarial probes must each verify a distinct angle: (a) does the literal duplicate an existing value already centralized in `config/`? (b) does the literal silently couple two languages (e.g., a Python config value and a hand-typed PowerShell / shell mirror)? (c) does the literal appear in user-facing help/doc text in a way that would silently lie if the canonical value changed?
+
+**J2. String-template magic**
+- Walk every f-string / template string in production code. Strip the `{...}` interpolations and inspect the remaining literal residue.
+- Flag only when the residue is **structural** (paths, URLs, regex, command patterns, query DSL fragments). Descriptive output / log prefixes / human-readable help text are not J2-scope by themselves.
+- Adversarial probes: (a) does any f-string concatenate a path, URL, or pattern fragment that should be sourced from `config/`? (b) does any literal repeat across two languages or two files in a way that belongs in shared config? (c) does the literal include an embedded number that mirrors a `config/` constant and would drift if the constant changed?
+
+**J3. Constants location**
+- Walk every module-level `UPPER_SNAKE = ...` declaration in production files.
+- Exempt path families: `config/*`, `/migrations/`, `/workflow/`, `_tab.py`, `/states.py`, `/modules.py`, and all test files. Anywhere else, an UPPER_SNAKE module-level constant must move to `config/`.
+- Distinguish *imports* (`from config.X import FOO`) from *declarations* — imports are not J3-scope.
+- Adversarial probes: (a) does any module-level constant masquerade as an "import" via a re-export pattern? (b) is there a `_PRIVATE_UPPER` declaration that escapes the visual UPPER_SNAKE filter but is still module-level? (c) does any test file declare a constant that *would* be flagged if it were in production, indicating the constant probably belongs in `config/` even if test-exempt?
+
+**J4. File-global use-count**
+- For every file-global constant outside `config/`, count references in the same file. Single ref → move to `config/`. Zero refs → delete.
+- The rule applies to *constants*, not functions, classes, or imports.
+- Adversarial probes: (a) is any imported constant referenced only once in the importing file (suggesting the import itself is gratuitous)? (b) is any helper function defined in a production file but never called from inside the same file (separate dead-code concern, surfaced here for completeness)? (c) does any constant in `config/` get imported from zero call sites across the repo?
+
+**J5. Abbreviations**
+- Walk every parameter, local, and attribute name in production code. Flag: `ctx`, `cfg`, `msg`, `btn`, `idx`, `cnt`, `elem`, `val`, `tmp`, `str`, `num`, `arr`, `obj`, `fn`, `cb`, `req`, `res`. Loop counters `i`/`j`/`k` and `e` for exceptions are exempt.
+- Test files are exempt.
+- Adversarial probes: (a) is there a borderline name (e.g., `removed`, `arguments`) that someone might mis-classify as an abbreviation but is actually a full English word? Confirm. (b) does any callback / parameter / attribute use a short variant of a domain term that is technically a full word but conventionally abbreviates a longer one? (c) does any variable in a comprehension or lambda use a single letter outside the `i`/`j`/`k`/`e` exemption?
+
+**J6. Vague names**
+- Flag any name from the vague list: `result`, `data`, `output`, `response`, `value`, `item`, `temp`, `info`, `stuff`, `thing`. Vague verb prefixes for function names: `handle`, `process`, `manage`, `do`.
+- Test files are exempt.
+- Adversarial probes: (a) does any local variable use a domain-adjacent name that is actually on the vague list (e.g., `result` from a parser, `data` from a fetch)? (b) does any newly-introduced function name start with a vague prefix? (c) does any public attribute / dict key use a vague label that the call site has to disambiguate by surrounding context?
+
+**J7. Type hints**
+- Walk every function in production files. Verify parameter and return types are present, no `Any`, no `# type: ignore`.
+- Test files are exempt.
+- Adversarial probes: (a) does any production function rely on inferred return type from a single `return` path? (b) does any parameter use a string-quoted forward reference that masks `Any`? (c) is there a `# type: ignore` anywhere? Grep the diff explicitly.
+
+**J8. New inline comments**
+- Every `#` or `//` comment line **added** by this diff in production code — flag, except for exempt markers (shebangs, `# type:`, `# noqa`, `# pylint:`, `# pragma:`, `// @ts-`, `// eslint-`, `// prettier-`, `/// `).
+- Module/function/class docstrings are always allowed.
+- Existing comments are NEVER removed (Comment Preservation rule); if the diff removes an existing comment, that is a separate violation outside J8 (also blocked by the hook).
+- Test files are exempt.
+- Adversarial probes: (a) is there any `# type:` or marker comment that is actually inert prose rather than a real type-checker / linter directive? (b) is any docstring carrying inline-comment content (line-level explanations rather than module/function description)? (c) does any newly-added blank line between code stanzas function as a comment substitute, suggesting the author wanted to add a comment but couldn't?
+
+**J9. Logging format**
+- Walk every `log_*(...)` call. Must be `log_*("template with {}", arg)`, not `log_*(f"...")`.
+- The rule applies to the project's structured `log_*` family, not stdlib `print`. `print` f-strings are J2-scope (string-template magic), not J9-scope.
+- Test files are exempt.
+- Adversarial probes: (a) is there any imported `log_*` function in production code that uses an f-string? (b) is there a logger-equivalent call (e.g., `logger.info(f"...")` from `logging` stdlib) that should be subject to the same rule? (c) does any non-Python logger family (e.g., `console.log`, `Write-Host`, structured-log helpers) appear with a template-string pattern that mirrors the J9 anti-pattern?
+
+**J10. Imports inside functions**
+- Every `import` / `from ... import ...` statement — verify at module scope.
+- Test files: deferred imports after a `sys.path.insert(0, ...)` guard at module scope are allowed (documented circular-import-style workaround).
+- Adversarial probes: (a) is there any lazy `import` inside a production function body? (b) does any conditional `import` (e.g., inside `if TYPE_CHECKING:`) escape into runtime accidentally? (c) does any non-Python language analog (e.g., `require(...)` inside a JS function, `Import-Module` inside a PowerShell `if` branch) appear in production code?
+
+**J11. sys.path.insert dedup**
+- Every `sys.path.insert(0, X)` must be guarded by `if X not in sys.path:` (or equivalent membership test).
+- Test files are explicitly in scope for J11 (the rule that always applies even to test files).
+- Adversarial probes: (a) is the guard expression semantically equivalent to `if X not in sys.path:` where `X` is exactly the value being inserted (no string/Path mismatch)? (b) is there a second `sys.path` mutation elsewhere in the file that is not guarded? (c) would importing the module twice (e.g., via test collection re-runs) re-trigger the insert?
+
+**J12. Hardcoded user paths**
+- Any string literal containing `C:/Users/<name>/...`, `/Users/<name>/...`, `/home/<name>/...` in production code? Use `pathlib.Path.home()` or `os.path.expanduser('~')`.
+- Exempt: test files, `config/` files, workflow registry paths (`/workflow/`, `_tab.py`, `/states.py`, `/modules.py`), Django migrations (`/migrations/`), and hook infrastructure.
+- Adversarial probes: (a) does any error message, help string, or docstring example embed a `C:/Users/...`, `/home/...`, or `/Users/...` example? Grep the diff. (b) does any scheduled-task / launcher / installer artifact hardcode a path that should be derived from `$PSCommandPath`, `__file__`, or `os.getcwd()`? (c) does any docstring example show a user-specific home, even if the runtime code itself is path-clean?
+
+## Cross-bucket questions to answer at the end
+
+Q1: Are there literals or names that span two sub-buckets (e.g., a magic value in J1 that also appears inside an f-string scrutinized by J2; an UPPER_SNAKE in J3 that also fails the use-count test in J4)? Cite the literal/name and both sub-bucket IDs.
+
+Q2: What is the worst CODE_RULES drift introduced by this artifact? Cite `<file>:<line>`. (Common candidates: cross-language duplicates, stale help text mirroring a config constant, abbreviations in a public API surface, bare `Any` annotations, hardcoded user paths in installer scripts.)
+
+Q3: Which findings would `code_rules_enforcer.py` block at write time, vs. which would only be caught by audit (slipping past the hook's pattern)? Cite `<file>:<line>` for any audit-only finding so the hook can be tightened later.
+
+## Output
+
+Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket J1–J12, produce Shape A or Shape B (with ≥3 probes). Cross-bucket Q1–Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P2 CODE_RULES violations across these 12 sub-buckets — find them." Open Questions section for ambiguities. Read-only. No edits, no commits.
+
+Note: most Category J findings are P2 (style / cleanup) since they don't affect runtime behavior; the adversarial-pass quota uses P2 here.
+
+---
+
+# Worked example: jl-cmd/claude-code-config PR #394
+
 Audit jl-cmd/claude-code-config PR #394 for **Category J only** (CODE_RULES.md compliance). Skip A–I, K. Sub-bucket forced-exhaustion mode: Category J is decomposed into 12 sub-buckets below. Each sub-bucket REQUIRES at least one Shape A finding OR exactly one Shape B proof-of-absence with **at least 3 adversarial probes** specific to that sub-bucket. A sub-bucket returning neither is a protocol gap.
 
 PR: feat(scripts): add sweep-empty-dirs utility and scheduled-task installer

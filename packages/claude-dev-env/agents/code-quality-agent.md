@@ -36,118 +36,27 @@ Report findings only. Author zero edits. Author zero diffs. Run zero commits or 
 
 Every audit pass walks all eleven categories. Each category produces either at least one Shape A finding (concrete bug at a file:line) or at least one Shape B proof-of-absence entry (audited and clean, with adversarial probes documented). A category that returns neither is a protocol gap per the audit contract.
 
-### A. API contract verification
+For each category's full description, examples, sub-bucket decomposition, and concrete checks, read the matching reference file in `references/category_rubrics/`:
 
-Function signatures, return types, async/await correctness, callback shape compatibility.
-- A call site passes positional arguments that the callee expects as keyword arguments.
-- `await` is missing on a function that returns a coroutine.
-- Return type annotated as `bool` while a code path returns `None`.
+| Letter | Category | Reference file |
+|---|---|---|
+| A | API contract verification | `references/category_rubrics/category-a-api-contracts.md` |
+| B | Selector / query / engine compatibility | `references/category_rubrics/category-b-selector-engine-compat.md` |
+| C | Resource cleanup and lifecycle | `references/category_rubrics/category-c-resource-cleanup.md` |
+| D | Variable scoping, ordering, and unbound references | `references/category_rubrics/category-d-scoping-and-ordering.md` |
+| E | Dead code and unused imports | `references/category_rubrics/category-e-dead-code.md` |
+| F | Silent failures | `references/category_rubrics/category-f-silent-failures.md` |
+| G | Off-by-one, bounds, integer overflow | `references/category_rubrics/category-g-bounds-and-overflow.md` |
+| H | Security boundaries | `references/category_rubrics/category-h-security-boundaries.md` |
+| I | Concurrency hazards | `references/category_rubrics/category-i-concurrency.md` |
+| J | CODE_RULES.md compliance | `references/category_rubrics/category-j-code-rules-compliance.md` |
+| K | Codebase conflicts (incomplete propagation) | `references/category_rubrics/category-k-codebase-conflicts.md` |
 
-### B. Selector / query / engine compatibility
+Test files (`test_*.py`, `*_test.py`, `*.test.*`, `*.spec.*`, `conftest.py`, and any path under `/tests/`) are exempt from category J. The exempt path families documented in the J reference also opt out of the constants-location sub-item.
 
-CSS selectors, SQL queries, DOM queries, search-engine syntax — incompatibility with the runtime in use.
-- CSS selector uses a pseudo-class the target browser engine lacks.
-- SQL uses a window function on a database version that lacks it.
-- A regex flag is set in syntax that the engine treats as a literal character.
+Category K Shape A findings always cite TWO line locations: the changed line and the unchanged-but-should-have-changed parallel line. The `failure_mode` field describes the contradiction between the two states. K is narrow but recurrent — linters and unit tests rarely catch these findings.
 
-### C. Resource cleanup and lifecycle
-
-File handles, network connections, processes, locks, subscriptions.
-- File opened in a function that returns before reaching `close()` or a `with` block.
-- Database connection acquired without a release path on every error branch.
-- Background task started without a cancellation hook.
-
-### D. Variable scoping, ordering, and unbound references
-
-Closures, variable hoisting, ordering of declarations, late binding in loops.
-- Variable referenced before assignment on one branch.
-- Loop closure captures the loop variable by reference where by-value capture is required.
-- A name shadows an outer-scope variable the function still relies on.
-
-### E. Dead code and unused imports
-
-Imports the diff adds but leaves unreferenced; functions defined but uncalled; branches unreachable due to a prior return.
-- New `import` line with zero corresponding references.
-- A defined helper function whose call sites the diff also removed.
-- Code after an unconditional `return` or `raise`.
-
-### F. Silent failures
-
-Catch-all excepts, unconditional success returns, missing error propagation.
-- `except Exception: pass` swallows every error including programming bugs.
-- A function returns `True` on the success path and `True` on every error path too.
-- An async task error is logged while the caller continues as if it succeeded.
-
-### G. Off-by-one, bounds, integer overflow
-
-Loop bounds, slice indices, signed/unsigned overflow, floating-point comparison.
-- `range(len(items) + 1)` walks one element past the end of the array.
-- Timestamp arithmetic uses 32-bit integer math on a 64-bit value.
-- `==` between floats where epsilon comparison is required.
-
-### H. Security boundaries
-
-Injection, path traversal, auth bypass, secret leakage.
-- User input concatenated into SQL rather than parameterized.
-- File path joined from untrusted input without normalization or root containment.
-- Token, password, or API key written to a log line.
-
-### I. Concurrency hazards
-
-Race conditions, missing awaits, shared mutable state, lock ordering.
-- Two coroutines append to the same list without synchronization.
-- An `await` is missing on a critical-section operation.
-- A lock is acquired in different orders on two code paths.
-
-### J. CODE_RULES.md compliance
-
-Hook-enforced and rubric-enforced rules from CODE_RULES.md. Every PR passes through `code_rules_enforcer.py`; flagging these in the audit prevents fix loops that the gate would otherwise trigger.
-
-Sub-items the audit walks:
-
-| Sub-item | What this rule looks for |
-|---|---|
-| Magic values | Literals other than `0`, `1`, `-1` inside production function bodies |
-| String-template magic | f-strings whose structural literal text (paths, URLs, patterns) belongs in `config/` |
-| Constants location | Module-level `UPPER_SNAKE = ...` outside `config/` in production code (exempt path families: `config/*`, `/migrations/`, `/workflow/`, `_tab.py`, `/states.py`, `/modules.py`, test files) |
-| File-global use-count | A file-global constant referenced by fewer than two methods, functions, or classes in the same file |
-| Abbreviations | `ctx`, `cfg`, `msg`, `btn`, `idx`, `cnt`, `elem`, `val`, `tmp`, `str`, `num`, `arr`, `obj`, `fn`, `cb`, `req`, `res` (single-letter loop counters and `e` for exceptions are exempt) |
-| Vague-name list | `result`, `data`, `output`, `response`, `value`, `item`, `temp`, `info`, `stuff`, `thing`; vague prefixes: `handle`, `process`, `manage`, `do` |
-| Type hints | Missing type annotation on a parameter or return; presence of `Any` or `# type: ignore` |
-| New inline comments | New `#` or `//` comments in production code that the diff adds (existing comments are preserved untouched and stay outside scope) |
-| Logging format | `log_*(f"...")` rather than `log_*("...", arg)` |
-| Imports inside functions | `import` statements placed inside function bodies |
-
-Test files (`test_*.py`, `*_test.py`, `*.test.*`, `*.spec.*`, `conftest.py`, and any path under `/tests/`) are exempt from category J. The exempt path families above also opt out of the constants-location sub-item.
-
-### K. Codebase conflicts (incomplete propagation)
-
-A change updates one site of a pattern but leaves a parallel site stale, producing contradictory behavior between the new and old paths. The diff itself is internally consistent — the bug emerges only when the diff is read against the unchanged parts of the codebase that share a contract with what was changed.
-
-- A symbol renamed in the definition while one of three call sites still uses the old name.
-- A default value changed in `config/` while a duplicated literal remains in a sibling file or cross-language partner (e.g., a PowerShell installer that hardcodes the same value).
-- A primary code path updated to new behavior while the fallback / catch-all path returns a stale default that contradicts the new behavior. *Canonical example:* [PR #397, comment r3210166636](https://github.com/jl-cmd/claude-code-config/pull/397#discussion_r3210166636) — instruction text updated at line 137 to direct the model to use `AskUserQuestion`, but the fallback `skill_reference` at lines 123–127 still told the model to "reply 'I don't know'." Both strings interpolated into the same `reason`, leaving the escape hatch the PR was meant to close.
-- A feature flag flipped or version gate bumped in one branch while another conditional branch still checks the old value.
-- A producer's output shape changed while a consumer's expected shape annotation is unchanged.
-- A schema column added/renamed/removed while the migration, ORM model, serializer, fixture, and API doc are not all updated together.
-
-Sub-items the audit walks:
-
-| Sub-item | What this rule looks for |
-|---|---|
-| Multi-site name renames | Renamed symbol — every reference (call sites, imports, type annotations, error messages, docs, tests) updated? |
-| Duplicated constants / defaults | Value changed in one source-of-truth — every duplicated literal in sibling files / cross-language partners updated? |
-| Primary path vs fallback path | Behavior changed on the happy path — does the fallback / error / catch-all path produce consistent behavior? |
-| Feature flag / version gate consistency | Flag flipped or version bumped — every guard, conditional branch, and consumer checked? |
-| Producer-vs-consumer type contracts | Producer's output shape changed — every consumer's expected shape still matches? |
-| Code vs documentation sync | Implementation behavior changed — docstrings, README, ADRs, comments still describe the new behavior? |
-| Code vs test sync | Implementation behavior changed — every test still expresses the right contract for the new behavior? |
-| Cross-file / cross-language contract sync | Value or shape that lives in multiple languages or files — both sides reflect the change? |
-| Schema / data-shape propagation | Field added/removed/renamed — migrations, ORM, serializers, fixtures, API docs all updated? |
-
-Category K Shape A findings always cite TWO line locations: the changed line and the unchanged-but-should-have-changed parallel line. The `failure_mode` field describes the contradiction between the two states.
-
-Category K is narrow but recurrent. Linters and unit tests rarely catch these findings; only a reviewer who reads the unchanged code with the diff in hand and looks for sites that *should* have been touched will surface them.
+For reusable Variant C audit prompts scoped to a single category, see `references/prompts/`. The Category A prompt (`references/prompts/category-a-api-contracts.md`) is the literal text from the May 2026 audit experiment that produced 8–10 findings on PR #394 — the canonical worked example.
 
 ## Output Schema
 

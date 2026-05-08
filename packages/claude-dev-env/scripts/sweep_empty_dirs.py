@@ -12,18 +12,8 @@ import os
 import sys
 import time
 
-_DEFAULT_AGE_SECONDS: int = 120
-_DEFAULT_POLL_INTERVAL: int = 30
-
-
-def _is_empty(directory: str) -> bool:
-    try:
-        with os.scandir(directory) as entries:
-            for _ in entries:
-                return False
-        return True
-    except PermissionError:
-        return False
+from config.sweep_config import DEFAULT_AGE_SECONDS as _DEFAULT_AGE_SECONDS
+from config.sweep_config import DEFAULT_POLL_INTERVAL as _DEFAULT_POLL_INTERVAL
 
 
 def sweep(root: str, min_age_seconds: int) -> list[str]:
@@ -61,7 +51,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--age",
         type=int,
         default=_DEFAULT_AGE_SECONDS,
-        help="Minimum age in seconds (default: 120 = 2 minutes)",
+        help=f"Minimum age in seconds (default: {_DEFAULT_AGE_SECONDS} = 2 minutes)",
     )
     parser.add_argument(
         "--once",
@@ -72,7 +62,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--interval",
         type=int,
         default=_DEFAULT_POLL_INTERVAL,
-        help="Poll interval in seconds when looping (default: 30)",
+        help=f"Poll interval in seconds when looping (default: {_DEFAULT_POLL_INTERVAL})",
     )
     return parser
 

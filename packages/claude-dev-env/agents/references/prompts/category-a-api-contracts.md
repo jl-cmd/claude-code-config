@@ -4,6 +4,56 @@ PR: feat(scripts): add sweep-empty-dirs utility and scheduled-task installer
 Head SHA: 62c9c169ee7a44824e5da25c4cf8b74fdca08a53
 ID prefix: `find`.
 
+## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
+
+**A1. Python function signatures vs internal call sites**
+- Every defined function's parameter list (count, names, defaults, kw-only).
+- Every internal call within `sweep_empty_dirs.py` matches its target's signature.
+
+**A2. Python return-type annotation vs every code path**
+- Each function's return annotation is satisfied by every path: explicit `return X`, fall-through, exception-handler exit.
+- Pay specific attention to `main() -> None` (with the `KeyboardInterrupt` path) and `sweep(...) -> list[str]` (single return path).
+
+**A3. argparse parser → Namespace contract**
+- Every `add_argument(...)` declared in `_build_parser()` produces the exact dest name accessed in `main()`.
+- `type=` matches downstream usage (e.g., `time.sleep` accepts the type).
+- Switch flag (`--once`) produces a bool; non-switches produce typed values.
+- Default values resolve correctly when the flag is omitted.
+
+**A4. stdlib callback contracts (os.walk onerror, getctime, rmdir)**
+- `os.walk(root, onerror=_log_walk_error, topdown=False)` — `_log_walk_error` matches the exact signature stdlib calls (positional `OSError`).
+- `os.path.getctime`, `os.rmdir` argument and exception contracts.
+- `time.sleep` argument contract.
+- `os.walk`'s own kwargs (`onerror`, `topdown`) are spelled correctly for the Python version targeted.
+
+**A5. subprocess invocation contract (test file)**
+- `subprocess.run([list], check=True, capture_output=True)` — kwargs valid for the targeted Python.
+- The list shape — `["powershell", "-Command", string]` — matches `subprocess.run`'s expected `args` parameter.
+- Exception contract: `check=True` raises CalledProcessError on non-zero exit; tests do not catch it.
+
+**A6. PowerShell cmdlet parameter sets and binding**
+- `param(...)` declarations with `ParameterSetName=` — does the script declare `[CmdletBinding(DefaultParameterSetName=...)]`? If not, what happens with no-arg invocation?
+- `New-ScheduledTaskTrigger -Daily -At ... -RepetitionInterval ...` — is `-RepetitionInterval` valid for the `-Daily` parameter set per Microsoft's docs? Verify against https://learn.microsoft.com/powershell/module/scheduledtasks/new-scheduledtasktrigger.
+- `Get-Command python` (line 80) — missing `-ErrorAction SilentlyContinue` in the fallback breaks the subsequent null-check contract.
+- `Register-ScheduledTask`, `New-ScheduledTaskAction`, `New-ScheduledTaskSettingsSet`, `Get-ScheduledTask`, `Unregister-ScheduledTask` — verify each call's parameter shape against its cmdlet signature.
+
+**A7. Cross-language argv boundary (PowerShell argv construction → Python sys.argv → argparse)**
+- The `New-ScheduledTaskAction -Argument` string `"$ScriptPath --once --age $AgeSeconds ""$Target"""` — when expanded and passed to Windows process creation, does the resulting argv match what argparse expects?
+- Trailing-backslash hazard: if `$Target` ends with `\`, what does the Microsoft C-runtime argv parser produce?
+- The Python `argparse` flag order — does the launcher's argv arrangement (`<flags> <positional>`) match what argparse accepts?
+- Cross-language default-value drift: PowerShell `[int]$AgeSeconds = 120` vs Python `DEFAULT_AGE_SECONDS: int = 120` — both hardcoded, no shared source of truth.
+- Cross-language type drift: PowerShell `[int]` vs Python `type=int` — both convert to integer, but PowerShell's `[int]` is 32-bit signed; argparse's `int(...)` is Python int (arbitrary precision). Match for normal values.
+
+## Cross-bucket questions to answer at the end
+
+Q1: Are there any contracts that span two sub-buckets that single-bucket analysis would miss?
+Q2: What's the worst contract-drift hazard introduced by this PR? Cite file:line.
+Q3: Where would a future refactor most likely break a cross-language contract? Name the line(s) most fragile.
+
+## Output
+
+Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket A1-A7, produce Shape A or Shape B (with ≥3 probes). Cross-bucket Q1-Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P1 bugs across these 7 sub-buckets — find them." Open Questions section for ambiguities. Read-only. No edits, no commits.
+
 ## Diff (4 new files, all lines in scope)
 
 ### packages/claude-dev-env/scripts/sweep_empty_dirs.py
@@ -250,53 +300,3 @@ $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Force | Out-Null
 Write-Host "$TaskName registered — runs every ${IntervalMinutes}min against '$Target' (age ≥ ${AgeSeconds}s)."
 ```
-
-## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
-
-**A1. Python function signatures vs internal call sites**
-- Every defined function's parameter list (count, names, defaults, kw-only).
-- Every internal call within `sweep_empty_dirs.py` matches its target's signature.
-
-**A2. Python return-type annotation vs every code path**
-- Each function's return annotation is satisfied by every path: explicit `return X`, fall-through, exception-handler exit.
-- Pay specific attention to `main() -> None` (with the `KeyboardInterrupt` path) and `sweep(...) -> list[str]` (single return path).
-
-**A3. argparse parser → Namespace contract**
-- Every `add_argument(...)` declared in `_build_parser()` produces the exact dest name accessed in `main()`.
-- `type=` matches downstream usage (e.g., `time.sleep` accepts the type).
-- Switch flag (`--once`) produces a bool; non-switches produce typed values.
-- Default values resolve correctly when the flag is omitted.
-
-**A4. stdlib callback contracts (os.walk onerror, getctime, rmdir)**
-- `os.walk(root, onerror=_log_walk_error, topdown=False)` — `_log_walk_error` matches the exact signature stdlib calls (positional `OSError`).
-- `os.path.getctime`, `os.rmdir` argument and exception contracts.
-- `time.sleep` argument contract.
-- `os.walk`'s own kwargs (`onerror`, `topdown`) are spelled correctly for the Python version targeted.
-
-**A5. subprocess invocation contract (test file)**
-- `subprocess.run([list], check=True, capture_output=True)` — kwargs valid for the targeted Python.
-- The list shape — `["powershell", "-Command", string]` — matches `subprocess.run`'s expected `args` parameter.
-- Exception contract: `check=True` raises CalledProcessError on non-zero exit; tests do not catch it.
-
-**A6. PowerShell cmdlet parameter sets and binding**
-- `param(...)` declarations with `ParameterSetName=` — does the script declare `[CmdletBinding(DefaultParameterSetName=...)]`? If not, what happens with no-arg invocation?
-- `New-ScheduledTaskTrigger -Daily -At ... -RepetitionInterval ...` — is `-RepetitionInterval` valid for the `-Daily` parameter set per Microsoft's docs? Verify against https://learn.microsoft.com/powershell/module/scheduledtasks/new-scheduledtasktrigger.
-- `Get-Command python` (line 80) — missing `-ErrorAction SilentlyContinue` in the fallback breaks the subsequent null-check contract.
-- `Register-ScheduledTask`, `New-ScheduledTaskAction`, `New-ScheduledTaskSettingsSet`, `Get-ScheduledTask`, `Unregister-ScheduledTask` — verify each call's parameter shape against its cmdlet signature.
-
-**A7. Cross-language argv boundary (PowerShell argv construction → Python sys.argv → argparse)**
-- The `New-ScheduledTaskAction -Argument` string `"$ScriptPath --once --age $AgeSeconds ""$Target"""` — when expanded and passed to Windows process creation, does the resulting argv match what argparse expects?
-- Trailing-backslash hazard: if `$Target` ends with `\`, what does the Microsoft C-runtime argv parser produce?
-- The Python `argparse` flag order — does the launcher's argv arrangement (`<flags> <positional>`) match what argparse accepts?
-- Cross-language default-value drift: PowerShell `[int]$AgeSeconds = 120` vs Python `DEFAULT_AGE_SECONDS: int = 120` — both hardcoded, no shared source of truth.
-- Cross-language type drift: PowerShell `[int]` vs Python `type=int` — both convert to integer, but PowerShell's `[int]` is 32-bit signed; argparse's `int(...)` is Python int (arbitrary precision). Match for normal values.
-
-## Cross-bucket questions to answer at the end
-
-Q1: Are there any contracts that span two sub-buckets that single-bucket analysis would miss?
-Q2: What's the worst contract-drift hazard introduced by this PR? Cite file:line.
-Q3: Where would a future refactor most likely break a cross-language contract? Name the line(s) most fragile.
-
-## Output
-
-Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket A1-A7, produce Shape A or Shape B (with ≥3 probes). Cross-bucket Q1-Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P1 bugs across these 7 sub-buckets — find them." Open Questions section for ambiguities. Read-only. No edits, no commits.

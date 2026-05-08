@@ -18,10 +18,15 @@ param(
     [string]$Target,
 
     [Parameter(ParameterSetName = "install")]
+    [ValidateRange(1, [int]::MaxValue)]
     [int]$IntervalMinutes = 5,
 
     [Parameter(ParameterSetName = "install")]
-    [int]$AgeSeconds = 120,
+    [ValidateRange(1, [int]::MaxValue)]
+    [int]$AgeSeconds = 120,  # matches config/sweep_config.py DEFAULT_AGE_SECONDS
+
+    [Parameter(ParameterSetName = "install")]
+    [DateTime]$StartAt = (Get-Date),
 
     [Parameter(ParameterSetName = "remove")]
     [switch]$Remove,
@@ -77,14 +82,31 @@ if (-not (Test-Path $Target)) {
 }
 
 $_py = Get-Command py -ErrorAction SilentlyContinue
-$PythonPath = if ($_py) { $_py.Source } else { (Get-Command python).Source }
+$PythonPath = if ($_py) { $_py.Source } else { (Get-Command python -ErrorAction SilentlyContinue).Source }
 if (-not $PythonPath) {
     Write-Error "Cannot find Python (py or python) on PATH."
     exit 1
 }
-$Action = New-ScheduledTaskAction -Execute $PythonPath -Argument "$ScriptPath --once --age $AgeSeconds ""$Target"""
-$Trigger = New-ScheduledTaskTrigger -Daily -At "00:00" -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes)
+& $PythonPath --version 2>$null
+if (-not $?) {
+    Write-Error "Python found at $PythonPath but failed to run."
+    exit 1
+}
+
+# Sanitize target path before interpolation
+$Target = $Target.TrimEnd('\')
+if ($Target -match '\$') {
+    Write-Error "Target path must not contain `$` characters."
+    exit 1
+}
+
+$Action = New-ScheduledTaskAction -Execute $PythonPath -Argument """$ScriptPath"" --once --age $AgeSeconds ""$Target"""
+$Trigger = New-ScheduledTaskTrigger -Once -At $StartAt -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration ([TimeSpan]::MaxValue)
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
-Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Force | Out-Null
-Write-Host "$TaskName registered — runs every ${IntervalMinutes}min against '$Target' (age ≥ ${AgeSeconds}s)."
+$null = Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Force
+if (-not $?) {
+    Write-Error "Failed to register scheduled task."
+    exit 1
+}
+Write-Host "$TaskName registered — runs every ${IntervalMinutes}min against '$Target' (age > ${AgeSeconds}s)."

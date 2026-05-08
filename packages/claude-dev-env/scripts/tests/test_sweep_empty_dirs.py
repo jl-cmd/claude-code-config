@@ -21,12 +21,9 @@ def _set_creation_time_windows(path: str, timestamp: float) -> None:
     """Set creation time on Windows via PowerShell."""
     dt = datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
     date_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+    escaped_path = path.replace("'", "''")
     subprocess.run(
-        [
-            "powershell",
-            "-Command",
-            f"(Get-Item '{path}').CreationTimeUtc = [DateTime]'{date_str}'",
-        ],
+        ["powershell", "-Command", f"(Get-Item '{escaped_path}').CreationTimeUtc = [DateTime]'{date_str}'"],
         check=True,
         capture_output=True,
     )

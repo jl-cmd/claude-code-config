@@ -16,6 +16,14 @@ from config.sweep_config import DEFAULT_AGE_SECONDS
 from config.sweep_config import DEFAULT_POLL_INTERVAL
 
 
+def _positive_int(value: str) -> int:
+    """Argparse type: require value >= 1."""
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1, got {value}")
+    return parsed
+
+
 def _log_walk_error(os_error: OSError) -> None:
     print(f"warning: cannot scan {os_error.filename} — {os_error.strerror}", file=sys.stderr)
 
@@ -28,23 +36,28 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
     instead of checking snapshotted subdirectory lists.
     """
 
-    now = time.time()
     removed: list[str] = []
 
     for each_directory_path, _, _ in os.walk(
         root, onerror=_log_walk_error, topdown=False
     ):
+        now = time.time()
         try:
             created = os.path.getctime(each_directory_path)
-        except OSError:
+        except FileNotFoundError:
             continue
-        if now - created >= min_age_seconds:
+        except PermissionError:
+            print(f"warning: permission denied — {each_directory_path}", file=sys.stderr)
+            continue
+        if now - created > min_age_seconds:
             try:
                 os.rmdir(each_directory_path)
                 print(f"deleted: {each_directory_path}")
                 removed.append(each_directory_path)
-            except OSError:
+            except FileNotFoundError:
                 pass
+            except OSError:
+                print(f"warning: could not remove {each_directory_path}", file=sys.stderr)
 
     return removed
 
@@ -67,7 +80,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--interval",
-        type=int,
+        type=_positive_int,
         default=DEFAULT_POLL_INTERVAL,
         help=f"Poll interval in seconds when looping (default: {DEFAULT_POLL_INTERVAL})",
     )

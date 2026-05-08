@@ -83,7 +83,7 @@ After Groq returns:
 After all files have been patched (or skipped):
 
 1. Run the project's test suite and confirm all existing tests pass. If a test fails, diagnose the regression and fix it before committing.
-2. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and obtain its total finding count. If this is the first loop (L <= 1) or the file does not exist, skip this comparison. Re-read each changed file and count any new violations. If the number of new violations exceeds zero, flag them as same-loop fix-targets and revise before committing.
+2. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and obtain its total finding count. If this is the first loop (L <= 1) or the file does not exist, skip this comparison. Re-read each changed file and count any new violations. Compute the post-fix total: previous total minus bugs fixed in this round plus new violations. If the post-fix total exceeds the previous total, flag all new findings as same-loop fix-targets and revise before committing.
 3. `git add` every patched file by explicit path — never `git add -A`.
 4. `git commit` with a message summarizing the addressed findings. Example:
    ```

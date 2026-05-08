@@ -158,7 +158,7 @@ cd into `<worktree_path>` before any git or file operation.
   2. Apply each fix you can address.
   3. Run `python -m py_compile` (or language-equivalent) on every modified file.
   4. Run the project's test suite and confirm all existing tests pass. If a test fails, diagnose the regression and fix it before committing.
-  5. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and obtain its total finding count. If this is the first loop (L <= 1) or the file does not exist, skip this comparison. Otherwise, re-read each changed file and count any new violations introduced by the fix. If the number of new violations exceeds zero, flag them as same-loop fix-targets and revise before committing.
+  5. Read the previous loop's outcome XML (`<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`) and obtain its total finding count. If this is the first loop (L <= 1) or the file does not exist, skip this comparison. Otherwise, re-read each changed file and count any new violations. Compute the post-fix total: previous total minus bugs fixed in this round plus new violations. If the post-fix total exceeds the previous total, flag all new findings as same-loop fix-targets and revise before committing.
   6. git add by explicit path, then git commit with a message summarizing the bugs fixed.
      - If the commit fails because a git hook (pre-commit, commit-msg, etc.) blocked it,
        capture the hook's stderr, write status=hook_blocked for every finding in this loop
@@ -201,6 +201,6 @@ cd into `<worktree_path>` before any git or file operation.
   - Type hints on every signature you touch.
   - **Narrow scope.** Fix only the exact defect at the specified file:line. No restructuring, no inlining helpers, no renames, no "while I'm here" cleanup.
   - **Preserve helpers.** Do not remove or inline existing helper functions unless the finding explicitly names the helper as the problem.
-  - **No regression.** Before committing, re-read each changed file and count any new violations. Compare the number of new violations against the previous loop's total finding count (from `<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`). On the first loop (L <= 1) or when the file does not exist, skip this guard. The total (previous count minus fixed findings plus new violations) must be flat or decreased relative to the previous loop. An increase means the fix introduced new bugs — revise before committing. Do not commit a regression.
+  - **No regression.** Before committing, re-read each changed file and count any new violations. Compare the post-fix total (previous total minus bugs fixed plus new violations) against the previous loop's total finding count (from `<worktree_path>/.bugteam-pr<N>-loop<L-1>.outcomes.xml`). On the first loop (L <= 1) or when the file does not exist, skip this guard. The post-fix total must be flat or decreased relative to the previous loop. An increase means the fix introduced new bugs — revise before committing. Do not commit a regression.
 </constraints>
 ```

@@ -38,7 +38,11 @@ cd into `<worktree_path>` before any git or file operation.
   verified-clean -- re-audit with a concrete trace.
 
   Categories A–K (one-line summary; full rubric and sub-bucket decomposition
-  for each is in `packages/claude-dev-env/audit-rubrics/category_rubrics/`):
+  for each is in `packages/claude-dev-env/audit-rubrics/category_rubrics/`;
+  ready-to-send Variant C prompts — each with a PR/repo-independent
+  generalized skeleton above a `---` separator and a worked example against
+  an authentic PR below — are in
+  `packages/claude-dev-env/audit-rubrics/prompts/`):
 
   A. API contract verification (signatures, return types, async/await correctness)
   B. Selector / query / engine compatibility

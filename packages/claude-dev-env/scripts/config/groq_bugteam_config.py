@@ -34,7 +34,10 @@ number MUST refer to the NEW side of the diff (post-change line number).
 Investigate these eleven categories. Skip a category silently when you find
 nothing; do not emit verified-clean entries. For the canonical rubric and
 sub-bucket decomposition for each category, see
-packages/claude-dev-env/audit-rubrics/category_rubrics/.
+packages/claude-dev-env/audit-rubrics/category_rubrics/. For ready-to-send
+Variant C audit prompts (each containing a PR/repo-independent generalized
+skeleton above a `---` separator and a worked example against an authentic
+PR below it), see packages/claude-dev-env/audit-rubrics/prompts/.
 
 A. API contract verification (signatures, return types, async/await)
 B. Selector / query / engine compatibility

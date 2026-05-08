@@ -56,7 +56,7 @@ Test files (`test_*.py`, `*_test.py`, `*.test.*`, `*.spec.*`, `conftest.py`, and
 
 Category K Shape A findings always cite TWO line locations: the changed line and the unchanged-but-should-have-changed parallel line. The `failure_mode` field describes the contradiction between the two states. K is narrow but recurrent — linters and unit tests rarely catch these findings.
 
-For reusable Variant C audit prompts scoped to a single category, see `../audit-rubrics/prompts/`. The Category A prompt (`../audit-rubrics/prompts/category-a-api-contracts.md`) is the literal text from the May 2026 audit experiment that produced 8–10 findings on PR #394 — the canonical worked example.
+For reusable Variant C audit prompts scoped to a single category, see `../audit-rubrics/prompts/`. **Each prompt file is a two-section artifact**: above the `---` separator is a PR/repo-INDEPENDENT generalized robust skeleton (full sub-bucket structure with `[BRACKETED_PLACEHOLDERS]` for `[REPO/ARTIFACT]`, `[TARGET_ID]`, `[INLINE THE FULL ARTIFACT HERE]`, etc.) — copy this and fill in for a new audit on any artifact. Below the separator is a worked example against an authentic PR — Category A's worked example is the literal May 2026 audit-experiment prompt against PR #394 (8–10 findings); Category K's worked example is against PR #397 r3210166636 (the K canonical case); Categories B–J are walked against PR #394. Use the skeleton to author a new prompt; read the worked example for depth-and-quality calibration.
 
 ## Output Schema
 

@@ -22,3 +22,7 @@ When the input contains multiple data body blocks (e.g., several file diffs), gr
 ## Atomicity
 
 The framework block stays whole. The data body section sits as one contiguous region at the end.
+
+## Disposition reporting
+
+Every outcome emits an action note via the mechanism that [`output-contract.md`](output-contract.md) defines. When blocks were reordered: `> Gap: Blocks reordered to canonical sequence (mission → metadata → framework → questions → output spec → data body).` When the input already follows canonical ordering and no reorder is needed: `> Gap: Structural ordering verified — input already in canonical sequence.` Silent omission is forbidden — see the [no silent action](output-contract.md#disposition-invariants) invariant.

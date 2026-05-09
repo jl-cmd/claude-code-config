@@ -56,3 +56,7 @@ After (Category C):
 When the adversarial phrase already names a specific failure mode, the noun stays. The skill changes only generic nouns.
 
 The count (e.g., 3) and severity tier (e.g., P1) stay intact when the original phrase carries them. Some categories name a noun that doesn't fit the P-tier model — Codebase Conflicts ("parallel sites that should have been updated alongside the diff") is the canonical example — but preservation still applies: if the original phrase includes a tier, the rewritten phrase includes it too. The rule is preservation, not insertion or removal.
+
+## Disposition reporting
+
+Every outcome emits an action note via the mechanism that [`output-contract.md`](output-contract.md) defines. When the noun was replaced: `> Gap: Adversarial-pass noun sharpened — "bugs" → "<specific noun>".` When the phrase already carries a specific noun: `> Gap: Adversarial-pass noun verified — "<specific noun>" already specific.` Silent pass is forbidden — see the [no silent action](output-contract.md#disposition-invariants) invariant.

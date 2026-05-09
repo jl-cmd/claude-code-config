@@ -65,7 +65,8 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 - Mission first, framework before data body, persona absent, multi-category disposition present, no soft directives, code block tagged.
 
 **Spokes that fire**
-- None.
+- [`structure.md`](structure.md): code block present → verifies ordering, emits `> Gap:` note recording the check.
+- [`per-category.md`](per-category.md): multi-category framework present → confirms disposition line exists, emits `> Gap:` note.
 
 **Rewritten output**
-- Identical to input.
+- Identical to input save for the appended gap notes from structure and per-category.

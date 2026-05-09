@@ -27,3 +27,7 @@ Typo fixes apply only to plain-language prose — narrative sentences, mission s
 - Any quoted substring the user could be referencing literally (e.g., `"recieve"` in quotes stays as-is)
 
 These surfaces are subject to the byte-for-byte preservation invariant in [`output-contract.md`](output-contract.md). When in doubt about whether a token is prose or a literal reference, leave it unchanged.
+
+## Disposition reporting
+
+Every surface-formatting change emits an action note via the mechanism that [`output-contract.md`](output-contract.md) defines (e.g., `> Gap: Typo corrected in mission line — "recieve" → "receive".`, `> Gap: Code block language tag added — python.`). When the surface pass makes zero changes, emit a single note: `> Gap: Surface cleanup verified — no formatting issues found.` Silent pass is forbidden — see the [no silent action](output-contract.md#disposition-invariants) invariant.

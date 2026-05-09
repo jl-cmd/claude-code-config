@@ -102,7 +102,7 @@ def test_suppresses_eexist_like_enotempty() -> None:
         os.mkdir(target_dir)
 
         def _mock_getctime(directory_path: str) -> float:
-            return _OLD_TIMESTAMP if directory_path == target_dir else time.time()
+            return _OLD_TIMESTAMP
 
         original_rmdir = os.rmdir
 

@@ -45,7 +45,7 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 > `> Gap: Persona transformed — original "You are a senior security engineer" replaced with mission "Audit this code for security issues."`
 > `> Gap: Directive "Be thorough" replaced with surface enumeration "Inspect: SQL injection, XSS, auth issues."`
 > `> Gap: Directive "carefully" replaced with locator requirement "Cite file:line for every finding."`
-> `> Gap: Narrative directive "Try to find" replaced with measurable criteria "Inspect: SQL injection, XSS, auth issues."`
+> `> Gap: Narrative directive "Try to find" merged with directives output — both derived the same measurable criteria "Inspect: SQL injection, XSS, auth issues."`
 > `> Gap: Code block relocated to end per structure ordering.`
 
 ## Example 3: Multi-category framework without disposition

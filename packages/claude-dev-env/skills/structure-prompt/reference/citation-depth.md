@@ -32,7 +32,7 @@ Before:
 
 After (2 occurrences: definition plus one call site):
 ```
-- `os.walk(root, onerror=_log_walk_error (`sweep_empty_dirs.py:23, sweep_empty_dirs.py:33`), topdown=False)` — `_log_walk_error` matches the exact signature stdlib calls.
+- `os.walk(root, onerror=_log_walk_error, topdown=False)` — `_log_walk_error` (`sweep_empty_dirs.py:23, sweep_empty_dirs.py:33`) matches the exact signature stdlib calls.
 ```
 
 Before:

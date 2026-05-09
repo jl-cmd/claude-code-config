@@ -62,12 +62,12 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
                 all_removed.append(each_directory_path)
             except FileNotFoundError:
                 pass
-            except OSError as each_error:
-                if each_error.errno not in (errno.ENOTEMPTY, errno.EEXIST):
+            except OSError as e:
+                if e.errno not in (errno.ENOTEMPTY, errno.EEXIST):
                     logging.warning(
                         "could not remove %s -- %s",
                         each_directory_path,
-                        each_error,
+                        e,
                     )
 
     return all_removed

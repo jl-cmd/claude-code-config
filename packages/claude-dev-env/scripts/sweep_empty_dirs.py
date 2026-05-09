@@ -37,7 +37,7 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
     instead of checking snapshotted subdirectory lists.
     """
 
-    removed: list[str] = []
+    all_removed: list[str] = []
 
     now = time.time()
     for each_directory_path, _, _ in os.walk(
@@ -59,7 +59,7 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
             try:
                 os.rmdir(each_directory_path)
                 logging.info("deleted: %s", each_directory_path)
-                removed.append(each_directory_path)
+                all_removed.append(each_directory_path)
             except FileNotFoundError:
                 pass
             except OSError as each_error:
@@ -70,7 +70,7 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
                         each_error,
                     )
 
-    return removed
+    return all_removed
 
 
 def _build_parser() -> argparse.ArgumentParser:

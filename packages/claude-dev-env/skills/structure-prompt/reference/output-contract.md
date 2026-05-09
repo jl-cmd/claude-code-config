@@ -16,7 +16,7 @@ The skill emits exactly one artifact: the rewritten prompt. The emission shape d
 
 ## Disposition invariants
 
-**No silent no-op.** When a spoke elects not to apply its transformation — missing source, ambiguous detection, fallback to user input, carve-out match, or any other reason — it MUST emit a gap note via the paste-mode or file-mode gap-report mechanism defined below. Silent omission is never the correct disposition. The reader of the output must always be able to detect which spokes fired, which deferred, and why.
+**No silent no-op.** When a spoke elects not to apply its transformation — missing source, ambiguous detection, fallback to user input, carve-out match, or any other reason — it MUST emit a gap note via the paste-mode or file-path-mode gap-report mechanism defined below. Silent omission is never the correct disposition. The reader of the output must always be able to detect which spokes fired, which deferred, and why.
 
 ## Preservation invariants
 
@@ -51,7 +51,16 @@ The skill adds content only when a spoke explicitly authorizes it AND [`research
 - A category-specific failure-mode noun in the adversarial-pass phrase, when [`adversarial-tuning.md`](adversarial-tuning.md) fires
 - Surface-formatting normalization (typo correction, single bullet style, language tags on fenced blocks, trimmed trailing whitespace, collapsed blank-line runs, sequential heading levels), when [`cleanup.md`](cleanup.md) fires
 
-Each addition needs evidence — a rubric line, a real line in the data body (sibling artifact or user-pasted context), or a user-supplied value via AskUserQuestion. When evidence is missing, the spoke leaves the prompt as-is and reports the gap. The gap-report shape depends on emission mode:
+Skill-defined additions (the per-category disposition line, surface-formatting cleanup) are authorized by their spoke firing alone — they do not need an external source. For evidence-required additions (cited values from the rubric, placeholder values from the input or user, the failure-mode noun from the category rubric), [`research.md`](research.md) confirms the new content matches a real source. When evidence is missing for an evidence-required addition, the spoke leaves the prompt as-is and reports the gap. For a skill-defined addition, the spoke fires unconditionally; the gap mechanism does not apply. The gap-report shape depends on emission mode:
 
 - **Paste mode.** The fenced block contains exactly the rewritten prompt — no footer follows it. Record gaps inside the fenced block as a final blockquoted note prefixed `> Gap:` (one line per gap). The note sits below the rewritten prompt's last block and remains inside the fence.
-- **File-path mode.** The rewritten file on disk MUST be self-describing for gaps. Append a final `<!-- gap-report:` HTML comment block at the bottom of the file (one `> Gap:` line per gap, wrapped in the comment so the file renders cleanly when consumed by another tool). When no gaps exist, omit the comment block entirely. The post-edit confirmation message that names the file and the spokes that fired ALSO lists the same gaps, but the file itself is now self-describing — a reader of the file alone can detect which spokes deferred and why.
+- **File-path mode.** The rewritten file on disk MUST be self-describing for gaps. Append a final HTML comment block at the bottom of the file. The block opens with `<!-- gap-report:` on its own line, contains one `> Gap:` line per gap, and closes with `-->` on its own line. When no gaps exist, omit the comment block entirely. Example for a run with two gaps:
+
+  ```
+  <!-- gap-report:
+  > Gap: Persona transformed — original "You are an expert code reviewer" replaced with mission "Find bugs in this code."
+  > Gap: canonical-case marker skipped — framework has 5+ sub-buckets but resolution tiers yielded nothing
+  -->
+  ```
+
+  The post-edit confirmation message that names the file and the spokes that fired ALSO lists the same gaps, but the file itself is now self-describing — a reader of the file alone can detect which spokes deferred and why.

@@ -21,7 +21,11 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 ## Example 2: Persona-led generic prompt
 
 **Input**
-> You are a senior security engineer. Be thorough and review this code carefully. Try to find SQL injection, XSS, and auth issues. ```python ... ```
+> You are a senior security engineer. Be thorough and review this code carefully. Try to find SQL injection, XSS, and auth issues.
+>
+> ```python
+> # ... code block ...
+> ```
 
 **Spokes that fire**
 - [`persona.md`](persona.md): "You are a senior security engineer" → mission line.
@@ -33,7 +37,9 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 > Audit this code for security issues.
 > Inspect: SQL injection, XSS, auth issues.
 > Cite file:line for every finding.
-> ```python ... ```
+> ```python
+> # ... code block ...
+> ```
 
 ## Example 3: Multi-category framework without disposition
 

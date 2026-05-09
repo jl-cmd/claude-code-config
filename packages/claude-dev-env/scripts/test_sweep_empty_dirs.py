@@ -2,12 +2,17 @@
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from scripts.sweep_empty_dirs import _build_parser, _positive_int, sweep
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from sweep_empty_dirs import _build_parser, _positive_int, sweep  # noqa: E402
 
 
 def test_positive_int_accepts_valid_value() -> None:

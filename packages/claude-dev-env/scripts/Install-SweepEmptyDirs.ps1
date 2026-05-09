@@ -46,12 +46,12 @@ if ($Status) {
     Write-Host "STATUS: $TaskName is registered."
     Write-Host "  State: $($task.State)"
     Write-Host "  Actions:"
-    foreach ($action in $task.Actions) {
-        Write-Host "    $($action.Execute) $($action.Arguments)"
+    foreach ($each_action in $task.Actions) {
+        Write-Host "    $($each_action.Execute) $($each_action.Arguments)"
     }
     Write-Host "  Triggers:"
-    foreach ($trigger in $task.Triggers) {
-        Write-Host "    $($trigger.Repetition.Interval) (starting $($trigger.StartBoundary))"
+    foreach ($each_trigger in $task.Triggers) {
+        Write-Host "    $($each_trigger.Repetition.Interval) (starting $($each_trigger.StartBoundary))"
     }
     return
 }

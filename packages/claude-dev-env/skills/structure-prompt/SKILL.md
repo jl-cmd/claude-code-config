@@ -22,7 +22,7 @@ Read [`reference/block-classification.md`](reference/block-classification.md), t
 | Starting any optimization | [`reference/block-classification.md`](reference/block-classification.md) |
 | A spoke needs information that isn't in the input | [`reference/research.md`](reference/research.md) |
 | Input contains a fenced code block, diff, dump, transcript, or single content region ≥ 500 characters | [`reference/structure.md`](reference/structure.md) |
-| Input opens with a role assignment ("You are…", "Act as…", "Imagine you are…", "As a…") | [`reference/persona.md`](reference/persona.md) |
+| Input opens with a role assignment ("You are…", "Act as…", "Imagine you are…", "As a…", "Pretend to be…", "Role:…") | [`reference/persona.md`](reference/persona.md) |
 | Input names 2+ categories, surfaces, sub-buckets, items, checks, or criteria the agent processes | [`reference/per-category.md`](reference/per-category.md) |
 | Input contains performance directives ("be thorough", "think step by step", "you are an expert", "please", "kindly") | [`reference/directives.md`](reference/directives.md) |
 | Input contains narrative directives ("try to", "look at", "make sure", "consider", "be sure to", "think about") | [`reference/constraints.md`](reference/constraints.md) |

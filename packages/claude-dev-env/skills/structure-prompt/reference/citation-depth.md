@@ -49,4 +49,4 @@ After (one occurrence per cmdlet):
 
 When the identifier is a generic concept (e.g., `if version`, `if FLAG`) rather than a real symbol in the data body, the bullet stays as-written. Citations apply to actual identifiers, not category-shaped placeholders.
 
-When the identifier sits in a file the data body doesn't include (e.g., the bullet mentions `os.walk` but the diff doesn't define it), the citation skips that identifier. Mention this in the report so the user knows the source wasn't available.
+When the identifier sits in a file the data body doesn't include (e.g., the bullet mentions `os.walk` but the diff doesn't define it), the citation skips that identifier. Note the missing source in the location [`output-contract.md`](output-contract.md) defines for the active emission mode (a `> Gap:` blockquote inside the paste-mode fenced block, or the post-edit confirmation message in file-path mode).

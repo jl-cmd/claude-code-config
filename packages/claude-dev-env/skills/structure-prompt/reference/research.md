@@ -4,7 +4,7 @@ Some spokes need information the input prompt doesn't include — like the line 
 
 ## Where to look, in order
 
-1. **The sibling rubric file.** Every category prompt has a companion rubric at `../category_rubrics/<same-name>.md`. The rubric often spells out the canonical example, the instantiation recipe, and the category-specific failure-mode noun. Read it first.
+1. **The sibling rubric file.** When the calling framework provides a companion rubric (typically at `../category_rubrics/<same-name>.md` in audit-rubric layouts, but the path is framework-specific), read it first. The rubric often spells out the canonical example, the instantiation recipe, and the category-specific failure-mode noun. When no sibling rubric exists for the input prompt, skip this source and proceed to the companion artifact.
 
 2. **The companion artifact.** When the rubric points at a sibling prompt as a worked example (e.g., "see `category-a-api-contracts.md` for the canonical diff"), read that sibling and use its diff or framework as the reference.
 
@@ -19,7 +19,7 @@ A change earns its place in the rewritten prompt when one of these is true:
 - The sibling artifact contains it (the line number is real, the identifier sits in the diff)
 - The user supplied it via an AskUserQuestion answer
 
-When none of the three holds, the spoke leaves the prompt as-is and notes the gap in the report.
+When none of the three holds, the spoke leaves the prompt as-is and notes the gap in the location [`output-contract.md`](output-contract.md) defines for the active emission mode (a `> Gap:` blockquote inside the paste-mode fenced block, or the post-edit confirmation message in file-path mode).
 
 ## Tone of the AskUserQuestion
 

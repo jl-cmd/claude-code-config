@@ -16,3 +16,14 @@ The optimized prompt has consistent surface formatting.
 ## Scope
 
 This pass changes surface formatting only. Identifiers, content, and ordering pass through unchanged.
+
+## Typo-correction carve-out
+
+Typo fixes apply only to plain-language prose — narrative sentences, mission statements, instructions to the agent, and similar running text. The pass leaves these surfaces untouched even when they look like typos:
+
+- Text inside backtick code spans (e.g., `` `mispelled_var` `` stays as-is)
+- Text inside fenced code blocks (any language, any content)
+- Identifiers, file paths, URLs, IDs, SHAs, ID prefixes, proper names
+- Any quoted substring the user could be referencing literally (e.g., `"recieve"` in quotes stays as-is)
+
+These six surfaces match the byte-for-byte preservation invariant in [`output-contract.md`](output-contract.md). When in doubt about whether a token is prose or a literal reference, leave it unchanged.

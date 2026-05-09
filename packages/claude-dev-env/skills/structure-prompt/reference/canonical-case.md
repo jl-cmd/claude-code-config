@@ -14,13 +14,15 @@ The marker fires when ALL three hold:
 
 In order:
 
-1. **Rubric match.** When the sibling rubric (`../category_rubrics/<name>.md`) describes a "Canonical example" or names one axis as the signature pattern, pick that sub-bucket.
+1. **Rubric match.** When the calling framework provides a sibling rubric (e.g., at `../category_rubrics/<name>.md` in audit-rubric layouts) and that rubric describes a "Canonical example" or names one axis as the signature pattern, pick that sub-bucket. When no sibling rubric exists, skip this step and fall through to bullet density.
 2. **Bullet density.** When the rubric stays silent, count the concrete bullets per sub-bucket. The sub-bucket with the most bullets that cite a real identifier or line number wins.
 3. **Identifier density.** When two sub-buckets tie on bullet count, pick the one whose identifiers appear most often in the data body.
 
 ## How to mark it
 
 Append `⭐ canonical <category-letter> case` after the sub-bucket title, on the same line.
+
+Derive `<category-letter>` from the leading letter of the sub-bucket id (`K3` → `K`, `A2` → `A`, `B1` → `B`). When the framework uses non-lettered sub-bucket ids or no ids at all (e.g., bullets titled `Surface 1`, `Item 1`, `Check 1`), drop the letter and write `⭐ canonical case`.
 
 Example before:
 ```

@@ -16,7 +16,9 @@ The skill emits exactly one artifact: the rewritten prompt. The emission shape d
 
 ## Preservation invariants
 
-The rewritten prompt preserves byte-for-byte:
+Two clauses govern what the rewritten prompt may change.
+
+**Existing input content is preserved byte-for-byte.** The rewrite must not alter any of these values when they already appear in the input:
 
 - Identifiers (variable names, function names, file paths)
 - IDs and SHAs
@@ -25,6 +27,8 @@ The rewritten prompt preserves byte-for-byte:
 - Numeric values (line numbers, thresholds, counts)
 - URLs
 - Code block contents
+
+**New numeric criteria are additive content.** When a spoke introduces a new measurable threshold (e.g., the `≥3` adversarial probes from [`per-category.md`](per-category.md), the citation-occurrence cutoffs from [`citation-depth.md`](citation-depth.md), or any new word/probe/count limit), that number is sourced per the authorized-additions list below. New numeric criteria augment the prompt; they never overwrite a numeric value the input already carries.
 
 ## Idempotency
 
@@ -43,4 +47,7 @@ The skill adds content only when a spoke explicitly authorizes it AND [`research
 - A category-specific failure-mode noun in the adversarial-pass phrase, when [`adversarial-tuning.md`](adversarial-tuning.md) fires
 - Surface-formatting normalization (typo correction, single bullet style, language tags on fenced blocks, trimmed trailing whitespace, collapsed blank-line runs, sequential heading levels), when [`cleanup.md`](cleanup.md) fires
 
-Each addition needs evidence — a rubric line, a real line in the data body, or a user-supplied value via AskUserQuestion. When evidence is missing, the spoke leaves the prompt as-is and reports the gap in the file-mode confirmation or the paste-mode emission's footer.
+Each addition needs evidence — a rubric line, a real line in the data body, or a user-supplied value via AskUserQuestion. When evidence is missing, the spoke leaves the prompt as-is and reports the gap. The gap-report shape depends on emission mode:
+
+- **Paste mode.** The fenced block contains exactly the rewritten prompt — no footer follows it. Record gaps inside the fenced block as a final blockquoted note prefixed `> Gap:` (one line per gap). The note sits below the rewritten prompt's last block and remains inside the fence.
+- **File-path mode.** The file on disk contains only the rewritten prompt — no gap notes are written into the file. List gaps in the post-edit confirmation message that names the file and the spokes that fired.

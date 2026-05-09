@@ -162,4 +162,3 @@ Each criterion returns either **at least one finding** OR **exactly one proof-of
 | File | Purpose |
 |------|---------|
 | `SKILL.md` | Hub — binary criteria, gotchas, when-to-apply, verification protocol |
-| `reference/criteria.md` | Violation/fix examples and adversarial probes per criterion |

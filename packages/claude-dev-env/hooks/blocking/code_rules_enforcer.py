@@ -2999,11 +2999,13 @@ def _reconstruct_post_edit_file_content(
 
     Reads ``file_path`` from disk and replaces the first occurrence of
     ``old_string`` with ``new_string``, mirroring how the Edit tool itself
-    applies a single replacement. Returns None when the file cannot be read
-    or when ``old_string`` is not present in the existing file (which means
-    the Edit will fail or has already been applied — neither case yields a
-    well-defined post-edit view).
+    applies a single replacement. Returns None when the file cannot be read,
+    ``old_string`` is empty, or ``old_string`` is not present in the existing
+    file (which means the Edit will fail or has already been applied — neither
+    case yields a well-defined post-edit view).
     """
+    if not old_string:
+        return None
     try:
         with open(file_path, "r", encoding="utf-8") as existing_file:
             existing_content = existing_file.read()

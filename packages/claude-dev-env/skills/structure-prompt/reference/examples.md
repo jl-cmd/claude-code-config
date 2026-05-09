@@ -30,7 +30,7 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 **Spokes that fire**
 - [`persona.md`](persona.md): "You are a senior security engineer" → mission line.
 - [`directives.md`](directives.md): "Be thorough" → surface enumeration; "carefully" → locator requirement.
-- [`constraints.md`](constraints.md): "Try to find" → "Enumerate".
+- [`constraints.md`](constraints.md): "Try to find" → measurable criteria.
 - [`structure.md`](structure.md): code block to the end.
 
 **Rewritten output**
@@ -40,6 +40,9 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 > ```python
 > # ... code block ...
 > ```
+>
+> The rewritten prompt carries these `> Gap:` lines from the persona pass (per [`persona.md`](persona.md) disposition reporting):
+> `> Gap: Persona transformed — original "You are a senior security engineer" replaced with mission "Audit this code for security issues."`
 
 ## Example 3: Multi-category framework without disposition
 

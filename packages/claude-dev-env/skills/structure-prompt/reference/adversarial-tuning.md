@@ -46,10 +46,10 @@ After (Category B):
 > "assume your first pass missed at least 3 P1 engine-version incompatibilities across these 7 sub-buckets — find them"
 
 After (Category K):
-> "assume your first pass missed at least 3 parallel sites that should have been updated alongside the diff across these 9 sub-buckets — find them"
+> "assume your first pass missed at least 3 parallel sites that should have been updated alongside the diff across these 7 sub-buckets — find them"
 
 After (Category C):
-> "assume your first pass missed at least 3 P1 leaked resources across these 8 sub-buckets — find them"
+> "assume your first pass missed at least 3 P1 leaked resources across these 7 sub-buckets — find them"
 
 ## What stays put
 

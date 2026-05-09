@@ -40,7 +40,7 @@ A second invocation of the skill on its own output produces the same output. The
 
 ## Authorized additions
 
-The skill adds content only when a spoke explicitly authorizes it AND [`research.md`](research.md) confirms the new content matches a real source (rubric, sibling artifact, or user response). The authorized additions are:
+The skill adds content only when a spoke explicitly authorizes it AND [`research.md`](research.md) confirms the new content matches a real source (rubric, sibling artifact, user-pasted context, or AskUserQuestion answer). The authorized additions are:
 
 - The mission line, when [`persona.md`](persona.md) replaces a role assignment
 - The per-category disposition line, when [`per-category.md`](per-category.md) detects an unenforced framework
@@ -51,7 +51,7 @@ The skill adds content only when a spoke explicitly authorizes it AND [`research
 - A category-specific failure-mode noun in the adversarial-pass phrase, when [`adversarial-tuning.md`](adversarial-tuning.md) fires
 - Surface-formatting normalization (typo correction, single bullet style, language tags on fenced blocks, trimmed trailing whitespace, collapsed blank-line runs, sequential heading levels), when [`cleanup.md`](cleanup.md) fires
 
-Each addition needs evidence — a rubric line, a real line in the data body, or a user-supplied value via AskUserQuestion. When evidence is missing, the spoke leaves the prompt as-is and reports the gap. The gap-report shape depends on emission mode:
+Each addition needs evidence — a rubric line, a real line in the data body (sibling artifact or user-pasted context), or a user-supplied value via AskUserQuestion. When evidence is missing, the spoke leaves the prompt as-is and reports the gap. The gap-report shape depends on emission mode:
 
 - **Paste mode.** The fenced block contains exactly the rewritten prompt — no footer follows it. Record gaps inside the fenced block as a final blockquoted note prefixed `> Gap:` (one line per gap). The note sits below the rewritten prompt's last block and remains inside the fence.
 - **File-path mode.** The rewritten file on disk MUST be self-describing for gaps. Append a final `<!-- gap-report:` HTML comment block at the bottom of the file (one `> Gap:` line per gap, wrapped in the comment so the file renders cleanly when consumed by another tool). When no gaps exist, omit the comment block entirely. The post-edit confirmation message that names the file and the spokes that fired ALSO lists the same gaps, but the file itself is now self-describing — a reader of the file alone can detect which spokes deferred and why.

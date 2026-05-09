@@ -17,9 +17,10 @@ Some spokes need information the input prompt doesn't include — like the line 
 A change earns its place in the rewritten prompt when one of these is true:
 - The rubric file states it
 - The sibling artifact contains it (the line number is real, the identifier sits in the diff)
+- The user-pasted context contains it (the value sits in the prompt body the user supplied, in a fenced block within it, or in an artifact the user pasted alongside the prompt)
 - The user supplied it via an AskUserQuestion answer
 
-When none of the three holds, the spoke leaves the prompt as-is and notes the gap in the location [`output-contract.md`](output-contract.md) defines for the active emission mode. The deferral itself is mandatory — see the [no silent no-op](output-contract.md#disposition-invariants) invariant.
+When none of the four holds, the spoke leaves the prompt as-is and notes the gap in the location [`output-contract.md`](output-contract.md) defines for the active emission mode. The deferral itself is mandatory — see the [no silent no-op](output-contract.md#disposition-invariants) invariant.
 
 ## Tone of the AskUserQuestion
 

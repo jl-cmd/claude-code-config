@@ -6,7 +6,7 @@ The optimized prompt has consistent surface formatting.
 
 | Surface | State after cleanup |
 |---|---|
-| Typos in mission, metadata, framework, or output spec | Spelled correctly |
+| Typos in mission, metadata, framework, output spec, or questions | Spelled correctly |
 | Bullet style within a single section | Single style throughout (`-`) |
 | Code block language tags | Every fenced block carries a language tag |
 | Trailing whitespace on lines | Removed |

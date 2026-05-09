@@ -27,12 +27,12 @@ When the identifier appears one or more times across the data body:
 
 Before:
 ```
-- `os.walk(root, onerror=_log_walk_error, topdown=False)` — `_log_walk_error` matches the exact signature stdlib calls.
+- uses `os.walk` with `_log_walk_error` — `_log_walk_error` matches the exact signature stdlib calls.
 ```
 
 After (2 occurrences: definition plus one call site):
 ```
-- `os.walk(root, onerror=_log_walk_error, topdown=False)` — `_log_walk_error` (`sweep_empty_dirs.py:23, sweep_empty_dirs.py:33`) matches the exact signature stdlib calls.
+- uses `os.walk` (`sweep_empty_dirs.py:23`) with `_log_walk_error` (`sweep_empty_dirs.py:23, sweep_empty_dirs.py:33`) — `_log_walk_error` matches the exact signature stdlib calls.
 ```
 
 Before:

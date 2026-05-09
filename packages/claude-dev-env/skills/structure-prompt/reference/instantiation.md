@@ -21,7 +21,7 @@ A placeholder is any bracketed token whose content reads as instructional rather
 1. Find every placeholder in the prompt.
 2. For each placeholder, look up the value via [`research.md`](research.md).
 3. Replace the placeholder with the real value.
-4. For `[INLINE THE FULL ARTIFACT HERE]`, the artifact's text comes from one of the sources [`research.md`](research.md) enumerates — a local file the user named when invoking in file-path mode, a sibling artifact the rubric points at, content the user pasted alongside the prompt, or a path the user supplied via AskUserQuestion. Inline that text as fenced code blocks, using each file's path as a `###` heading above its fenced block. The skill never reaches outside those sources for retrieval; when none of them yields the artifact, the spoke leaves the placeholder in place and records a gap per [`output-contract.md`](output-contract.md).
+4. For placeholders matching `[INLINE THE FULL ARTIFACT HERE …]` (any placeholder that opens with `INLINE THE FULL ARTIFACT`, including the long-form `[INLINE THE FULL ARTIFACT HERE — do not ask the agent to fetch.]`), the artifact's text comes from one of the sources [`research.md`](research.md) enumerates — a local file the user named when invoking in file-path mode, a sibling artifact the rubric points at, content the user pasted alongside the prompt, or a path the user supplied via AskUserQuestion. Inline that text as fenced code blocks, using each file's path as a `###` heading above its fenced block. The skill never reaches outside those sources for retrieval; when none of them yields the artifact, the spoke leaves the placeholder in place and records a gap per [`output-contract.md`](output-contract.md).
 
 ## When the rubric points at a sibling prompt
 

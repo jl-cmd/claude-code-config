@@ -23,7 +23,7 @@ param(
 
     [Parameter(ParameterSetName = "install")]
     [ValidateRange(1, [int]::MaxValue)]
-    [int]$AgeSeconds = 120,  # matches config/timing.py DEFAULT_AGE_SECONDS
+    [int]$AgeSeconds = 120
 
     [Parameter(ParameterSetName = "install")]
     [DateTime]$StartAt = (Get-Date),
@@ -58,11 +58,14 @@ if ($Status) {
 
 if ($Remove) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-    Write-Host "$TaskName removed."
+    if (-not $?) {
+        Write-Warning "Failed to unregister scheduled task '$TaskName'."
+    } else {
+        Write-Host "$TaskName removed."
+    }
     return
 }
 
-# Resolve the script path relative to this launcher's own location.
 $ScriptDir = Split-Path -Parent $PSCommandPath
 $ScriptPath = Join-Path $ScriptDir "sweep_empty_dirs.py"
 
@@ -93,7 +96,6 @@ if (-not $?) {
     exit 1
 }
 
-# Sanitize target path before interpolation (TrimEnd is safe for admin shares with $)
 $Target = (Resolve-Path $Target).Path
 $Target = [System.IO.Path]::TrimEndingDirectorySeparator($Target)
 

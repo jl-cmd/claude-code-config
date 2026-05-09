@@ -46,7 +46,7 @@ After (Category B):
 > "assume your first pass missed at least 3 P1 engine-version incompatibilities across these 7 sub-buckets — find them"
 
 After (Category K):
-> "assume your first pass missed at least 3 parallel sites that should have been updated alongside the diff across these 7 sub-buckets — find them"
+> "assume your first pass missed at least 3 P1 parallel sites that should have been updated alongside the diff across these 7 sub-buckets — find them"
 
 After (Category C):
 > "assume your first pass missed at least 3 P1 leaked resources across these 7 sub-buckets — find them"
@@ -55,4 +55,4 @@ After (Category C):
 
 When the adversarial phrase already names a specific failure mode, the noun stays. The skill changes only generic nouns.
 
-The count (e.g., 3) and severity tier (e.g., P1) stay intact when the original phrase carries them. Some categories name a noun that doesn't fit the P-tier model — Codebase Conflicts ("parallel sites that should have been updated alongside the diff") is the canonical example. For those, the original phrase typically omits the severity tier; the skill leaves it omitted. The rule is preservation, not insertion.
+The count (e.g., 3) and severity tier (e.g., P1) stay intact when the original phrase carries them. Some categories name a noun that doesn't fit the P-tier model — Codebase Conflicts ("parallel sites that should have been updated alongside the diff") is the canonical example — but preservation still applies: if the original phrase includes a tier, the rewritten phrase includes it too. The rule is preservation, not insertion or removal.

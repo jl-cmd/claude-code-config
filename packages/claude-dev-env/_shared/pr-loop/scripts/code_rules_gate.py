@@ -34,7 +34,7 @@ from config.code_rules_gate_constants import (
 )
 
 
-ValidateContentCallable = Callable[[str, str, str], list[str]]
+ValidateContentCallable = Callable[[str, str, str, str | None], list[str]]
 
 
 def hunk_header_pattern() -> re.Pattern[str]:

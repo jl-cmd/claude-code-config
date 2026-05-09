@@ -501,7 +501,7 @@ def test_validate_content_callable_signature_is_explicit() -> None:
         for each_line in callable_alias_source
         if "ValidateContentCallable" in each_line and "Callable[" in each_line
     ]
-    assert any("[str, str, str]" in each_line for each_line in matching_lines)
+    assert any("[str, str, str, str | None]" in each_line for each_line in matching_lines)
 
 
 def test_run_gate_uses_each_path_loop_variable() -> None:

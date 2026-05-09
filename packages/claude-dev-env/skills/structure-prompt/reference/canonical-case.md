@@ -41,4 +41,8 @@ Example after:
 
 When a ⭐ marker already lives somewhere in the framework, the marker pass leaves it alone — the prompt's author already chose. The skill marks at most one sub-bucket per invocation.
 
-When research turns up no clear canonical case (the bullets are evenly weighted, no rubric guidance, no identifier-density signal), the marker pass leaves the framework unmarked AND MUST emit a gap note via the paste-mode or file-path-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines for the active emission mode. The framework reads fine without an arbitrary pick, but the deferral itself is recorded — see the [no silent no-op](output-contract.md#disposition-invariants) invariant.
+When research turns up no clear canonical case (the bullets are evenly weighted, no rubric guidance, no identifier-density signal), the marker pass leaves the framework unmarked AND MUST emit a gap note via the paste-mode or file-path-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines for the active emission mode. The framework reads fine without an arbitrary pick, but the deferral itself is recorded — see the [no silent action](output-contract.md#disposition-invariants) invariant.
+
+## Disposition reporting
+
+Every outcome emits an action note via the mechanism that [`output-contract.md`](output-contract.md) defines. When a sub-bucket was marked: `> Gap: ⭐ canonical <letter> case marker added to sub-bucket "<sub-bucket-id>".` When the framework has fewer than 5 sub-buckets or already carries a ⭐ marker: `> Gap: Canonical-case marker verified — <reason>.` When no clear canonical case exists: `> Gap: Canonical-case marker skipped — framework has 5+ sub-buckets but <rubric match / bullet density / identifier density> found no clear canonical case.` Silent pass is forbidden — see the [no silent action](output-contract.md#disposition-invariants) invariant.

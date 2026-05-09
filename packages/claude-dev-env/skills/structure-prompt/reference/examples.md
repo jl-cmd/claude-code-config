@@ -46,7 +46,7 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 > `> Gap: Directive "Be thorough" replaced with surface enumeration "Inspect: SQL injection, XSS, auth issues."`
 > `> Gap: Directive "carefully" replaced with locator requirement "Cite file:line for every finding."`
 > `> Gap: Narrative directive "Try to find" merged with directives output — both derived the same measurable criteria "Inspect: SQL injection, XSS, auth issues."`
-> `> Gap: Code block relocated to end per structure ordering.`
+> `> Gap: Structural ordering verified — input already in canonical sequence.`
 
 ## Example 3: Multi-category framework without disposition
 

@@ -45,3 +45,7 @@ These elements pass through untouched:
 - The cross-bucket question structure (Q1, Q2, Q3 by name)
 - The output spec's lead format (`Total: N (P0=N, P1=N, P2=N)`)
 - The adversarial-pass count and severity tier — handled by [`adversarial-tuning.md`](adversarial-tuning.md) when the noun needs sharpening; the count and tier values come from the original prompt's own adversarial phrase, not a fixed default
+
+## Disposition reporting
+
+Every outcome emits an action note via the mechanism that [`output-contract.md`](output-contract.md) defines. When placeholders were filled: `> Gap: Placeholders instantiated — <N> placeholders replaced with real values.` When no placeholders exist: `> Gap: Instantiation verified — no placeholder tokens found.` When a placeholder could not be resolved: `> Gap: Placeholder "<token>" left in place — no real value found in available sources.` Silent pass is forbidden — see the [no silent action](output-contract.md#disposition-invariants) invariant.

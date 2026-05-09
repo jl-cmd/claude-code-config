@@ -54,4 +54,8 @@ When the identifier sits in a file the data body doesn't include (e.g., the bull
 1. An inline gap marker adjacent to the identifier: `(citation unavailable: <reason>)` — so the bullet is not visually identical to a successful citation when read in isolation.
 2. A gap note via the paste-mode or file-path-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines for the active emission mode.
 
-Both records are required by the [no silent no-op](output-contract.md#disposition-invariants) invariant: the reader of the bullet alone must see the gap, and the reader of the output as a whole must see the gap.
+Both records are required by the [no silent action](output-contract.md#disposition-invariants) invariant: the reader of the bullet alone must see the gap, and the reader of the output as a whole must see the gap.
+
+## Disposition reporting
+
+Every outcome emits an action note via the mechanism that [`output-contract.md`](output-contract.md) defines. When citations were added: `> Gap: Citations added — <N> identifier(s) cited at file:line.` When no citation candidates exist: `> Gap: Citation-depth verified — no uncited identifiers found.` When a citation was unavailable: `> Gap: Citation unavailable for "<identifier>" — <reason>.` Silent pass is forbidden — see the [no silent action](output-contract.md#disposition-invariants) invariant.

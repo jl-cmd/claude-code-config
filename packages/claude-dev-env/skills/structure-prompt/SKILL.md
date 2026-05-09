@@ -25,7 +25,7 @@ Read [`reference/block-classification.md`](reference/block-classification.md), t
 | Input opens with a role assignment ("You are…", "Act as…", "Imagine you are…", "As a…") | [`reference/persona.md`](reference/persona.md) |
 | Input names 2+ categories, surfaces, sub-buckets, items, checks, or criteria the agent processes | [`reference/per-category.md`](reference/per-category.md) |
 | Input contains performance directives ("be thorough", "think step by step", "you are an expert", "please", "kindly") | [`reference/directives.md`](reference/directives.md) |
-| Input contains narrative directives ("try to", "look at", "make sure", "consider", "be sure to") | [`reference/constraints.md`](reference/constraints.md) |
+| Input contains narrative directives ("try to", "look at", "make sure", "consider", "be sure to", "think about") | [`reference/constraints.md`](reference/constraints.md) |
 | Input contains placeholder tokens (`[REPO/ARTIFACT]`, `[INLINE THE FULL ARTIFACT HERE]`, `[N]`, etc.) | [`reference/instantiation.md`](reference/instantiation.md) |
 | Sub-bucket bullets reference identifiers from the data body without `file:line` citations | [`reference/citation-depth.md`](reference/citation-depth.md) |
 | Framework has 5+ sub-buckets and no ⭐ canonical-case marker | [`reference/canonical-case.md`](reference/canonical-case.md) |

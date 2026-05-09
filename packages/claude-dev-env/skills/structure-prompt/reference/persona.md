@@ -36,4 +36,4 @@ The persona pass MUST emit a gap note via the paste-mode or file-mode gap-report
 - `> Gap: Persona preserved (creative-writing carve-out matched: "<matched keyword>").`
 - `> Gap: Persona preserved (no carve-out keyword matched, but transformation would have stripped intent — recording for reader visibility).`
 
-Near-miss vocabulary that doesn't match the six exact carve-out keywords still produces a gap note in the third shape, so the reader sees that persona was stripped rather than the strip happening silently. See the [no silent no-op](output-contract.md#disposition-invariants) invariant.
+Near-miss vocabulary that doesn't match the six exact carve-out keywords still produces a gap note in the third shape, so the reader sees that persona was preserved despite near-miss vocabulary rather than the preservation happening silently. See the [no silent no-op](output-contract.md#disposition-invariants) invariant.

@@ -30,6 +30,8 @@ Each directive maps to a measurable constraint or to omission:
 | "You are an expert" | omitted (covered by the mission line) |
 | "Do your best" | omitted |
 
+Every transformation outcome — whether the directive was mapped to a measurable constraint or omitted — MUST emit an action note recording what changed via the mechanism that [`output-contract.md`](output-contract.md) defines (e.g., `> Gap: Directive "Be thorough" replaced with surface enumeration "Inspect: input validation, auth, secret handling."` or `> Gap: Directive "Take a deep breath" omitted — no measurable equivalent.`). See the [no silent action](output-contract.md#disposition-invariants) invariant.
+
 ## Show-reasoning carve-out
 
 "Think step by step" stays intact when the prompt explicitly requires the agent to show its reasoning chain in the output. The carve-out MUST emit a gap note via the paste-mode or file-path-mode mechanism that [`output-contract.md`](output-contract.md) defines. See the [no silent no-op](output-contract.md#disposition-invariants) invariant.

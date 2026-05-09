@@ -14,7 +14,7 @@ A bullet is a citation candidate when all three hold:
 
 1. For each citation candidate, search the data body for the identifier.
 2. Find the line where the identifier first appears in each file. When the data body uses explicit line numbers (e.g., a code block prefixed with file:line annotations or a diff), use those. When the data body has no line numbers (e.g., a raw pasted dump), use the 1-based line index within the data-body block as `<line>`.
-3. Append the citation in this format at the end of the bullet, before the period: `(<file>:<line>)`.
+3. Append the citation in this format immediately after the backtick-wrapped identifier: `` `identifier` (`<file>:<line>`)``. When the bullet contains multiple identifiers, cite each one inline after its owning backtick span. The examples below illustrate both single-identifier and multi-identifier bullets.
 
 ## Multiple occurrences
 

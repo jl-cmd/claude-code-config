@@ -4,11 +4,12 @@ When a framework has many sub-buckets, one of them usually carries the category'
 
 ## Detection
 
-The marker fires when ALL three hold:
+The marker fires when BOTH hold:
 
 - The framework has 5 or more sub-buckets
 - No sub-bucket already carries the ⭐ marker
-- Either the sibling rubric names a canonical example, or one sub-bucket clearly has more concrete content than the others
+
+The third condition — whether a canonical signal exists — is determined during selection (below), not detection. When selection finds no clear canonical case, the marker pass does not mark and instead emits a gap note per the [no silent action](output-contract.md#disposition-invariants) invariant.
 
 ## How to pick the canonical sub-bucket
 

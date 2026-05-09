@@ -41,6 +41,6 @@ The skill adds content only when a spoke explicitly authorizes it AND [`research
 - `file:line` citations on identifier mentions, when [`citation-depth.md`](citation-depth.md) fires
 - The ⭐ canonical-case marker on one sub-bucket, when [`canonical-case.md`](canonical-case.md) fires
 - A category-specific failure-mode noun in the adversarial-pass phrase, when [`adversarial-tuning.md`](adversarial-tuning.md) fires
-- Surface-formatting normalization (typo correction, single bullet style, language tags on fenced blocks, trimmed whitespace runs), when [`cleanup.md`](cleanup.md) fires
+- Surface-formatting normalization (typo correction, single bullet style, language tags on fenced blocks, trimmed whitespace runs, sequential heading levels), when [`cleanup.md`](cleanup.md) fires
 
 Each addition needs evidence — a rubric line, a real line in the data body, or a user-supplied value via AskUserQuestion. When evidence is missing, the spoke leaves the prompt as-is and reports the gap in the file-mode confirmation or the paste-mode emission's footer.

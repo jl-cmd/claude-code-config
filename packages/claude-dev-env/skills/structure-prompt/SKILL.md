@@ -1,6 +1,6 @@
 ---
 name: structure-prompt
-description: Restructure any user-provided prompt — order blocks correctly, replace persona framing with task constraints, enforce per-category dispositions, replace ceremony directives with measurable constraints, expand placeholder tokens into real values via the sibling rubric or AskUserQuestion, add file:line citations for identifiers that appear in the data body, mark the canonical sub-bucket with ⭐, sharpen generic adversarial-pass phrasing into a category-specific failure-mode noun, and normalize surface formatting (typos, mixed bullet styles, untagged code blocks, whitespace runs). Trigger when the user invokes /structure-prompt, pastes a prompt and asks to optimize it, asks for a "minimally invasive edit" to a prompt artifact, or asks to "tighten this prompt".
+description: Restructure any user-provided prompt — order blocks correctly, replace persona framing with task constraints, enforce per-category dispositions, replace ceremony directives with measurable constraints, expand placeholder tokens into real values via the sibling rubric or AskUserQuestion, add file:line citations for identifiers that appear in the data body, mark the canonical sub-bucket with ⭐, sharpen generic adversarial-pass phrasing into a category-specific failure-mode noun, and normalize surface formatting (typos, mixed bullet styles, untagged code blocks, whitespace runs, heading levels). Trigger when the user invokes /structure-prompt, pastes a prompt and asks to optimize it, asks for a "minimally invasive edit" to a prompt artifact, or asks to "tighten this prompt".
 ---
 
 # structure-prompt
@@ -30,7 +30,7 @@ Read [`reference/block-classification.md`](reference/block-classification.md), t
 | Sub-bucket bullets reference identifiers from the data body without `file:line` citations | [`reference/citation-depth.md`](reference/citation-depth.md) |
 | Framework has 5+ sub-buckets and no ⭐ canonical-case marker | [`reference/canonical-case.md`](reference/canonical-case.md) |
 | Output spec contains generic adversarial-pass phrasing ("missed at least N bugs/findings") | [`reference/adversarial-tuning.md`](reference/adversarial-tuning.md) |
-| Input has typos, mixed bullet styles, untagged code blocks, or whitespace runs | [`reference/cleanup.md`](reference/cleanup.md) |
+| Input has typos, mixed bullet styles, untagged code blocks, whitespace runs, or non-sequential heading levels | [`reference/cleanup.md`](reference/cleanup.md) |
 | Situation doesn't match any spoke above | [`reference/examples.md`](reference/examples.md) |
 | Emitting the rewritten prompt | [`reference/output-contract.md`](reference/output-contract.md) |
 

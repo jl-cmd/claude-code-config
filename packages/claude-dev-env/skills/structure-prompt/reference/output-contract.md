@@ -16,7 +16,12 @@ The skill emits exactly one artifact: the rewritten prompt. The emission shape d
 
 ## Disposition invariants
 
-**No silent no-op.** When a spoke elects not to apply its transformation — missing source, ambiguous detection, fallback to user input, carve-out match, or any other reason — it MUST emit a gap note via the paste-mode or file-path-mode gap-report mechanism defined below. Silent omission is never the correct disposition. The reader of the output must always be able to detect which spokes fired, which deferred, and why.
+**No silent action.** Every spoke that fires MUST record its action. Two cases use the same `> Gap:` mechanism:
+
+- **Deferred.** The spoke elected not to apply its transformation — missing source, ambiguous detection, fallback to user input, carve-out match, or any other reason. The gap note records what was deferred and why.
+- **Applied.** The spoke successfully applied its transformation. The gap note records what changed (e.g., persona transformed, directive replaced, citation added) so the reader can detect the change.
+
+Silent omission is never the correct disposition in either case. The reader of the output must always be able to detect which spokes fired, which deferred, and why.
 
 ## Preservation invariants
 

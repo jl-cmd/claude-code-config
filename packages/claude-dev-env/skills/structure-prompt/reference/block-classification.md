@@ -23,5 +23,5 @@ Every input prompt decomposes into six block types. Tag each region of the input
 
 1. Read the input prompt top to bottom.
 2. Annotate each region with exactly one tag.
-3. Confirm every region carries one tag.
+3. Confirm every content region carries one tag. Gap-note lines (`> Gap:`) from a prior skill invocation are passthrough — they enter as input but carry no block type and are not re-tagged.
 4. Proceed to the matching spoke.

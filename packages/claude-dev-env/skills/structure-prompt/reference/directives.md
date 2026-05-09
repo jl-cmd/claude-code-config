@@ -32,4 +32,4 @@ Each directive maps to a measurable constraint or to omission:
 
 ## Show-reasoning carve-out
 
-"Think step by step" stays intact when the prompt explicitly requires the agent to show its reasoning chain in the output. The carve-out MUST emit a gap note via the paste-mode or file-mode mechanism that [`output-contract.md`](output-contract.md) defines. See the [no silent no-op](output-contract.md#disposition-invariants) invariant.
+"Think step by step" stays intact when the prompt explicitly requires the agent to show its reasoning chain in the output. The carve-out MUST emit a gap note via the paste-mode or file-path-mode mechanism that [`output-contract.md`](output-contract.md) defines. See the [no silent no-op](output-contract.md#disposition-invariants) invariant.

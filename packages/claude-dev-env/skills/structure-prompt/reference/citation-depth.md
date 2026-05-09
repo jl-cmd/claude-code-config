@@ -13,7 +13,7 @@ A bullet is a citation candidate when all three hold:
 ## Procedure
 
 1. For each citation candidate, search the data body for the identifier.
-2. Find the line where the identifier first appears in each file.
+2. Find the line where the identifier first appears in each file. When the data body uses explicit line numbers (e.g., a code block prefixed with file:line annotations or a diff), use those. When the data body has no line numbers (e.g., a raw pasted dump), use the 1-based line index within the data-body block as `<line>`.
 3. Append the citation in this format at the end of the bullet, before the period: `(<file>:<line>)`.
 
 ## Multiple occurrences
@@ -52,6 +52,6 @@ When the identifier is a generic concept (e.g., `if version`, `if FLAG`) rather 
 When the identifier sits in a file the data body doesn't include (e.g., the bullet mentions `os.walk` but the diff doesn't define it), the citation skips that identifier. The skipped citation MUST emit BOTH:
 
 1. An inline gap marker adjacent to the identifier: `(citation unavailable: <reason>)` — so the bullet is not visually identical to a successful citation when read in isolation.
-2. A gap note via the paste-mode or file-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines for the active emission mode.
+2. A gap note via the paste-mode or file-path-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines for the active emission mode.
 
 Both records are required by the [no silent no-op](output-contract.md#disposition-invariants) invariant: the reader of the bullet alone must see the gap, and the reader of the output as a whole must see the gap.

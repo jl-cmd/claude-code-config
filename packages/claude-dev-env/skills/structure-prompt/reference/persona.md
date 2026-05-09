@@ -30,7 +30,7 @@ The persona line stays intact when the prompt explicitly references one of these
 
 ## Disposition reporting
 
-The persona pass MUST emit a gap note via the paste-mode or file-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines, recording one of three dispositions:
+The persona pass MUST emit a gap note via the paste-mode or file-path-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines, recording one of three dispositions:
 
 - `> Gap: Persona transformed — original "<persona line>" replaced with mission "<mission line>".`
 - `> Gap: Persona preserved (creative-writing carve-out matched: "<matched keyword>").`

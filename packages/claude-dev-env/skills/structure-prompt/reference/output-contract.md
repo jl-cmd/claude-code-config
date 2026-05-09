@@ -12,7 +12,7 @@ The skill emits exactly one artifact: the rewritten prompt. The emission shape d
 ```
 ````
 
-**File-path mode** — input arrives as a file path argument (e.g., `/structure-prompt path/to/file.md`). Rewrite the file in place. Emit a one-line confirmation that names the file, gives the line-count delta, and lists the spokes that fired.
+**File-path mode** — input arrives as a file path argument (e.g., `/structure-prompt path/to/file.md`). Rewrite the file in place. Emit a confirmation that names the file, gives the line-count delta, and lists the spokes that fired. When gaps exist, the confirmation also lists them — the output may span multiple lines.
 
 ## Disposition invariants
 
@@ -40,7 +40,7 @@ A second invocation of the skill on its own output produces the same output. The
 
 ## Authorized additions
 
-The skill adds content only when a spoke explicitly authorizes it AND [`research.md`](research.md) confirms the new content matches a real source (rubric, sibling artifact, user-pasted context, or AskUserQuestion answer). The authorized additions are:
+The skill adds content only when a spoke explicitly authorizes it. Evidence-required additions (cited values from the rubric, placeholder values from the input or user, the failure-mode noun from the category rubric) must also pass [`research.md`](research.md) confirmation that the new content matches a real source (rubric, sibling artifact, user-pasted context, or AskUserQuestion answer). Skill-defined additions (the per-category disposition line, surface-formatting cleanup) are authorized by their spoke firing alone. The authorized additions are:
 
 - The mission line, when [`persona.md`](persona.md) replaces a role assignment
 - The per-category disposition line, when [`per-category.md`](per-category.md) detects an unenforced framework

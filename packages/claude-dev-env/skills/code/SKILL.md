@@ -161,12 +161,4 @@ Each criterion returns either **at least one finding** OR **exactly one proof-of
 
 | File | Purpose |
 |------|---------|
-| `SKILL.md` | This hub — binary criteria, gotchas, when-to-apply, file index |
-| `reference/` | Reserved for domain-specific standards addenda |
-| `scripts/` | Reserved for deterministic validators |
-
-## Folder map
-
-- `SKILL.md` — hub.
-- `reference/` — domain-specific standards extensions.
-- `scripts/` — deterministic validation scripts.
+| `SKILL.md` | Hub — binary criteria, gotchas, when-to-apply, verification protocol |

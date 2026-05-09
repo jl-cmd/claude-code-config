@@ -94,6 +94,7 @@ if (-not $?) {
 }
 
 # Sanitize target path before interpolation (TrimEnd is safe for admin shares with $)
+$Target = (Resolve-Path $Target).Path
 $Target = [System.IO.Path]::TrimEndingDirectorySeparator($Target)
 
 $Action = New-ScheduledTaskAction -Execute $PythonPath -Argument """$ScriptPath"" --once --age $AgeSeconds ""$Target"""

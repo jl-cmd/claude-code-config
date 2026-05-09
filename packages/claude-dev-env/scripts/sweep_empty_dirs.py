@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Delete empty directories older than 2 minutes under a given root.
+"""Delete empty directories older than a configurable age under a given root.
 
 Usage:
     python sweep_empty_dirs.py /path/to/watch
@@ -85,7 +85,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--age",
         type=_positive_int,
         default=default_age_seconds,
-        help=f"Minimum age in seconds (default: {default_age_seconds} = 2 minutes)",
+        help=f"Minimum age in seconds (default: {default_age_seconds})",
     )
     parser.add_argument(
         "--once",

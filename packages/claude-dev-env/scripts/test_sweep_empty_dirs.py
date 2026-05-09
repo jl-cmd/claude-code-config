@@ -15,6 +15,10 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
+for _cached in list(sys.modules):
+    if _cached == "config" or _cached.startswith("config."):
+        del sys.modules[_cached]
+
 from sweep_empty_dirs import _build_parser, _positive_int, sweep  # noqa: E402
 
 _OLD_TIMESTAMP = time.time() - 300

@@ -8,7 +8,7 @@ A bullet is a citation candidate when all three hold:
 
 - The bullet contains a backtick-wrapped identifier (e.g., `os.walk`, `New-ScheduledTaskTrigger`, `_log_walk_error`)
 - The identifier also appears in the data body
-- No `file:line` citation already follows the bullet
+- No `file:line` citation already follows that identifier within the bullet
 
 ## Procedure
 

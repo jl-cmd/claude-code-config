@@ -39,14 +39,14 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
 
     removed: list[str] = []
 
+    now = time.time()
     for each_directory_path, _, _ in os.walk(
         root, onerror=_log_walk_error, topdown=False
     ):
         if each_directory_path == root:
             continue
-        now = time.time()
         try:
-            created = os.path.getctime(each_directory_path)
+            ctime = os.path.getctime(each_directory_path)
         except FileNotFoundError:
             continue
         except PermissionError:
@@ -54,7 +54,7 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
             continue
         except OSError:
             continue
-        if now - created > min_age_seconds:
+        if now - ctime > min_age_seconds:
             try:
                 os.rmdir(each_directory_path)
                 print(f"deleted: {each_directory_path}")
@@ -62,7 +62,7 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
             except FileNotFoundError:
                 pass
             except OSError as each_error:
-                if each_error.errno != errno.ENOTEMPTY:
+                if each_error.errno not in (errno.ENOTEMPTY, errno.EEXIST):
                     print(
                         f"warning: could not remove {each_directory_path}"
                         f" — {each_error}",

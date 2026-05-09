@@ -97,7 +97,7 @@ if (-not $?) {
 $Target = [System.IO.Path]::TrimEndingDirectorySeparator($Target)
 
 $Action = New-ScheduledTaskAction -Execute $PythonPath -Argument """$ScriptPath"" --once --age $AgeSeconds ""$Target"""
-$Trigger = New-ScheduledTaskTrigger -Once -At $StartAt -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration ([TimeSpan]::MaxValue)
+$Trigger = New-ScheduledTaskTrigger -Once -At $StartAt -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) -RepetitionDuration (New-TimeSpan -Days 31)
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
 $null = Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Settings $Settings -Force

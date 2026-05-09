@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import sys
 import tempfile
@@ -87,3 +88,36 @@ def test_skips_dir_when_getctime_raises_os_error() -> None:
 
         assert problem_dir not in removed
         assert os.path.isdir(problem_dir)
+
+
+def test_suppresses_eexist_like_enotempty() -> None:
+    """Sweep must suppress EEXIST on rmdir (some platforms use it instead of ENOTEMPTY for non-empty
+    directories) just like it already suppresses ENOTEMPTY."""
+    with tempfile.TemporaryDirectory() as tmp:
+        non_empty_dir = os.path.join(tmp, "occupied")
+        os.mkdir(non_empty_dir)
+        _touch(os.path.join(non_empty_dir, "a_file"))
+
+        target_dir = os.path.join(tmp, "empty_target")
+        os.mkdir(target_dir)
+
+        def _mock_getctime(directory_path: str) -> float:
+            return _OLD_TIMESTAMP if directory_path == target_dir else time.time()
+
+        original_rmdir = os.rmdir
+
+        def _rmdir_raise_eexist(removal_path: str) -> None:
+            if "occupied" in removal_path:
+                raise OSError(errno.EEXIST, "Directory not empty")
+            original_rmdir(removal_path)
+
+        with patch("os.path.getctime", side_effect=_mock_getctime), \
+             patch("os.rmdir", side_effect=_rmdir_raise_eexist):
+            removed = sweep(tmp, min_age_seconds=120)
+
+        assert target_dir in removed
+        assert os.path.isdir(non_empty_dir)
+
+
+def _touch(file_path: str) -> None:
+    Path(file_path).write_text("")

@@ -76,7 +76,7 @@ if (-not $Target) {
     exit 1
 }
 
-if (-not (Test-Path $Target)) {
+if (-not (Test-Path -PathType Container $Target)) {
     Write-Error "Target directory does not exist: $Target"
     exit 1
 }

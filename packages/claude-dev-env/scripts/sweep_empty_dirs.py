@@ -7,6 +7,8 @@ Usage:
     python sweep_empty_dirs.py /path/to/watch --once
 """
 
+from __future__ import annotations
+
 import argparse
 import errno
 import logging

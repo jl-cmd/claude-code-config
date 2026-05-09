@@ -49,7 +49,7 @@ Zero violations across `src/`, `tests/`, and `scripts/`:
 
 ### 3. Test coverage
 
-- `pytest -n auto --cov=src --cov=scripts --cov-report=term-missing` exits 0.
+- `pytest -n auto --cov=src --cov=scripts --cov-branch --cov-report=term-missing` exits 0.
 - Statement coverage: 100%. Branch coverage: 100%.
 - Zero mocks. Every test exercises actual code paths.
 - Zero weak assertions. Every assert checks a specific, falsifiable property.
@@ -88,7 +88,7 @@ Zero violations across `src/`, `tests/`, and `scripts/`:
 ### 9. JSON recursive types
 
 - Bypass framework validation (e.g., Pydantic).
-- Parse with `json.loads()`, assign immediately to a recursive TypeAlias, then validate with internal `_decode_*` / `_load_json_*` functions.
+- Parse with `json.loads()`, validate immediately with internal `_decode_*` / `_load_json_*` functions before any other use.
 
 ### 10. ASGI / framework boundaries
 

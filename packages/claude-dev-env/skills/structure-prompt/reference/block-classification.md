@@ -17,7 +17,7 @@ Every input prompt decomposes into six block types. Tag each region of the input
 **Data body block.** Any of:
 - Fenced code block (triple backtick)
 - Diff, file dump, transcript, log, table, or document inlined as content
-- Any single content region exceeding 500 characters that the agent inspects rather than acts on
+- Any single content region of 500 characters or more that the agent inspects rather than acts on
 
 ## Tagging procedure
 

@@ -34,17 +34,7 @@ For quick skill syntax questions or one-off SKILL.md edits, use `/skill-writer` 
 
 ## The Process
 
-Copy this checklist and track progress:
-
-```
-Build Progress:
-- [ ] Step 1: Classify skill type
-- [ ] Step 2: Scaffold folder structure
-- [ ] Step 3: Gather domain knowledge and gotchas
-- [ ] Step 4: Write skill (delegate to skill-writer)
-- [ ] Step 5: Self-audit against mandatory checklist
-- [ ] Step 6: Deliver with file map and maintenance notes
-```
+Each workflow file provides its own progress checklist. After routing below, open the corresponding workflow file and copy its checklist.
 
 ### Routing
 

@@ -6,7 +6,7 @@ The output spec usually closes with an adversarial second-pass instruction like 
 
 The fix fires when the output spec contains a phrase matching this shape, with a generic noun:
 
-- "missed at least <number> [P0 / P1] [bugs / findings / issues / problems]"
+- "missed at least <number> [bugs / findings / issues / problems]" — optionally preceded by a severity tier (`P0` or `P1`) when the framework uses tiered findings.
 
 A noun is "generic" when it could apply to any audit category. A noun is "specific" when it names the failure mode of the category.
 

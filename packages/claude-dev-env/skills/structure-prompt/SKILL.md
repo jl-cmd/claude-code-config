@@ -29,7 +29,7 @@ Read [`reference/block-classification.md`](reference/block-classification.md), t
 | Input contains placeholder tokens (`[REPO/ARTIFACT]`, `[INLINE THE FULL ARTIFACT HERE]`, `[N]`, etc.) | [`reference/instantiation.md`](reference/instantiation.md) |
 | Sub-bucket bullets reference identifiers from the data body without `file:line` citations | [`reference/citation-depth.md`](reference/citation-depth.md) |
 | Framework has 5+ sub-buckets and no ⭐ canonical-case marker | [`reference/canonical-case.md`](reference/canonical-case.md) |
-| Output spec contains generic adversarial-pass phrasing ("missed at least N P1 bugs/findings") | [`reference/adversarial-tuning.md`](reference/adversarial-tuning.md) |
+| Output spec contains generic adversarial-pass phrasing ("missed at least N bugs/findings") | [`reference/adversarial-tuning.md`](reference/adversarial-tuning.md) |
 | Input has typos, mixed bullet styles, untagged code blocks, or whitespace runs | [`reference/cleanup.md`](reference/cleanup.md) |
 | Situation doesn't match any spoke above | [`reference/examples.md`](reference/examples.md) |
 | Emitting the rewritten prompt | [`reference/output-contract.md`](reference/output-contract.md) |

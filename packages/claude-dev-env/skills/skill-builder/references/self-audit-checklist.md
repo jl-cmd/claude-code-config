@@ -10,7 +10,7 @@ Source synthesis: [Anthropic best practices](https://platform.claude.com/docs/en
   > "Default assumption: Claude is already very smart."
 - [ ] **Degree of freedom** — Matches task fragility. Low for narrow bridges, high for open fields.
   > "Match the level of specificity to the task's fragility and variability."
-- [ ] **Naming convention** — Gerund form preferred. Lowercase, numbers, hyphens only. Max 64 chars. No reserved words.
+- [ ] **Naming convention** — Name uses gerund form (verb-ing) unless it's a well-known acronym or proper name. Lowercase, numbers, hyphens only. Max 64 chars. No reserved words.
   > "Use consistent naming patterns to make Skills easier to reference."
 - [ ] **Description field** — Third person. Includes what AND when. Specific trigger phrases. Max 1024 chars. No XML tags.
   > "The description is critical for skill selection: Claude uses it to choose the right Skill from potentially 100+ available Skills."

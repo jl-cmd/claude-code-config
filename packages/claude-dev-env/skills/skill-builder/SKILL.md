@@ -30,7 +30,7 @@ For quick skill syntax questions or one-off SKILL.md edits, use `/skill-writer` 
 
 **Refusal cases — first match wins:**
 
-- **No clear task or domain.** `What should this skill do? Give me a one-sentence description of the capability.`
+- **No clear task or domain.** Respond exactly: `What should this skill do? Give me a one-sentence description of the capability.`
 
 ## The Process
 

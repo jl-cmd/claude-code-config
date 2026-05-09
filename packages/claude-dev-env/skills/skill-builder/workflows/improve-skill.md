@@ -51,7 +51,7 @@ Failure classification:
 | Symptom | Diagnosis | Apply |
 |---|---|---|
 | Skill never activates when it should | Description missing trigger phrases or too vague | Principles: Description field |
-| Skill activates when it shouldn’t | Description too broad, no refusal cases | Principles: Refusal cases |
+| Skill activates when it shouldn’t | Description too broad, no refusal cases | Principles: Constraints and refusal cases |
 | Claude reads wrong files first | Structure not intuitive, hub doesn’t guide well | Progressive disclosure |
 | Claude ignores a companion file | File not signaled in SKILL.md or poorly linked | File index, hub pattern |
 | Claude over-explains basics | Skill states what Claude already knows | Principles: Concision |

@@ -55,6 +55,7 @@ The skill adds content only when a spoke explicitly authorizes it. Evidence-requ
 - The ⭐ canonical-case marker on one sub-bucket, when [`canonical-case.md`](canonical-case.md) fires
 - A category-specific failure-mode noun in the adversarial-pass phrase, when [`adversarial-tuning.md`](adversarial-tuning.md) fires
 - Surface-formatting normalization (typo correction, single bullet style, language tags on fenced blocks, trimmed trailing whitespace, collapsed blank-line runs, sequential heading levels), when [`cleanup.md`](cleanup.md) fires
+- `(citation unavailable: <reason>)` inline markers adjacent to unciteable identifiers, when [`citation-depth.md`](citation-depth.md) fires
 
 Skill-defined additions (the per-category disposition line, surface-formatting cleanup, the failure-mode noun from [`adversarial-tuning.md`](adversarial-tuning.md)'s built-in lookup table) are authorized by their spoke firing alone — they do not need an external source. For evidence-required additions (cited values from the rubric, placeholder values from the input or user), [`research.md`](research.md) confirms the new content matches a real source. When evidence is missing for an evidence-required addition, the spoke leaves the prompt as-is and reports the gap. For a skill-defined addition, the spoke fires unconditionally and STILL emits an action note recording what changed — the "No silent action" invariant applies to both applied and deferred outcomes. The gap-report shape depends on emission mode:
 

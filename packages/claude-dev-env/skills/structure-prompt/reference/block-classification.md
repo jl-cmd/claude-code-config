@@ -15,7 +15,7 @@ Every input prompt decomposes into six block types. Tag each region of the input
 **Output spec block.** The format the agent's output takes — totals header, per-item shape, ordering, severity tags, locator format, length cap, lead phrase, closing phrase.
 
 **Data body block.** Any of:
-- Fenced code block (triple backtick)
+- Fenced code block (triple backtick) that sits INSIDE the prompt content — not the outer paste-mode fence that wraps the entire prompt artifact
 - Diff, file dump, transcript, log, table, or document inlined as content
 - Any single content region of 500 characters or more that the agent inspects rather than acts on
 

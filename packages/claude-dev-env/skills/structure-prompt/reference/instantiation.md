@@ -44,4 +44,4 @@ These elements pass through untouched:
 - The per-category disposition statement
 - The cross-bucket question structure (Q1, Q2, Q3 by name)
 - The output spec's lead format (`Total: N (P0=N, P1=N, P2=N)`)
-- The adversarial-pass count (3) and severity tier (P1) — handled by [`adversarial-tuning.md`](adversarial-tuning.md) when the noun needs sharpening
+- The adversarial-pass count and severity tier — handled by [`adversarial-tuning.md`](adversarial-tuning.md) when the noun needs sharpening; the count and tier values come from the original prompt's own adversarial phrase, not a fixed default

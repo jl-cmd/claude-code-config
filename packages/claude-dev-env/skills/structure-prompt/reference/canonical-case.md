@@ -40,4 +40,4 @@ Example after:
 
 When a ⭐ marker already lives somewhere in the framework, the marker pass leaves it alone — the prompt's author already chose. The skill marks at most one sub-bucket per invocation.
 
-When research turns up no clear canonical case (the bullets are evenly weighted, no rubric guidance, no identifier-density signal), the marker pass stays silent. The framework reads fine without one; better to leave it unmarked than to pick arbitrarily.
+When research turns up no clear canonical case (the bullets are evenly weighted, no rubric guidance, no identifier-density signal), the marker pass leaves the framework unmarked AND MUST emit a gap note via the paste-mode or file-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines for the active emission mode. The framework reads fine without an arbitrary pick, but the deferral itself is recorded — see the [no silent no-op](output-contract.md#disposition-invariants) invariant.

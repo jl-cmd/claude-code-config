@@ -19,7 +19,7 @@ A change earns its place in the rewritten prompt when one of these is true:
 - The sibling artifact contains it (the line number is real, the identifier sits in the diff)
 - The user supplied it via an AskUserQuestion answer
 
-When none of the three holds, the spoke leaves the prompt as-is and notes the gap in the location [`output-contract.md`](output-contract.md) defines for the active emission mode (a `> Gap:` blockquote inside the paste-mode fenced block, or the post-edit confirmation message in file-path mode).
+When none of the three holds, the spoke leaves the prompt as-is and notes the gap in the location [`output-contract.md`](output-contract.md) defines for the active emission mode. The deferral itself is mandatory — see the [no silent no-op](output-contract.md#disposition-invariants) invariant.
 
 ## Tone of the AskUserQuestion
 

@@ -26,4 +26,4 @@ Typo fixes apply only to plain-language prose — narrative sentences, mission s
 - Identifiers, file paths, URLs, IDs, SHAs, ID prefixes, proper names
 - Any quoted substring the user could be referencing literally (e.g., `"recieve"` in quotes stays as-is)
 
-These six surfaces match the byte-for-byte preservation invariant in [`output-contract.md`](output-contract.md). When in doubt about whether a token is prose or a literal reference, leave it unchanged.
+These surfaces are subject to the byte-for-byte preservation invariant in [`output-contract.md`](output-contract.md). When in doubt about whether a token is prose or a literal reference, leave it unchanged.

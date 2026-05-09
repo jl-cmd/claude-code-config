@@ -18,7 +18,7 @@ A bullet is a citation candidate when all three hold:
 
 ## Multiple occurrences
 
-When the identifier appears more than once across the data body:
+When the identifier appears one or more times across the data body:
 
 - 1–3 occurrences → cite all of them: `(file_a.py:42, file_a.py:88, file_b.ps1:12)`
 - 4 or more → cite the first and last with `…` between: `(file_a.py:42, …, file_b.ps1:200)`
@@ -49,4 +49,9 @@ After (one occurrence per cmdlet):
 
 When the identifier is a generic concept (e.g., `if version`, `if FLAG`) rather than a real symbol in the data body, the bullet stays as-written. Citations apply to actual identifiers, not category-shaped placeholders.
 
-When the identifier sits in a file the data body doesn't include (e.g., the bullet mentions `os.walk` but the diff doesn't define it), the citation skips that identifier. Note the missing source in the location [`output-contract.md`](output-contract.md) defines for the active emission mode (a `> Gap:` blockquote inside the paste-mode fenced block, or the post-edit confirmation message in file-path mode).
+When the identifier sits in a file the data body doesn't include (e.g., the bullet mentions `os.walk` but the diff doesn't define it), the citation skips that identifier. The skipped citation MUST emit BOTH:
+
+1. An inline gap marker adjacent to the identifier: `(citation unavailable: <reason>)` — so the bullet is not visually identical to a successful citation when read in isolation.
+2. A gap note via the paste-mode or file-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines for the active emission mode.
+
+Both records are required by the [no silent no-op](output-contract.md#disposition-invariants) invariant: the reader of the bullet alone must see the gap, and the reader of the output as a whole must see the gap.

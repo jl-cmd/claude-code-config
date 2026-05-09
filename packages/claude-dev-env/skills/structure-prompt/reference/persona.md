@@ -27,3 +27,13 @@ Replace the persona line with a single mission sentence stating the task in impe
 ## Creative-writing carve-out
 
 The persona line stays intact when the prompt explicitly references one of these output qualities: `style`, `tone`, `voice`, `fiction`, `creative writing`, `narrative`. In that case the persona shapes the output's character and the mission line follows it.
+
+## Disposition reporting
+
+The persona pass MUST emit a gap note via the paste-mode or file-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines, recording one of three dispositions:
+
+- `> Gap: Persona transformed — original "<persona line>" replaced with mission "<mission line>".`
+- `> Gap: Persona preserved (creative-writing carve-out matched: "<matched keyword>").`
+- `> Gap: Persona preserved (no carve-out keyword matched, but transformation would have stripped intent — recording for reader visibility).`
+
+Near-miss vocabulary that doesn't match the six exact carve-out keywords still produces a gap note in the third shape, so the reader sees that persona was stripped rather than the strip happening silently. See the [no silent no-op](output-contract.md#disposition-invariants) invariant.

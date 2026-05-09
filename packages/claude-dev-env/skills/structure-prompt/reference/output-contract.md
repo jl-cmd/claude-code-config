@@ -14,6 +14,10 @@ The skill emits exactly one artifact: the rewritten prompt. The emission shape d
 
 **File-path mode** — input arrives as a file path argument (e.g., `/structure-prompt path/to/file.md`). Rewrite the file in place. Emit a one-line confirmation that names the file, gives the line-count delta, and lists the spokes that fired.
 
+## Disposition invariants
+
+**No silent no-op.** When a spoke elects not to apply its transformation — missing source, ambiguous detection, fallback to user input, carve-out match, or any other reason — it MUST emit a gap note via the paste-mode or file-mode gap-report mechanism defined below. Silent omission is never the correct disposition. The reader of the output must always be able to detect which spokes fired, which deferred, and why.
+
 ## Preservation invariants
 
 Two clauses govern what the rewritten prompt may change.
@@ -50,4 +54,4 @@ The skill adds content only when a spoke explicitly authorizes it AND [`research
 Each addition needs evidence — a rubric line, a real line in the data body, or a user-supplied value via AskUserQuestion. When evidence is missing, the spoke leaves the prompt as-is and reports the gap. The gap-report shape depends on emission mode:
 
 - **Paste mode.** The fenced block contains exactly the rewritten prompt — no footer follows it. Record gaps inside the fenced block as a final blockquoted note prefixed `> Gap:` (one line per gap). The note sits below the rewritten prompt's last block and remains inside the fence.
-- **File-path mode.** The file on disk contains only the rewritten prompt — no gap notes are written into the file. List gaps in the post-edit confirmation message that names the file and the spokes that fired.
+- **File-path mode.** The rewritten file on disk MUST be self-describing for gaps. Append a final `<!-- gap-report:` HTML comment block at the bottom of the file (one `> Gap:` line per gap, wrapped in the comment so the file renders cleanly when consumed by another tool). When no gaps exist, omit the comment block entirely. The post-edit confirmation message that names the file and the spokes that fired ALSO lists the same gaps, but the file itself is now self-describing — a reader of the file alone can detect which spokes deferred and why.

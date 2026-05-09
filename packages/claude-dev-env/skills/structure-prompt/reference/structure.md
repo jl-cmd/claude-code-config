@@ -13,7 +13,7 @@ The optimized prompt presents blocks in this fixed sequence:
 
 1. Extract each tagged block from the input.
 2. Concatenate the blocks in the sequence above.
-3. Preserve every byte of identifiers, IDs, SHAs, prefixes, file paths, proper names, and code content exactly as supplied.
+3. Preserve every byte of the inputs that [`output-contract.md`](output-contract.md) lists under "Preservation invariants" exactly as supplied.
 
 ## Multiple data bodies
 

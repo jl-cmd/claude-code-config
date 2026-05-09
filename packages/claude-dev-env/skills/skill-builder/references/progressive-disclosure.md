@@ -33,7 +33,7 @@ Every skill is a folder. These are the standard subdirectories, each with a spec
 
 SKILL.md is an index, not a textbook. It tells Claude what exists and when to read it.
 
-From Source C (bugteam, pr-converge): the proven layout:
+Observed in model skills (bugteam, pr-converge), the proven layout:
 
 1. Core principle (one sentence)
 2. Gotchas (highest-signal content)

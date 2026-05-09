@@ -34,7 +34,7 @@ For quick skill syntax questions or one-off SKILL.md edits, use `/skill-writer` 
 
 ## The Process
 
-Each workflow file provides its own progress checklist. After routing below, open the corresponding workflow file and copy its checklist.
+Each workflow file provides step-by-step instructions. After routing below, open the corresponding workflow file and follow it.
 
 ### Routing
 

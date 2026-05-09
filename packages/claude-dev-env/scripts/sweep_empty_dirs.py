@@ -13,9 +13,6 @@ import os
 import sys
 import time
 
-from config.timing import DEFAULT_AGE_SECONDS
-from config.timing import DEFAULT_POLL_INTERVAL
-
 
 def _positive_int(raw_argument: str) -> int:
     """Argparse type: require value >= 1."""
@@ -73,6 +70,10 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    _timing_module = __import__("config.timing", fromlist=["DEFAULT_AGE_SECONDS"])
+    default_age_seconds = _timing_module.DEFAULT_AGE_SECONDS
+    default_poll_interval = _timing_module.DEFAULT_POLL_INTERVAL
+
     parser = argparse.ArgumentParser(
         description="Delete empty directories older than a given age.",
     )
@@ -80,8 +81,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--age",
         type=_positive_int,
-        default=DEFAULT_AGE_SECONDS,
-        help=f"Minimum age in seconds (default: {DEFAULT_AGE_SECONDS} = 2 minutes)",
+        default=default_age_seconds,
+        help=f"Minimum age in seconds (default: {default_age_seconds} = 2 minutes)",
     )
     parser.add_argument(
         "--once",
@@ -91,8 +92,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--interval",
         type=_positive_int,
-        default=DEFAULT_POLL_INTERVAL,
-        help=f"Poll interval in seconds when looping (default: {DEFAULT_POLL_INTERVAL})",
+        default=default_poll_interval,
+        help=f"Poll interval in seconds when looping (default: {default_poll_interval})",
     )
     return parser
 

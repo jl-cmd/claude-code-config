@@ -9,9 +9,12 @@ Usage:
 
 import argparse
 import errno
+import logging
 import os
 import sys
 import time
+
+from config.timing import DEFAULT_AGE_SECONDS, DEFAULT_POLL_INTERVAL
 
 
 def _positive_int(raw_argument: str) -> int:
@@ -23,7 +26,7 @@ def _positive_int(raw_argument: str) -> int:
 
 
 def _log_walk_error(os_error: OSError) -> None:
-    print(f"warning: cannot scan {os_error.filename} — {os_error.strerror}", file=sys.stderr)
+    logging.warning("cannot scan %s -- %s", os_error.filename, os_error.strerror)
 
 
 def sweep(root: str, min_age_seconds: int) -> list[str]:
@@ -43,36 +46,36 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
         if each_directory_path == root:
             continue
         try:
-            ctime = os.path.getctime(each_directory_path)
+            raw_ctime = os.path.getctime(each_directory_path)
         except FileNotFoundError:
             continue
         except PermissionError:
-            print(f"warning: permission denied — {each_directory_path}", file=sys.stderr)
+            logging.warning("permission denied -- %s", each_directory_path)
             continue
         except OSError:
             continue
+        ctime = min(raw_ctime, now)
         if now - ctime > min_age_seconds:
             try:
                 os.rmdir(each_directory_path)
-                print(f"deleted: {each_directory_path}")
+                logging.info("deleted: %s", each_directory_path)
                 removed.append(each_directory_path)
             except FileNotFoundError:
                 pass
             except OSError as each_error:
                 if each_error.errno not in (errno.ENOTEMPTY, errno.EEXIST):
-                    print(
-                        f"warning: could not remove {each_directory_path}"
-                        f" — {each_error}",
-                        file=sys.stderr,
+                    logging.warning(
+                        "could not remove %s -- %s",
+                        each_directory_path,
+                        each_error,
                     )
 
     return removed
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    _timing_module = __import__("config.timing", fromlist=["DEFAULT_AGE_SECONDS"])
-    default_age_seconds = _timing_module.DEFAULT_AGE_SECONDS
-    default_poll_interval = _timing_module.DEFAULT_POLL_INTERVAL
+    default_age_seconds = DEFAULT_AGE_SECONDS
+    default_poll_interval = DEFAULT_POLL_INTERVAL
 
     parser = argparse.ArgumentParser(
         description="Delete empty directories older than a given age.",
@@ -101,6 +104,8 @@ def _build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = _build_parser()
     arguments = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     if not os.path.isdir(arguments.root):
         print(f"error: not a directory: {arguments.root}", file=sys.stderr)

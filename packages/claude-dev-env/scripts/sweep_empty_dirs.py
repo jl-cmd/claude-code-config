@@ -95,7 +95,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"Minimum age in seconds (default: {default_age_seconds})",
     )
     parser.add_argument(
-        "--once",
+        "--once", dest="is_once",
         action="store_true",
         help="Single pass and exit instead of watching in a loop",
     )
@@ -118,7 +118,7 @@ def main() -> None:
         print(f"error: not a directory: {arguments.root}", file=sys.stderr)
         sys.exit(1)
 
-    if arguments.once:
+    if arguments.is_once:
         sweep(arguments.root, arguments.age)
         return
 

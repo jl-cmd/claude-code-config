@@ -4,13 +4,13 @@ The skill emits exactly one artifact: the rewritten prompt. The emission shape d
 
 ## Emission modes
 
-**Paste mode** — input arrives as the user's message body or as a fenced block within it. Emit one fenced block containing the rewritten prompt:
+**Paste mode** — input arrives as the user's message body or as a fenced block within it. Emit one fenced block containing the rewritten prompt. Use a fence with at least four backticks so any inner triple-backtick code blocks in the rewritten prompt do not prematurely close the outer fence:
 
+``````
 ````
-```
 <rewritten prompt>
-```
 ````
+``````
 
 **File-path mode** — input arrives as a file path argument (e.g., `/structure-prompt path/to/file.md`). Rewrite the file in place. Emit a confirmation that names the file, gives the line-count delta, and lists the spokes that fired. When gaps exist, the confirmation also lists them — the output may span multiple lines.
 
@@ -41,7 +41,7 @@ Two clauses govern what the rewritten prompt may change.
 
 ## Idempotency
 
-A second invocation of the skill on its own output produces the same output. The detection patterns in each spoke stop firing once their target shape has been applied — placeholders no longer match because they've been substituted; identifier mentions no longer match because citations have been added; the canonical sub-bucket no longer matches because the ⭐ marker is now present; the adversarial phrase no longer matches because the noun is specific.
+A second invocation of the skill on its own output produces the same output. Some spoke detection patterns (e.g., structure ordering, per-category disposition insertion) remain true on every invocation — the input shape doesn't change. But detection conditions for content-mutating spokes incorporate an "already applied" check: placeholders no longer match because they've been substituted; identifier mentions no longer match because citations have been added; the canonical sub-bucket no longer matches because the ⭐ marker is now present; the adversarial phrase no longer matches because the noun is specific. Combined with the gap-report block's deterministic replacement (current run overwrites, prior-run blocks are preserved as passthrough when no new gaps exist), the full pipeline produces identical output on re-invocation.
 
 ## Authorized additions
 

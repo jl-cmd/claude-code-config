@@ -42,6 +42,12 @@ def test_positive_int_rejects_negative() -> None:
         _positive_int("-1")
 
 
+def test_positive_int_rejects_non_integer() -> None:
+    """_positive_int raises for non-integer strings like 'abc'."""
+    with pytest.raises(argparse.ArgumentTypeError):
+        _positive_int("abc")
+
+
 def test_build_parser_sets_age_default_from_timing_config() -> None:
     """_build_parser uses DEFAULT_AGE_SECONDS from config.timing as --age default."""
     parser = _build_parser()

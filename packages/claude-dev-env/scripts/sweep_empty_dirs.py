@@ -21,7 +21,12 @@ from config.timing import DEFAULT_AGE_SECONDS, DEFAULT_POLL_INTERVAL
 
 def _positive_int(raw_argument: str) -> int:
     """Argparse type: require value >= 1."""
-    parsed = int(raw_argument)
+    try:
+        parsed = int(raw_argument)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"invalid integer value: {raw_argument!r}"
+        )
     if parsed < 1:
         raise argparse.ArgumentTypeError(f"must be >= 1, got {raw_argument}")
     return parsed

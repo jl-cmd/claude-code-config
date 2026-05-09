@@ -23,7 +23,7 @@ param(
 
     [Parameter(ParameterSetName = "install")]
     [ValidateRange(1, [int]::MaxValue)]
-    [int]$AgeSeconds = 120
+    [int]$AgeSeconds = 120,
 
     [Parameter(ParameterSetName = "install")]
     [DateTime]$StartAt = (Get-Date),

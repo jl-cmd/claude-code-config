@@ -11,9 +11,10 @@ Two separate paths, evaluated for every backtick-wrapped identifier in each bull
 - The identifier also appears in the data body
 - No `file:line` citation already follows that identifier within the bullet
 
-**Citation-unavailable path.** An identifier triggers the unavailable path when both hold:
+**Citation-unavailable path.** An identifier triggers the unavailable path when all three hold:
 - The bullet contains a backtick-wrapped identifier
 - The identifier does NOT appear in the data body — its file is not included in the diff or the identifier is external (e.g., a stdlib symbol, a framework API)
+- No `(citation unavailable: <reason>)` marker already follows that identifier within the bullet
 
 Both paths fire independently per identifier. A bullet can contain both citable and unciteable identifiers.
 

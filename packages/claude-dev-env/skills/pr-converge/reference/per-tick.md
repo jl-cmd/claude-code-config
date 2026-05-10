@@ -197,6 +197,14 @@ alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
 the latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction; wait
 for review or HEAD change before re-triggering.
 
+**Bugbot-down detection:** After posting `bugbot run`, wait 15 seconds for
+bugbot to acknowledge. Fetch the comment via
+`issue_read(method="get_comments")` and locate the most recent `bugbot run`
+body. If the comment has zero reactions, bugbot did not acknowledge — it is
+down. Set `bugbot_down = true`, `phase = BUGTEAM`, and continue BUGTEAM in
+the same tick (no wakeup — bugteam runs now against this HEAD). If reactions
+are present, bugbot acknowledged; proceed with normal pacing (Step 4).
+
 ## Step 4: Loop pacing
 
 **`ScheduleWakeup` field hints** (prefer [Pacing

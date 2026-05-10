@@ -41,6 +41,11 @@ post a fresh PR in a fresh branch based on origin main to the user.
 - **Duplicate `bugbot run` while review queued** — skip Step 3 when the
   latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction;
   wait for review or HEAD change before re-triggering.
+- **Bugbot unresponsive after `bugbot run` post** — after posting the
+  trigger comment, wait 15s then check for reactions on that comment via
+  `issue_read(method="get_comments")`. Zero reactions means bugbot is
+  down; set `bugbot_down = true`, `phase = BUGTEAM`, and continue bugteam
+  in the same tick instead of scheduling another bugbot wakeup.
 - **Bot login fields differ by endpoint** — `get_reviews` returns
   `.user.login` (object), but `get_review_comments` returns `.author`
   (string, not an object). Threads use `is_outdated` (not `commit_id`) to

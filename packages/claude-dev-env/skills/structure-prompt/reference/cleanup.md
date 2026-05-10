@@ -8,7 +8,7 @@ The optimized prompt has consistent surface formatting.
 |---|---|
 | Typos in mission, metadata, framework, output spec, or questions | Spelled correctly |
 | Bullet style within a single section | Single style throughout (`-`) |
-| Code block language tags | Every fenced block carries a language tag |
+| Code block language tags | Every fenced block inside the prompt artifact carries a language tag |
 | Trailing whitespace on lines | Removed |
 | Runs of 3+ blank lines | Collapsed to one blank line |
 | Heading levels | Sequential within each block (no jumps from `#` to `###`) |

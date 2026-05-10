@@ -5,12 +5,12 @@ Every narrative directive in the optimized prompt names a measurable criterion.
 ## Detection patterns
 
 A narrative directive opens with a soft verb:
-- "Try to <X>"
-- "Look at <X>"
-- "Make sure to <X>"
-- "Consider <X>"
-- "Be sure to <X>"
-- "Think about <X>"
+- "Try to `<X>`"
+- "Look at `<X>`"
+- "Make sure to `<X>`"
+- "Consider `<X>`"
+- "Be sure to `<X>`"
+- "Think about `<X>`"
 
 ## Transformation
 

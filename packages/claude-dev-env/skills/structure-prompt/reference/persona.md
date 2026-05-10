@@ -5,14 +5,14 @@ Lead the optimized prompt with what the agent does, not who the agent is.
 ## Detection patterns
 
 The persona block matches any of:
-- "You are a/an <role>"
-- "You are an expert in/at <topic>"
+- "You are a/an `<role>`"
+- "You are an expert in/at `<topic>`"
 - "You are a helpful assistant"
-- "Act as <role>"
-- "Pretend to be <role>"
-- "Imagine you are <role>"
-- "As a/an <role>, …"
-- "Role: <role>"
+- "Act as `<role>`"
+- "Pretend to be `<role>`"
+- "Imagine you are `<role>`"
+- "As a/an `<role>`, …"
+- "Role: `<role>`"
 
 ## Transformation
 

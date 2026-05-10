@@ -129,7 +129,14 @@ Bugfind subagent completes (findings or clean):
   2. Else: update `state.json` (per §Concurrency) with `last_action:
      "audit_clean"`, `status: "awaiting_bugbot"`, `phase: "BUGBOT"`, then
      trigger bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
-  3. Goes idle.
+  3. **Bugbot-down detection.** Sleep 15 seconds. Fetch recent comments via
+     `issue_read(method="get_comments", owner=owner, repo=repo, issueNumber=issueNumber)`.
+     Locate the most recent comment whose body contains `"bugbot run"`. If the
+     comment has zero reactions (reactions count is `0` or absent): set
+     `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"` via
+     `state.json`, spawn a `bugteam` subagent, and return (skip going idle).
+     If one or more reactions present, continue to step 4.
+  4. Goes idle.
 
 ### Fix result → general-purpose per PR
 

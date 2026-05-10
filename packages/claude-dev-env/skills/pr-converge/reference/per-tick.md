@@ -151,6 +151,12 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
      `pull_request_review_id` to the review's `.id`
      ```
 
+     Note: a `CHANGES_REQUESTED` review with body-only findings (no
+     inline comments) matches the condition above via the
+     `CHANGES_REQUESTED` state, but the inline fetch returns empty.
+     It falls through to the "Empty inline (body-only findings)"
+     sub-branch below rather than the "Non-empty inline" fix protocol.
+
      - **Non-empty inline:** Apply **Fix protocol** (see
        [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)).
        Reset `bugbot_clean_at = null, copilot_clean_at = null`,

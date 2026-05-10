@@ -12,7 +12,8 @@ per [ground-rules.md](ground-rules.md).
   (what changed + commit identifier), matching §Audit result → fix worker step 4 — **before** writing
   `state.json` and going idle.
 - Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`,
-  `bugbot_clean_at: null`, `phase: "BUGBOT"`, `status: "awaiting_bugbot"`,
+  `bugbot_clean_at: null`, `copilot_clean_at: null`, `phase: "BUGBOT"`,
+  `status: "awaiting_bugbot"`,
   `last_updated` (ISO-8601 UTC) to `state.json` (per §Concurrency).
 - Goes idle. Orchestrator spawns follow-up `general-purpose` agent for
   bugbot trigger and monitoring.
@@ -39,7 +40,8 @@ git add <files> && git commit -m "fix(review): <brief summary>"
 git push origin <BRANCH>
   ```
 **Pre-push gate:** honor hooks; full-stop on bypass. Capture new HEAD
-only after both gates pass; set `current_head`, `bugbot_clean_at = null`.
+only after both gates pass; set `current_head`, `bugbot_clean_at = null`,
+`copilot_clean_at = null`.
 - Reply inline on each addressed comment thread using the `add_reply_to_pull_request_comment` MCP tool:
 
   ```

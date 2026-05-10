@@ -141,12 +141,16 @@ python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_inline_comments.py" \
 
      - **Non-empty inline:** Apply **Fix protocol** (see
        [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)).
-       Reset `bugbot_clean_at = null`, stay in `phase = BUGBOT`.
-       Run Step 3, schedule next wakeup, return.
+       Reset `bugbot_clean_at = null, copilot_clean_at = null`,
+       stay in `phase = BUGBOT`. Run Step 3, schedule next wakeup,
+       return.
      - **Empty inline (body-only findings):** Parse findings from
-       review body. Apply **Fix protocol**. Reset
-       `bugbot_clean_at = null`, stay in `phase = BUGBOT`. Run
-       Step 3, schedule next wakeup, return.
+       review body. Push commit with fixes, then post a new review
+       comment via `pull_request_review_write(method="create",
+       event="COMMENT", body="<fix acknowledgement>")` to
+       acknowledge the fix. Reset
+       `bugbot_clean_at = null, copilot_clean_at = null`, stay in
+       `phase = BUGBOT`. Run Step 3, schedule next wakeup, return.
 
 ### `phase == BUGTEAM`
 

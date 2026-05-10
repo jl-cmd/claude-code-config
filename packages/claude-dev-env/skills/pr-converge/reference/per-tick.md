@@ -109,9 +109,8 @@ c. Decide (four branches; match first whose predicate holds):
      null`, reset `inline_lag_streak = 0`, schedule next wakeup, return.
    - **`commit_id == current_head` AND zero unaddressed inline AND review
      body clean:** Set `bugbot_clean_at = current_head`, reset
-     `inline_lag_streak = 0`, `phase = BUGTEAM`. Continue BUGTEAM in same
-     tick — back-to-back convergence requires bugteam on same HEAD
-     before next wakeup.
+     `inline_lag_streak = 0`. Fall through to step d — Copilot pre-check
+     runs before BUGTEAM transition.
    - **`commit_id == current_head` with unaddressed inline findings:**
      Apply **Fix protocol**. Reset `inline_lag_streak = 0`. With
      `state.json`: clean-coder teammate pushes, replies inline, writes
@@ -129,6 +128,14 @@ c. Decide (four branches; match first whose predicate holds):
      `../workflows/schedule-wakeup-loop.md` (`delaySeconds: 90`).
 
 d. Check latest Copilot review on `current_head`:
+
+   Fetch Copilot reviews for `current_head` (newest-first, classified
+   dirty/clean):
+
+   ```bash
+python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_reviews.py" \
+--owner <OWNER> --repo <REPO> --number <NUMBER>
+   ```
 
    - **`classification == "dirty"` (state `CHANGES_REQUESTED` or
      `COMMENTED` with non-empty body):** Fetch Copilot inline
@@ -152,6 +159,10 @@ python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_inline_comments.py" \
        acknowledge the fix. Reset
        `bugbot_clean_at = null, copilot_clean_at = null`, stay in
        `phase = BUGBOT`. Run Step 3, schedule next wakeup, return.
+   - **`classification == "clean"` (state `APPROVED`) OR no Copilot
+     review at `current_head`:** Set `phase = BUGTEAM`. Continue
+     BUGTEAM in same tick — back-to-back convergence requires
+     bugteam on same HEAD before next wakeup.
 
 ### `phase == BUGTEAM`
 

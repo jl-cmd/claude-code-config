@@ -108,9 +108,10 @@ Persist `mergeable_state` into `merge_state_status`. Decide:
 
 ## (d) Post-convergence Copilot review request
 
-Once gates (a), (b), and (c) all pass (Copilot clean at `current_head` *or* no
-Copilot review yet, AND Claude clean or absent at `current_head`, AND
-`mergeable_state == "clean"`), request Copilot review:
+Once gates (a), (b), and (c) all pass AND gate (a) recorded "No Copilot review at
+<SHA>" (i.e., Copilot has not already approved this HEAD), request Copilot review.
+If gate (a) already set `copilot_clean_at = current_head` (Copilot APPROVED),
+skip this gate and continue to gate (e).
 
 ```
 request_copilot_review(owner=OWNER, repo=REPO, pullNumber=NUMBER)

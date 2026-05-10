@@ -64,7 +64,7 @@ b. Decide:
        Continue to convergence-gates.md gate (e) in same tick.
      - `state: CHANGES_REQUESTED` or `COMMENTED` with non-empty body → dirty.
        Reset `copilot_wait_count = 0`. Apply **Fix protocol**.
-	       Reset `bugbot_clean_at = null` AND
+       Reset `bugbot_clean_at = null` AND
        `copilot_clean_at = null`, `phase = BUGBOT`, schedule next wakeup, return.
    - **No Copilot review at `current_head` yet:** Increment `copilot_wait_count`.
      `>= 3` → hard blocker per [stop-conditions.md](stop-conditions.md); report

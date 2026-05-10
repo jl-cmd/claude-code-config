@@ -34,7 +34,7 @@ Every criterion below must be met before the change is complete.
 
 Zero violations across the project's source, test, and script directories (adapt `src/`, `tests/`, `scripts/` to the project's actual layout):
 
-- No `Any`, `object`, `cast()`, `# type: ignore`, `# noqa`.
+- No `Any`, `cast()`, `# type: ignore`, `# noqa`.
 - No `.pyi` files, stubs, or shims.
 - Mypy strict mode exits 0 with no errors.
 - All TypedDicts are treated as immutable after construction and carry explicit `encode`/`decode` functions.

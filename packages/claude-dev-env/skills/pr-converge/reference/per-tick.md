@@ -169,6 +169,10 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
    - **No Copilot review at `current_head`:** Set `phase = BUGTEAM`.
      Continue BUGTEAM in same tick — back-to-back convergence
      requires bugteam on same HEAD before next wakeup.
+   - **Any other state (DISMISSED, COMMENTED with empty body):** No
+     actionable findings. Set `phase = BUGTEAM`. Continue BUGTEAM
+     in same tick — back-to-back convergence requires bugteam on
+     same HEAD before next wakeup.
 
 ### `phase == BUGTEAM`
 

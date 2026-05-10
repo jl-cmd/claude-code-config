@@ -1,11 +1,11 @@
 ---
 name: code
-description: "Prepend strict code standards to every implementation session. Enforces strong typing, no Any, no casts, no type: ignore, immutable TypedDicts, 100% test coverage, DRY, no mocks, no stubs, no fallbacks, and proper module structure. Triggers: /code, code standards, strict code, enforce standards, implement with standards."
+description: "Prepends strict code standards to every implementation session. Enforces strong typing, no Any, no casts, no type: ignore, immutable TypedDicts, 100% test coverage, DRY, no mocks, no stubs, no fallbacks, and proper module structure. Triggers: /code, code standards, strict code, enforce standards, implement with standards."
 ---
 
 # Code Standards Enforcer
 
-Prepend these standards to every implementation session. Every criterion is binary — pass or fail. No partial credit.
+Prepends these standards to every implementation session. Every criterion is binary — pass or fail. No partial credit.
 
 ## When this applies
 
@@ -18,7 +18,7 @@ Invoke at the start of any implementation task. The standards persist for the en
 
 ## Gotchas
 
-- **`make check` must run from pwsh, not bash.** The Bash tool routes through Git Bash on Windows, where `make` may not be on PATH. Always use `powershell -Command "make check 2>&1 | Select-Object -Last 100"`.
+- **`make check` must run from pwsh, not bash.** The Bash tool routes through Git Bash on Windows, where `make` may not be on PATH. Always use `pwsh -NoProfile -Command "make check 2>&1 | Select-Object -Last 100"`.
 - **`New-Item`, `Get-ChildItem`, `Remove-Item` are pwsh cmdlets.** Don't use them inside Bash tool calls. Use the PowerShell tool or prefix with `pwsh -NoProfile -Command`.
 - **`TypedDict` encode/decode must be manual.** Pydantic and similar frameworks bypass the strict validation pattern. Write `_encode_*` and `_decode_*` functions by hand.
 - **`_test_hooks.py` is per-module, not per-package.** Every module that has dependencies needs its own hooks file. A single `conftest.py` with mocks does not satisfy this rule.
@@ -32,7 +32,7 @@ Every criterion below must be met before the change is complete.
 
 ### 1. Typing strictness
 
-Zero violations across `src/`, `tests/`, and `scripts/`:
+Zero violations across the project's source, test, and script directories (adapt `src/`, `tests/`, `scripts/` to the project's actual layout):
 
 - No `Any`, `object`, `cast()`, `# type: ignore`, `# noqa`.
 - No `.pyi` files, stubs, or shims.
@@ -49,7 +49,7 @@ Zero violations across `src/`, `tests/`, and `scripts/`:
 
 ### 3. Test coverage
 
-- `pytest -n auto --cov=src --cov=scripts --cov-branch --cov-report=term-missing` exits 0.
+- Test runner exits 0 with full statement and branch coverage (e.g. `pytest -n auto --cov --cov-branch --cov-report=term-missing` with paths adapted to the project layout).
 - Statement coverage: 100%. Branch coverage: 100%.
 - Zero mocks. Every test exercises actual code paths.
 - Zero weak assertions. Every assert checks a specific, falsifiable property.
@@ -57,8 +57,8 @@ Zero violations across `src/`, `tests/`, and `scripts/`:
 
 ### 4. Dependency injection
 
-- Every module under `Services/` has a `_test_hooks.py` with internal DI hooks (underscore = private).
-- `Libs/testing.py` exports public test utilities for consumers.
+- Every module that has external dependencies provides a `_test_hooks.py` with internal DI hooks (underscore = private). The hook file lives alongside the module it services.
+- A shared testing utility module exports public test helpers for consumers (adapt the path to the project's conventions, e.g. `Libs/testing.py`).
 - Production code sets hooks to real implementations at startup. Tests set them to fakes.
 - No `if`/`else` branching on test vs. production — call the hook directly.
 
@@ -98,12 +98,17 @@ Zero violations across `src/`, `tests/`, and `scripts/`:
 
 ### 11. Dynamic import pattern
 
-When using `importlib.import_module()` + `getattr()`: annotate the variable directly with the Protocol type at assignment. The type annotation overrides the `Any` from `getattr`. Do not leave the type as `Any`.
+When using `importlib.import_module()` + `getattr()`, the intermediate variables are untyped. Bind the final instance through a typed constructor or a typed wrapper function so the result carries a concrete type rather than `Any`:
 
 ```python
 mod = importlib.import_module("module_name")
 cls = getattr(mod, "ClassName")
-instance: TheProtocol = cls()
+
+def _construct(klass: type) -> TheProtocol:
+    instance = klass()
+    return instance
+
+instance = _construct(cls)
 ```
 
 ### 12. Documentation
@@ -128,16 +133,16 @@ def load_config(config_path: str) -> AppConfig:
 
 ### 13. Build infrastructure
 
-Project root must contain:
+The project under development must contain:
 
 - `Makefile` with targets: `check`, `lint`, `test`, `coverage`.
 - `pyproject.toml` with `[tool.mypy]` strict mode, `[tool.pytest.ini_options]` with `addopts = -n auto`.
-- `scripts/guard.py` — runs during `make lint`, covers `src/`, `tests/`, and `scripts/`.
+- A lint guard script that covers the project's source, test, and script directories.
 
 ### 14. Lint gates
 
-- `make lint` runs mypy (strict), ruff, and `scripts/guard.py`.
-- All three cover `src/`, `tests/`, and `scripts/`.
+- `make lint` runs mypy (strict), ruff, and the project's guard script.
+- All linters cover the project's source, test, and script directories.
 - `make lint` exits 0 before `make test` is valid.
 
 ### 15. Protocol signature match

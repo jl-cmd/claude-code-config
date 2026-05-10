@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><!-- TPL:PAGE_TITLE --></title>
+  <style>
+    :root {
+      --ivory:    #141413;
+      --slate:    #FAF9F5;
+      --clay:     #E08B6E;
+      --oat:      #2A2520;
+      --olive:    #9CB07A;
+      --gray-150: #1F1E1C;
+      --gray-300: #2D2C2A;
+      --gray-500: #87867F;
+      --gray-700: #C4C2BC;
+      --white:    #1A1918;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    html { color-scheme: dark; }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { max-width: 1040px; margin: 0 auto; }
+
+    header.page-head { margin-bottom: 44px; max-width: 820px; }
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 36px;
+      line-height: 1.15;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .pr-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--gray-500);
+      margin-bottom: 18px;
+    }
+    .pr-meta .stat strong { color: var(--slate); font-weight: 600; }
+    .pr-meta .add { color: var(--olive); }
+    .pr-meta .del { color: var(--clay); }
+
+    .prompt-box {
+      background: var(--gray-150);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 240px;
+      gap: 48px;
+      align-items: start;
+    }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .toc { display: none; } }
+
+    section { margin-bottom: 56px; scroll-margin-top: 24px; }
+    h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 25px;
+      color: var(--slate);
+      margin-bottom: 14px;
+      letter-spacing: -0.01em;
+    }
+    p.lede { font-size: 15.5px; max-width: 680px; margin-bottom: 12px; }
+    p + p.lede { margin-top: 12px; }
+
+    .toc {
+      position: sticky;
+      top: 32px;
+      border-left: 1.5px solid var(--gray-300);
+      padding-left: 18px;
+      font-size: 13px;
+    }
+    .toc .t-head {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    .toc a { display: block; color: var(--gray-700); text-decoration: none; padding: 4px 0; }
+    .toc a:hover { color: var(--clay); }
+    .toc .sub { padding-left: 12px; color: var(--gray-500); font-size: 12.5px; }
+
+    .story-panel {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      margin-bottom: 48px;
+      max-width: 760px;
+      overflow: hidden;
+    }
+    .story-row {
+      padding: 18px 24px;
+      border-left: 4px solid var(--gray-500);
+    }
+    .story-row + .story-row { border-top: 1.5px solid var(--gray-300); }
+    .story-row.new  { border-left-color: var(--olive); }
+    .story-row.gone { border-left-color: var(--clay); }
+    .story-row.kept { border-left-color: var(--gray-500); }
+    .story-row .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .story-row.new .k  { color: var(--olive); }
+    .story-row.gone .k { color: var(--clay); }
+    .story-row p,
+    .story-row { font-size: 15px; color: var(--slate); }
+    .story-row .placeholder { color: var(--gray-500); font-style: italic; }
+
+    .ba {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin: 22px 0 4px;
+    }
+    @media (max-width: 720px) { .ba { grid-template-columns: 1fr; } }
+    .ba .panel {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .ba .panel.gained { border-color: var(--olive); }
+    .ba .panel.lost { border-color: var(--clay); }
+    .ba .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    .ba .gained .k { color: var(--olive); }
+    .ba .lost .k { color: var(--clay); }
+    .ba ul { list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; }
+    .ba li::before { content: '·'; color: var(--gray-500); margin-right: 8px; }
+    .ba .gained li::before { color: var(--olive); }
+    .ba .lost li::before { color: var(--clay); }
+    .ba .empty { font-style: italic; color: var(--gray-500); font-size: 13.5px; }
+    .ba .panel .add { color: var(--olive); font-family: var(--mono); }
+    .ba .panel .del { color: var(--clay); font-family: var(--mono); }
+    .ba .panel .stat-line { font-family: var(--mono); font-size: 13px; color: var(--gray-500); margin-top: 8px; }
+
+    .file-tour { display: flex; flex-direction: column; gap: 22px; }
+    .file {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .file summary {
+      padding: 14px 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      list-style: none;
+      background: var(--gray-150);
+      border-bottom: 1.5px solid var(--gray-300);
+    }
+    .file[open] summary { border-bottom-color: var(--gray-300); }
+    .file:not([open]) summary { border-bottom: none; }
+    .file summary::-webkit-details-marker { display: none; }
+    .file summary .chev {
+      width: 8px; height: 8px;
+      border-right: 2px solid var(--gray-500);
+      border-bottom: 2px solid var(--gray-500);
+      transform: rotate(-45deg);
+      transition: transform .15s ease;
+      flex-shrink: 0;
+    }
+    .file[open] summary .chev { transform: rotate(45deg); }
+    .file summary .path {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--slate);
+      flex: 1;
+      word-break: break-all;
+    }
+    .file summary .badge {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .badge.gained { background: #243025; color: #B8D097; }
+    .badge.modified { background: var(--oat); color: var(--slate); }
+    .badge.ported { background: var(--gray-150); color: var(--gray-500); }
+    .badge.lost { background: #3A2620; color: #F2A88C; }
+    .file summary .stat { font-family: var(--mono); font-size: 12px; }
+    .file summary .stat .add { color: var(--olive); }
+    .file summary .stat .del { color: var(--clay); }
+    .file .file-body { padding: 18px 20px 22px; }
+
+    .focus { display: flex; flex-direction: column; gap: 14px; max-width: 760px; }
+    .focus .item {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      gap: 16px;
+    }
+    .focus .item.changed { border-left: 4px solid var(--clay); }
+    .focus .item.kept    { border-left: 4px solid var(--gray-300); }
+    .focus .item.lost    { border-left: 4px solid var(--clay); }
+    .focus .item.gained  { border-left: 4px solid var(--olive); }
+    .focus .n {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--white);
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .focus .n.changed { background: var(--clay); }
+    .focus .n.kept    { background: var(--gray-500); }
+    .focus .n.lost    { background: var(--clay); }
+    .focus .n.gained  { background: var(--olive); }
+    .focus .t { font-weight: 600; color: var(--slate); font-size: 15px; margin-bottom: 2px; }
+    .focus .d { font-size: 13.5px; color: var(--gray-500); }
+    .focus .d code { font-size: 12.5px; }
+
+    .empty-section {
+      background: var(--white);
+      border: 1.5px dashed var(--gray-300);
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-size: 13.5px;
+      color: var(--gray-500);
+      font-style: italic;
+      max-width: 760px;
+    }
+
+    .file .file-body .diff-source {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 14px;
+      margin-bottom: 4px;
+    }
+    .file .file-body .empty-diff {
+      font-size: 13.5px;
+      color: var(--gray-500);
+      font-style: italic;
+      margin-top: 12px;
+    }
+
+    .file .file-body details.side {
+      border: 1.5px solid var(--bc, var(--gray-300));
+      border-radius: 10px;
+      margin-top: 12px;
+      overflow: hidden;
+      --c: var(--clay);
+      --bg: #1F1714;
+      --bc: #3A2620;
+      --bb: #F2A88C;
+      --bbg: #3A2620;
+    }
+    .file .file-body details.side.additions {
+      --c: var(--olive);
+      --bg: #161F17;
+      --bc: #243025;
+      --bb: #B8D097;
+      --bbg: #243025;
+    }
+    .file .file-body details.side > summary {
+      padding: 10px 18px;
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--c);
+      background: var(--bg);
+      border-bottom: 1.5px solid var(--bc);
+    }
+    .file .file-body details.side:not([open]) > summary { border-bottom: none; }
+    .file .file-body details.side > summary::-webkit-details-marker { display: none; }
+    .file .file-body details.side > summary .sv {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-right: 2px solid var(--c);
+      border-bottom: 2px solid var(--c);
+      transform: rotate(-45deg);
+      transition: transform 0.15s ease;
+      flex-shrink: 0;
+    }
+    .file .file-body details.side[open] > summary .sv { transform: rotate(45deg); }
+    .file .file-body details.side .side-badge {
+      font-family: var(--mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 1px 9px;
+      border-radius: 6px;
+      background: var(--bbg);
+      color: var(--bb);
+      margin-left: 6px;
+    }
+    .file .file-body details.side .line-count {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--gray-500);
+      margin-left: auto;
+      font-weight: 500;
+    }
+    .file .file-body details.side .empty-side {
+      padding: 14px 20px;
+      font-style: italic;
+      color: var(--gray-500);
+      font-size: 13px;
+      background: var(--bg);
+    }
+    .file .file-body details.side pre {
+      margin: 0;
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre;
+      overflow-x: auto;
+      background: var(--bg);
+      color: var(--gray-700);
+    }
+    .file .file-body details.side pre .h {
+      color: #58A6FF;
+      font-weight: 600;
+    }
+    .file .file-body details.side pre .c { color: var(--gray-500); }
+    .file .file-body details.side pre .a { color: var(--olive); }
+    .file .file-body details.side pre .d { color: var(--clay); }
+    .file .file-body details.side pre .truncated {
+      display: block;
+      color: var(--gray-500);
+      font-style: italic;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow"><!-- TPL:EYEBROW --></div>
+      <h1><!-- TPL:HEADING --></h1>
+      <div class="pr-meta">
+        <!-- TPL:META -->
+      </div>
+      <div class="prompt-box">
+        <span class="label">Rebase context</span>
+        <!-- TPL:CONTEXT -->
+      </div>
+    </header>
+
+    <div class="layout">
+      <main>
+
+        <div class="story-panel">
+          <div class="story-row new">
+            <div class="k">What's new</div>
+            <!-- TPL:WHATS_NEW -->
+          </div>
+          <div class="story-row gone">
+            <div class="k">What's gone</div>
+            <!-- TPL:WHATS_GONE -->
+          </div>
+          <div class="story-row kept">
+            <div class="k">What's kept</div>
+            <!-- TPL:WHATS_KEPT -->
+          </div>
+        </div>
+
+        <section id="summary">
+          <h2>Pre vs post</h2>
+          <!-- TPL:WHY_SUMMARY -->
+          <div class="ba">
+            <div class="panel lost">
+              <div class="k">Pre-rebase (<!-- TPL:PRE_SHORT -->)</div>
+              <ul>
+                <!-- TPL:PRE_SUMMARY_LIST -->
+              </ul>
+            </div>
+            <div class="panel gained">
+              <div class="k">Post-rebase (<!-- TPL:POST_SHORT -->)</div>
+              <ul>
+                <!-- TPL:POST_SUMMARY_LIST -->
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="gainedlost">
+          <h2>Gained &amp; lost</h2>
+          <!-- TPL:WHY_GAINED_LOST -->
+          <div class="ba">
+            <div class="panel lost">
+              <div class="k">Lost · <!-- TPL:LOST_COUNT --></div>
+              <!-- TPL:LOST_BLOCK -->
+            </div>
+            <div class="panel gained">
+              <div class="k">Gained · <!-- TPL:GAINED_COUNT --></div>
+              <!-- TPL:GAINED_BLOCK -->
+            </div>
+          </div>
+        </section>
+
+        <section id="files">
+          <h2>File-by-file</h2>
+          <!-- TPL:WHY_FILES -->
+          <div class="file-tour">
+            <!-- TPL:FILE_ROWS -->
+          </div>
+        </section>
+
+        <section id="commits">
+          <h2>Commit walk</h2>
+          <!-- TPL:WHY_COMMITS -->
+          <div class="focus">
+            <!-- TPL:COMMIT_WALK -->
+          </div>
+        </section>
+
+      </main>
+
+      <nav class="toc">
+        <div class="t-head">In this report</div>
+        <a href="#summary">Pre vs post</a>
+        <a href="#gainedlost">Gained &amp; lost</a>
+        <a href="#files">File-by-file</a>
+        <a href="#commits">Commit walk</a>
+      </nav>
+    </div>
+
+  </div>
+</body>
+</html>

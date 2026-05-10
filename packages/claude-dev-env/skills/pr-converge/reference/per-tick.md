@@ -41,37 +41,10 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `
 ```
 
 If owner/repo/number are not yet known, extract them from the PR URL.
-If `current_head` changed since last tick, reset `bugbot_down` to `false`
-(new HEAD invalidates prior down-detection state).
 
 Capture `number`, `head.sha` (= `current_head`), owner/repo, branch.
 
 ## Step 2: Branch on `phase`
-
-### `phase == COPILOT_WAIT`
-
-Re-enter convergence-gates.md gate (d) Copilot-response handling:
-
-a. Fetch latest Copilot review at `current_head`:
-
-   ```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
-   → filter `.user.login` for copilot (case-insensitive substring "copilot")
-   → filter `.commit_id == current_head`
-   → sort by `.submitted_at` descending
-   ```
-
-b. Decide:
-   - **Copilot review present at `current_head`:**
-     - `state: APPROVED` → reset `copilot_wait_count = 0`, set `copilot_clean_at = current_head`, `phase = BUGTEAM`.
-       Continue to convergence-gates.md gate (e) in same tick.
-     - `state: CHANGES_REQUESTED` or `COMMENTED` with non-empty body → dirty.
-       Reset `copilot_wait_count = 0`. Apply **Fix protocol**.
-       Reset `bugbot_clean_at = null` AND
-       `copilot_clean_at = null`, `phase = BUGBOT`, schedule next wakeup, return.
-   - **No Copilot review at `current_head` yet:** Increment `copilot_wait_count`.
-     `>= 3` → hard blocker per [stop-conditions.md](stop-conditions.md); report
-     and terminate with no loop pacing. Else schedule next wakeup (270s), return.
 
 ### `phase == BUGBOT`
 
@@ -159,13 +132,8 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
      It falls through to the "Empty inline (body-only findings)"
      sub-branch below rather than the "Non-empty inline" fix protocol.
 
-     - **Non-empty inline:** Apply **Fix protocol**.
-       With `state.json`: clean-coder teammate pushes, replies
-       inline, writes `state.json`, goes idle; Step 3 on new HEAD
-       runs via orchestrator-spawned follow-up agent (see §Fix
-       result → general-purpose). No `state.json` (single-PR): see
-       [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)
-       for full single-PR contract.
+     - **Non-empty inline:** Apply **Fix protocol** (see
+       [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)).
        Reset `bugbot_clean_at = null, copilot_clean_at = null`,
        stay in `phase = BUGBOT`. Run Step 3, schedule next wakeup,
        return.
@@ -173,7 +141,8 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
        review body. Spawn Agent (subagent_type: clean-coder) to
        implement → push → post a new review comment via
        `pull_request_review_write(method="create",
-       event="COMMENT", body="<fix acknowledgement citing new HEAD SHA>")` to
+       event="COMMENT", owner=OWNER, repo=REPO, pullNumber=NUMBER,
+       body="<fix acknowledgement citing new HEAD SHA>")` to
        acknowledge the fix. Reset
        `bugbot_clean_at = null, copilot_clean_at = null`, stay in
        `phase = BUGBOT`. Run Step 3, schedule next wakeup, return.
@@ -184,22 +153,10 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
    - **No Copilot review at `current_head`:** Set `phase = BUGTEAM`.
      Continue BUGTEAM in same tick — back-to-back convergence
      requires bugteam on same HEAD before next wakeup.
-   - **Any other state (DISMISSED, COMMENTED with empty body):**
-     Fetch Copilot inline comments for `current_head` (same filter
-     as the inline fetch above, anchored to newest Copilot review on
-     `current_head`). If actionable inline comments exist (non-empty
-     and unresolved): Apply **Fix protocol**.
-     With `state.json`: clean-coder teammate pushes, replies
-     inline, writes `state.json`, goes idle; Step 3 on new HEAD
-     runs via orchestrator-spawned follow-up agent (see §Fix
-     result → general-purpose). No `state.json` (single-PR): see
-     [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)
-     for full single-PR contract.
-     Reset `bugbot_clean_at = null, copilot_clean_at = null`, stay
-     in `phase = BUGBOT`. Run Step 3, schedule next wakeup, return.
-     If no actionable inline comments: no actionable findings. Set
-     `phase = BUGTEAM`. Continue BUGTEAM in same tick — back-to-back
-     convergence requires bugteam on same HEAD before next wakeup.
+   - **Any other state (DISMISSED, COMMENTED with empty body):** No
+     actionable findings. Set `phase = BUGTEAM`. Continue BUGTEAM
+     in same tick — back-to-back convergence requires bugteam on
+     same HEAD before next wakeup.
 
 ### `phase == BUGTEAM`
 
@@ -217,15 +174,18 @@ Skill({skill: "bugteam", args:
      bugteam by reading [`../../bugteam/SKILL.md`](../../bugteam/SKILL.md). Same
      loop and gates; only harness steps differ.
 
-b. **Re-resolve current HEAD (MANDATORY — never skip).** Bugteam may have
-pushed commits during its run. `current_head` from Step 1 is stale:
-
+b. **Re-resolve current HEAD** — bugteam may have pushed commits during
+its run. `current_head` from Step 1 is potentially stale:
+   ```bash
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `.head.sha`
    ```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `.head.sha` → capture as `new_head`
+If `new_head != current_head`, set `current_head = new_head`,
+`bugbot_clean_at = null`, `copilot_clean_at = null`. New commits
+invalidate both bugbot's and Copilot's prior clean state.
 
-   If `new_head != current_head`, set `current_head = new_head`,
-   `bugbot_clean_at = null`, `bugbot_down = false`. New commits invalidate
-   bugbot's prior clean and down-detection state.
+   **Propagation guard:** If a push happened this tick, schedule a 90-second
+   wakeup to let the GitHub API propagate the new commits to review endpoints
+   before the next tick.
 
 c. Inspect bugteam outcome. Reports `convergence (zero findings)` or list
 of unfixed findings with file:line.
@@ -237,8 +197,8 @@ never falsely terminates:
      Re-trigger bugbot same tick (Step 3) so new HEAD enters queue, `phase
      = BUGBOT`, schedule next wakeup, return.
    - **Convergence AND `bugbot_clean_at == current_head` (no push):**
-     Back-to-back clean — necessary, not sufficient. Run **[convergence-gates.md](convergence-gates.md)** to clear Copilot, Claude, mergeability, post-convergence
-     Copilot-request, and thread-resolution gates. Only when all five gates pass mark PR ready and
+     Back-to-back clean — necessary, not sufficient. Run **[convergence-gates.md](convergence-gates.md)** to clear Copilot-findings, mergeability, post-convergence
+     Copilot-request. Only when all four gates pass mark PR ready and
      **omit loop pacing** per **Convergence** of active pacing workflow.
    - **Convergence BUT `bugbot_clean_at != current_head` (no push):**
      `phase = BUGBOT`, schedule next wakeup, return.
@@ -257,16 +217,6 @@ alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
 **Gotcha (duplicate `bugbot run` while review queued):** Skip Step 3 when
 the latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction; wait
 for review or HEAD change before re-triggering.
-
-**Bugbot-down detection:** After posting `bugbot run` via `add_issue_comment`,
-capture the returned comment ID. Wait 15 seconds, then fetch comments via
-`issue_read(method="get_comments", owner=OWNER, repo=REPO, issue_number=NUMBER)`,
-select the comment whose `id` matches the captured ID, and check its
-reactions. If the comment has zero reactions, bugbot did not
-acknowledge — it is down. Set `bugbot_down = true`, `phase = BUGTEAM`, and
-continue BUGTEAM in the same tick (no wakeup — bugteam runs now against this
-HEAD). If reactions are present, bugbot acknowledged; proceed with normal
-pacing (Step 4).
 
 ## Step 4: Loop pacing
 

@@ -1,14 +1,11 @@
 # Stop conditions
 
-- **Convergence** (back-to-back clean ∧ all six gates pass per
-  [convergence-gates.md](convergence-gates.md) gate (f) checklist:
-  Copilot clean at `current_head`, Claude clean or absent,
-  `mergeable_state == "clean"` with `mergeable == true`,
-  post-convergence Copilot review `APPROVED`, zero unresolved bot
-  threads): use `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`. With
+- **Convergence** (back-to-back clean ∧ all four gates pass per
+  [convergence-gates.md](convergence-gates.md) gate (d) checklist):
+  use `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`. With
   `state.json`, append convergence row to
   `<TMPDIR>/pr-converge-<session_id>/converged.log` per `multi-pr-orchestration.md` §Memory; else
-  skip. Report [convergence-gates.md](convergence-gates.md) (f) summary, then **omit loop pacing**
+  skip. Report [convergence-gates.md](convergence-gates.md) (d) summary, then **omit loop pacing**
   per **Convergence** in `../workflows/schedule-wakeup-loop.md`. End all loops
   once all PRs terminal (converged or blocked).
 - **Hard blocker:** API auth failure across two ticks, CI regression

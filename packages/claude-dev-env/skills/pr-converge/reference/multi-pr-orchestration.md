@@ -111,7 +111,7 @@ Bugfind subagent completes (findings or clean):
      `add_reply_to_pull_request_comment(owner, repo, pullNumber, commentId, body)`.
   5. Writes `state.json` (per §Concurrency): `last_action: "fix_pushed"`,
      `current_head: <new SHA>`, `bugbot_clean_at: null`,
-     `bugbot_down: false`, `phase:
+     `copilot_clean_at: null`, `bugbot_down: false`, `phase:
      "BUGBOT"`, `status: "awaiting_bugbot"`, `last_updated` ISO-8601 UTC.
   6. Goes idle.
 
@@ -154,6 +154,7 @@ When bugfix (clean-coder) subagent completes after push:
      select the comment whose `id` matches the captured ID, and check its
      reactions. If the comment has zero reactions (reactions
      count is `0` or absent): set `bugbot_down = true`,
+     `copilot_clean_at: null`,
      `phase: "BUGTEAM"`, `status: "in_progress"`,
      `last_action: "bugbot_down_detected"`, `last_updated` ISO-8601 UTC
      via `state.json`, spawn a `bugteam` subagent, and return (skip

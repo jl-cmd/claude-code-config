@@ -109,7 +109,7 @@ d. Check latest Copilot review on `current_head`:
 
    ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_reviews.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER>
+--owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
    ```
 
    - **`classification == "dirty"` (state `CHANGES_REQUESTED` or

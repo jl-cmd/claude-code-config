@@ -4,12 +4,12 @@ The skill emits exactly one artifact: the rewritten prompt. The emission shape d
 
 ## Emission modes
 
-**Paste mode** — input arrives as the user's message body or as a fenced block within it. Emit one fenced block containing the rewritten prompt. Use a fence with at least four backticks so any inner triple-backtick code blocks in the rewritten prompt do not prematurely close the outer fence:
+**Paste mode** — input arrives as the user's message body or as a fenced block within it. Emit one fenced block containing the rewritten prompt. Choose a fence length that is strictly longer than the longest consecutive backtick run anywhere in the rewritten prompt (i.e., `max_backtick_run + 1`, with a minimum of four backticks). This ensures no inner fence in the rewritten prompt can prematurely close the outer fence — including cases where the input already used a 4+ backtick wrapper:
 
 ``````
-````
-<rewritten prompt>
-````
+`````
+<rewritten prompt, which may itself contain 4-backtick fences>
+`````
 ``````
 
 **File-path mode** — input arrives as a file path argument (e.g., `/structure-prompt path/to/file.md`). Rewrite the file in place. Emit a confirmation that names the file, gives the line-count delta, and lists the spokes that fired. When gaps exist, the confirmation also lists them — the output may span multiple lines.

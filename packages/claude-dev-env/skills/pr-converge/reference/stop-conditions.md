@@ -3,7 +3,7 @@
 - **Convergence** (back-to-back clean ∧ no outstanding Copilot or Claude
   findings on `current_head` ∧ `mergeable_state == "clean"` with `mergeable ==
   true` ∧ post-convergence Copilot request returned `clean` at
-  `current_head` ∧ zero unresolved bot review threads): verify all seven
+  `current_head` ∧ zero unresolved review threads): verify all seven
   pre-conditions in [convergence-gates.md](convergence-gates.md) gate (f),
   then use `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`. With
   `state.json`, append convergence row to

@@ -123,11 +123,12 @@ The COPILOT_WAIT phase prevents the agent from re-entering convergence gates
 while Copilot processes. Next tick with `phase == COPILOT_WAIT`:
 
 - **Copilot review present at `current_head`:**
-  - `state: APPROVED` → set `copilot_clean_at = current_head`. Record
+  - `state: APPROVED` → reset `copilot_wait_count = 0`, set `copilot_clean_at = current_head`. Record
     evidence: "Copilot APPROVED at <SHA>". Set `phase = BUGTEAM`.
     Continue to gate (e) in same tick.
   - `state: CHANGES_REQUESTED` or `COMMENTED` with non-empty body → dirty.
-    Treat identically to gate (a) dirty path — spawn Agent (subagent_type: clean-coder) to fix,
+    Reset `copilot_wait_count = 0`. Treat identically to gate (a) dirty path —
+    spawn Agent (subagent_type: clean-coder) to fix,
     reset `bugbot_clean_at = null` AND `copilot_clean_at = null`,
     `phase = BUGBOT`, schedule next wakeup, return.
 - **No Copilot review at `current_head` yet:** Increment `copilot_wait_count`
@@ -144,6 +145,10 @@ reviewers (bot and human) anchored to `current_head`:
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
   → filter threads where `is_outdated == false` AND `is_resolved == false`
   → count
+
+The MCP `get_review_comments` endpoint returns `review_threads` with
+`is_resolved` and `is_outdated` fields per thread. Each thread contains a
+`comments` array whose first comment's `author` identifies the reviewer.
 ```
 
 Decide:
@@ -164,7 +169,7 @@ verify ALL of the following with evidence from prior gates:
 - [ ] `copilot_clean_at == current_head` (from gate (a) or gate (d))
 - [ ] Claude `APPROVED` or absent at `current_head` (from gate (b))
 - [ ] `mergeable_state == "clean"` AND `mergeable == true` (from gate (c))
-- [ ] Zero unresolved bot review threads at `current_head` (from gate (e))
+- [ ] Zero unresolved review threads at `current_head` (from gate (e))
 - [ ] No push since bugteam convergence (from per-tick.md Step 2 BUGTEAM §b)
 
 If ANY checkbox cannot be confirmed with evidence, do NOT mark ready.

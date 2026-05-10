@@ -1,6 +1,11 @@
 ---
 name: code
-description: "Prepends strict code standards to every implementation session. Enforces strong typing, no Any, no casts, no type: ignore, treated-as-immutable TypedDicts, 100% test coverage, DRY, no mocks, no stubs, no fallbacks, and proper module structure. Triggers: /code, code standards, strict code, enforce standards, implement with standards."
+description: >-
+  Prepends strict code standards to every implementation session. Enforces
+  strong typing, no Any, no casts, no type: ignore, treated-as-immutable
+  TypedDicts, 100% test coverage, DRY, no mocks, no stubs, no fallbacks, and
+  proper module structure. Triggers: /code, code standards, strict code, enforce
+  standards, implement with standards.
 ---
 
 # Code Standards Enforcer

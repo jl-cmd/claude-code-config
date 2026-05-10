@@ -280,3 +280,13 @@ def test_json_decode_error_passes():
     )
     assert result.returncode == 0
     assert result.stdout == ""
+
+
+def test_blocks_md_with_curly_braces_in_path():
+    result = _run_hook(
+        "Write",
+        {"file_path": "docs/{template}.md", "content": "# Template"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"

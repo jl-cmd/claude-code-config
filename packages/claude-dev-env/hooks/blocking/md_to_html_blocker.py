@@ -12,6 +12,7 @@ from typing import TextIO
 
 
 _markdown_extension = ".md"
+_html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 
 
 def _is_exempt_path(file_path: str) -> bool:
@@ -29,11 +30,11 @@ def _is_exempt_path(file_path: str) -> bool:
 
 def _block_reason(file_path: str) -> str:
     return (
-        "BLOCKED: Write/Edit to .md file '{}' is not permitted. "
+        f"BLOCKED: Write/Edit to .md file '{file_path}' is not permitted. "
         "Use .html files instead for documentation. "
-        "See https://thariqs.github.io/html-effectiveness/ for why HTML "
+        f"See {_html_effectiveness_url} for why HTML "
         "is more effective than Markdown for structured information."
-    ).format(file_path)
+    )
 
 
 def _block_context() -> str:
@@ -42,7 +43,7 @@ def _block_context() -> str:
         "Design freely — HTML can express spatial structure, interactivity, "
         "and visual hierarchy that markdown cannot.\n\n"
         "Reference for HTML effectiveness patterns:\n"
-        "https://thariqs.github.io/html-effectiveness/\n"
+        f"{_html_effectiveness_url}\n"
         "Exceptions (.md still allowed):\n"
         "- Files inside .claude/ directories\n"
         "- README.md and CHANGELOG.md at repo root"
@@ -52,7 +53,7 @@ def _block_context() -> str:
 def _block_system_message() -> str:
     return (
         ".md files are blocked in this project — generate a self-contained .html "
-        "file instead. See https://thariqs.github.io/html-effectiveness/ for "
+        f"file instead. See {_html_effectiveness_url} for "
         "design patterns and examples. Exemptions: .claude/ infrastructure, "
         "README.md, CHANGELOG.md at repo root."
     )

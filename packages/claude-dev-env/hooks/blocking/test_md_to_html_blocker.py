@@ -24,6 +24,22 @@ class _RunHook:
 _run_hook = _RunHook()
 
 
+def test_exempt_root_filenames_are_module_constant():
+    """Exempt root filenames should be a module-level constant, not inline in the function body."""
+    import importlib
+    import sys
+    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_dir not in sys.path:
+        sys.path.insert(0, hook_dir)
+
+    import md_to_html_blocker as blocker_module
+    importlib.reload(blocker_module)
+
+    assert hasattr(blocker_module, "_exempt_root_filenames")
+    assert "readme.md" in blocker_module._exempt_root_filenames
+    assert "changelog.md" in blocker_module._exempt_root_filenames
+
+
 def test_blocks_write_md_file():
     result = _run_hook(
         "Write",

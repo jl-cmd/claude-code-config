@@ -13,6 +13,7 @@ from typing import TextIO
 
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
+_exempt_root_filenames = ("readme.md", "changelog.md")
 
 
 def _is_exempt_path(file_path: str) -> bool:
@@ -21,7 +22,7 @@ def _is_exempt_path(file_path: str) -> bool:
     if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
         return True
     basename = os.path.basename(normalized)
-    if basename.lower() in ("readme.md", "changelog.md"):
+    if basename.lower() in _exempt_root_filenames:
         directory = os.path.dirname(normalized)
         if directory in ("", "."):
             return True

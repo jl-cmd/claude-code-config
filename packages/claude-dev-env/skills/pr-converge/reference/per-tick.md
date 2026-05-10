@@ -220,11 +220,9 @@ pushed commits during its run. `current_head` from Step 1 is stale:
 
    ```
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `.head.sha` → capture as `new_head`
-   ```
 
-If `new_head != current_head`, set `current_head = new_head` AND
-`bugbot_clean_at = null, copilot_clean_at = null`. New commits invalidate prior clean results.
-   ```
+   If `new_head != current_head`, set `current_head = new_head` AND
+   `bugbot_clean_at = null, copilot_clean_at = null`. New commits invalidate prior clean results.
 
 c. Inspect bugteam outcome. Reports `convergence (zero findings)` or list
 of unfixed findings with file:line.

@@ -49,7 +49,7 @@ Zero violations across the project's source, test, and script directories (adapt
 
 ### 3. Test coverage
 
-- Test runner exits 0 with full statement and branch coverage (e.g. `pytest -n auto --cov --cov-branch --cov-report=term-missing` with paths adapted to the project layout).
+- Test runner exits 0 with full statement and branch coverage (e.g. `pytest -n auto --cov --cov-branch --cov-report=term-missing` with paths adapted to the project layout) (requires pytest-xdist and pytest-cov).
 - Statement coverage: 100%. Branch coverage: 100%.
 - Zero mocks. Every test exercises actual code paths through fakes injected via DI hooks (see criterion 4).
 - Zero weak assertions. Every assert checks a specific, falsifiable property.
@@ -138,7 +138,7 @@ def load_config(config_path: str) -> AppConfig:
 The project under development must contain:
 
 - `Makefile` with targets: `check`, `lint`, `test`, `coverage`.
-- `pyproject.toml` with `[tool.mypy]` strict mode, `[tool.pytest.ini_options]` with `addopts = -n auto`.
+- `pyproject.toml` with `[tool.mypy]` strict mode, `[tool.pytest.ini_options]` with `addopts = -n auto` (requires pytest-xdist).
 - A lint guard script that covers the project's source, test, and script directories.
 
 ### 14. Lint gates

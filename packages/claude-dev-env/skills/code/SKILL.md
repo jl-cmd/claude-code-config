@@ -22,7 +22,7 @@ Invoke at the start of any implementation task. The standards persist for the en
 - **`New-Item`, `Get-ChildItem`, `Remove-Item` are pwsh cmdlets.** Don't use them inside Bash tool calls. Use the PowerShell tool or prefix with `pwsh -NoProfile -Command`.
 - **`TypedDict` encode/decode must be manual.** Pydantic and similar frameworks bypass the strict validation pattern. Write `_encode_*` and `_decode_*` functions by hand.
 - **`_test_hooks.py` is per-module, not per-package.** Every module that has dependencies needs its own hooks file. A single `conftest.py` with mocks does not satisfy this rule.
-- **Protocol must match the real API exactly.** If the real class has `async def fetch(self, key: str) -> bytes`, the Protocol must declare the same signature. A mismatch compiles but fails at runtime.
+- **Protocol must match the real API exactly.** If the real class has `async def fetch(self, key: str) -> bytes`, the Protocol must declare the same signature. A mismatch is caught at type-check time by mypy strict mode.
 
 ---
 

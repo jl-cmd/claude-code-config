@@ -1,64 +1,140 @@
 # GitHub PR comments (Step 2.5)
 
-Per-loop pull-request reviews: findings render as a tree under one parent review (similar to Cursor Bugbot). **Teammates own all PR comment posting** — bugfind posts the review (parent body plus child finding comments in one batched POST); bugfix posts fix replies. Comment, review, and reply POSTs belong to teammates. The lead’s single PR write is the final description rewrite at Step 4.5 (`pr-description-writer`).
+Per-loop pull-request reviews: findings render as a tree under one parent
+review (similar to Cursor Bugbot). **The consolidator/validator subagent
+(`-validate`) owns all PR comment posting** for the audit phase — the eleven
+category auditors (`-a` through `-k`) only write per-letter outcome XML and
+never make a PR write. The bugfix subagent posts fix replies via the GitHub
+MCP after its commit lands. Comment, review, and reply writes belong to
+subagents. The lead's single PR write is the final description rewrite at
+Step 4.5 (`pr-description-writer`).
 
-- **Per-loop review** — One `POST /pulls/<number>/reviews` per loop, posted by the bugfind teammate **after** auditing. The review body is the loop header (audit counts); the review’s `comments[]` array holds one anchored finding per P0/P1/P2 finding. GitHub renders a single collapsible thread with each finding as a child comment.
+- **Per-loop review** — One review per loop, posted by the consolidator/
+  validator after the eleven category auditors return. The review body is
+  the loop header (audit counts); the review's child comments are the
+  anchored findings. GitHub renders a single collapsible thread with each
+  finding as a child comment.
 
-- **Fix replies** — Reply to each child finding comment after the commit lands. Body: `Fixed in <commit_sha>` if addressed, or `Could not address this loop: <one-line reason>` if not. The `/pulls/<number>/comments/<id>/replies` endpoint works on any review comment, including those created as part of a review.
+- **Fix replies** — Reply to each child finding comment after the commit
+  lands. Body: `Fixed in <commit_sha>` if addressed, or `Could not address
+  this loop: <one-line reason>` if not. Replies attach to any review
+  comment, including those created as part of a review.
 
-**Ordering:** Bugfind audits first, buffers findings, validates anchors against the captured diff, then posts the review **once** at the end. The review body states the finding count authoritatively. Keep all posting in that single end-of-loop review POST.
+**Ordering:** the eleven category auditors return per-letter XML; the
+consolidator/validator reads them, validates and de-dups, buffers the final
+findings, validates anchors against the captured diff, then posts the
+review. The review body states the finding count authoritatively. All
+posting happens in the consolidator/validator's three-step MCP flow.
 
-## MCP tool shapes (teammate)
+## MCP tool calls (no shell, no jq, no gh CLI)
 
-All three POSTs use MCP tool calls. Body text with markdown (backticks, newlines, quotes) passes through safely as string parameters — no temp files, no jq, no shell pipes.
+Bodies are passed as plain string parameters to the MCP tool calls — the
+tools handle JSON encoding internally, so backticks, newlines, and quoted
+text inside the body survive without escaping. There are no temp files, no
+`jq` pipelines, and no `gh api ... --input -` invocations.
 
-### Per-loop review (one POST creates parent + children)
+### Per-loop review (three-step pending-review flow)
 
-Build `comments[]` programmatically from buffered, diff-anchored findings. Single-line shape: `{path, line, side: "RIGHT", body: <finding markdown>}`. Multi-line: `{path, start_line, start_side: "RIGHT", line, side: "RIGHT", body: ...}` (all four anchor fields required).
+The `pull_request_review_write` tool does **not** accept a `comments[]`
+array. The MCP-native shape is pending-review + per-comment add + submit.
 
-```
-pull_request_review_write(
-  method="create",
-  event="COMMENT",
-  body=<review_body_markdown>,
-  commitID=<head_sha_at_post_time>,
-  owner=<owner>, repo=<repo>, pullNumber=<pull_number>,
-  comments=[
-    {path: <file_1>, line: <line_1>, side: "RIGHT", body: <finding_1_markdown>}
-    [, ... one object per anchored finding ...]
-  ]
-)
-```
+1. Create the pending review:
 
-Response includes the parent review `html_url` and a `comments` array of child comments (`id`, `html_url`). Harvest children in index order and align with the finding list.
+   ```
+   mcp__plugin_github_github__pull_request_review_write(
+     method="create",
+     owner="<owner>",
+     repo="<repo>",
+     pullNumber=<number>
+   )
+   ```
+
+   Omit `event` so the review stays pending. Capture
+   `<head_sha_at_post_time>` with `git rev-parse HEAD` in the subagent cwd
+   immediately before this call.
+
+2. For each anchored finding, in index order, call:
+
+   ```
+   mcp__plugin_github_github__add_comment_to_pending_review(
+     owner="<owner>",
+     repo="<repo>",
+     pullNumber=<number>,
+     path="<file>",
+     line=<line>,
+     side="RIGHT",
+     subjectType="LINE",
+     body="<finding markdown>"
+   )
+   ```
+
+   For multi-line anchors also pass `startLine=<start>` and
+   `startSide="RIGHT"`.
+
+3. Submit the pending review with the loop-header body:
+
+   ```
+   mcp__plugin_github_github__pull_request_review_write(
+     method="submit_pending",
+     owner="<owner>",
+     repo="<repo>",
+     pullNumber=<number>,
+     event="COMMENT",
+     body="<review body>"
+   )
+   ```
+
+   Harvest the parent review `html_url` and the child comment
+   `id`/`html_url` entries from the submit_pending response. If the
+   response does not surface child comments, follow up with
+   `pull_request_read(method="get_review_comments", owner=<owner>,
+   repo=<repo>, pullNumber=<number>)` filtered to the just-submitted review
+   id and match child comments to anchored findings in the order they were
+   added in step 2.
 
 ### Fix reply
 
 ```
-add_reply_to_pull_request_comment(
+mcp__plugin_github_github__add_reply_to_pull_request_comment(
+  owner="<owner>",
+  repo="<repo>",
+  pullNumber=<number>,
   commentId=<finding_comment_id>,
-  body=<reply_markdown>,
-  owner=<owner>, repo=<repo>, pullNumber=<pull_number>
+  body="<reply text>"
 )
 ```
 
 ### Review POST failure fallback
 
-Top-level PR comment via issue-comments (`issue_number` is the PR number):
+If any of steps 1–3 fails (rate limit, network, malformed payload), clean
+up with:
 
 ```
-add_issue_comment(
-  owner=<owner>, repo=<repo>,
-  issueNumber=<pull_number>,
-  body=<full_fallback_markdown>
+mcp__plugin_github_github__pull_request_review_write(
+  method="delete_pending",
+  owner="<owner>",
+  repo="<repo>",
+  pullNumber=<number>
 )
 ```
 
-`<head_sha_at_post_time>` is the SHA at post time (`git rev-parse HEAD` in the teammate’s working directory immediately before the POST). The review anchors finding comments to the head SHA at audit time (before this loop’s fix lands).
+then post one PR-level comment carrying the review header plus every
+finding inline:
 
-Body text is passed directly as string parameters to the MCP tool calls — no temp files, no jq, no shell pipes.
+```
+mcp__plugin_github_github__add_issue_comment(
+  owner="<owner>",
+  repo="<repo>",
+  issue_number=<number>,
+  body="<full fallback text>"
+)
+```
 
-## Review body template (`<tmp_review_body.md>`)
+`issue_number` is the PR number for PR-level comments. Mark every finding
+`used_fallback="true"` and set `finding_comment_url` to the issue-comment
+URL.
+
+## Review body template (`<review_body>` argument)
 
 ```
 ## /bugteam loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2
@@ -69,18 +145,34 @@ Body text is passed directly as string parameters to the MCP tool calls — no t
 - **[severity] title** — <file>:<line> — <one-line description>
 ```
 
-If the audit returns zero findings, still post **one** review with `event=COMMENT`, empty `comments[]`, and body `## /bugteam loop <N> audit: 0P0 / 0P1 / 0P2 → clean` so each loop’s section is self-contained on the PR.
+If the audit returns zero findings, still post **one** review with
+`event="COMMENT"`, no anchored child comments, and body
+`## /bugteam loop <N> audit: 0P0 / 0P1 / 0P2 → clean` so each loop's
+section is self-contained on the PR.
 
-## Anchor-validation fallback (teammate)
+## Anchor-validation fallback (consolidator/validator)
 
-GitHub rejects the entire review POST if any `comments[]` entry targets a line not in the diff. Before posting, validate every finding’s `(file, line)` against the captured diff. Findings not in the diff are **not** added to `comments[]`; list them in the review body under `### Findings without a diff anchor`. Outcome XML: `used_fallback="true"`, `finding_comment_id=""`, `finding_comment_url=<review_url>` (parent URL when there is no child). Log fallback count in outcome XML for the lead’s final report. The loop continues; anchor mismatch does not abort.
+The MCP review-submit call rejects the entire submit if any of the
+already-added pending comments target a line not in the diff. Before
+calling `add_comment_to_pending_review`, validate every finding's
+`(file, line)` against the captured diff. Findings not in the diff are
+**not** added as anchored comments; list them in the review body under
+`### Findings without a diff anchor`. Outcome XML: `used_fallback="true"`,
+`finding_comment_id=""`, `finding_comment_url=<review_url>` (parent URL
+when there is no child). Log fallback count in outcome XML for the lead's
+final report. The loop continues; anchor mismatch does not abort.
 
-## Review POST failure fallback
+## GitHub MCP tools used
 
-If the review POST fails (rate limit, network, malformed payload), fall back to one top-level issue comment containing the review body plus every finding inline (severity, file:line, description). Every finding in that run: `used_fallback="true"`, `finding_comment_url` = issue-comment URL. Use `add_issue_comment` (see MCP tool reference below).
+- `pull_request_review_write` — methods `create`, `submit_pending`,
+  `delete_pending`.
+- `add_comment_to_pending_review` — anchored review comments.
+- `add_reply_to_pull_request_comment` — fix replies on existing review
+  comments.
+- `add_issue_comment` — top-level PR comment fallback (`issue_number` is
+  the PR number).
+- `pull_request_read` (`get_review_comments`) — fallback for harvesting
+  child-comment ids/urls if the submit_pending response does not surface
+  them to the caller.
 
-## MCP tool reference
-
-- Per-loop batched review: `pull_request_review_write(method="create", event="COMMENT", body=..., commitID=..., owner=..., repo=..., pullNumber=..., comments=[...])` — wraps `POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews`
-- Fix reply: `add_reply_to_pull_request_comment(commentId=..., body=..., owner=..., repo=..., pullNumber=...)` — wraps `POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies`
-- Review-POST failure fallback: `add_issue_comment(owner=..., repo=..., issueNumber=..., body=...)` — wraps `POST /repos/{owner}/{repo}/issues/{issue_number}/comments`
+Reference: https://github.com/github/github-mcp-server.

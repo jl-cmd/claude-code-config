@@ -38,11 +38,11 @@ cd into `<worktree_path>` before any git or file operation.
   verified-clean -- re-audit with a concrete trace.
 
   Categories A–K (one-line summary; full rubric and sub-bucket decomposition
-  for each is in `packages/claude-dev-env/audit-rubrics/category_rubrics/`;
+  for each is in `$HOME/.claude/audit-rubrics/category_rubrics/`;
   ready-to-send Variant C prompts — each with a PR/repo-independent
   generalized skeleton above a `---` separator and a worked example against
   an authentic PR below — are in
-  `packages/claude-dev-env/audit-rubrics/prompts/`):
+  `$HOME/.claude/audit-rubrics/prompts/`):
 
   A. API contract verification (signatures, return types, async/await correctness)
   B. Selector / query / engine compatibility
@@ -69,11 +69,28 @@ cd into `<worktree_path>` before any git or file operation.
 </constraints>
 
 <comment_posting>
-  Sibling auditors (-b through -k): run only steps 1–2 (audit, assign IDs,
-  capture excerpt, validate anchors), then write outcome XML per <output_format> and return.
-  Skip steps 3–5 — sibling auditors do not post PR reviews.
+  Category auditors (-a through -k): each is bound to one category letter and
+  loads exactly one rubric from
+  `$HOME/.claude/audit-rubrics/category_rubrics/category-<letter>-<slug>.md`
+  and the matching ready-to-send prompt from
+  `$HOME/.claude/audit-rubrics/prompts/category-<letter>-<slug>.md`. The
+  prompt file is a TEMPLATE, not a free-form instruction. Follow it as
+  closely as possible in terms of structure, section ordering, depth of
+  analysis, and overall length. Only the CONTENT of each section is
+  flexible — the specific findings, evidence, file:line references, traces,
+  and rationale come from the live diff under audit, but the shape of the
+  output (which sections appear, in what order, how deep each one goes,
+  and how long each one is) must mirror the template. Compressing,
+  skipping, or restructuring the template is non-compliant. The rubric file
+  supplies the category's sub-bucket decomposition and decision criteria;
+  the prompt file supplies the output shape. Both must be loaded; neither
+  may be substituted for the other. Findings may be filed only for the
+  bound category letter. Run only steps 1–2 (audit, assign IDs, capture
+  excerpt, validate anchors), then write outcome XML per <output_format>
+  and return. Skip steps 3–5 — category auditors do not post PR reviews.
 
-  Validator (-a) and single-opus auditors: run all steps below.
+  Consolidator/validator (-validate) and single-opus auditors: run all steps
+  below.
 
   1. Audit the diff against the 11 categories above. Buffer the findings
      in memory; all posting happens at step 4 once anchors are validated.
@@ -92,21 +109,53 @@ cd into `<worktree_path>` before any git or file operation.
 
        _From /bugteam audit loop <L>._
 
-  4. Post ONE review via `pull_request_review_write(method="create",
-     event="COMMENT", body=<review_body>, owner=<O>, repo=<R>,
-     pullNumber=<N>, comments=[...])`. See Step 2.5 in SKILL.md for the full
-     parameter shape. Harvest the parent review `html_url` from the response
-     and the `comments[]` child entries (each with its own `id` and `html_url`).
-     Match child entries to anchored findings in index order.
-  5. If the review POST fails, use `add_issue_comment(owner=<O>, repo=<R>,
-     issueNumber=<N>, body=<full_text>)` as fallback.
+  4. Post ONE review per loop using the GitHub MCP three-step pending-review
+     flow (the `pull_request_review_write` tool does NOT accept a `comments[]`
+     array — pending review + per-comment add + submit is the only correct
+     shape). Bodies are passed as plain strings; the MCP tool does the JSON
+     encoding internally:
+
+     a. Create the pending review:
+        `pull_request_review_write(method="create", owner=<O>, repo=<R>,
+        pullNumber=<N>)` — omit `event` so the review stays pending.
+     b. For each anchored finding, in index order, call
+        `add_comment_to_pending_review(owner=<O>, repo=<R>, pullNumber=<N>,
+        path=<file>, line=<line>, side="RIGHT", subjectType="LINE",
+        body=<finding markdown>)`. For multi-line anchors also pass
+        `startLine=<start>` and `startSide="RIGHT"`.
+     c. Submit the pending review with the loop-header body and
+        `event="COMMENT"`:
+        `pull_request_review_write(method="submit_pending", owner=<O>,
+        repo=<R>, pullNumber=<N>, event="COMMENT", body=<review_body>)`.
+
+     Harvest the parent review `html_url` from the submit_pending response
+     and the child comment `id` / `html_url` entries the same response carries.
+     If the response shape does not surface child comments to the caller,
+     follow up with `pull_request_read(method="get_review_comments", owner=<O>,
+     repo=<R>, pullNumber=<N>)` filtered to the just-submitted review id.
+     Match child comments to anchored findings in the order they were added
+     in step 4b.
+  5. If any of steps 4a–4c fails, clean up with
+     `pull_request_review_write(method="delete_pending", owner=<O>, repo=<R>,
+     pullNumber=<N>)` and post one fallback PR-level comment carrying the
+     review body plus every finding inline:
+     `add_issue_comment(owner=<O>, repo=<R>, issue_number=<N>,
+     body=<full_text>)`. Mark every finding `used_fallback="true"` with the
+     issue-comment URL as `finding_comment_url`.
   Body text is passed directly as string parameters to the MCP tool calls —
   no temp files, no jq, no shell pipes.
 </comment_posting>
 
 <output_format>
-  For the (-a) validator: write the outcome XML below to .bugteam-pr<N>-loop<L>.outcomes.xml inside
-  the PR's worktree directory (<worktree_path>). For sibling auditors (-b through -k): write to <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed in prompt). Sibling auditors do not post PR reviews; set review_url, finding_comment_id, and finding_comment_url to empty strings, and used_fallback to "false". Omit unanchored findings from sibling output — only the validator handles those. Return only that path on stdout. The schema:
+  For the (-validate) consolidator/validator: write the outcome XML below to
+  .bugteam-pr<N>-loop<L>.outcomes.xml inside the PR's worktree directory
+  (<worktree_path>). For category auditors (-a through -k): write to
+  <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed
+  in prompt). Category auditors do not post PR reviews; set review_url,
+  finding_comment_id, and finding_comment_url to empty strings, and
+  used_fallback to "false". Omit unanchored findings from category-auditor
+  output — only the consolidator/validator handles those. Return only that
+  path on stdout. The schema:
 </output_format>
 ```
 
@@ -192,7 +241,7 @@ cd into `<worktree_path>` before any git or file operation.
   <bugteam_fix loop="<L>" commit_sha="<sha or empty if no commit>">
     <outcome
       finding_id="loop<L>-<K>"
-      status="fixed|could_not_address|hook_blocked"
+      status="fixed|could_not_address|hook_blocked|unverified_fixed"
       commit_sha="<sha if fixed, empty otherwise>"
       reply_comment_id="<id of the reply posted>"
       reply_comment_url="<url of the reply posted>"

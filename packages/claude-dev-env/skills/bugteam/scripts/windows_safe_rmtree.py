@@ -1,0 +1,70 @@
+"""Recursively remove a directory tree, stripping Windows ReadOnly attributes.
+
+Required by ~/.claude/rules/windows-filesystem-safe.md so bugteam teardown does
+not silently swallow Windows ReadOnly-attribute failures the way the unsafe
+shutil ignore-errors flag does.
+
+Usage:
+    python windows_safe_rmtree.py <absolute-path>
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import stat
+import sys
+from collections.abc import Callable
+
+from bugteam_config.windows_safe_rmtree_constants import (
+    EXIT_CODE_USAGE_ERROR,
+    EXPECTED_ARGUMENT_COUNT,
+    ONEXC_PYTHON_MAJOR_VERSION,
+    ONEXC_PYTHON_MINOR_VERSION,
+)
+
+
+def _strip_read_only_and_retry(
+    removal_function: Callable[[str], None],
+    target_path: str,
+    *_exc_info: object,
+) -> None:
+    try:
+        os.chmod(target_path, stat.S_IWRITE)
+        removal_function(target_path)
+    except OSError:
+        pass
+
+
+def _select_handler_keyword() -> dict[str, Callable[..., None]]:
+    onexc_required_version = (
+        ONEXC_PYTHON_MAJOR_VERSION,
+        ONEXC_PYTHON_MINOR_VERSION,
+    )
+    if sys.version_info >= onexc_required_version:
+        return {"onexc": _strip_read_only_and_retry}
+    return {"onerror": _strip_read_only_and_retry}
+
+
+def remove_tree(target_path: str) -> None:
+    handler_keyword = _select_handler_keyword()
+    try:
+        shutil.rmtree(target_path, **handler_keyword)
+    except OSError:
+        pass
+
+
+def _print_usage_to_stderr() -> None:
+    sys.stderr.write("usage: python windows_safe_rmtree.py <absolute-path>\n")
+
+
+def main(all_arguments: list[str]) -> int:
+    if len(all_arguments) != EXPECTED_ARGUMENT_COUNT:
+        _print_usage_to_stderr()
+        return EXIT_CODE_USAGE_ERROR
+    remove_tree(all_arguments[1])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

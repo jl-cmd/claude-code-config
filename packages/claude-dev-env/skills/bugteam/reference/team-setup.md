@@ -1,8 +1,47 @@
 # Run setup and loop state
 
+## Pre-flight (before Step 0)
+
+### Utility scripts
+
+Shell-heavy steps live under
+[`_shared/pr-loop/scripts/`](../../_shared/pr-loop/scripts/) (run, do not paste
+into context). Utility scripts are **executed**, not loaded as primary context
+([`sources.md`](sources.md) § Progressive disclosure and utility scripts).
+
+```bash
+python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/preflight.py"
+```
+
+Non-zero → fix before grant. `BUGTEAM_PREFLIGHT_SKIP=1` emergency only.
+`--pre-commit` if `.pre-commit-config.yaml` exists.
+
+**Auto-remediation for `core.hooksPath`:** when preflight fails with stderr
+containing `core.hooksPath` (the message starts with `bugteam_preflight:
+core.hooksPath is`, or `Git-side CODE_RULES enforcement is not active`), Claude
+must auto-invoke the fix script — do not fall through to `AskUserQuestion`, do
+not punt to the user, do not ask for confirmation:
+
+```bash
+python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/fix_hookspath.py"
+```
+
+The fix script removes any non-canonical local-scope override on the active
+repository, sets the global `core.hooksPath` to `~/.claude/hooks/git-hooks` if
+missing or wrong, and re-runs `preflight.py`. Its exit code becomes the
+preflight outcome. Exit 0 → continue to Step 0. Non-zero only when the
+canonical hooks directory is missing (run `npx claude-dev-env .` first) or
+`git config --global` writes are blocked. Other preflight failures (pytest,
+pre-commit) still require manual fixes —
+the auto-remediation only applies to the `core.hooksPath` failure mode.
+
 ## Step 0 — Grant project permissions (detail)
 
-Before spawning any subagents, grant the session write access to the project’s `.claude/**` tree. Command in `SKILL.md`.
+Before spawning any subagents, grant the session write access to the project's `.claude/**` tree:
+
+```bash
+python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/grant_project_claude_permissions.py"
+```
 
 `${CLAUDE_SKILL_DIR}` is a Claude Code host-managed token, pre-substituted by the runtime before any shell sees it. Unlike `${TMPDIR}` and similar shell parameter expansions, it does not depend on the shell’s expansion semantics, so it behaves the same on Unix and Windows shells.
 
@@ -14,11 +53,23 @@ This is the **first** action of every `/bugteam` invocation, before any subagent
 
 Same resolution path as `/findbugs`:
 
-1. `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` — extracts `number`, `baseRefName`, `headRefName`, `url` from response (`N` comes from the parent skill's PR context, or fall back to `pull_request_read` with the default branch lookup to recover the PR number).
+1. Call `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` to fetch PR metadata; capture `number`, `headRefName`, `baseRefName`, and `url` from the response. Falls back to the merge-base diff path when no PR exists.
 2. Fall back to `git merge-base HEAD origin/<default>` then `git diff <merge-base>...HEAD`.
 3. Neither → refuse per refusal cases in `SKILL.md`.
 
 Capture `<owner>/<repo>`, head branch, base branch, PR number, PR URL. This scope persists across every loop — `/bugteam` runs to completion from the single up-front confirmation.
+
+For multi-PR invocations, capture `all_prs = [{number, owner, repo, baseRef, headRef, url}, ...]`. A single-PR invocation produces a one-element list and follows the same downstream rules.
+
+### Per-PR workspace
+
+For each PR in `all_prs`:
+
+1. Create `<run_temp_dir>/pr-<N>/`.
+2. Run `git worktree add "<run_temp_dir>/pr-<N>/worktree" origin/<headRef>`.
+3. Record the absolute worktree path alongside the PR's other fields.
+
+Background subagents for a PR operate inside that PR's worktree. Step 4 teardown runs `git worktree remove "<run_temp_dir>/pr-<N>/worktree"` for each PR before the shared `rmtree`.
 
 ## Step 2 — Run name and temp directory (detail)
 
@@ -36,8 +87,26 @@ Capture `<owner>/<repo>`, head branch, base branch, PR number, PR URL. This scop
 
 ### Loop state block
 
-The block in `SKILL.md` mixes lead-internal variables and one shell command (`starting_sha`). Read it as instructions, not a single runnable script.
+Loop state (lead; not a single script; per-PR): the variables below are tracked independently for each PR in `all_prs`. Each PR has its own cycle, state, and exit reason.
+
+```bash
+loop_count=0
+last_action="fresh"
+last_findings='{"total": 0}'
+audit_log=""
+run_temp_dir="<absolute-path>/<run_name>"
+starting_sha="$(git -C "<run_temp_dir>/pr-<N>/worktree" rev-parse HEAD)"
+loop_comment_index=""
+```
+
+The block above mixes lead-internal variables and one shell command (`starting_sha`). Read it as instructions, not a single runnable script.
 
 **`loop_comment_index` scope (per-loop, not cross-loop):** Reset at the start of every AUDIT action, populated as finding comments are posted during AUDIT, consumed by the matching FIX action when it posts fix replies, and discarded after FIX completes. It does not persist across loops; each loop starts with an empty index and its own fresh set of comment URLs.
 
 Each entry: `{loop, finding_id, finding_comment_id, finding_comment_url, used_fallback, fix_status}`. Populated by AUDIT, consumed by FIX.
+
+### --bugbot-retrigger flag
+
+**`--bugbot-retrigger` flag:** when present, the FIX subagent posts a `bugbot
+run` issue comment via the Step 2.5 issue-comments fallback endpoint after
+every successful FIX push, to re-trigger Cursor's bugbot on the new commit.

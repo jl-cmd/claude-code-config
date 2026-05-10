@@ -22,9 +22,9 @@ Each invariant cites the normative section or companion file it derives from. Al
 | I-2 | `Bash` invoking `scripts/revoke_project_claude_permissions.py` runs exactly once per invocation on every exit path, after teardown. | `SKILL.md` § Step 5 |
 | I-3 | Orchestration uses `Agent(..., run_in_background=true)` only — no `TeamCreate`, `TeamDelete`, `SendMessage`, or `Task` tool calls. | `SKILL.md` § Step 2; § Step 4 |
 | I-4 | `Agent` calls are fresh per loop (`run_in_background=true`; new `name` each loop). | `CONSTRAINTS.md` — **Fresh subagent per loop** |
-| I-5 | Audit sibling spawns pass `model="haiku"`; validator and fix spawns pass `model="opus"`. | `SKILL.md` § AUDIT action (parallel auditors); § FIX action; `CONSTRAINTS.md` — **Opus 4.7 at xhigh effort for validator and fix subagents** |
-| I-6 | Loop count ≤ 10 audits. 11th audit never fires. | `SKILL.md` YAML `description` (10-loop cap); § Step 3 (**Pre-audit** / **FIX** increment rules) |
-| I-7 | From loop 4 onward without convergence, eleven parallel `Agent(..., run_in_background=true)` calls in one message for audit. | `SKILL.md` § AUDIT action (**Parallel auditors**) |
+| I-5 | Every audit and fix spawn passes `model="opus"` (eleven category auditors `-a` through `-k`, the consolidator/validator `-validate`, and the fix subagent). | `SKILL.md` § AUDIT action (parallel auditors); § FIX action; `CONSTRAINTS.md` — **Opus 4.7 at xhigh effort for every auditor, validator, and fix subagent** |
+| I-6 | Loop count ≤ 20 audits. 21st audit never fires. | `SKILL.md` YAML `description` (20-loop cap); § Step 3 (**Pre-audit** / **FIX** increment rules) |
+| I-7 | Every audit loop runs the two-phase, twelve-teammate flow: phase 1 issues eleven parallel `Agent(..., run_in_background=true)` calls (one per A–K rubric, names `bugfind-pr<N>-loop<L>-a` through `-k`) in one assistant message; phase 2 issues one `Agent(name="bugfind-pr<N>-loop<L>-validate", run_in_background=true)` only after all eleven phase-1 notifications have arrived. There is no single-auditor mode and no loop-count gate. | `SKILL.md` § AUDIT action (**Phase 1** / **Phase 2**) |
 | I-8 | Lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` with the `Read` tool after each audit, before the next action. | `SKILL.md` § AUDIT action |
 | I-9 | Teardown sequence: `git worktree remove` each PR → `rmtree` `<run_temp_dir>` → Step 4.5 → revoke. | `SKILL.md` § Step 4; § Step 4.5; § Step 5 |
 | I-10 | The bugfind subagent posts ONE per-loop review; the bugfix subagent posts fix replies. The lead's only PR-write action is the Step 4.5 description rewrite. | `CONSTRAINTS.md` — **Audit/fix comment posting** |
@@ -68,7 +68,7 @@ The harness does not yet exist; this document defines its contract.
 **Scenario.** Current branch is `main` with no PR and no upstream difference.
 
 **Layer B predicted trace.**
-1. `pull_request_read(method="get", pullNumber=N, owner=O, repo=R)` → fails / no matching PR.
+1. `Bash("gh pr view --json ...")` → non-zero exit.
 2. `Bash("git merge-base HEAD origin/main")` → empty.
 3. No grant script.
 
@@ -103,36 +103,40 @@ The harness does not yet exist; this document defines its contract.
 | # | Tool call | Source |
 |---|---|---|
 | 1 | `Bash("python .../scripts/grant_project_claude_permissions.py")` | `SKILL.md` § Step 0 |
-| 2 | `pull_request_read(method="get", pullNumber=42, owner=..., repo=...)` | `SKILL.md` § Step 1 |
+| 2 | `Bash("gh pr view --json number,baseRefName,headRefName,url")` | `SKILL.md` § Step 1 |
 | 3 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" rev-parse HEAD")` → captures `starting_sha` | `SKILL.md` § Step 2 — **Loop state** block |
 | 4 | `Bash("mkdir -p <run_temp_dir>/pr-42")` | `SKILL.md` § AUDIT action |
-| 5 | `pull_request_read(method="get_diff", pullNumber=42, owner=..., repo=...)` → write to `<run_temp_dir>/pr-42/loop-1.patch` | `SKILL.md` § AUDIT action |
-| 6 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop1", run_in_background=true, model="opus", description=..., prompt=<audit XML loop 1>)` | `SKILL.md` § AUDIT action |
-| 7 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
-| 8 | `Read(".bugteam-pr42-loop1.outcomes.xml")` | `SKILL.md` § AUDIT action |
+| 5 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/pr-42/loop-1.patch")` | `SKILL.md` § AUDIT action |
+| 6 | Eleven parallel `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop1-<letter>", run_in_background=true, model="opus", description=..., prompt=<audit XML for category <letter>>)` calls in one assistant message — letters `a` through `k` (phase 1) | `SKILL.md` § AUDIT action **Phase 1** |
+| 7 | Lead awaits all eleven phase-1 background-completion notifications | `SKILL.md` § AUDIT action **Phase 1** |
+| 8 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop1-validate", run_in_background=true, model="opus", description=..., prompt=<validate XML; literal absolute paths to all 11 sibling XMLs>)` (phase 2) | `SKILL.md` § AUDIT action **Phase 2** |
+| 8a | Lead awaits the consolidator/validator background-completion notification | `SKILL.md` § AUDIT action **Phase 2** |
+| 8b | `Read(".bugteam-pr42-loop1.outcomes.xml")` — merged validator output | `SKILL.md` § AUDIT action **Phase 2** |
 | 9 | `Agent(subagent_type="clean-coder", name="bugfix-pr42-loop1", run_in_background=true, model="opus", description=..., prompt=<fix XML loop 1>)` | `SKILL.md` § FIX action |
 | 10 | Lead awaits background-completion notification | `SKILL.md` § FIX action |
 | 11 | `Read(".bugteam-pr42-loop1.outcomes.xml")` — bugfix outcome XML | `SKILL.md` § FIX action |
 | 12 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" rev-parse HEAD")` → verify HEAD advanced | `SKILL.md` § FIX action (**Verify**) |
 | 13 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" fetch origin <branch>")` → fetch remote state | `SKILL.md` § FIX action (**Verify**) |
 | 14 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" rev-parse origin/<branch>")` → confirm matches HEAD | `SKILL.md` § FIX action (**Verify**) |
-| 15 | `pull_request_read(method="get_diff", pullNumber=42, owner=..., repo=...)` → write to `<run_temp_dir>/pr-42/loop-2.patch` | `SKILL.md` § AUDIT action |
-| 16 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop2", run_in_background=true, ...)` (loop 2) | `SKILL.md` § AUDIT action |
-| 17 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
-| 18 | `Read(".bugteam-pr42-loop2.outcomes.xml")` — zero findings | `SKILL.md` § AUDIT action |
+| 15 | `Bash("gh pr diff 42 -R ... > <run_temp_dir>/pr-42/loop-2.patch")` | `SKILL.md` § AUDIT action |
+| 16 | Eleven parallel `Agent(name="bugfind-pr42-loop2-<letter>", ...)` calls in one assistant message (phase 1, loop 2) | `SKILL.md` § AUDIT action **Phase 1** |
+| 17 | Lead awaits all eleven phase-1 notifications | `SKILL.md` § AUDIT action **Phase 1** |
+| 17a | `Agent(name="bugfind-pr42-loop2-validate", ...)` (phase 2, loop 2) | `SKILL.md` § AUDIT action **Phase 2** |
+| 17b | Lead awaits the consolidator/validator notification | `SKILL.md` § AUDIT action **Phase 2** |
+| 18 | `Read(".bugteam-pr42-loop2.outcomes.xml")` — zero findings | `SKILL.md` § AUDIT action **Phase 2** |
 | 19 | `Bash("git worktree remove \"<run_temp_dir>/pr-42/worktree\"")` | `SKILL.md` § Step 4 step 1 |
 | 20 | `Bash("python -c \"...shutil.rmtree(r'<run_temp_dir>', ...)\"")` | `SKILL.md` § Step 4 step 2 (Windows-safe teardown) |
-| 21 | `pull_request_read(method="get_diff", pullNumber=42, owner=..., repo=...)` → write to `.bugteam-final.diff` | `SKILL.md` § Step 4.5 step 1 |
-| 22 | `pull_request_read(method="get", pullNumber=42, owner=..., repo=...)` → extract `.body`, write to `.bugteam-original-body.md` | `SKILL.md` § Step 4.5 step 2 |
+| 21 | `Bash("gh pr diff 42 -R ... > .bugteam-final.diff")` | `SKILL.md` § Step 4.5 step 1 |
+| 22 | `Bash("gh pr view 42 -R ... --json body --jq .body > .bugteam-original-body.md")` | `SKILL.md` § Step 4.5 step 2 |
 | 23 | `Agent(subagent_type="pr-description-writer", description=..., prompt=<brief>)` | `SKILL.md` § Step 4.5 |
 | 24 | `Write(".bugteam-final-body.md", <returned body>)` | `SKILL.md` § Step 4.5 step 4 |
-| 25 | `update_pull_request(pullNumber=42, owner=..., repo=..., body=...)` | `SKILL.md` § Step 4.5 step 4 |
+| 25 | `Bash("gh pr edit 42 -R ... --body-file .bugteam-final-body.md")` | `SKILL.md` § Step 4.5 step 4 |
 | 26 | `Bash("rm .bugteam-final.diff .bugteam-original-body.md .bugteam-final-body.md")` | `SKILL.md` § Step 4.5 step 5 |
 | 27 | `Bash("python .../scripts/revoke_project_claude_permissions.py")` | `SKILL.md` § Step 5 |
 
 **Pass criteria.**
 - All Layer A invariants hold.
-- Exactly 2 `Agent(name="bugfind-pr42-loop...")` calls, exactly 1 `Agent(name="bugfix-pr42-loop...")` call.
+- Exactly 22 `Agent(name="bugfind-pr42-loop[12]-[a..k]")` calls (eleven per loop in phase 1) plus exactly 2 `Agent(name="bugfind-pr42-loop[12]-validate")` calls (one per loop in phase 2), and exactly 1 `Agent(name="bugfix-pr42-loop1")` call.
 - Final report contains `/bugteam exit: converged` and `Loops: 2`.
 
 **Process check after first real run.** Compare the observed trace against steps 1–27. Common expected divergences that should not fail the eval:
@@ -163,22 +167,21 @@ Patch this table to match observation and annotate each correction.
 
 ---
 
-## Eval 7 — Cap reached: 10 loops, no convergence
+## Eval 7 — Cap reached: 20 loops, no convergence
 
 **Scenario.** Mock audit returns one P2 finding every loop. Mock fix subagent always commits but never clears the finding.
 
 **Layer A invariants.** All of I-1 through I-10.
 
 **Layer B predicted behavior.**
-- Loops 1–3: single `Agent(name="bugfind-pr<N>-loop<L>", run_in_background=true)` per loop.
-- Loops 4–10: eleven parallel `Agent(name="bugfind-pr<N>-loop<L>-[a..k]", run_in_background=true)` in a single assistant message per loop (10 haiku + 1 opus validator); lead awaits the validator notification.
+- Every loop (1–20) runs the two-phase, twelve-teammate flow: phase 1 issues eleven parallel `Agent(...)` calls in one assistant message — eleven opus category auditors named `bugfind-pr<N>-loop<L>-[a..k]`, each bound to one A–K rubric. After all eleven phase-1 notifications arrive, phase 2 issues one `Agent(name="bugfind-pr<N>-loop<L>-validate", run_in_background=true)`; lead awaits the consolidator/validator notification.
 - Each loop produces one `Agent(name="bugfix-pr<N>-loop<L>", run_in_background=true)`.
-- Exactly 10 audit phases, exactly 10 fix phases.
+- Exactly 20 audit phases, exactly 20 fix phases.
 - Steps 19–26 from Eval 5 fire at teardown.
 
 **Pass criteria.**
-- I-6 holds: exactly 10 audit phases.
-- I-7 holds: loops 4–10 each emit eleven audit `Agent` calls in a single assistant message.
+- I-6 holds: exactly 20 audit phases.
+- I-7 holds: every loop emits eleven audit `Agent` calls in a single assistant message in phase 1, then one `-validate` `Agent` call in phase 2.
 - Final report contains `/bugteam exit: cap reached` and the remaining bug count.
 
 **Process check.** The distinct `Agent(name=...)` audit-call count is a prediction. On the first real run, record the exact count and rewrite the formula here.
@@ -194,8 +197,8 @@ Patch this table to match observation and annotate each correction.
 **Layer B predicted trace.** Eval 5 steps 1–8 and 19–26 only — no FIX phase because zero findings means the skill exits the loop at `last_action == "audited"` and `last_findings.total == 0`.
 
 **Pass criteria.**
-- Exactly 1 `Agent(subagent_type="code-quality-agent", run_in_background=true)` call, 0 fix agent spawns.
-- Bugfind's outcome XML records zero findings; the per-loop review POST carries body `## /bugteam loop 1 audit: 0P0 / 0P1 / 0P2 → clean`.
+- Exactly 12 `Agent(subagent_type="code-quality-agent", run_in_background=true)` calls in loop 1 (eleven category auditors `bugfind-pr<N>-loop1-[a..k]` in phase 1, one consolidator/validator `bugfind-pr<N>-loop1-validate` in phase 2), 0 fix agent spawns.
+- The merged validator outcome XML records zero findings; the per-loop review POST carries body `## /bugteam loop 1 audit: 0P0 / 0P1 / 0P2 → clean`.
 - Step 4.5 and Step 5 still fire.
 
 ---
@@ -224,7 +227,7 @@ Patch this table to match observation and annotate each correction.
 - Every finding's outcome XML carries `used_fallback="true"` and the issue-comment URL as `finding_comment_url`.
 - Cycle continues to the FIX action without aborting.
 
-**Open item for the real run.** The issue-comments fallback uses `add_issue_comment(owner=..., repo=..., issueNumber=42, body=...)` (`SKILL.md` § Step 2.5 **Review POST fails**; full narrative in `reference/github-pr-reviews.md` § **Review POST failure fallback**). Before running Eval 10 for real, confirm the teammate obeys this shape — the fixture must assert the `add_issue_comment` tool call.
+**Open item for the real run.** The issue-comments fallback shape is `jq -Rs | gh api .../issues/<number>/comments --input -` (`SKILL.md` § Step 2.5 **Review POST fails**; full narrative in `reference/github-pr-reviews.md` § **Review POST failure fallback**). Before running Eval 10 for real, confirm the teammate obeys this shape — the fixture must assert the endpoint path and the `--input -` pattern.
 
 ---
 

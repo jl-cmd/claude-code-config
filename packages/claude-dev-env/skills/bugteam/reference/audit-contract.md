@@ -107,7 +107,7 @@ Merge rules:
 - **Zero Haiku findings**: primary set trusted; proceed.
 - **Malformed or non-parseable Haiku output**: lead trusts the primary set, logs the event in `loop-<L>-diagnostics.json` under `haiku_findings` as `[{"parse_error": "<message>"}]`.
 
-For multi-subagent skills (`/bugteam`) the parallel-auditors pattern in [`audit-and-teammates.md`](audit-and-teammates.md) already provides cross-model coverage via 10 haiku auditors + opus validator.
+For multi-subagent skills (`/bugteam`) the parallel-auditors pattern in [`audit-and-teammates.md`](audit-and-teammates.md) already provides per-category coverage via 11 opus category auditors (one per A–K rubric) + an opus consolidator/validator.
 
 ## Post-fix self-audit
 

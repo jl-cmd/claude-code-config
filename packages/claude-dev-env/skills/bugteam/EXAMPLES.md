@@ -19,12 +19,12 @@ Claude: [resolves PR #42, runs loop]
 
 <example>
 User: `/bugteam`
-Claude: [runs 10 loops without convergence]
+Claude: [runs 20 loops without convergence]
 
-`Loop 10 audit: 0P0 / 1P1 / 2P2`
+`Loop 20 audit: 0P0 / 1P1 / 2P2`
 
 `/bugteam exit: cap reached`
-`Loops: 10`
+`Loops: 20`
 `Remaining: 0P0 / 1P1 / 2P2 — run /findbugs for human triage`
 </example>
 
@@ -50,7 +50,7 @@ Claude: [resolves PR #99, runs loop with partial-fix outcomes]
 `Loops: 2`
 `Unresolved findings (2): src/auth.py:45 (P1: file is generated, cannot edit); src/legacy.py:200 (P1: rewrite scope exceeds the bug)`
 
-The bugfix teammate writes one outcome per finding to `.bugteam-pr99-loop2.fix-outcomes.xml`. Findings with `status=could_not_address` carry their `<reason>` text, and the teammate posts a matching reply to each finding comment so the reviewer sees why each bug stayed open.
+The bugfix teammate writes one outcome per finding to `.bugteam-loop-2.outcomes.xml`. Findings with `status=could_not_address` carry their `<reason>` text, and the teammate posts a matching reply to each finding comment so the reviewer sees why each bug stayed open.
 </example>
 
 <example>

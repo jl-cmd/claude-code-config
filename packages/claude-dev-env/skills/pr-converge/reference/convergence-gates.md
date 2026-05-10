@@ -3,10 +3,10 @@
 Run **only** when Step 2 BUGTEAM reports `convergence (zero findings)` AND
 `bugbot_clean_at == current_head` AND no push during bugteam tick. Gates run
 in order; first failure determines next-tick behavior. Mark PR ready only
-when all five pass.
+when all five validation gates (a)–(e) pass.
 
 **Mandatory evidence rule:** Every gate that fetches data MUST produce a
-summary of its findings before proceeding to the next gate. Gate (e) MUST
+summary of its findings before proceeding to the next gate. Gate (f) MUST
 reference evidence from each prior gate. Skipping any gate silently is a
 hard blocker per [stop-conditions.md](stop-conditions.md) — report "gate
 evidence missing: <gate name>" and omit loop pacing.
@@ -67,7 +67,8 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
   → filter threads where `is_outdated == false` AND any comment has `.author` matching Claude (case-insensitive substring "claude")
 ```
 
-Decide (same four-branch structure as gate (a)):
+Decide (same state-based classifier as gate (a), collapsed to two outcomes since
+Claude findings go through Fix protocol regardless of inline vs body-only):
 
 - **`classification == "dirty"` (state `CHANGES_REQUESTED` or `COMMENTED`
   with non-empty body):** Treat identically to gate (a) dirty path — apply
@@ -136,8 +137,8 @@ while Copilot processes. Next tick with `phase == COPILOT_WAIT`:
 
 ## (e) Thread-resolution gate
 
-Before marking ready, count unresolved review threads from all bot
-reviewers (Bugbot, Copilot, Claude) anchored to `current_head`:
+Before marking ready, count unresolved review threads from all
+reviewers (bot and human) anchored to `current_head`:
 
 ```
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")

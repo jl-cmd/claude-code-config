@@ -61,7 +61,7 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews
 b. Decide:
    - **Copilot review present at `current_head`:**
      - `state: APPROVED` → set `copilot_clean_at = current_head`, `phase = BUGTEAM`.
-       Continue BUGTEAM in same tick (re-run Step 2 BUGTEAM from §a).
+       Continue to convergence-gates.md gate (e) in same tick.
      - `state: CHANGES_REQUESTED` or `COMMENTED` with non-empty body → dirty.
        Apply **Fix protocol**. Reset `bugbot_clean_at = null` AND
        `copilot_clean_at = null`, `phase = BUGBOT`, schedule next wakeup, return.

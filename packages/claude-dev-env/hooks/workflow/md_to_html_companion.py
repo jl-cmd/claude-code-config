@@ -170,13 +170,31 @@ def _md_to_html(markdown_text: str) -> str:
     return "\n".join(all_output_lines)
 
 
+def _placeholder(
+    match: re.Match, storage: list, open_tag: str, close_tag: str
+) -> str:
+    placeholder = f"\x00CODE{len(storage)}\x00"
+    storage.append((placeholder, f"{open_tag}{match.group(1)}{close_tag}"))
+    return placeholder
+
+
 def _inline_format(text: str) -> str:
     text = escape(text)
+
+    code_placeholders: list[tuple[str, str]] = []
+    text = re.sub(
+        r"`([^`]+)`",
+        lambda m: _placeholder(m, code_placeholders, "<code>", "</code>"),
+        text,
+    )
+
     link_placeholders: list[tuple[str, str, str]] = []
 
     def _save_link(match: re.Match) -> str:
         link_text = match.group("text")
         url = match.group("url")
+        if url.lower().startswith("javascript:") or url.lower().startswith("data:"):
+            url = ""
         placeholder = f"\x00LINK{len(link_placeholders)}\x00"
         link_placeholders.append((placeholder, url, link_text))
         return placeholder
@@ -186,11 +204,14 @@ def _inline_format(text: str) -> str:
         _save_link,
         text,
     )
+
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
-    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+
     for placeholder, url, link_text in link_placeholders:
         text = text.replace(placeholder, f'<a href="{url}">{link_text}</a>')
+    for placeholder, content in code_placeholders:
+        text = text.replace(placeholder, content)
     return text
 
 

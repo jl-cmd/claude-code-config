@@ -35,7 +35,7 @@ def test_generates_html_companion():
         md_path = os.path.join(tmp, "guide.md")
         html_path = os.path.join(tmp, "guide.html")
 
-        os.makedirs(tmp, exist_ok=True)
+
         with open(md_path, "w", encoding="utf-8") as f:
             f.write("# Hello\n\nThis is a test.")
 
@@ -79,7 +79,7 @@ def test_skips_non_md_files():
         py_path = os.path.join(tmp, "main.py")
         html_path = os.path.join(tmp, "main.html")
 
-        os.makedirs(tmp, exist_ok=True)
+
         with open(py_path, "w", encoding="utf-8") as f:
             f.write("x = 1")
 
@@ -389,3 +389,43 @@ def test_does_not_skip_nested_readme():
         )
         assert result.returncode == 0
         assert os.path.exists(html_path)
+
+
+def test_inline_code_preserves_asterisks():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("Type `**bold**` in a docstring.")
+
+        _run_hook(
+            "Write",
+            {
+                "file_path": md_path,
+                "content": "Type `**bold**` in a docstring.",
+            },
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "<code>**bold**</code>" in html
+        assert "<strong>" not in html
+
+
+def test_blocks_javascript_url_scheme():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("[click me](javascript:alert(1))")
+
+        _run_hook(
+            "Write",
+            {
+                "file_path": md_path,
+                "content": "[click me](javascript:alert(1))",
+            },
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert 'href="javascript:' not in html
+        assert "click me" in html

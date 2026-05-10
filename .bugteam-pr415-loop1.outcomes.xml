@@ -1,0 +1,45 @@
+<outcomes>
+  <loop>1</loop>
+  <pr>415</pr>
+  <head_sha>f616631c8704ee9dc21db714c93761ca237af3de</head_sha>
+  <summary>0P0 / 0P1 / 3P2</summary>
+  <findings>
+    <finding id="loop1-1">
+      <category>F</category>
+      <severity>P2</severity>
+      <file>packages/claude-dev-env/hooks/workflow/md_to_html_companion.py</file>
+      <line>229</line>
+      <title>Silent write failure on HTML output</title>
+      <body>except OSError: pass swallows all write failures. If the HTML file cannot be written (disk full, permissions, read-only directory), the hook exits 0 on line 232 with zero indication of failure. The caller has no way to know the companion HTML was not generated.</body>
+      <fix_constraint>Log the failure to stderr before passing; the hook must not block the tool (PostToolUse).</fix_constraint>
+    </finding>
+    <finding id="loop1-2">
+      <category>E</category>
+      <severity>P2</severity>
+      <file>packages/claude-dev-env/hooks/workflow/test_md_to_html_companion.py</file>
+      <line>28</line>
+      <title>Dead code: _write_md_and_run never called</title>
+      <body>The helper _write_md_and_run is defined at module scope but never invoked by any test in the file. All tests call _run_hook directly instead. Dead code adds maintenance burden with zero value.</body>
+      <fix_constraint>Remove the unused function. Do not add tests that call it — the existing pattern (_run_hook directly) is sufficient.</fix_constraint>
+    </finding>
+    <finding id="loop1-3">
+      <category>H</category>
+      <severity>P2</severity>
+      <file>packages/claude-dev-env/hooks/workflow/md_to_html_companion.py</file>
+      <line>119</line>
+      <title>Title inserted into HTML without escaping</title>
+      <body>_extract_title returns raw text from the first # heading in the markdown. This raw text is inserted via .format() into the HTML title tag and h1 element without any HTML-escaping. If a heading contains angle brackets, ampersands, or quotes, they will appear as literal HTML control characters in the output. While this is local file generation (not served), well-formed HTML should escape text content.</body>
+      <fix_constraint>Apply html.escape() to the title before inserting into the template. The body (from _md_to_html) is already converted, but title bypasses _inline_format.</fix_constraint>
+    </finding>
+  </findings>
+  <verified_clean>
+    <category letter="A">main() signature (-> None) checked; hook reads JSON from stdin and writes HTML — contract matches PostToolUse hook spec. All function signatures have complete type hints.</category>
+    <category letter="B">No selectors, queries, or engine integrations in changed code.</category>
+    <category letter="C">All file opens use with-blocks (lines 213, 227). stdin read via json.load() — single-use, no handle leak. No subprocess or socket resources.</category>
+    <category letter="D">All variables defined before use. No unbound references.</category>
+    <category letter="G">No numeric indexing or boundary arithmetic in changed code. String slicing uses fixed offsets safe against empty strings (preceded by startswith checks).</category>
+    <category letter="I">Hook runs as a separate process per PostToolUse invocation. No shared mutable state, no threads, no async.</category>
+    <category letter="J">CSS values in _html_template are design constants. The .md/.html extension strings and ("Write", "Edit") tuple are structural to the hook's purpose. No actionable magic values.</category>
+    <category letter="K">No parallel sites identified. The .claude/ exemption pattern matches the one in #412 — consistent.</category>
+  </verified_clean>
+</outcomes>

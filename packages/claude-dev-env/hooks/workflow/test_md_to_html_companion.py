@@ -1,4 +1,9 @@
-"""Tests for md_to_html_companion hook."""
+"""Tests for md_to_html_companion hook.
+
+This test suite validates that the md-to-html companion hook correctly
+generates HTML from markdown input, handles edge cases, and produces
+valid HTML output.
+"""
 
 import json
 import os

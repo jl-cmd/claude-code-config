@@ -7,11 +7,15 @@ See https://thariqs.github.io/html-effectiveness/
 """
 
 import json
+import logging
 import os
 import re
 import sys
 from html import escape
 from pathlib import Path
+
+
+logging.basicConfig(stream=sys.stderr, level=logging.WARNING, format="%(message)s")
 
 if str(Path(__file__).resolve().parent.parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -305,7 +309,9 @@ def main() -> None:
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
     except OSError:
-        pass
+        logging.warning(
+            "md_to_html_companion: failed to write %s", html_path
+        )
 
     sys.exit(0)
 

@@ -1,6 +1,6 @@
 ---
 name: code
-description: "Prepends strict code standards to every implementation session. Enforces strong typing, no Any, no casts, no type: ignore, immutable TypedDicts, 100% test coverage, DRY, no mocks, no stubs, no fallbacks, and proper module structure. Triggers: /code, code standards, strict code, enforce standards, implement with standards."
+description: "Prepends strict code standards to every implementation session. Enforces strong typing, no Any, no casts, no type: ignore, treated-as-immutable TypedDicts, 100% test coverage, DRY, no mocks, no stubs, no fallbacks, and proper module structure. Triggers: /code, code standards, strict code, enforce standards, implement with standards."
 ---
 
 # Code Standards Enforcer
@@ -51,7 +51,7 @@ Zero violations across the project's source, test, and script directories (adapt
 
 - Test runner exits 0 with full statement and branch coverage (e.g. `pytest -n auto --cov --cov-branch --cov-report=term-missing` with paths adapted to the project layout).
 - Statement coverage: 100%. Branch coverage: 100%.
-- Zero mocks. Every test exercises actual code paths.
+- Zero mocks. Every test exercises actual code paths through fakes injected via DI hooks (see criterion 4).
 - Zero weak assertions. Every assert checks a specific, falsifiable property.
 - Zero fake tests (tests that pass without validating behavior).
 
@@ -101,6 +101,7 @@ Zero violations across the project's source, test, and script directories (adapt
 When using `importlib.import_module()` + `getattr()`, the intermediate variables are untyped. Bind the final instance through a typed wrapper so the result carries a concrete type rather than `Any`:
 
 ```python
+import importlib
 from collections.abc import Callable
 
 mod = importlib.import_module("module_name")

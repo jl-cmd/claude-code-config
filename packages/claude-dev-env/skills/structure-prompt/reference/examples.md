@@ -57,7 +57,7 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 - [`per-category.md`](per-category.md): insert canonical disposition line under the category list header.
 
 **Inserted line**
-> Each category returns either at least one finding OR exactly one proof-of-absence with at least 3 adversarial probes specific to that category. A category returning neither is a protocol gap.
+> Each category returns either at least one finding with a locator OR exactly one proof-of-absence with at least 3 adversarial probes specific to that category. A category returning neither is a protocol gap.
 
 ## Example 4: Already-optimized prompt
 

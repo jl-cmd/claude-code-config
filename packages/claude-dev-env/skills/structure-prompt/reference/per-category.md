@@ -12,7 +12,7 @@ The framework names 2+ categories, surfaces, sub-buckets, items, checks, or crit
 
 Insert this exact line directly under the category list header, substituting `<category-noun>` with whatever the prompt calls them (sub-bucket, surface, item, category, check, criterion):
 
-> Each <category-noun> returns either at least one finding OR exactly one proof-of-absence with at least 3 adversarial probes specific to that <category-noun>. A <category-noun> returning neither is a protocol gap.
+> Each <category-noun> returns either at least one finding with a locator OR exactly one proof-of-absence with at least 3 adversarial probes specific to that <category-noun>. A <category-noun> returning neither is a protocol gap.
 
 ## Idempotency
 

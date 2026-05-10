@@ -4,14 +4,22 @@ When a sub-bucket bullet names an identifier (a function, variable, cmdlet, file
 
 ## Detection
 
-A bullet is a citation candidate when all three hold:
+Two separate paths, evaluated for every backtick-wrapped identifier in each bullet:
 
+**Citation-candidate path.** An identifier is a citation candidate when all three hold:
 - The bullet contains a backtick-wrapped identifier (e.g., `os.walk`, `New-ScheduledTaskTrigger`, `_log_walk_error`)
 - The identifier also appears in the data body
 - No `file:line` citation already follows that identifier within the bullet
 
+**Citation-unavailable path.** An identifier triggers the unavailable path when both hold:
+- The bullet contains a backtick-wrapped identifier
+- The identifier does NOT appear in the data body — its file is not included in the diff or the identifier is external (e.g., a stdlib symbol, a framework API)
+
+Both paths fire independently per identifier. A bullet can contain both citable and unciteable identifiers.
+
 ## Procedure
 
+**For citation candidates:**
 1. For each citation candidate, search the data body for the identifier.
 2. Find every occurrence of the identifier in the data body. When the data body uses explicit line numbers (e.g., a code block prefixed with file:line annotations or a diff), use those. When the data body has no line numbers (e.g., a raw pasted dump), use the 1-based line index within the data-body block as `<line>`. Apply the multiple-occurrence policy below to determine which lines to cite.
 3. Append the citation in this format immediately after the backtick-wrapped identifier: `` `identifier` (`<file>:<line>`)``. When the bullet contains multiple identifiers, cite each one inline after its owning backtick span. The examples below illustrate both single-identifier and multi-identifier bullets.

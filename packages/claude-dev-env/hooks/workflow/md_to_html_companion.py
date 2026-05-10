@@ -42,7 +42,10 @@ from config.html_companion_constants import (  # noqa: E402
 
 def _is_exempt_path(file_path: str) -> bool:
     normalized = file_path.replace("\\", "/")
-    return "/.claude/" in normalized or normalized.startswith(".claude/")
+    if "/.claude/" in normalized or normalized.startswith(".claude/"):
+        return True
+    basename = Path(file_path).name.lower()
+    return basename in ("readme.md", "changelog.md")
 
 
 def _md_to_html(markdown_text: str) -> str:
@@ -80,7 +83,7 @@ def _md_to_html(markdown_text: str) -> str:
                 flush_paragraph()
                 close_lists()
                 language = each_line[3:].strip()
-                if language:
+                if language and re.match(r"^[A-Za-z0-9_+#-]+$", language):
                     all_output_lines.append(
                         f'<pre><code class="language-{language}">'
                     )
@@ -165,14 +168,25 @@ def _md_to_html(markdown_text: str) -> str:
 
 def _inline_format(text: str) -> str:
     text = escape(text)
+    link_placeholders: list[tuple[str, str, str]] = []
+
+    def _save_link(match: re.Match) -> str:
+        link_text = match.group("text")
+        url = match.group("url")
+        placeholder = f"\x00LINK{len(link_placeholders)}\x00"
+        link_placeholders.append((placeholder, url, link_text))
+        return placeholder
+
     text = re.sub(
-        r"\[([^\]]+)\]\(((?:[^)(]+|\([^)(]*\))*)\)",
-        r'<a href="\2">\1</a>',
+        r"\[(?P<text>[^\]]+)\]\((?P<url>(?:[^)(]+|\([^)(]*\))*)\)",
+        _save_link,
         text,
     )
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    for placeholder, url, link_text in link_placeholders:
+        text = text.replace(placeholder, f'<a href="{url}">{link_text}</a>')
     return text
 
 
@@ -299,7 +313,7 @@ def main() -> None:
     if not md_content.strip():
         sys.exit(0)
 
-    title = _extract_title(md_content)
+    title = escape(_extract_title(md_content))
     html_body = _md_to_html(md_content)
     html_body = html_body.replace("{", "{{").replace("}", "}}")
     html_content = _html_template(title=title, body=html_body)

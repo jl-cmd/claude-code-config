@@ -253,6 +253,117 @@ def test_handles_curly_braces_in_body():
         assert "JS Example" in html
 
 
+def test_escapes_title_in_html_output():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("# Hackers <3 Markdown & <scripts>")
+
+        _run_hook(
+            "Write",
+            {
+                "file_path": md_path,
+                "content": "# Hackers <3 Markdown & <scripts>",
+            },
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "<title>Hackers &lt;3 Markdown &amp; &lt;scripts&gt;</title>" in html
+        assert "<script>" not in html
+
+
+def test_skips_readme_md():
+    for each_name in ("README.md", "readme.md"):
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = os.path.join(tmp, each_name)
+            html_path = os.path.join(tmp, os.path.splitext(each_name)[0] + ".html")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write("# Test")
+
+            result = _run_hook(
+                "Write", {"file_path": md_path, "content": "# Test"}
+            )
+            assert result.returncode == 0
+            assert not os.path.exists(html_path), (
+                f"{each_name} should not produce companion html"
+            )
+
+
+def test_skips_changelog_md():
+    for each_name in ("CHANGELOG.md", "changelog.md"):
+        with tempfile.TemporaryDirectory() as tmp:
+            md_path = os.path.join(tmp, each_name)
+            html_path = os.path.join(tmp, os.path.splitext(each_name)[0] + ".html")
+            with open(md_path, "w", encoding="utf-8") as f:
+                f.write("# Test")
+
+            result = _run_hook(
+                "Write", {"file_path": md_path, "content": "# Test"}
+            )
+            assert result.returncode == 0
+            assert not os.path.exists(html_path), (
+                f"{each_name} should not produce companion html"
+            )
+
+
+def test_language_class_valid():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("```python\nx = 1\n```")
+
+        _run_hook("Write", {"file_path": md_path, "content": "```python\nx = 1\n```"})
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert 'class="language-python"' in html
+
+
+def test_language_class_skips_invalid():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("```my lang\nx = 1\n```")
+
+        _run_hook("Write", {"file_path": md_path, "content": "```my lang\nx = 1\n```"})
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "<pre><code>" in html
+        assert 'class="language-' not in html
+
+
+def test_language_class_allows_valid_chars():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("```c++\nint x = 1;\n```")
+
+        _run_hook("Write", {"file_path": md_path, "content": "```c++\nint x = 1;\n```"})
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert 'class="language-c++"' in html
+
+
+def test_link_text_asterisks_remain_literal():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("See [text *not italic*](url).")
+
+        _run_hook(
+            "Write",
+            {"file_path": md_path, "content": "See [text *not italic*](url)."},
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert '<a href="url">text *not italic*</a>' in html
+        assert "<em>" not in html
+
+
 def test_handles_parentheses_in_links():
     with tempfile.TemporaryDirectory() as tmp:
         md_path = os.path.join(tmp, "guide.md")

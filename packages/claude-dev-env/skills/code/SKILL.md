@@ -18,7 +18,7 @@ Invoke at the start of any implementation task. The standards persist for the en
 
 ## Gotchas
 
-- **`make check` must run from pwsh, not bash.** The Bash tool routes through Git Bash on Windows, where `make` may not be on PATH. Always use `pwsh -NoProfile -Command "make check 2>&1 | Select-Object -Last 100; exit $LASTEXITCODE"` so the pipeline does not mask a non-zero exit code from make.
+- **`make check` must run from pwsh, not bash.** The Bash tool routes through Git Bash on Windows, where `make` may not be on PATH. Always use `pwsh -NoProfile -Command 'make check 2>&1 | Select-Object -Last 100; exit $LASTEXITCODE'` so the pipeline does not mask a non-zero exit code from make.
 - **`New-Item`, `Get-ChildItem`, `Remove-Item` are pwsh cmdlets.** Don't use them inside Bash tool calls. Use the PowerShell tool or prefix with `pwsh -NoProfile -Command`.
 - **`TypedDict` encode/decode must be manual.** Pydantic and similar frameworks bypass the strict validation pattern. Write `_encode_*` and `_decode_*` functions by hand.
 - **`_test_hooks.py` is per-module, not per-package.** Every module that has dependencies needs its own hooks file. A single `conftest.py` with mocks does not satisfy this rule.

@@ -30,10 +30,9 @@ The persona line stays intact when the prompt explicitly references one of these
 
 ## Disposition reporting
 
-The persona pass MUST emit a gap note via the paste-mode or file-path-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines, recording one of three dispositions:
+The persona pass MUST emit a gap note via the paste-mode or file-path-mode gap-report mechanism that [`output-contract.md`](output-contract.md) defines, recording one of two dispositions:
 
 - `> Gap: Persona transformed — original "<persona line>" replaced with mission "<mission line>".`
 - `> Gap: Persona preserved (creative-writing carve-out matched: "<matched keyword>").`
-- `> Gap: Persona preserved (no carve-out keyword matched, but transformation would have stripped intent — recording for reader visibility).`
 
-Near-miss vocabulary that doesn't match the six exact carve-out keywords still produces a gap note in the third shape, so the reader sees that persona was preserved despite near-miss vocabulary rather than the preservation happening silently. See the [no silent no-op](output-contract.md#disposition-invariants) invariant.
+When none of the six carve-out keywords appears in the input, the persona line is always transformed. The detection is deterministic: a case-insensitive match against the six listed keywords only. No subjective "near-miss" or "intent" judgment applies. See the [no silent action](output-contract.md#disposition-invariants) invariant.

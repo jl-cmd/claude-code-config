@@ -11,7 +11,7 @@ The optimized prompt presents blocks in this fixed sequence:
 
 ## Procedure
 
-1. Extract each tagged block from the input.
+1. Extract each tagged block from the input. The gap-report region (prior-run `> Gap:` lines or `<!-- gap-report:` comment blocks) is excluded from block ordering — it is kept at the end during classification and reordering, then deterministically replaced during emission per [`output-contract.md`](output-contract.md).
 2. Concatenate the blocks in the sequence above.
 3. Preserve every byte of the inputs that [`output-contract.md`](output-contract.md) lists under "Preservation invariants" exactly as supplied.
 

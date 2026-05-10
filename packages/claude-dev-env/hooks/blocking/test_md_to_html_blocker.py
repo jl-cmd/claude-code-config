@@ -282,6 +282,16 @@ def test_json_decode_error_passes():
     assert result.stdout == ""
 
 
+def test_blocks_claude_path_traversal_bypass():
+    result = _run_hook(
+        "Write",
+        {"file_path": ".claude/../docs/guide.md", "content": "# Bypass"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_blocks_md_with_curly_braces_in_path():
     result = _run_hook(
         "Write",

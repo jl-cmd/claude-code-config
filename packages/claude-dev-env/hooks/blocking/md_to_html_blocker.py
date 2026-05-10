@@ -16,7 +16,7 @@ _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 
 
 def _is_exempt_path(file_path: str) -> bool:
-    normalized = file_path.replace("\\", "/")
+    normalized = os.path.normpath(file_path).replace("\\", "/")
     lower_normalized = normalized.lower()
     if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
         return True

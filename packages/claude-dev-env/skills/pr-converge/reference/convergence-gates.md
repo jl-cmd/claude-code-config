@@ -20,6 +20,7 @@ plus inline comments anchored to most recent Copilot review on
 ```
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
   → filter `.user.login` for copilot (case-insensitive substring "copilot")
+  → filter `.commit_id == current_head`
   → sort by `.submitted_at` descending
 
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
@@ -61,6 +62,7 @@ anchored to most recent Claude review on `current_head`:
 ```
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
   → filter `.user.login` for claude (case-insensitive substring "claude")
+  → filter `.commit_id == current_head`
   → sort by `.submitted_at` descending
 
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")

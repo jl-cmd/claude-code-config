@@ -55,6 +55,7 @@ a. Fetch latest Copilot review at `current_head`:
    ```
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
    → filter `.user.login` for copilot (case-insensitive substring "copilot")
+   → filter `.commit_id == current_head`
    → sort by `.submitted_at` descending
    ```
 

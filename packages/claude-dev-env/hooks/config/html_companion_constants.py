@@ -1,4 +1,4 @@
-"""CSS theme constants for md-to-html companion hook."""
+"""CSS theme constants and URL scheme denylist for md-to-html companion hook."""
 
 CSS_BG_COLOR = "13, 17, 23"
 CSS_FG_COLOR = "201, 209, 217"
@@ -16,3 +16,5 @@ CSS_H3_SIZE = "1.1rem"
 CSS_CODE_SIZE = "0.85rem"
 CSS_TABLE_WIDTH = "100%"
 CSS_TH_WEIGHT = "600"
+
+BLOCKED_URL_SCHEMES = frozenset({"javascript", "data"})

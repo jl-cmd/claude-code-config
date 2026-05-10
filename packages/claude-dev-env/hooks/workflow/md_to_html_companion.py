@@ -13,14 +13,17 @@ import re
 import sys
 from html import escape
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 logging.basicConfig(stream=sys.stderr, level=logging.WARNING, format="%(message)s")
 
-if str(Path(__file__).resolve().parent.parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+_hook_dir = str(Path(__file__).absolute().parent.parent)
+if _hook_dir not in sys.path:
+    sys.path.insert(0, _hook_dir)
 
 from config.html_companion_constants import (  # noqa: E402
+    BLOCKED_URL_SCHEMES,
     CSS_ACCENT_COLOR,
     CSS_BG_COLOR,
     CSS_BODY_PADDING,
@@ -192,8 +195,9 @@ def _inline_format(text: str) -> str:
 
     def _save_link(match: re.Match) -> str:
         link_text = match.group("text")
-        url = match.group("url")
-        if url.lower().startswith("javascript:") or url.lower().startswith("data:"):
+        url = match.group("url").strip()
+        parsed_url = urlparse(url)
+        if parsed_url.scheme.lower() in BLOCKED_URL_SCHEMES:
             url = ""
         placeholder = f"\x00LINK{len(link_placeholders)}\x00"
         link_placeholders.append((placeholder, url, link_text))
@@ -209,7 +213,10 @@ def _inline_format(text: str) -> str:
     text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
 
     for placeholder, url, link_text in link_placeholders:
-        text = text.replace(placeholder, f'<a href="{url}">{link_text}</a>')
+        if url == "":
+            text = text.replace(placeholder, link_text)
+        else:
+            text = text.replace(placeholder, f'<a href="{url}">{link_text}</a>')
     for placeholder, content in code_placeholders:
         text = text.replace(placeholder, content)
     return text

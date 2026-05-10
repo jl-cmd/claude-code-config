@@ -275,19 +275,39 @@ def test_escapes_title_in_html_output():
 
 
 def test_skips_root_readme():
-    for each_name in ("README.md", "readme.md"):
-        result = _run_hook(
-            "Write", {"file_path": each_name, "content": "# Test"}
-        )
-        assert result.returncode == 0
+    with tempfile.TemporaryDirectory() as tmp:
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp)
+            for each_name in ("README.md", "readme.md"):
+                with open(each_name, "w", encoding="utf-8") as f:
+                    f.write("# Test")
+                result = _run_hook(
+                    "Write", {"file_path": each_name, "content": "# Test"}
+                )
+                assert result.returncode == 0
+                expected_html = each_name.replace(".md", ".html")
+                assert not os.path.exists(expected_html)
+        finally:
+            os.chdir(original_cwd)
 
 
 def test_skips_root_changelog():
-    for each_name in ("CHANGELOG.md", "changelog.md"):
-        result = _run_hook(
-            "Write", {"file_path": each_name, "content": "# Test"}
-        )
-        assert result.returncode == 0
+    with tempfile.TemporaryDirectory() as tmp:
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp)
+            for each_name in ("CHANGELOG.md", "changelog.md"):
+                with open(each_name, "w", encoding="utf-8") as f:
+                    f.write("# Test")
+                result = _run_hook(
+                    "Write", {"file_path": each_name, "content": "# Test"}
+                )
+                assert result.returncode == 0
+                expected_html = each_name.replace(".md", ".html")
+                assert not os.path.exists(expected_html)
+        finally:
+            os.chdir(original_cwd)
 
 
 def test_language_class_valid():
@@ -427,5 +447,6 @@ def test_blocks_javascript_url_scheme():
         html_path = os.path.join(tmp, "guide.html")
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        assert 'href="javascript:' not in html
+        assert "javascript:" not in html
         assert "click me" in html
+        assert "<a" not in html

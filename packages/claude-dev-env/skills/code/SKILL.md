@@ -18,7 +18,7 @@ Invoke at the start of any implementation task. The standards persist for the en
 
 ## Gotchas
 
-- **`make check` must run from pwsh, not bash.** The Bash tool routes through Git Bash on Windows, where `make` may not be on PATH. Always use `pwsh -NoProfile -Command "make check 2>&1 | Select-Object -Last 100"`.
+- **`make check` must run from pwsh, not bash.** The Bash tool routes through Git Bash on Windows, where `make` may not be on PATH. Always use `pwsh -NoProfile -Command "make check 2>&1 | Select-Object -Last 100; exit $LASTEXITCODE"` so the pipeline does not mask a non-zero exit code from make.
 - **`New-Item`, `Get-ChildItem`, `Remove-Item` are pwsh cmdlets.** Don't use them inside Bash tool calls. Use the PowerShell tool or prefix with `pwsh -NoProfile -Command`.
 - **`TypedDict` encode/decode must be manual.** Pydantic and similar frameworks bypass the strict validation pattern. Write `_encode_*` and `_decode_*` functions by hand.
 - **`_test_hooks.py` is per-module, not per-package.** Every module that has dependencies needs its own hooks file. A single `conftest.py` with mocks does not satisfy this rule.
@@ -37,7 +37,7 @@ Zero violations across the project's source, test, and script directories (adapt
 - No `Any`, `object`, `cast()`, `# type: ignore`, `# noqa`.
 - No `.pyi` files, stubs, or shims.
 - Mypy strict mode exits 0 with no errors.
-- All TypedDicts are immutable and carry explicit `encode`/`decode` functions.
+- All TypedDicts are treated as immutable after construction and carry explicit `encode`/`decode` functions.
 - All decode functions call `require_*` validation on every field.
 - Internal encoder is typed — no untyped dict intermediaries.
 
@@ -98,15 +98,16 @@ Zero violations across the project's source, test, and script directories (adapt
 
 ### 11. Dynamic import pattern
 
-When using `importlib.import_module()` + `getattr()`, the intermediate variables are untyped. Bind the final instance through a typed constructor or a typed wrapper function so the result carries a concrete type rather than `Any`:
+When using `importlib.import_module()` + `getattr()`, the intermediate variables are untyped. Bind the final instance through a typed wrapper so the result carries a concrete type rather than `Any`:
 
 ```python
+from collections.abc import Callable
+
 mod = importlib.import_module("module_name")
 cls = getattr(mod, "ClassName")
 
-def _construct(klass: type) -> TheProtocol:
-    instance = klass()
-    return instance
+def _construct(klass: Callable[..., TheProtocol]) -> TheProtocol:
+    return klass()
 
 instance = _construct(cls)
 ```

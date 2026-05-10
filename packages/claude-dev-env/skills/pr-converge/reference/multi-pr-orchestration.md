@@ -131,9 +131,10 @@ Bugfind subagent completes (findings or clean):
      "audit_clean"`, `status: "awaiting_bugbot"`, `phase: "BUGBOT"`, then
      trigger bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
   3. **Bugbot-down detection.** Capture the comment ID from the
-     `add_issue_comment` response. Sleep 15 seconds. Fetch that specific
-     comment via `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`
-     and check its reactions. If the comment has zero reactions (reactions
+     `add_issue_comment` response. Sleep 15 seconds. Fetch comments via
+     `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`,
+     select the comment whose `id` matches the captured ID, and check its
+     reactions. If the comment has zero reactions (reactions
      count is `0` or absent): set `bugbot_down = true`,
      `phase: "BUGTEAM"`, `status: "in_progress"`,
      `last_action: "bugbot_down_detected"`, `last_updated` ISO-8601 UTC
@@ -150,9 +151,10 @@ When bugfix (clean-coder) subagent completes after push:
   1. Reads `state.json` for its PR.
   2. Triggers bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
   3. **Bugbot-down detection.** Capture the comment ID from the
-     `add_issue_comment` response. Sleep 15 seconds. Fetch that specific
-     comment via `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`
-     and check its reactions. If the comment has zero reactions (reactions
+     `add_issue_comment` response. Sleep 15 seconds. Fetch comments via
+     `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`,
+     select the comment whose `id` matches the captured ID, and check its
+     reactions. If the comment has zero reactions (reactions
      count is `0` or absent): set `bugbot_down = true`,
      `phase: "BUGTEAM"`, `status: "in_progress"`,
      `last_action: "bugbot_down_detected"`, `last_updated` ISO-8601 UTC

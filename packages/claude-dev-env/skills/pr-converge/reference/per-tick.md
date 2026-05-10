@@ -201,9 +201,10 @@ the latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction; wait
 for review or HEAD change before re-triggering.
 
 **Bugbot-down detection:** After posting `bugbot run` via `add_issue_comment`,
-capture the returned comment ID. Wait 15 seconds, then fetch that specific
-comment via `issue_read(method="get_comments", owner=OWNER, repo=REPO, issue_number=NUMBER)`
-and check its reactions. If the comment has zero reactions, bugbot did not
+capture the returned comment ID. Wait 15 seconds, then fetch comments via
+`issue_read(method="get_comments", owner=OWNER, repo=REPO, issue_number=NUMBER)`,
+select the comment whose `id` matches the captured ID, and check its
+reactions. If the comment has zero reactions, bugbot did not
 acknowledge — it is down. Set `bugbot_down = true`, `phase = BUGTEAM`, and
 continue BUGTEAM in the same tick (no wakeup — bugteam runs now against this
 HEAD). If reactions are present, bugbot acknowledged; proceed with normal

@@ -250,3 +250,33 @@ def test_passes_windows_path_claude_exempt():
     )
     assert result.returncode == 0
     assert result.stdout == ""
+
+
+def test_passes_claude_dir_case_insensitive():
+    result = _run_hook(
+        "Write",
+        {"file_path": ".Claude/rules/foo.md", "content": "# Rule"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_readme_lowercase_at_root():
+    result = _run_hook(
+        "Write",
+        {"file_path": "readme.md", "content": "# readme"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_json_decode_error_passes():
+    result = subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input="not json",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""

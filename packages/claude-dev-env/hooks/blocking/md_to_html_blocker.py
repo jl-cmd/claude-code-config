@@ -16,10 +16,11 @@ _markdown_extension = ".md"
 
 def _is_exempt_path(file_path: str) -> bool:
     normalized = file_path.replace("\\", "/")
-    if "/.claude/" in normalized or normalized.startswith(".claude/"):
+    lower_normalized = normalized.lower()
+    if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
         return True
     basename = os.path.basename(normalized)
-    if basename in ("README.md", "CHANGELOG.md"):
+    if basename.lower() in ("readme.md", "changelog.md"):
         directory = os.path.dirname(normalized)
         if directory in ("", "."):
             return True
@@ -42,9 +43,6 @@ def _block_context() -> str:
         "and visual hierarchy that markdown cannot.\n\n"
         "Reference for HTML effectiveness patterns:\n"
         "https://thariqs.github.io/html-effectiveness/\n"
-        "file:///Y:/Projects/LLM%20Plugins/claude-code-config/docs/references/"
-        "Thariq%20on%20X_%20_Using%20Claude%20Code_%20The%20Unreasonable%20"
-        "Effectiveness%20of%20HTML_%20_%20X.html\n\n"
         "Exceptions (.md still allowed):\n"
         "- Files inside .claude/ directories\n"
         "- README.md and CHANGELOG.md at repo root"
@@ -61,6 +59,11 @@ def _block_system_message() -> str:
 
 
 def main() -> None:
+    """Read hook input JSON from stdin, deny .md writes or pass through silently.
+
+    Returns:
+        None (exits process).
+    """
     try:
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError:

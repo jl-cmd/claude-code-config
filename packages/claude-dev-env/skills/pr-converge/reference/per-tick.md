@@ -129,7 +129,7 @@ pushed commits during its run. `current_head` from Step 1 is stale:
    Capture `new_head`. Then check the most recent commit timestamp:
 
    ```
-   list_commits(owner=OWNER, repo=REPO, sha="<headRefName>")
+   list_commits(owner=OWNER, repo=REPO, sha="<branch>")
      → sort by `.commit.committer.date` descending → index 0 `.commit.committer.date`
    ```
 
@@ -151,11 +151,10 @@ never falsely terminates:
      Re-trigger bugbot same tick (Step 3) so new HEAD enters queue, `phase
      = BUGBOT`, schedule next wakeup, return.
    - **Convergence AND `bugbot_clean_at == current_head` (no push):**
-     Back-to-back clean — necessary, not sufficient. Run **[convergence-gates.md](convergence-gates.md)** to clear Copilot, Claude, mergeability,
-     post-convergence Copilot, and thread-resolution gates. Only when all
-     gates pass AND the seven-point pre-condition checklist in gate (f)
-     is confirmed, mark PR ready. **Omit loop pacing** per **Convergence**
-     of active pacing workflow.
+     Back-to-back clean — necessary, not sufficient. Run **[convergence-gates.md](convergence-gates.md)** to clear Copilot findings, mergeability,
+     and post-convergence Copilot request. Only when all four gates pass
+     mark PR ready. **Omit loop pacing** per **Convergence** of active
+     pacing workflow.
    - **Convergence BUT `bugbot_clean_at != current_head` (no push):**
      `phase = BUGBOT`, schedule next wakeup, return.
    - **Findings without committed fixes:** spawn Agent (subagent_type: clean-coder) to implement fixes and push, then reply inline via `add_reply_to_pull_request_comment` MCP, following [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).

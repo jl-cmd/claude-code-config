@@ -42,6 +42,13 @@ def sweep(root: str, min_age_seconds: int) -> list[str]:
     Walks bottom-up so nested empty directories are cleaned from the leaves
     inward.  Relies on os.rmdir to fail harmlessly for non-empty directories
     instead of checking snapshotted subdirectory lists.
+
+    Args:
+        root: Path to scan for empty directories.
+        min_age_seconds: Minimum age in seconds before a directory is removed.
+
+    Returns:
+        List of directory paths that were successfully removed.
     """
 
     all_removed: list[str] = []

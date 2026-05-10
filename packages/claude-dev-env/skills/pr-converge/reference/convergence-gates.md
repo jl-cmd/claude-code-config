@@ -24,7 +24,7 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews
   → sort by `.submitted_at` descending
 
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-  → filter threads where `is_outdated == false`
+  → filter threads where `is_outdated == false` AND `is_resolved == false`
     AND `pull_request_review_id` matches the newest Copilot review on `current_head`
     AND any comment has `.author` matching Copilot (case-insensitive substring "copilot")
 ```
@@ -68,7 +68,7 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews
   → sort by `.submitted_at` descending
 
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-  → filter threads where `is_outdated == false`
+  → filter threads where `is_outdated == false` AND `is_resolved == false`
     AND `pull_request_review_id` matches the newest Claude review on `current_head`
     AND any comment has `.author` matching Claude (case-insensitive substring "claude")
 ```

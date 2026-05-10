@@ -110,7 +110,8 @@ Bugfind subagent completes (findings or clean):
   4. Replies inline on each addressed finding via
      `add_reply_to_pull_request_comment(owner, repo, pullNumber, commentId, body)`.
   5. Writes `state.json` (per §Concurrency): `last_action: "fix_pushed"`,
-     `current_head: <new SHA>`, `bugbot_clean_at: null`, `phase:
+     `current_head: <new SHA>`, `bugbot_clean_at: null`,
+     `bugbot_down: false`, `phase:
      "BUGBOT"`, `status: "awaiting_bugbot"`, `last_updated` ISO-8601 UTC.
   6. Goes idle.
 

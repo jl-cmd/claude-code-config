@@ -150,9 +150,16 @@ of unfixed findings with file:line.
 d. Decide based on post-bugteam state — order matters. Check
 pushed-during-bugteam FIRST so convergence report against stale HEAD
 never falsely terminates:
-   - **Audit pushed this tick (`bugbot_clean_at` reset in step b):**
+   - **Audit pushed this tick AND `bugbot_down == false`
+     (`bugbot_clean_at` reset in step b):**
      Re-trigger bugbot same tick (Step 3) so new HEAD enters queue, `phase
      = BUGBOT`, schedule next wakeup, return.
+   - **Audit pushed this tick AND `bugbot_down == true`:**
+     Bugbot cannot acknowledge the re-trigger. Continue bugteam re-audit
+     cycle — run pre-audit gate then AUDIT against `current_head`. Let
+     the bugteam loop run to convergence. When convergence is confirmed
+     and `bugbot_clean_at` is set to `current_head` (bugbot skipped per
+     user instruction), proceed to convergence-gates.
    - **Convergence AND `bugbot_clean_at == current_head` (no push):**
      Back-to-back clean — necessary, not sufficient. Run **[convergence-gates.md](convergence-gates.md)** to clear all six gates: Copilot findings,
      Claude reviewer, mergeability, post-convergence Copilot request,

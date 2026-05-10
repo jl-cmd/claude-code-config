@@ -54,6 +54,13 @@ post a fresh PR in a fresh branch based on origin main to the user.
   indicate staleness. Always check the correct fields and use
   case-insensitive substring matching on login values, never strict
   equality.
+- **BUGTEAM push-during-bugteam short-circuits re-audit when bugbot_down** — When
+  bugbot_down is true and bugteam pushes a fix, BUGTEAM step d's first-matched
+  branch ("Audit pushed → re-trigger bugbot, phase = BUGBOT") fires before the
+  convergence check. This skips the re-audit needed to confirm zero findings,
+  creating a fix → push → re-trigger → down → bugteam loop. Fix: when
+  bugbot_down is true post-push, continue the bugteam re-audit cycle to
+  convergence before re-triggering. Only exit BUGTEAM when convergence confirmed.
 
 ## First tick of a session
 

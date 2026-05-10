@@ -107,18 +107,20 @@ d. Check latest Copilot review on `current_head`:
    Fetch Copilot reviews for `current_head` (newest-first, classified
    dirty/clean):
 
-   ```bash
-python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_reviews.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
+   ```
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
+   → filter `.user.login` for copilot (case-insensitive substring),
+     sort by `.submitted_at` descending
    ```
 
    - **`classification == "dirty"` (state `CHANGES_REQUESTED` or
      `COMMENTED` with non-empty body):** Fetch Copilot inline
      comments for `current_head`:
 
-     ```bash
-python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_inline_comments.py" \
---owner <OWNER> --repo <REPO> --number <NUMBER> --commit "$current_head"
+     ```
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
+   → filter threads where `is_outdated == false` AND `is_resolved == false`
+     AND any comment has `.author` matching copilot (case-insensitive substring)
      ```
 
      - **Non-empty inline:** Apply **Fix protocol** (see
@@ -134,10 +136,13 @@ python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_inline_comments.py" \
        acknowledge the fix. Reset
        `bugbot_clean_at = null, copilot_clean_at = null`, stay in
        `phase = BUGBOT`. Run Step 3, schedule next wakeup, return.
-   - **`classification == "clean"` (state `APPROVED`) OR no Copilot
-     review at `current_head`:** Set `phase = BUGTEAM`. Continue
+   - **`classification == "clean"` (state `APPROVED`):** Set
+     `copilot_clean_at = current_head`, `phase = BUGTEAM`. Continue
      BUGTEAM in same tick — back-to-back convergence requires
      bugteam on same HEAD before next wakeup.
+   - **No Copilot review at `current_head`:** Set `phase = BUGTEAM`.
+     Continue BUGTEAM in same tick — back-to-back convergence
+     requires bugteam on same HEAD before next wakeup.
 
 ### `phase == BUGTEAM`
 

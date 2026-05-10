@@ -126,11 +126,11 @@ pushed commits during its run. `current_head` from Step 1 is stale:
    pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `.head.sha`
    ```
 
-   Capture `new_head`. Then check the last push timestamp:
+   Capture `new_head`. Then check the most recent commit timestamp:
 
    ```
    pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_commits")
-     → sort by `.commit.author.date` descending → index 0 `.commit.author.date`
+     → sort by `.commit.committer.date` descending → index 0 `.commit.committer.date`
    ```
 
    If the most recent commit was pushed **less than 60 seconds ago**, the

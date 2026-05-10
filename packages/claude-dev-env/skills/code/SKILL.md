@@ -42,7 +42,7 @@ Zero violations across the project's source, test, and script directories (adapt
 - No `Any`, `cast()`, `# type: ignore`, `# noqa`.
 - No `.pyi` files, stubs, or shims.
 - Mypy strict mode exits 0 with no errors.
-- All TypedDicts are treated as immutable after construction and carry explicit `encode`/`decode` functions.
+- All TypedDicts are treated as immutable after construction and carry explicit `_encode_*` / `_decode_*` functions.
 - All decode functions call `require_*` validation on every field.
 - Internal encoder is typed — no untyped dict intermediaries.
 

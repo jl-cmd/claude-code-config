@@ -74,17 +74,17 @@ cd into `<worktree_path>` before any git or file operation.
   `$HOME/.claude/audit-rubrics/category_rubrics/category-<letter>-<slug>.md`
   and the matching ready-to-send prompt from
   `$HOME/.claude/audit-rubrics/prompts/category-<letter>-<slug>.md`. The
-  prompt file is a TEMPLATE, not a free-form instruction. Follow it as
-  closely as possible in terms of structure, section ordering, depth of
-  analysis, and overall length. Only the CONTENT of each section is
-  flexible — the specific findings, evidence, file:line references, traces,
-  and rationale come from the live diff under audit, but the shape of the
-  output (which sections appear, in what order, how deep each one goes,
-  and how long each one is) must mirror the template. Compressing,
-  skipping, or restructuring the template is non-compliant. The rubric file
-  supplies the category's sub-bucket decomposition and decision criteria;
-  the prompt file supplies the output shape. Both must be loaded; neither
-  may be substituted for the other. Findings may be filed only for the
+  prompt file is a TEMPLATE — a strong default for the output shape, not a
+  straitjacket. Use its sections, ordering, and depth as the starting frame.
+  When the diff under audit raises a problem that does not fit the template's
+  buckets, or when the template's section makes no sense for what is actually
+  in this diff, reorganize, merge, or drop sections so the bugs are clearest
+  to the reader. Findings, evidence, file:line references, traces, and
+  rationale come from the diff. The template tells you what a thorough audit
+  usually looks like; the diff tells you what this audit actually needs.
+  The rubric file supplies the category's sub-bucket decomposition and
+  decision criteria; the prompt file supplies the output shape. Both must
+  be loaded; neither may be substituted for the other. Findings may be filed only for the
   bound category letter. Run only steps 1–2 (audit, assign IDs, capture
   excerpt, validate anchors), then write outcome XML per <output_format>
   and return. Skip steps 3–5 — category auditors do not post PR reviews.
@@ -145,9 +145,17 @@ cd into `<worktree_path>` before any git or file operation.
      repo=<R>, pullNumber=<N>)` filtered to the just-submitted review id.
      Match child comments to anchored findings in the order they were added
      in step 4b.
-  5. If any of steps 4a–4c fails, clean up with
+  5. Bail out to the issue-comment fallback below when steps 4a–4c fail,
+     when step 4c fails twice in a row, when the pending review is in an
+     unrecoverable state mid-flow (orphaned pending, partial-add failures
+     with no clean recovery, MCP responses that do not parse), or when
+     your judgment says the pending-review path is broken for this loop.
+     Two retries is plenty. Do not mechanically loop on a stuck flow —
+     post the findings as a PR-level comment instead.
+
+     Clean up with
      `pull_request_review_write(method="delete_pending", owner=<O>, repo=<R>,
-     pullNumber=<N>)` and post one fallback PR-level comment carrying the
+     pullNumber=<N>)` then post one fallback PR-level comment carrying the
      review body plus every finding inline:
      `add_issue_comment(owner=<O>, repo=<R>, issue_number=<N>,
      body=<full_text>)`. Mark every finding `used_fallback="true"` with the

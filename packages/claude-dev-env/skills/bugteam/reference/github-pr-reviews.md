@@ -106,8 +106,21 @@ mcp__plugin_github_github__add_reply_to_pull_request_comment(
 
 ### Review POST failure fallback
 
-If any of steps 1–3 fails (rate limit, network, malformed payload), clean
-up with:
+The three-step pending-review flow is the default path because GitHub
+renders one collapsible review with anchored child comments. It is not
+the only valid path. Bail out and use the issue-comment fallback below
+when:
+
+- Any of steps 1–3 fails (rate limit, network, malformed payload).
+- Steps 1–2 succeed but step 3 fails repeatedly (two retries is plenty —
+  do not loop on a broken pending review).
+- The pending review is in an unrecoverable state mid-flow (orphaned
+  pending from a prior aborted run, partial-add failures with no clean
+  recovery path, MCP responses that do not parse).
+
+Mechanical retry of the three-step flow when it is clearly stuck wastes
+the loop. The judgment call belongs to the validator. Clean up first
+with:
 
 ```
 mcp__plugin_github_github__pull_request_review_write(

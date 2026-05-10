@@ -138,6 +138,10 @@ def _cached_config_resolves_inside_pr_converge_scripts() -> bool:
     return _cached_config_module_resolves_inside(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
 
 
+def _cached_config_resolves_inside_dev_env_scripts() -> bool:
+    return _cached_config_module_resolves_inside(_DEV_ENV_SCRIPTS_DIRECTORY_PATH)
+
+
 def _config_module_is_currently_cached() -> bool:
     return "config" in sys.modules
 
@@ -264,13 +268,18 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
     any_pr_converge_scripts_entry_was_removed = _remove_path_if_present(
         _PR_CONVERGE_SCRIPTS_DIRECTORY_PATH
     )
+    any_dev_env_scripts_entry_was_removed = _remove_path_if_present(
+        _DEV_ENV_SCRIPTS_DIRECTORY_PATH
+    )
     if (
         any_git_hooks_entry_was_removed
         or any_shared_scripts_entry_was_removed
         or any_pr_converge_scripts_entry_was_removed
+        or any_dev_env_scripts_entry_was_removed
         or _cached_config_is_flat_git_hooks_module()
         or _cached_config_resolves_inside_shared_pr_loop_scripts()
         or _cached_config_resolves_inside_pr_converge_scripts()
+        or _cached_config_resolves_inside_dev_env_scripts()
     ):
         _evict_config_module()
 

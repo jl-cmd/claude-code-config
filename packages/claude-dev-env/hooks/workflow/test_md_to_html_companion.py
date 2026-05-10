@@ -25,14 +25,6 @@ class _RunHook:
 _run_hook = _RunHook()
 
 
-def _write_md_and_run(file_path: str, content: str):
-    os.makedirs(os.path.dirname(file_path) or ".", exist_ok=True)
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(content)
-    result = _run_hook("Write", {"file_path": file_path, "content": content})
-    return result
-
-
 def test_generates_html_companion():
     with tempfile.TemporaryDirectory() as tmp:
         md_path = os.path.join(tmp, "guide.md")
@@ -140,7 +132,7 @@ def test_converts_code_fence():
             html = f.read()
         assert "<pre>" in html
         assert "<code" in html
-        assert "print('hi')" in html
+        assert "print(&#x27;hi&#x27;)" in html
 
 
 def test_converts_bold():
@@ -154,3 +146,129 @@ def test_converts_bold():
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
         assert "<strong>bold</strong>" in html
+
+
+def test_escapes_html_special_chars():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("Use <div> for layout & choose \"text\" for quotes.")
+
+        _run_hook(
+            "Write",
+            {
+                "file_path": md_path,
+                "content": "Use <div> for layout & choose \"text\" for quotes.",
+            },
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "&lt;div&gt;" in html
+        assert "&amp;" in html
+        assert "<div>" not in html
+
+
+def test_escapes_code_block_content():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("```\nif x < 5 and y > 3:\n    print('hello')\n```")
+
+        _run_hook(
+            "Write",
+            {
+                "file_path": md_path,
+                "content": "```\nif x < 5 and y > 3:\n    print('hello')\n```",
+            },
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "&lt;" in html
+        assert "if x" in html
+
+
+def test_lists_are_wrapped_in_ul():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("- item one\n- item two\n- item three")
+
+        _run_hook(
+            "Write",
+            {
+                "file_path": md_path,
+                "content": "- item one\n- item two\n- item three",
+            },
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "<ul>" in html
+        assert "</ul>" in html
+        assert html.index("<ul>") < html.index("<li>item one</li>")
+        assert html.index("</li>") < html.index("</ul>")
+
+
+def test_ordered_lists_are_wrapped_in_ol():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("1. first\n2. second")
+
+        _run_hook(
+            "Write",
+            {"file_path": md_path, "content": "1. first\n2. second"},
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "<ol>" in html
+        assert "</ol>" in html
+
+
+def test_handles_curly_braces_in_body():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("# JS Example\n\nUse `{ foo: 1 }` in code.")
+
+        _run_hook(
+            "Write",
+            {
+                "file_path": md_path,
+                "content": "# JS Example\n\nUse `{ foo: 1 }` in code.",
+            },
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert "foo" in html
+        assert "JS Example" in html
+
+
+def test_handles_parentheses_in_links():
+    with tempfile.TemporaryDirectory() as tmp:
+        md_path = os.path.join(tmp, "guide.md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(
+                "See [Python]"
+                "(https://en.wikipedia.org/wiki/Python_(programming_language))."
+            )
+
+        _run_hook(
+            "Write",
+            {
+                "file_path": md_path,
+                "content": "See [Python]"
+                "(https://en.wikipedia.org/wiki/Python_(programming_language)).",
+            },
+        )
+        html_path = os.path.join(tmp, "guide.html")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+        assert (
+            'href="https://en.wikipedia.org/wiki/Python_(programming_language)"'
+            in html
+        )

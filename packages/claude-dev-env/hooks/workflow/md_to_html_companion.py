@@ -10,6 +10,30 @@ import json
 import os
 import re
 import sys
+from html import escape
+from pathlib import Path
+
+if str(Path(__file__).resolve().parent.parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from config.html_companion_constants import (  # noqa: E402
+    CSS_ACCENT_COLOR,
+    CSS_BG_COLOR,
+    CSS_BODY_PADDING,
+    CSS_BORDER_COLOR,
+    CSS_CODE_SIZE,
+    CSS_FG_COLOR,
+    CSS_H1_SIZE,
+    CSS_H2_SIZE,
+    CSS_H3_SIZE,
+    CSS_LINE_HEIGHT,
+    CSS_MAX_WIDTH,
+    CSS_MUTED_COLOR,
+    CSS_STRONG_COLOR,
+    CSS_SURFACE_COLOR,
+    CSS_TABLE_WIDTH,
+    CSS_TH_WEIGHT,
+)
 
 
 def _is_exempt_path(file_path: str) -> bool:
@@ -25,12 +49,23 @@ def _md_to_html(markdown_text: str) -> str:
     all_lines = text.split("\n")
     all_output_lines: list[str] = []
     is_in_code_block = False
+    is_in_unordered_list = False
+    is_in_ordered_list = False
     paragraph_buffer: list[str] = []
 
     def flush_paragraph() -> None:
         if paragraph_buffer:
             all_output_lines.append("<p>" + "\n".join(paragraph_buffer) + "</p>")
             paragraph_buffer.clear()
+
+    def close_lists() -> None:
+        nonlocal is_in_unordered_list, is_in_ordered_list
+        if is_in_unordered_list:
+            all_output_lines.append("</ul>")
+            is_in_unordered_list = False
+        if is_in_ordered_list:
+            all_output_lines.append("</ol>")
+            is_in_ordered_list = False
 
     for each_line in all_lines:
         if each_line.startswith("```"):
@@ -39,53 +74,77 @@ def _md_to_html(markdown_text: str) -> str:
                 is_in_code_block = False
             else:
                 flush_paragraph()
-                lang = each_line[3:].strip()
-                if lang:
-                    all_output_lines.append(f'<pre><code class="language-{lang}">')
+                close_lists()
+                language = each_line[3:].strip()
+                if language:
+                    all_output_lines.append(
+                        f'<pre><code class="language-{language}">'
+                    )
                 else:
                     all_output_lines.append("<pre><code>")
                 is_in_code_block = True
             continue
 
         if is_in_code_block:
-            all_output_lines.append(each_line)
+            all_output_lines.append(escape(each_line))
             continue
 
         stripped = each_line.strip()
         if not stripped:
             flush_paragraph()
+            close_lists()
             continue
 
         if stripped.startswith("# "):
             flush_paragraph()
+            close_lists()
             all_output_lines.append(f"<h1>{_inline_format(stripped[2:])}</h1>")
         elif stripped.startswith("## "):
             flush_paragraph()
+            close_lists()
             all_output_lines.append(f"<h2>{_inline_format(stripped[3:])}</h2>")
         elif stripped.startswith("### "):
             flush_paragraph()
+            close_lists()
             all_output_lines.append(f"<h3>{_inline_format(stripped[4:])}</h3>")
         elif stripped.startswith("#### "):
             flush_paragraph()
+            close_lists()
             all_output_lines.append(f"<h4>{_inline_format(stripped[5:])}</h4>")
         elif stripped.startswith("##### "):
             flush_paragraph()
+            close_lists()
             all_output_lines.append(f"<h5>{_inline_format(stripped[6:])}</h5>")
         elif stripped.startswith("###### "):
             flush_paragraph()
+            close_lists()
             all_output_lines.append(f"<h6>{_inline_format(stripped[7:])}</h6>")
         elif stripped.startswith("- ") or stripped.startswith("* "):
             flush_paragraph()
+            if is_in_ordered_list:
+                all_output_lines.append("</ol>")
+                is_in_ordered_list = False
+            if not is_in_unordered_list:
+                all_output_lines.append("<ul>")
+                is_in_unordered_list = True
             all_output_lines.append(f"<li>{_inline_format(stripped[2:])}</li>")
         elif re.match(r"^\d+\.\s", stripped):
             flush_paragraph()
+            if is_in_unordered_list:
+                all_output_lines.append("</ul>")
+                is_in_unordered_list = False
+            if not is_in_ordered_list:
+                all_output_lines.append("<ol>")
+                is_in_ordered_list = True
             content = re.sub(r"^\d+\.\s", "", stripped)
             all_output_lines.append(f"<li>{_inline_format(content)}</li>")
         elif stripped == "---":
             flush_paragraph()
+            close_lists()
             all_output_lines.append("<hr>")
         elif stripped.startswith("> "):
             flush_paragraph()
+            close_lists()
             all_output_lines.append(
                 f"<blockquote>{_inline_format(stripped[2:])}</blockquote>"
             )
@@ -94,13 +153,19 @@ def _md_to_html(markdown_text: str) -> str:
 
     if is_in_code_block:
         all_output_lines.append("</code></pre>")
+    close_lists()
     flush_paragraph()
 
     return "\n".join(all_output_lines)
 
 
 def _inline_format(text: str) -> str:
-    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
+    text = escape(text)
+    text = re.sub(
+        r"\[([^\]]+)\]\(((?:[^)(]+|\([^)(]*\))*)\)",
+        r'<a href="\2">\1</a>',
+        text,
+    )
     text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
     text = re.sub(r"\*(.+?)\*", r"<em>\1</em>", text)
     text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
@@ -163,26 +228,38 @@ def _html_template(title: str, body: str) -> str:
 </html>""".format(
         title=title,
         body=body,
-        bg="13, 17, 23",
-        fg="201, 209, 217",
-        border="48, 54, 61",
-        accent="88, 166, 255",
-        muted="139, 148, 158",
-        surface="22, 27, 34",
-        strong="240, 246, 252",
-        line_height="1.6",
-        body_padding="2rem",
-        max_width="960px",
-        h1_size="1.6rem",
-        h2_size="1.25rem",
-        h3_size="1.1rem",
-        code_size="0.85rem",
-        table_width="100%",
-        th_weight="600",
+        bg=CSS_BG_COLOR,
+        fg=CSS_FG_COLOR,
+        border=CSS_BORDER_COLOR,
+        accent=CSS_ACCENT_COLOR,
+        muted=CSS_MUTED_COLOR,
+        surface=CSS_SURFACE_COLOR,
+        strong=CSS_STRONG_COLOR,
+        line_height=CSS_LINE_HEIGHT,
+        body_padding=CSS_BODY_PADDING,
+        max_width=CSS_MAX_WIDTH,
+        h1_size=CSS_H1_SIZE,
+        h2_size=CSS_H2_SIZE,
+        h3_size=CSS_H3_SIZE,
+        code_size=CSS_CODE_SIZE,
+        table_width=CSS_TABLE_WIDTH,
+        th_weight=CSS_TH_WEIGHT,
     )
 
 
 def main() -> None:
+    """Process a PostToolUse hook payload from stdin.
+
+    Reads JSON with tool_name and tool_input.file_path from stdin.
+    When file_path is a .md file outside .claude/, generates a companion
+    .html file alongside it.
+
+    Args:
+        (reads from sys.stdin — no function arguments)
+
+    Returns:
+        None — exits 0 on success or when no action is needed.
+    """
     try:
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError:
@@ -220,6 +297,7 @@ def main() -> None:
 
     title = _extract_title(md_content)
     html_body = _md_to_html(md_content)
+    html_body = html_body.replace("{", "{{").replace("}", "}}")
     html_content = _html_template(title=title, body=html_body)
 
     html_path = os.path.splitext(file_path)[0] + ".html"

@@ -66,14 +66,20 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews
   → sort by `.submitted_at` descending
 
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-  → filter threads where `is_outdated == false` AND any comment has `.author` matching Claude (case-insensitive substring "claude")
+  → select newest Claude review from reviews step; filter threads by its
+    `pull_request_review_id` where `is_outdated == false`
+
+The `get_review_comments` endpoint returns threads keyed by
+`pull_request_review_id`; filter to the review selected above so older
+Claude threads on other commits are excluded.
 ```
 
 Decide (same state-based classifier as gate (a), collapsed to two outcomes since
 Claude findings go through Fix protocol regardless of inline vs body-only):
 
 - **`classification == "dirty"` (state `CHANGES_REQUESTED` or `COMMENTED`
-  with non-empty body):** Treat identically to gate (a) dirty path — apply
+  with non-empty body, OR non-empty inline threads anchored to
+  `current_head`):** Treat identically to gate (a) dirty path — apply
   Fix protocol. Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`,
   `phase = BUGBOT`, schedule next wakeup, return.
 - **`classification == "clean"` (state `APPROVED` or no Claude review at

@@ -23,7 +23,7 @@ Both paths fire independently per identifier. A bullet can contain both citable 
 **For citation candidates:**
 1. For each citation candidate, search the data body for the identifier.
 2. Find every occurrence of the identifier in the data body. When the data body uses explicit line numbers (e.g., a code block prefixed with file:line annotations or a diff), use those. When the data body has no line numbers (e.g., a raw pasted dump), use the 1-based line index within the data-body block as `<line>`. Apply the multiple-occurrence policy below to determine which lines to cite.
-3. Append the citation in this format immediately after the backtick-wrapped identifier: `` `identifier` (`<file>:<line>`)``. When the bullet contains multiple identifiers, cite each one inline after its owning backtick span. The examples below illustrate both single-identifier and multi-identifier bullets.
+3. Append the citation in this format immediately after the backtick-wrapped identifier: `` `identifier` (`<file>:<line>`)``. When the bullet contains multiple identifiers, cite each one inline after its owning backtick span. The `<file>` value comes from the data-body block's heading or label (e.g., the filename in a `### file.py` heading, the diff header, or the code block's language tag). When the data body has no file identity at all (a raw paste with no heading or label), use `data-body:<line>`. The examples below illustrate both single-identifier and multi-identifier bullets.
 
 ## Multiple occurrences
 

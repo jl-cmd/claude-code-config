@@ -146,7 +146,9 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews
      ```
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
    → filter threads where `is_outdated == false` AND `is_resolved == false`
-     AND any comment has `.author` matching copilot (case-insensitive substring)
+     AND any comment has `.author` matching copilot (case-insensitive substring),
+     anchor to newest Copilot review on `current_head` by matching
+     `pull_request_review_id` to the review's `.id`
      ```
 
      - **Non-empty inline:** Apply **Fix protocol** (see
@@ -158,7 +160,7 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
        review body. Spawn Agent (subagent_type: clean-coder) to
        implement → push → post a new review comment via
        `pull_request_review_write(method="create",
-       event="COMMENT", body="<fix acknowledgement>")` to
+       event="COMMENT", body="<fix acknowledgement citing new HEAD SHA>")` to
        acknowledge the fix. Reset
        `bugbot_clean_at = null, copilot_clean_at = null`, stay in
        `phase = BUGBOT`. Run Step 3, schedule next wakeup, return.

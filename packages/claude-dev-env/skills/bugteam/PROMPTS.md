@@ -109,7 +109,17 @@ cd into `<worktree_path>` before any git or file operation.
 
        _From /bugteam audit loop <L>._
 
-  4. Post ONE review per loop using the GitHub MCP three-step pending-review
+  4. **Before posting, read the full review once as if you were the PR
+     author.** Ask: would I understand what to fix and why? Do any two
+     findings describe the same problem in different words — merge them. Does
+     any finding miss its mark — rewrite or drop it. Does the review feel
+     coherent as a whole, or does it read like eleven separate audits
+     stapled together? The review's job is to make the PR author want to
+     fix these bugs, not to demonstrate that the rubric ran. Rearrange,
+     merge, or rephrase anything that would confuse the author. Then
+     proceed with the mechanical three-step flow below.
+
+     Post ONE review per loop using the GitHub MCP three-step pending-review
      flow (the `pull_request_review_write` tool does NOT accept a `comments[]`
      array — pending review + per-comment add + submit is the only correct
      shape). Bodies are passed as plain strings; the MCP tool does the JSON

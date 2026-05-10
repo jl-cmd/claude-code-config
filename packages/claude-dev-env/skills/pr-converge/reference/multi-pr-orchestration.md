@@ -42,6 +42,7 @@ Create once at session start. Each teammate writes result before going idle.
       "current_head": "f9a7d49e",
       "bugbot_clean_at": null,
       "inline_lag_streak": 0,
+      "bugbot_down": false,
       "tick_count": 5,
       "last_action": "bugbot_triggered",
       "status": "in_progress",
@@ -138,39 +139,49 @@ When bugfix (clean-coder) subagent completes after push:
   `Agent(subagent_type="general-purpose", run_in_background=true)`. Subagent:
   1. Reads `state.json` for its PR.
   2. Triggers bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
-  3. Polls `pull_request_read(method="get_reviews")` every 60s (up to 10 polls) until review
-     anchored to `current_head` appears with `commit_id == current_head`.
-  4. **Poll / classify loop** (repeat from 4a whenever 4c retries):
-     - **4a.** Fetch inline comments via `pull_request_read(method="get_review_comments")` filtered by review ID and `commit_id == current_head`.
-     - **4b.** Classify — three outcomes (same as `SKILL.md` Step 2 BUGBOT):
+  3. **Bugbot-down detection.** Sleep 15 seconds. Fetch recent comments via
+     `issue_read(method="get_comments", owner=owner, repo=repo, issueNumber=issueNumber)`.
+     Locate the most recent comment whose body contains `"bugbot run"`. If the
+     comment has zero reactions (reactions count is `0` or absent): set
+     `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"` via
+     `state.json`, spawn a `bugteam` subagent, and return (skip polling loop).
+     If one or more reactions present, continue to step 4.
+  4. Polls `pull_request_read(method="get_reviews")` every 60s (up to 10 polls)
+     until review anchored to `current_head` appears with `commit_id ==
+     current_head`. If polling reaches limit without a matching review, write
+     `state.json` with `status: "blocked"`, `last_action: "review_timeout"`,
+     and go idle.
+  5. **Poll / classify loop** (repeat from 5a whenever 5c retries):
+     - **5a.** Fetch inline comments via `pull_request_read(method="get_review_comments")` filtered by review ID and `commit_id == current_head`.
+     - **5b.** Classify — three outcomes (same as `SKILL.md` Step 2 BUGBOT):
        - **`clean`:** review body clean, zero unaddressed inline findings.
        - **`dirty`:** ≥1 unaddressed inline finding for `current_head`
          (actionable for Fix protocol / `clean-coder`).
        - **`inline_lag`:** review body shows findings, inline API returns
          zero matching for `current_head` (transient desync — `SKILL.md`
          Step 2 BUGBOT fourth bullet).
-     - **4c. `inline_lag`:** locked merge: increment `inline_lag_streak`
+     - **5c. `inline_lag`:** locked merge: increment `inline_lag_streak`
        (missing → `0` first); set `last_action: "inline_lag_wait"`,
        `phase: "BUGBOT"`, `last_updated`; keep `status` consistent (e.g.
        `awaiting_bugbot`). `inline_lag_streak >= 3` → **hard blocker** per
        `SKILL.md` §Stop conditions (structurally inconsistent review);
        report and go idle **without** classifying as `dirty`. Else sleep
-       90s and repeat from 4a (re-fetch inline only).
-     - **4d. `clean`:** exit. Locked merge: `bugbot_clean_at =
+       90s and repeat from 5a (re-fetch inline only).
+     - **5d. `clean`:** exit. Locked merge: `bugbot_clean_at =
        current_head`, reset `inline_lag_streak`, update `last_action`,
        `status`, `phase: BUGTEAM`.
-     - **4e. `dirty`:** exit. Locked merge: reset `inline_lag_streak`,
+     - **5e. `dirty`:** exit. Locked merge: reset `inline_lag_streak`,
        record findings count, update `last_action`, `status`, `phase:
        BUGBOT`.
-  5. Reports one-line outcome to orchestrator.
+  6. Reports one-line outcome to orchestrator.
 
 - Orchestrator reads updated `state.json`, spawns next agent:
   - `clean` → `general-purpose` runs BUGTEAM phase (bugteam via `Skill`
     when available, else inline by reading bugteam `SKILL.md`).
-  - Exited on `dirty` (4e) with actionable inline threads → spawn same
+  - Exited on `dirty` (5e) with actionable inline threads → spawn same
     fix worker as "audit result with findings". Do **not** spawn
-    `clean-coder` when monitor only saw `inline_lag` (4c retries) without
-    reaching 4e — that path retries or escalates via `inline_lag_streak ≥
+    `clean-coder` when monitor only saw `inline_lag` (5c retries) without
+    reaching 5e — that path retries or escalates via `inline_lag_streak ≥
     3` hard blocker, not fix pass.
 
 ## What orchestrator does per tick

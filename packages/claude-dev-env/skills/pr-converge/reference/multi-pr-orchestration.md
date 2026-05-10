@@ -130,11 +130,12 @@ Bugfind subagent completes (findings or clean):
   2. Else: update `state.json` (per §Concurrency) with `last_action:
      "audit_clean"`, `status: "awaiting_bugbot"`, `phase: "BUGBOT"`, then
      trigger bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
-  3. **Bugbot-down detection.** Sleep 15 seconds. Fetch recent comments via
-     `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`.
-     Locate the most recent comment whose body contains `"bugbot run"`. If the
-     comment has zero reactions (reactions count is `0` or absent): set
-     `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"`,
+  3. **Bugbot-down detection.** Capture the comment ID from the
+     `add_issue_comment` response. Sleep 15 seconds. Fetch that specific
+     comment via `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`
+     and check its reactions. If the comment has zero reactions (reactions
+     count is `0` or absent): set `bugbot_down = true`,
+     `phase: "BUGTEAM"`, `status: "in_progress"`,
      `last_action: "bugbot_down_detected"`, `last_updated` ISO-8601 UTC
      via `state.json`, spawn a `bugteam` subagent, and return (skip going
      idle). If one or more reactions present, continue to step 4.
@@ -148,11 +149,12 @@ When bugfix (clean-coder) subagent completes after push:
   `Agent(subagent_type="general-purpose", run_in_background=true)`. Subagent:
   1. Reads `state.json` for its PR.
   2. Triggers bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
-  3. **Bugbot-down detection.** Sleep 15 seconds. Fetch recent comments via
-     `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`.
-     Locate the most recent comment whose body contains `"bugbot run"`. If the
-     comment has zero reactions (reactions count is `0` or absent): set
-     `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"`,
+  3. **Bugbot-down detection.** Capture the comment ID from the
+     `add_issue_comment` response. Sleep 15 seconds. Fetch that specific
+     comment via `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`
+     and check its reactions. If the comment has zero reactions (reactions
+     count is `0` or absent): set `bugbot_down = true`,
+     `phase: "BUGTEAM"`, `status: "in_progress"`,
      `last_action: "bugbot_down_detected"`, `last_updated` ISO-8601 UTC
      via `state.json`, spawn a `bugteam` subagent, and return (skip
      polling loop). If one or more reactions present, continue to step 4.

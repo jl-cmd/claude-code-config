@@ -41,6 +41,8 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `
 ```
 
 If owner/repo/number are not yet known, extract them from the PR URL.
+If `current_head` changed since last tick, reset `bugbot_down` to `false`
+(new HEAD invalidates prior down-detection state).
 
 Capture `number`, `head.sha` (= `current_head`), owner/repo, branch.
 
@@ -198,13 +200,14 @@ alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.
 the latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction; wait
 for review or HEAD change before re-triggering.
 
-**Bugbot-down detection:** After posting `bugbot run`, wait 15 seconds for
-bugbot to acknowledge. Fetch the comment via
-`issue_read(method="get_comments", owner=OWNER, repo=REPO, issue_number=NUMBER)`
-and locate the most recent `bugbot run` body. If the comment has zero reactions, bugbot did not acknowledge — it is
-down. Set `bugbot_down = true`, `phase = BUGTEAM`, and continue BUGTEAM in
-the same tick (no wakeup — bugteam runs now against this HEAD). If reactions
-are present, bugbot acknowledged; proceed with normal pacing (Step 4).
+**Bugbot-down detection:** After posting `bugbot run` via `add_issue_comment`,
+capture the returned comment ID. Wait 15 seconds, then fetch that specific
+comment via `issue_read(method="get_comments", owner=OWNER, repo=REPO, issue_number=NUMBER)`
+and check its reactions. If the comment has zero reactions, bugbot did not
+acknowledge — it is down. Set `bugbot_down = true`, `phase = BUGTEAM`, and
+continue BUGTEAM in the same tick (no wakeup — bugteam runs now against this
+HEAD). If reactions are present, bugbot acknowledged; proceed with normal
+pacing (Step 4).
 
 ## Step 4: Loop pacing
 

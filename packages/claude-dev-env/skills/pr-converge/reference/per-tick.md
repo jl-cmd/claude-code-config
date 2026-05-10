@@ -120,8 +120,9 @@ python "${CLAUDE_SKILL_DIR}/scripts/fetch_copilot_inline_comments.py" \
        stay in `phase = BUGBOT`. Run Step 3, schedule next wakeup,
        return.
      - **Empty inline (body-only findings):** Parse findings from
-       review body. Push commit with fixes, then post a new review
-       comment via `pull_request_review_write(method="create",
+       review body. Spawn Agent (subagent_type: clean-coder) to
+       implement → push → post a new review comment via
+       `pull_request_review_write(method="create",
        event="COMMENT", body="<fix acknowledgement>")` to
        acknowledge the fix. Reset
        `bugbot_clean_at = null, copilot_clean_at = null`, stay in

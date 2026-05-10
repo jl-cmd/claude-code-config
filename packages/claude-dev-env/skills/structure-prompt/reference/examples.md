@@ -31,7 +31,7 @@ Each example shows an input prompt and the rewritten output, with a note on whic
 - [`persona.md`](persona.md): "You are a senior security engineer" → mission line.
 - [`directives.md`](directives.md): "Be thorough" → surface enumeration; "carefully" → locator requirement.
 - [`constraints.md`](constraints.md): "Try to find" → measurable criteria.
-- [`structure.md`](structure.md): code block to the end.
+- [`structure.md`](structure.md): code block present → verifies ordering, emits gap note.
 
 **Rewritten output**
 > Audit this code for security issues.

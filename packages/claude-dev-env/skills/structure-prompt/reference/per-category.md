@@ -1,7 +1,7 @@
 # Per-category disposition
 
-Every multi-category framework requires each category to emit exactly one of:
-- A positive finding with a locator (file:line, section ID, line number, or equivalent)
+Every multi-category framework requires each category to emit exactly one disposition:
+- At least one positive finding with a locator (file:line, section ID, line number, or equivalent) per category
 - An explicit proof-of-absence with at least 3 adversarial probes specific to that category
 
 ## Detection

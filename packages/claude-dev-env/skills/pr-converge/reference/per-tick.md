@@ -157,8 +157,13 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
      It falls through to the "Empty inline (body-only findings)"
      sub-branch below rather than the "Non-empty inline" fix protocol.
 
-     - **Non-empty inline:** Apply **Fix protocol** (see
-       [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)).
+     - **Non-empty inline:** Apply **Fix protocol**.
+       With `state.json`: clean-coder teammate pushes, replies
+       inline, writes `state.json`, goes idle; Step 3 on new HEAD
+       runs via orchestrator-spawned follow-up agent (see §Fix
+       result → general-purpose). No `state.json` (single-PR): see
+       [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)
+       for full single-PR contract.
        Reset `bugbot_clean_at = null, copilot_clean_at = null`,
        stay in `phase = BUGBOT`. Run Step 3, schedule next wakeup,
        return.
@@ -177,10 +182,22 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
    - **No Copilot review at `current_head`:** Set `phase = BUGTEAM`.
      Continue BUGTEAM in same tick — back-to-back convergence
      requires bugteam on same HEAD before next wakeup.
-   - **Any other state (DISMISSED, COMMENTED with empty body):** No
-     actionable findings. Set `phase = BUGTEAM`. Continue BUGTEAM
-     in same tick — back-to-back convergence requires bugteam on
-     same HEAD before next wakeup.
+   - **Any other state (DISMISSED, COMMENTED with empty body):**
+     Fetch Copilot inline comments for `current_head` (same filter
+     as lines 121-127, anchored to newest Copilot review on
+     `current_head`). If actionable inline comments exist (non-empty
+     and unresolved): Apply **Fix protocol**.
+     With `state.json`: clean-coder teammate pushes, replies
+     inline, writes `state.json`, goes idle; Step 3 on new HEAD
+     runs via orchestrator-spawned follow-up agent (see §Fix
+     result → general-purpose). No `state.json` (single-PR): see
+     [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)
+     for full single-PR contract.
+     Reset `bugbot_clean_at = null, copilot_clean_at = null`, stay
+     in `phase = BUGBOT`. Run Step 3, schedule next wakeup, return.
+     If no actionable inline comments: no actionable findings. Set
+     `phase = BUGTEAM`. Continue BUGTEAM in same tick — back-to-back
+     convergence requires bugteam on same HEAD before next wakeup.
 
 ### `phase == BUGTEAM`
 

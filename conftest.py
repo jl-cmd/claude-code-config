@@ -70,6 +70,12 @@ _PR_CONVERGE_SCRIPTS_DIRECTORY_PATH = (
     / "pr-converge"
     / "scripts"
 )
+_DEV_ENV_SCRIPTS_DIRECTORY_PATH = (
+    _REPOSITORY_ROOT_PATH
+    / "packages"
+    / "claude-dev-env"
+    / "scripts"
+)
 
 
 class _PendingSysPathRestore(NamedTuple):
@@ -235,6 +241,20 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         if cached_config_binding_is_wrong_for_pr_converge_scripts:
             _evict_config_module()
         _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
+        return
+
+    resolved_dev_env_scripts_path = _DEV_ENV_SCRIPTS_DIRECTORY_PATH.resolve()
+    is_inside_dev_env_scripts = _path_is_inside_directory(
+        resolved_collected_path, resolved_dev_env_scripts_path
+    )
+    if is_inside_dev_env_scripts:
+        _record_pending_sys_path_restore(collector.nodeid)
+        _evict_config_module()
+        _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
+        _remove_path_if_present(_HOOKS_ROOT_DIRECTORY_PATH)
+        _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
+        sys.path.insert(0, str(resolved_dev_env_scripts_path))
         return
 
     any_git_hooks_entry_was_removed = _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)

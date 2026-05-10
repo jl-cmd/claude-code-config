@@ -78,8 +78,8 @@ Decide (same state-based classifier as gate (a), collapsed to two outcomes since
 Claude findings go through Fix protocol regardless of inline vs body-only):
 
 - **`classification == "dirty"` (state `CHANGES_REQUESTED` or `COMMENTED`
-  with non-empty body, OR non-empty inline threads anchored to
-  `current_head`):** Treat identically to gate (a) dirty path — apply
+  with non-empty body, OR non-empty inline threads at `current_head`
+  that are `is_outdated == false` AND `is_resolved == false`):** Treat identically to gate (a) dirty path — apply
   Fix protocol. Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`,
   `phase = BUGBOT`, schedule next wakeup, return.
 - **`classification == "clean"` (state `APPROVED` or no Claude review at

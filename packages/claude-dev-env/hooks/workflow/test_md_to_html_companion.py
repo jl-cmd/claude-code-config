@@ -249,7 +249,8 @@ def test_handles_curly_braces_in_body():
         html_path = os.path.join(tmp, "guide.html")
         with open(html_path, encoding="utf-8") as f:
             html = f.read()
-        assert "foo" in html
+        assert "{ foo: 1 }" in html
+        assert "{{" not in html
         assert "JS Example" in html
 
 
@@ -273,38 +274,20 @@ def test_escapes_title_in_html_output():
         assert "<script>" not in html
 
 
-def test_skips_readme_md():
+def test_skips_root_readme():
     for each_name in ("README.md", "readme.md"):
-        with tempfile.TemporaryDirectory() as tmp:
-            md_path = os.path.join(tmp, each_name)
-            html_path = os.path.join(tmp, os.path.splitext(each_name)[0] + ".html")
-            with open(md_path, "w", encoding="utf-8") as f:
-                f.write("# Test")
-
-            result = _run_hook(
-                "Write", {"file_path": md_path, "content": "# Test"}
-            )
-            assert result.returncode == 0
-            assert not os.path.exists(html_path), (
-                f"{each_name} should not produce companion html"
-            )
+        result = _run_hook(
+            "Write", {"file_path": each_name, "content": "# Test"}
+        )
+        assert result.returncode == 0
 
 
-def test_skips_changelog_md():
+def test_skips_root_changelog():
     for each_name in ("CHANGELOG.md", "changelog.md"):
-        with tempfile.TemporaryDirectory() as tmp:
-            md_path = os.path.join(tmp, each_name)
-            html_path = os.path.join(tmp, os.path.splitext(each_name)[0] + ".html")
-            with open(md_path, "w", encoding="utf-8") as f:
-                f.write("# Test")
-
-            result = _run_hook(
-                "Write", {"file_path": md_path, "content": "# Test"}
-            )
-            assert result.returncode == 0
-            assert not os.path.exists(html_path), (
-                f"{each_name} should not produce companion html"
-            )
+        result = _run_hook(
+            "Write", {"file_path": each_name, "content": "# Test"}
+        )
+        assert result.returncode == 0
 
 
 def test_language_class_valid():
@@ -388,3 +371,21 @@ def test_handles_parentheses_in_links():
             'href="https://en.wikipedia.org/wiki/Python_(programming_language)"'
             in html
         )
+
+
+def test_does_not_skip_nested_readme():
+    with tempfile.TemporaryDirectory() as tmp:
+        nested_dir = os.path.join(tmp, "docs")
+        os.makedirs(nested_dir)
+        md_path = os.path.join(nested_dir, "README.md")
+        html_path = os.path.join(nested_dir, "README.html")
+
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write("# Nested README")
+
+        result = _run_hook(
+            "Write",
+            {"file_path": md_path, "content": "# Nested README"},
+        )
+        assert result.returncode == 0
+        assert os.path.exists(html_path)

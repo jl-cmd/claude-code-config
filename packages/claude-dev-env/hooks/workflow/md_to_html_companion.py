@@ -44,8 +44,12 @@ def _is_exempt_path(file_path: str) -> bool:
     normalized = file_path.replace("\\", "/")
     if "/.claude/" in normalized or normalized.startswith(".claude/"):
         return True
-    basename = Path(file_path).name.lower()
-    return basename in ("readme.md", "changelog.md")
+    if normalized.startswith("./"):
+        normalized = normalized[2:]
+    stripped = normalized.lstrip("/")
+    if "/" not in stripped:
+        return stripped.lower() in ("readme.md", "changelog.md")
+    return False
 
 
 def _md_to_html(markdown_text: str) -> str:
@@ -315,7 +319,6 @@ def main() -> None:
 
     title = escape(_extract_title(md_content))
     html_body = _md_to_html(md_content)
-    html_body = html_body.replace("{", "{{").replace("}", "}}")
     html_content = _html_template(title=title, body=html_body)
 
     html_path = os.path.splitext(file_path)[0] + ".html"

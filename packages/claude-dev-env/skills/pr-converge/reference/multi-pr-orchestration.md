@@ -118,7 +118,7 @@ Bugfind subagent completes (findings or clean):
   1. `bugbot_clean_at == current_head` (back-to-back clean): run the full
      four-gate flow from `convergence-gates.md`. Only when all gates
      pass — per the full gate sequence in `convergence-gates.md` — run
-     `update_pull_request(owner, repo, pullNumber, draft=false)`, append
+     `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`, append
      convergence row to `<TMPDIR>/pr-converge-<session_id>/converged.log`
      per §Memory, then write `state.json` (per §Concurrency) with `status:
      "converged"`, `last_action: "converged"`, `phase: "BUGBOT"`,
@@ -198,7 +198,7 @@ can remove files mid-run — environmental risk.
 - **Path:** sibling of `state.json`.
 - **Format:** one tab-separated row per converged PR: ISO8601 UTC,
   owner/repo#number, bugbot SHA, bugteam SHA.
-- **Append site:** agent running `update_pull_request(owner, repo, pullNumber, draft=false)`. Append **before**
+- **Append site:** agent running `update_pull_request(pullNumber=NUMBER, owner=OWNER, repo=REPO, draft=false)`. Append **before**
   locked `state.json` publish so log row survives failed merge.
 - **Never read inside loop.** User / follow-up tooling only.
 

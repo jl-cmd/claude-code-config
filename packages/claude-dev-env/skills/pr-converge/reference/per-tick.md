@@ -163,8 +163,9 @@ pushed commits during its run. `current_head` from Step 1 is stale:
    proceed with convergence-gates — schedule a 90s wakeup and return.
    Re-resolve HEAD next tick.
 
-   If `new_head != current_head`, set `current_head = new_head` AND
-   `bugbot_clean_at = null`. New commits invalidate bugbot's prior clean.
+   If `new_head != current_head`, set `current_head = new_head`,
+   `bugbot_clean_at = null`, `bugbot_down = false`. New commits invalidate
+   bugbot's prior clean and down-detection state.
 
 c. Inspect bugteam outcome. Reports `convergence (zero findings)` or list
 of unfixed findings with file:line.
@@ -199,7 +200,7 @@ for review or HEAD change before re-triggering.
 
 **Bugbot-down detection:** After posting `bugbot run`, wait 15 seconds for
 bugbot to acknowledge. Fetch the comment via
-`issue_read(method="get_comments", owner=OWNER, repo=REPO, issueNumber=NUMBER)`
+`issue_read(method="get_comments", owner=OWNER, repo=REPO, issue_number=NUMBER)`
 and locate the most recent `bugbot run` body. If the comment has zero reactions, bugbot did not acknowledge — it is
 down. Set `bugbot_down = true`, `phase = BUGTEAM`, and continue BUGTEAM in
 the same tick (no wakeup — bugteam runs now against this HEAD). If reactions

@@ -130,7 +130,7 @@ Bugfind subagent completes (findings or clean):
      "audit_clean"`, `status: "awaiting_bugbot"`, `phase: "BUGBOT"`, then
      trigger bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
   3. **Bugbot-down detection.** Sleep 15 seconds. Fetch recent comments via
-     `issue_read(method="get_comments", owner=owner, repo=repo, issueNumber=issueNumber)`.
+     `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`.
      Locate the most recent comment whose body contains `"bugbot run"`. If the
      comment has zero reactions (reactions count is `0` or absent): set
      `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"`,
@@ -148,7 +148,7 @@ When bugfix (clean-coder) subagent completes after push:
   1. Reads `state.json` for its PR.
   2. Triggers bugbot via `add_issue_comment(owner, repo, issueNumber, body="bugbot run")`.
   3. **Bugbot-down detection.** Sleep 15 seconds. Fetch recent comments via
-     `issue_read(method="get_comments", owner=owner, repo=repo, issueNumber=issueNumber)`.
+     `issue_read(method="get_comments", owner=owner, repo=repo, issue_number=issue_number)`.
      Locate the most recent comment whose body contains `"bugbot run"`. If the
      comment has zero reactions (reactions count is `0` or absent): set
      `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"`,

@@ -133,9 +133,10 @@ Bugfind subagent completes (findings or clean):
      `issue_read(method="get_comments", owner=owner, repo=repo, issueNumber=issueNumber)`.
      Locate the most recent comment whose body contains `"bugbot run"`. If the
      comment has zero reactions (reactions count is `0` or absent): set
-     `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"` via
-     `state.json`, spawn a `bugteam` subagent, and return (skip going idle).
-     If one or more reactions present, continue to step 4.
+     `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"`,
+     `last_action: "bugbot_down_detected"`, `last_updated` ISO-8601 UTC
+     via `state.json`, spawn a `bugteam` subagent, and return (skip going
+     idle). If one or more reactions present, continue to step 4.
   4. Goes idle.
 
 ### Fix result → general-purpose per PR
@@ -150,9 +151,10 @@ When bugfix (clean-coder) subagent completes after push:
      `issue_read(method="get_comments", owner=owner, repo=repo, issueNumber=issueNumber)`.
      Locate the most recent comment whose body contains `"bugbot run"`. If the
      comment has zero reactions (reactions count is `0` or absent): set
-     `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"` via
-     `state.json`, spawn a `bugteam` subagent, and return (skip polling loop).
-     If one or more reactions present, continue to step 4.
+     `bugbot_down = true`, `phase: "BUGTEAM"`, `status: "in_progress"`,
+     `last_action: "bugbot_down_detected"`, `last_updated` ISO-8601 UTC
+     via `state.json`, spawn a `bugteam` subagent, and return (skip
+     polling loop). If one or more reactions present, continue to step 4.
   4. Polls `pull_request_read(method="get_reviews")` every 60s (up to 10 polls)
      until review anchored to `current_head` appears with `commit_id ==
      current_head`. If polling reaches limit without a matching review, write

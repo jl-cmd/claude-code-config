@@ -202,23 +202,8 @@ b. **Re-resolve current HEAD (MANDATORY — never skip).** Bugteam may have
 pushed commits during its run. `current_head` from Step 1 is stale:
 
    ```
-   pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `.head.sha`
-   ```
-
-   Capture `new_head`. Then check the most recent commit timestamp:
-
-   ```
-   list_commits(owner=OWNER, repo=REPO, sha="<branch>")
-     → sort by `.commit.committer.date` descending → index 0 `.commit.committer.date`
-   ```
-
-   If the most recent commit timestamp is **less than 60 seconds ago**, the
-   GitHub API may not have propagated it to review endpoints yet. Do not
-   proceed with convergence-gates — schedule a 90s wakeup and return.
-   Re-resolve HEAD next tick.
-
-   If `new_head != current_head`, set `current_head = new_head` AND
-   `bugbot_clean_at = null`. New commits invalidate bugbot's prior clean.
+If `new_head != current_head`, set `current_head = new_head` AND
+`bugbot_clean_at = null, copilot_clean_at = null`. New commits invalidate prior clean results.
 
 c. Inspect bugteam outcome. Reports `convergence (zero findings)` or list
 of unfixed findings with file:line.

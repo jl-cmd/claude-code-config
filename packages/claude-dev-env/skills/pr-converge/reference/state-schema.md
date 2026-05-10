@@ -9,9 +9,8 @@ plain text so next tick re-reads from context:
 - `phase`: `BUGBOT`, `BUGTEAM`, or `COPILOT_WAIT`. Start `BUGBOT` on first tick.
 - `bugbot_clean_at`: HEAD SHA where bugbot last reported clean, or `null`.
   Reset to `null` on every push.
-- `copilot_clean_at`: HEAD SHA where Copilot last reported clean (or the
-  most recent HEAD that was handed over to BUGTEAM after a Copilot pre-check
-  passed), or `null`. Reset to `null` on every push.
+- `copilot_clean_at`: HEAD SHA where Copilot last reported clean, or
+  `null`. Reset to `null` on every push.
 - `inline_lag_streak`: integer, init `0`. Consecutive ticks where review
   body shows findings against `current_head` but inline API returns zero
   matching. Reset to `0` on any other branch outcome.

@@ -101,7 +101,7 @@ After phase 2 completes, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` fr
 
 ### Shutdown (bugfind)
 
-Each teammate self-terminates after marking its task complete — the task list reflects completion. The lead polls `TaskList` to detect when all eleven tasks are `completed`. Tasks that stay `in_progress` without an idle notification signal a crashed teammate. For each stuck task: verify whether the outcome XML exists at `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml`. XML present → mark task `completed` (teammate finished, crashed before marking). No XML → re-spawn that letter's teammate.
+Each teammate self-terminates after marking its task complete — the task list reflects completion. The lead polls `TaskList` to detect when all eleven tasks are `completed`. Tasks that stay `in_progress` without an idle notification signal a crashed teammate. For each stuck task: verify whether the outcome XML exists at `<run_temp_dir>/pr-{N}/loop-{L}-{letter}.outcomes.xml`. XML present → mark task `completed` (teammate finished, crashed before marking). No XML → re-spawn that letter's teammate.
 
 `last_action = "audited"`. Append audit metadata to `audit_log`.
 
@@ -122,14 +122,14 @@ TaskCreate(subject="{owner}/{repo}#{N} audit {letter} loop {L}",
                        "Loop number in subject is updated by cleanup at end of each loop. "
                        "Load rubric from $HOME/.claude/audit-rubrics/category_rubrics/category-{letter}-{slug}.md. "
                        "Load prompt from $HOME/.claude/audit-rubrics/prompts/category-{letter}-{slug}.md. "
-                       "Diff: <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}.patch. "
-                       "Write outcome XML to <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml. "
+                       "Diff: <run_temp_dir>/pr-{N}/loop-{L}.patch. "
+                       "Write outcome XML to <run_temp_dir>/pr-{N}/loop-{L}-{letter}.outcomes.xml. "
                        "Worktree: <worktree_path>.")
 # ... (11 calls, A through K)
 TaskCreate(subject="{owner}/{repo}#{N} consolidate loop {L}",
            description="Consolidate and validate all 11 audit outcome XMLs for {owner}/{repo}#{N}. "
                        "Loop number in subject is updated by cleanup at end of each loop. "
-                       "Read sibling XMLs from <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{a..k}.outcomes.xml. "
+                       "Read sibling XMLs from <run_temp_dir>/pr-{N}/loop-{L}-{a..k}.outcomes.xml. "
                        "Validate, de-dup, post review. Write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml.")
 TaskCreate(subject="{owner}/{repo}#{N} cleanup loop {L}",
            description="Reset task list for next audit loop on {owner}/{repo}#{N}. "
@@ -156,7 +156,7 @@ Agent(subagent_type="code-quality-agent",
 **Recovery (re-entry or API error):** Before spawning, the lead lists tasks
 (`TaskList`). For each task with status `pending` or `in_progress`:
 
-- Check if the outcome XML exists at `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml`
+- Check if the outcome XML exists at `<run_temp_dir>/pr-{N}/loop-{L}-{letter}.outcomes.xml`
 - If XML exists → teammate finished but crashed before marking; call `TaskUpdate` to `completed`
 - If no XML → re-spawn that letter's teammate
 
@@ -172,7 +172,7 @@ verifies every XML is on disk before spawning phase 2.
 
 ### AUDIT phase 2 — consolidator/validator after all eleven complete
 
-Once every sibling XML at `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{a..k}.outcomes.xml`
+Once every sibling XML at `<run_temp_dir>/pr-{N}/loop-{L}-{a..k}.outcomes.xml`
 is on disk, spawn the consolidator/validator in a fresh `Agent` call
 (`run_in_background=true`):
 
@@ -183,16 +183,16 @@ Agent(subagent_type="code-quality-agent",
       model="opus",
       run_in_background=true,
       description="Consolidate/validate {owner}/{repo}#{N} loop {L}",
-      prompt="<validate XML; read each of the 11 sibling XMLs at <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-a.outcomes.xml through <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-k.outcomes.xml (literal absolute paths, all already on disk); validate each finding: file exists, line in bounds, excerpt matches claimed line, category matches the auditor's bound letter, category A-K, severity P0/P1/P2; quarantine hallucinated findings to <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins, keep longest description on conflict; re-id as loop<L>-<K>; write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml; before posting, re-read the full review once as the PR author would — merge duplicates, drop findings that miss their mark, rephrase anything confusing — your job is to make the author want to fix these bugs, not to demonstrate the rubric ran; then post review>")
+      prompt="<validate XML; read each of the 11 sibling XMLs at <run_temp_dir>/pr-{N}/loop-{L}-a.outcomes.xml through <run_temp_dir>/pr-{N}/loop-{L}-k.outcomes.xml (literal absolute paths, all already on disk); validate each finding: file exists, line in bounds, excerpt matches claimed line, category matches the auditor's bound letter, category A-K, severity P0/P1/P2; quarantine hallucinated findings to <run_temp_dir>/pr-{N}/loop-{L}-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins, keep longest description on conflict; re-id as loop<L>-<K>; write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml; before posting, re-read the full review once as the PR author would — merge duplicates, drop findings that miss their mark, rephrase anything confusing — your job is to make the author want to fix these bugs, not to demonstrate the rubric ran; then post review>")
 ```
 
 Teammate `-validate` is the opus consolidator/validator: reads all eleven
-sibling XMLs at explicit absolute paths under `<run_temp_dir>/{owner}-{repo}-pr-{N}`
+sibling XMLs at explicit absolute paths under `<run_temp_dir>/pr-{N}`
 (no polling — the lead has already confirmed the files are on disk), then
 validates each finding: file exists, line in bounds, excerpt matches claimed
 line, category matches the auditor's bound letter, category is A–K, severity
 is P0/P1/P2. Hallucinated findings are quarantined to
-`<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-diagnostics.json` under
+`<run_temp_dir>/pr-{N}/loop-{L}-diagnostics.json` under
 `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)`
 (max severity wins, keep longest description on conflict) and re-assigned
 merged IDs as `loop<L>-<K>`. The `-validate` prompt must embed sibling paths

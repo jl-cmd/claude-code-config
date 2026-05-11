@@ -46,8 +46,9 @@ post a fresh PR in a fresh branch based on origin main to the user.
   ID. Wait 15s, then check for reactions on that specific comment via
   `issue_read(method="get_comments", owner=OWNER, repo=REPO, issue_number=NUMBER)`
   matching on the captured ID. Zero reactions means bugbot is down; set
-  `bugbot_down = true`, `phase = BUGTEAM`, and continue bugteam in the
-  same tick instead of scheduling another bugbot wakeup.
+  `bugbot_down = true`, `phase = BUGTEAM`, and jump to Step 2 BUGTEAM
+  branch in this same tick so bugteam runs immediately against this
+  HEAD without a wakeup cycle.
 - **Bot login fields differ by endpoint** — `get_reviews` returns
   `.user.login` (object), but `get_review_comments` returns `.author`
   (string, not an object). Threads use `is_outdated` (not `commit_id`) to

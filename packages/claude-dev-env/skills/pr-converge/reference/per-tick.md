@@ -230,8 +230,8 @@ capture the returned comment ID. Wait 15 seconds, then fetch comments via
 select the comment whose `id` matches the captured ID, and check its
 reactions. If the comment has zero reactions, bugbot did not
 acknowledge — it is down. Set `bugbot_down = true`, `phase = BUGTEAM`, and
-continue BUGTEAM in the same tick (no wakeup — bugteam runs now against this
-HEAD). If reactions are present, bugbot acknowledged; proceed with normal
+**jump to Step 2 BUGTEAM branch in this same tick** so bugteam runs
+immediately against this HEAD without a wakeup cycle. If reactions are present, bugbot acknowledged; proceed with normal
 pacing (Step 4).
 
 ## Step 4: Loop pacing

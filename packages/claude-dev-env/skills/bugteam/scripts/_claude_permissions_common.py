@@ -17,6 +17,8 @@ from typing import NoReturn
 
 from config.claude_permissions_common_constants import (
     ATOMIC_WRITE_TEMPORARY_SUFFIX,
+    CLAUDE_DIRECTORY_MARKER,
+    GIT_DIRECTORY_MARKER,
     TEXT_FILE_ENCODING,
 )
 
@@ -300,6 +302,12 @@ def ensure_list_entry(
             f"remove the entry manually, then re-run."
         )
     return existing_entry
+
+
+def is_valid_project_root(candidate_path: Path) -> bool:
+    git_marker_path = candidate_path / GIT_DIRECTORY_MARKER
+    claude_marker_path = candidate_path / CLAUDE_DIRECTORY_MARKER
+    return git_marker_path.exists() or claude_marker_path.exists()
 
 
 def prune_empty_list_then_empty_section(

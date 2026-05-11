@@ -6,6 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.modules.pop("config", None)
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from config.bugteam_preflight_constants import (
     ALL_DISCOVERY_IGNORE_DIRECTORIES,
     ALL_GIT_CONFIG_HOOKS_PATH_ARGUMENTS,
@@ -20,7 +24,7 @@ from config.bugteam_preflight_constants import (
 )
 
 
-def verify_git_hooks_path(repository_root: Path | None) -> int:
+def verify_git_hooks_path(repository_root: Path) -> int:
     """Check that core.hooksPath resolves to the claude-dev-env git-hooks directory.
 
     When *repository_root* is provided, queries the effective config for that
@@ -233,12 +237,11 @@ def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(all_argv)
 
 
-def main(all_argv: list[str] | None, repository_root: Path | None) -> int:
+def main(all_argv: list[str] | None = None) -> int:
     """Run the bugteam preflight checks (pytest, optional pre-commit).
 
     Args:
         all_argv: Command-line arguments to parse. Pass None to use sys.argv.
-        repository_root: Repository root path. Pass None to discover from cwd.
 
     Returns:
         Zero on success, non-zero exit code on failure.
@@ -249,13 +252,9 @@ def main(all_argv: list[str] | None, repository_root: Path | None) -> int:
         return 0
     start = Path.cwd()
     resolved_repository_root: Path = (
-        repository_root
-        if repository_root is not None
-        else (
-            arguments.repo_root.resolve()
-            if arguments.repo_root is not None
-            else find_repository_root(start)
-        )
+        arguments.repo_root.resolve()
+        if arguments.repo_root is not None
+        else find_repository_root(start)
     )
     hooks_path_exit_code = verify_git_hooks_path(resolved_repository_root)
     if hooks_path_exit_code != 0:
@@ -283,4 +282,4 @@ def main(all_argv: list[str] | None, repository_root: Path | None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(None, None))
+    raise SystemExit(main(sys.argv[1:]))

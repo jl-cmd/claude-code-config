@@ -43,7 +43,7 @@ def _make_completed_process(
 def test_should_exit_nonzero_when_core_hooks_path_unset(capsys: pytest.CaptureFixture[str]) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process("", returncode=1)
-        exit_code = bugteam_preflight.verify_git_hooks_path()
+        exit_code = bugteam_preflight.verify_git_hooks_path(Path("."))
     assert exit_code != 0
     captured = capsys.readouterr()
     assert "core.hooksPath" in captured.err
@@ -57,7 +57,7 @@ def test_should_exit_zero_when_core_hooks_path_points_to_claude_hooks(tmp_path: 
         mock_run.return_value = _make_completed_process(
             str(claude_hooks_path) + "\n", returncode=0
         )
-        exit_code = bugteam_preflight.verify_git_hooks_path()
+        exit_code = bugteam_preflight.verify_git_hooks_path(Path("."))
     assert exit_code == 0
 
 
@@ -66,7 +66,7 @@ def test_should_exit_nonzero_when_core_hooks_path_points_elsewhere(capsys: pytes
         mock_run.return_value = _make_completed_process(
             "/some/other/path/.husky\n", returncode=0
         )
-        exit_code = bugteam_preflight.verify_git_hooks_path()
+        exit_code = bugteam_preflight.verify_git_hooks_path(Path("."))
     assert exit_code != 0
     captured = capsys.readouterr()
     assert "core.hooksPath" in captured.err
@@ -75,7 +75,7 @@ def test_should_exit_nonzero_when_core_hooks_path_points_elsewhere(capsys: pytes
 def test_should_include_correction_commands_in_error_message(capsys: pytest.CaptureFixture[str]) -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process("", returncode=1)
-        bugteam_preflight.verify_git_hooks_path()
+        bugteam_preflight.verify_git_hooks_path(Path("."))
     captured = capsys.readouterr()
     assert (
         "npx claude-dev-env" in captured.err
@@ -106,7 +106,7 @@ def test_should_accept_hooks_path_with_trailing_slash() -> None:
         mock_run.return_value = _make_completed_process(
             "/home/user/.claude/hooks/git-hooks/\n", returncode=0
         )
-        exit_code = bugteam_preflight.verify_git_hooks_path()
+        exit_code = bugteam_preflight.verify_git_hooks_path(Path("."))
     assert exit_code == 0, (
         "hooksPath with trailing slash must pass verification after normalization"
     )
@@ -144,7 +144,7 @@ def test_should_accept_hooks_path_with_backslash_and_trailing_slash() -> None:
         mock_run.return_value = _make_completed_process(
             "C:\\Users\\user\\.claude\\hooks\\git-hooks\\\n", returncode=0
         )
-        exit_code = bugteam_preflight.verify_git_hooks_path()
+        exit_code = bugteam_preflight.verify_git_hooks_path(Path("."))
     assert exit_code == 0, (
         "Windows hooksPath with trailing backslash must pass after normalization"
     )
@@ -155,7 +155,7 @@ def test_should_exit_nonzero_when_git_executable_not_found(
 ) -> None:
     """Preflight must not crash with a traceback when git is missing from PATH."""
     with patch("subprocess.run", side_effect=FileNotFoundError()):
-        exit_code = bugteam_preflight.verify_git_hooks_path()
+        exit_code = bugteam_preflight.verify_git_hooks_path(Path("."))
     assert exit_code != 0, (
         "FileNotFoundError from subprocess.run must produce a non-zero exit, "
         "not a propagated traceback"
@@ -175,7 +175,7 @@ def test_should_exit_nonzero_when_subprocess_run_raises_os_error(
 ) -> None:
     """Preflight must surface a clean error for other OS-level git launch failures."""
     with patch("subprocess.run", side_effect=OSError("permission denied")):
-        exit_code = bugteam_preflight.verify_git_hooks_path()
+        exit_code = bugteam_preflight.verify_git_hooks_path(Path("."))
     assert exit_code != 0, (
         "OSError from subprocess.run must produce a non-zero exit, "
         "not a propagated traceback"

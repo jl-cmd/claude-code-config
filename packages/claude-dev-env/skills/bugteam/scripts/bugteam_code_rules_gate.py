@@ -826,17 +826,20 @@ def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(all_argv)
 
 
-def main() -> int:
+def main(all_arguments: list[str]) -> int:
     """Entry point for the bugteam CODE_RULES gate.
 
     Parses arguments, loads the validate_content function, determines the
     file scope (staged, diff against base, or explicit paths), and runs
     the gate.
 
+    Args:
+        all_arguments: Command-line arguments to parse.
+
     Returns:
         Zero when all checks pass, non-zero on violations or errors.
     """
-    arguments = parse_arguments(sys.argv[1:])
+    arguments = parse_arguments(all_arguments)
     repository_root = (
         arguments.repo_root.resolve()
         if arguments.repo_root is not None
@@ -880,4 +883,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

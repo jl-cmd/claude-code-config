@@ -8,7 +8,9 @@ from typing import Any
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+_script_directory = str(Path(__file__).resolve().parent)
+if _script_directory not in sys.path:
+    sys.path.insert(0, _script_directory)
 
 import probe_code_rules_enforcer_check as probe_module
 from probe_code_rules_enforcer_check import main, run_probe

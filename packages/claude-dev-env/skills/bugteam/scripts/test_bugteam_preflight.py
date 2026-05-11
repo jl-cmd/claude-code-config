@@ -139,6 +139,26 @@ def test_should_exit_zero_when_hooks_path_set_at_repo_scope(tmp_path: Path) -> N
     )
 
 
+def test_verify_git_hooks_path_accepts_none_repository_root(tmp_path: Path) -> None:
+    """When repository_root is None, the call must use git's cwd-effective config.
+
+    Binds the documented optional contract: passing None must not raise and must
+    omit the `-C <root>` arguments so git falls back to the working directory.
+    """
+    claude_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
+    claude_hooks_path.mkdir(parents=True)
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process(
+            str(claude_hooks_path) + "\n", returncode=0
+        )
+        exit_code = bugteam_preflight.verify_git_hooks_path(None)
+    assert exit_code == 0
+    called_command = mock_run.call_args[0][0]
+    assert "-C" not in called_command, (
+        "verify_git_hooks_path(None) must omit -C so git uses cwd-effective config"
+    )
+
+
 def test_should_accept_hooks_path_with_backslash_and_trailing_slash() -> None:
     with patch("subprocess.run") as mock_run:
         mock_run.return_value = _make_completed_process(

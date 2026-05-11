@@ -37,14 +37,15 @@ def _make_isolated_git_environment(home_directory: Path) -> dict[str, str]:
 
     Without this, real `git config --global` reads/writes hit the developer's
     actual ~/.gitconfig — which would corrupt the host machine and make tests
-    depend on global state. Pointing HOME, USERPROFILE, XDG_CONFIG_HOME, and
-    GIT_CONFIG_GLOBAL at a temp directory isolates the test fully.
+    depend on global state. Pointing HOME, USERPROFILE, and XDG_CONFIG_HOME
+    at a temp directory isolates the test fully on every supported git
+    version. GIT_CONFIG_GLOBAL would tighten the binding but requires
+    git >= 2.32 (August 2021); HOME/USERPROFILE already isolate on older git.
     """
     isolated_environment = os.environ.copy()
     isolated_environment["HOME"] = str(home_directory)
     isolated_environment["USERPROFILE"] = str(home_directory)
     isolated_environment["XDG_CONFIG_HOME"] = str(home_directory / ".config")
-    isolated_environment["GIT_CONFIG_GLOBAL"] = str(home_directory / ".gitconfig")
     isolated_environment["GIT_CONFIG_NOSYSTEM"] = "1"
     return isolated_environment
 

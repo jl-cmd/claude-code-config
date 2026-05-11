@@ -17,8 +17,7 @@ from typing import NoReturn
 
 from config.claude_permissions_common_constants import (
     ATOMIC_WRITE_TEMPORARY_SUFFIX,
-    CLAUDE_DIRECTORY_MARKER,
-    GIT_DIRECTORY_MARKER,
+    DEFAULT_SETTINGS_FILE_MODE,
     TEXT_FILE_ENCODING,
 )
 
@@ -156,14 +155,12 @@ def get_mode_to_preserve(settings_path: Path) -> int:
 
     Returns:
         The permission bits from the file mode (lower portion).
-        Returns 0o600 when the file does not exist (default for new
-        settings files).
+        Returns DEFAULT_SETTINGS_FILE_MODE when the file does not exist.
     """
-    default_settings_file_mode: int = 0o600
     try:
         stat_result = os.stat(settings_path)
     except FileNotFoundError:
-        return default_settings_file_mode
+        return DEFAULT_SETTINGS_FILE_MODE
     except OSError as stat_error:
         exit_with_error(f"Failed to stat {settings_path}: {stat_error}")
     return stat.S_IMODE(stat_result.st_mode)
@@ -182,13 +179,24 @@ def write_atomically_with_mode(
         temporary_path: Path for the temporary file (sibling of target).
         serialized_content: The content to write to the temporary file.
         file_mode: Unix permission bits for the new file (e.g., 0o600).
+
+    Raises:
+        OSError: When os.open or os.fdopen fails. The raw file descriptor
+            is closed before re-raising so the FD does not leak.
+        MemoryError: When os.fdopen runs out of buffer memory; the FD is
+            closed before re-raising.
     """
     file_descriptor = os.open(
         str(temporary_path),
         os.O_WRONLY | os.O_CREAT | os.O_EXCL,
         file_mode,
     )
-    with os.fdopen(file_descriptor, "w", encoding=TEXT_FILE_ENCODING) as writer:
+    try:
+        writer = os.fdopen(file_descriptor, "w", encoding=TEXT_FILE_ENCODING)
+    except (OSError, MemoryError):
+        os.close(file_descriptor)
+        raise
+    with writer:
         writer.write(serialized_content)
 
 
@@ -208,22 +216,29 @@ def save_settings(settings_path: Path, all_settings: dict[str, object]) -> None:
         settings_path.suffix + ATOMIC_WRITE_TEMPORARY_SUFFIX
     )
     mode_to_preserve = get_mode_to_preserve(settings_path)
+    is_temp_owned_by_this_invocation = False
     try:
         try:
             write_atomically_with_mode(
                 temporary_path, serialized_settings, mode_to_preserve
             )
+            is_temp_owned_by_this_invocation = True
             os.replace(str(temporary_path), str(settings_path))
+            is_temp_owned_by_this_invocation = False
         except OSError as os_error:
             exit_with_error(
                 f"Failed to write settings atomically to {settings_path}: {os_error}"
             )
     finally:
-        if temporary_path.exists():
+        if is_temp_owned_by_this_invocation and temporary_path.exists():
             try:
                 temporary_path.unlink()
-            except OSError:
-                pass
+            except OSError as unlink_error:
+                print(
+                    f"Warning: could not remove temp file {temporary_path}: "
+                    f"{type(unlink_error).__name__}: {unlink_error}",
+                    file=sys.stderr,
+                )
 
 
 def append_if_missing(all_target_list: list[object], new_value: str) -> bool:
@@ -302,12 +317,6 @@ def ensure_list_entry(
             f"remove the entry manually, then re-run."
         )
     return existing_entry
-
-
-def is_valid_project_root(candidate_path: Path) -> bool:
-    git_marker_path = candidate_path / GIT_DIRECTORY_MARKER
-    claude_marker_path = candidate_path / CLAUDE_DIRECTORY_MARKER
-    return git_marker_path.exists() or claude_marker_path.exists()
 
 
 def prune_empty_list_then_empty_section(

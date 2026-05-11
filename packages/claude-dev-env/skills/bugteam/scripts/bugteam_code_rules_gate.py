@@ -6,7 +6,10 @@ import importlib.util
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
+
+ValidateContentCallable = Callable[..., list[str]]
 
 from config.bugteam_code_rules_gate_constants import (
     ALL_CODE_FILE_EXTENSIONS,
@@ -35,13 +38,18 @@ def resolve_claude_dev_env_root() -> Path:
     return environment_value
 
 
-def load_validate_content() -> object:
+def load_validate_content() -> ValidateContentCallable:
     """Load and return the validate_content function from the CODE_RULES enforcer.
 
     Dynamically imports the code_rules_enforcer module by resolving its path
     relative to the current file's location. Temporarily removes the gate
     script's ``config`` from ``sys.modules`` to avoid a namespace clash with
     the enforcer's ``hooks/config/`` package.
+
+    Not thread-safe: mutates the process-global ``sys.modules`` mapping. Call
+    only from single-threaded contexts (the CLI entry point at ``main`` is
+    safe; concurrent invocations from multiple threads must wrap calls in an
+    external lock).
 
     Returns:
         The validate_content callable from the loaded enforcer module.
@@ -200,7 +208,12 @@ def staged_file_line_count(
         relative_path_posix: POSIX-style relative path to the staged file.
 
     Returns:
-        Number of lines in the staged file, or 0 if the file cannot be read.
+        Number of lines in the staged file (zero only when the file is genuinely empty).
+
+    Raises:
+        SystemExit: When ``git show`` fails. Returning zero on git errors
+            would be indistinguishable from an empty file and would silently
+            cause the gate to skip validating a newly added file.
     """
     show_result = subprocess.run(
         ["git", "show", f":{relative_path_posix}"],
@@ -212,7 +225,12 @@ def staged_file_line_count(
         check=False,
     )
     if show_result.returncode != 0:
-        return 0
+        print(
+            f"{BUGTEAM_CODE_RULES_GATE_PREFIX}git show :{relative_path_posix} failed:\n"
+            f"{show_result.stderr}",
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_CODE_ENFORCER_MISSING)
     staged_content = show_result.stdout
     if not staged_content:
         return 0
@@ -231,6 +249,12 @@ def is_staged_file_newly_added(
 
     Returns:
         True when the file status starts with 'A' (added).
+
+    Raises:
+        SystemExit: When ``git diff --cached --name-status`` fails. Returning
+            False on git errors would be indistinguishable from "modified, not
+            added" and would cause the gate to silently skip validating a
+            newly added file.
     """
     status_result = subprocess.run(
         ["git", "diff", "--cached", "--name-status", "--", relative_path_posix],
@@ -242,7 +266,12 @@ def is_staged_file_newly_added(
         check=False,
     )
     if status_result.returncode != 0:
-        return False
+        print(
+            f"{BUGTEAM_CODE_RULES_GATE_PREFIX}git diff --cached --name-status failed for "
+            f"{relative_path_posix}:\n{status_result.stderr}",
+            file=sys.stderr,
+        )
+        raise SystemExit(EXIT_CODE_ENFORCER_MISSING)
     for each_line in status_result.stdout.splitlines():
         stripped_line = each_line.strip()
         if stripped_line:
@@ -416,6 +445,12 @@ def check_database_column_string_magic(content: str, file_path: str) -> list[str
                 f"Line {first_element.lineno}: Column-name string magic {literal_text!r} - extract to config"
             )
             if len(issues) >= MAXIMUM_ISSUES_TO_REPORT:
+                print(
+                    f"{BUGTEAM_CODE_RULES_GATE_PREFIX}check_database_column_string_magic "
+                    f"cap reached at {MAXIMUM_ISSUES_TO_REPORT} issues for {file_path}; "
+                    "additional matches were dropped.",
+                    file=sys.stderr,
+                )
                 return issues
     return issues
 
@@ -471,6 +506,12 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
                     f"Line {each_node.lineno}: Wrapper {each_node.name!r} drops optional kwargs {sorted(missing)!r} of delegate {delegate_name!r}"
                 )
                 if len(issues) >= MAXIMUM_ISSUES_TO_REPORT:
+                    print(
+                        f"{BUGTEAM_CODE_RULES_GATE_PREFIX}check_wrapper_plumb_through "
+                        f"cap reached at {MAXIMUM_ISSUES_TO_REPORT} issues for {file_path}; "
+                        "additional matches were dropped.",
+                        file=sys.stderr,
+                    )
                     return issues
     return issues
 
@@ -578,7 +619,12 @@ def whole_file_line_set(file_path: Path) -> set[int]:
     """
     try:
         total_lines = len(file_path.read_text().splitlines())
-    except OSError:
+    except OSError as read_error:
+        print(
+            f"{BUGTEAM_CODE_RULES_GATE_PREFIX}whole_file_line_set could not read "
+            f"{file_path}: {type(read_error).__name__}: {read_error}",
+            file=sys.stderr,
+        )
         return set()
     if total_lines <= 0:
         return set()
@@ -687,7 +733,7 @@ def print_violation_section(
 
 
 def run_gate(
-    validate_content: object,
+    validate_content: ValidateContentCallable,
     all_file_paths: list[Path],
     repository_root: Path,
     all_added_lines_map: dict[Path, set[int]] | None,
@@ -705,10 +751,14 @@ def run_gate(
             When provided, violations on added lines are blocking; others are advisory.
 
     Returns:
-        Zero when no blocking violations are found, non-zero otherwise.
+        Zero when every targeted file was validated and no blocking
+        violations were found. Non-zero when any blocking violations were
+        found OR when one or more files could not be read (a skipped file
+        means the gate could not vouch for it).
     """
     blocking_by_file: dict[Path, list[str]] = {}
     advisory_by_file: dict[Path, list[str]] = {}
+    skipped_unreadable_count = 0
     for each_file_path in sorted(set(all_file_paths)):
         try:
             resolved = each_file_path.resolve()
@@ -726,6 +776,7 @@ def run_gate(
             content = resolved.read_text(encoding="utf-8")
         except OSError:
             print(f"{BUGTEAM_CODE_RULES_GATE_PREFIX}skip unreadable {resolved}", file=sys.stderr)
+            skipped_unreadable_count += 1
             continue
         relative = resolved.relative_to(repository_root.resolve())
         issues = validate_content(content, str(relative).replace("\\", "/"), old_content=content)
@@ -765,7 +816,13 @@ def run_gate(
             advisory_by_file,
             repository_root,
         )
-    if blocking_count:
+    if skipped_unreadable_count:
+        print(
+            f"{BUGTEAM_CODE_RULES_GATE_PREFIX}{skipped_unreadable_count} file(s) "
+            "skipped due to read errors; gate cannot vouch for those files.",
+            file=sys.stderr,
+        )
+    if blocking_count or skipped_unreadable_count:
         return 1
     return 0
 

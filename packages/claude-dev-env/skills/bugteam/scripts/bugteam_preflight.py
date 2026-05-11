@@ -24,7 +24,7 @@ from config.bugteam_preflight_constants import (
 )
 
 
-def verify_git_hooks_path(repository_root: Path) -> int:
+def verify_git_hooks_path(repository_root: Path | None) -> int:
     """Check that core.hooksPath resolves to the claude-dev-env git-hooks directory.
 
     When *repository_root* is provided, queries the effective config for that

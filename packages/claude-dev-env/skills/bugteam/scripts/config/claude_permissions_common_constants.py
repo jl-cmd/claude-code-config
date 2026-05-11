@@ -12,3 +12,4 @@ ATOMIC_WRITE_TEMPORARY_SUFFIX: str = ".tmp"
 ALL_VALID_PROJECT_ROOT_MARKERS: frozenset[str] = frozenset({".git", ".claude"})
 GIT_DIRECTORY_MARKER: str = ".git"
 CLAUDE_DIRECTORY_MARKER: str = ".claude"
+DEFAULT_SETTINGS_FILE_MODE: int = 0o600

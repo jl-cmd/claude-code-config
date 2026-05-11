@@ -1,161 +1,91 @@
 ---
 name: doc-gist
-description: Renders Claude-authored markdown (plan, work-in-progress note, decision record, runbook, design doc, any structured writeup) OR a git rebase report (with `--rebase`, comparing ORIG_HEAD vs HEAD with file-by-file diffs and a `git range-diff` walk) into a styled HTML page using an Anthropic-inspired template, uploads the result as a private (secret) GitHub gist via `gh gist create`, and returns an htmlpreview.github.io URL the user can open as a webpage. Trigger on `/doc-gist`, "publish this as a gist", "share my plan as a webpage", "make a gist of this doc", "render these notes to a webpage", "publish this writeup", "share this decision record", "show me the rebase changes as HTML", "rebase report", "what was gained or lost in that rebase", or any request to turn working notes/plans/decisions OR a rebase delta into a shareable styled webpage.
+description: Use when the user asks to share, publish, preview, or open as a webpage any HTML doc, writeup, report, plan, decision record, runbook, explainer, status update, or interactive artifact. Triggers on `/doc-gist`, "publish this", "share as a gist", "open this as a webpage", "make me a writeup", "publish my report", or any request that ends in a shareable HTML preview URL. Provides the `gist_upload` transport script, an auto-publish hook keyed off the `<!-- @publish-as-gist -->` HTML comment, and a 20-file gallery of HTML artifact patterns to draw from when designing fresh.
 ---
 
-# Doc → Gist → Webpage
+# doc-gist
 
-Take Claude-authored markdown (a plan, decision, status update, runbook, anything) OR a fresh git rebase, render it through a mode-appropriate styled HTML template, upload as a private GitHub gist, and return a clickable webpage URL.
+Design fresh HTML for the artifact at hand, mark it for publishing, write it. The rest is automatic — a hook spots the marker, uploads to a private gist, and prints the htmlpreview URL into your output for the user to click.
 
-## Modes
+## Principle (and what this skill deliberately does not ship)
 
-- **Doc mode** (default): markdown body via stdin or file. Produces a styled doc with TOC sidebar.
-- **Rebase mode** (`--rebase`): collects ORIG_HEAD vs HEAD vs auto-detected base, renders pre-vs-post panels, gained/lost file lists, file-by-file diff hunks (green/orange line tinting), and a `git range-diff` commit walk.
+This skill ships **transport, not shape**. There are no document templates here. There is no markdown-to-HTML converter. There is no rebase-report mode. The shape of every artifact is your fresh design per request, drawing on the gallery in [`references/examples/`](references/examples/) for inspiration.
+
+Per Thariq's html-effectiveness thesis: *"twenty self-contained .html files an agent produced — each one trades a document you'd skim for one you'd actually read."* Every doc-gist invocation produces a fresh design appropriate to the work, not a template fill.
+
+## How auto-publish works
+
+1. You write HTML to any path (no directory rule, no naming rule).
+2. The HTML contains the marker comment `<!-- @publish-as-gist -->` — typically as the first child of `<head>` or just inside `<body>`.
+3. The PostToolUse hook ([`workflow/doc_gist_auto_publish.py`](../../hooks/workflow/doc_gist_auto_publish.py)) fires after the Write/Edit completes, sees the marker, and runs [`scripts/gist_upload.py`](scripts/gist_upload.py) against the file.
+4. The upload script's gist + preview URLs print into your tool output. Quote them back to the user.
+
+The hook is a no-op for any HTML that lacks the marker — React components, test fixtures, scraped pages, partial fragments. The marker is the *intent signal*; absent marker means "this HTML isn't for sharing."
 
 ## Gotchas
 
-- **Doc mode** authoring path is **markdown via stdin** (or a non-`.md` file path). The repo's `md_to_html_blocker` hook refuses Write/Edit on `.md` files outside `.claude/`, so do not save the markdown to a `.md` file before running the script — pipe it directly: `$markdown | python publish.py --input -`.
-- **Rebase mode** ignores `--input` entirely. It auto-collects from git: pre-rebase tip = `ORIG_HEAD` (override with `--pre`), post-rebase tip = `HEAD` (override with `--post`), base = first match of `@{upstream}` / `origin/main` / `origin/master` / `main` / `master` (override with `--base`). `ORIG_HEAD` is overwritten by the next destructive git op — run rebase mode immediately, or pass `--pre <sha>` recovered from `git reflog`.
-- Doc-mode front-matter is optional. Without it, `--title` is required. Front-matter recognises `title:`, `eyebrow:`, `summary:` (one per line, simple `key: value` form, no nesting). Rebase mode ignores front-matter entirely.
-- Gist is **secret by default** (`gh gist create` runs without `--public`). Anyone with the URL can view, but it does not appear in search or the user's public profile.
-- The htmlpreview URL takes a few seconds to render the first time as the renderer fetches the raw gist content. If the page is blank, refresh once.
-- `gh` must be installed and authenticated (`gh auth status`). When `gh gist create failed` appears, run `gh auth login` and retry, or pass `--no-gist`.
-- Doc mode's built-in markdown converter handles headings (h1–h4), paragraphs, ordered/unordered lists, bold, italic, inline code, fenced code blocks, blockquotes, links, and horizontal rules. Tables and complex constructs are not parsed — for those, hand-author HTML and pass `--input file.html`.
-- Doc-mode TOC sidebar auto-builds from h2/h3 headings. With fewer than two headings, the TOC list is empty and the sidebar shows only the "In this doc" header.
-- Doc-mode body text is HTML-escaped through a placeholder protocol — Claude's content in the markdown source cannot inject raw HTML unless the input file is `.html`.
-- Rebase mode rejects refs containing whitespace or shell metacharacters (`;`, `|`, `&`, backtick, `$`, `<`, `>`). Recover from `git reflog` if a tag name happens to contain one of these.
-- Rebase mode embeds the actual `git diff` patch text per file, with each file expanding into nested **Removals** (clay-themed) and **Additions** (olive-themed) sub-panels. Hunk headers render in GitHub blue, metadata lines (`diff --git`, `index`, `+++`, `---`) in muted gray. Each file is truncated at 400 lines per side.
-- File status badges: `lost` (only in pre-rebase changeset), `gained` (only in post-rebase changeset), `ported` (in both, blob hashes at pre tip and post tip are identical — file carried across the rebase byte-for-byte), `modified` (in both, blob hashes differ — rebase reshaped the file). The ported-vs-modified split is content-based, not numstat-based: two patches with the same `+5/−3` totals but different actual lines are correctly flagged `modified`.
-- Rebase mode does NOT include generic "typically because…" boilerplate ledes. Each section heading sits directly above its data unless Claude supplies prose specific to the rebase via the `--why-summary`, `--why-gained-lost`, `--why-files`, or `--why-commits` flags. Each flag accepts an HTML string. Flags omitted means no lede paragraph at all.
-- Rebase reports open with a three-bucket "story panel" at the top: **What's new**, **What's gone**, **What's kept**. Each bucket is populated from the `--whats-new`, `--whats-gone`, `--whats-kept` flag. Each flag accepts an HTML string. Claude generates per-rebase prose for all three buckets on every invocation. When a bucket is omitted, the panel renders a placeholder ("Not supplied. Pass --whats-new / --whats-gone / --whats-kept.") so missing buckets are visible at a glance.
+- **`gh` must be authenticated.** The upload runs `gh gist create`. If `gh auth status` is failing, the hook surfaces the error to stderr and exits 0 (does not block the write). Run `gh auth login` and re-trigger by editing the HTML once more.
+- **The marker is a literal HTML comment, not a meta tag.** `<!-- @publish-as-gist -->` exactly. `<meta name="publish-as-gist">` does not match. Whitespace inside the marker breaks it.
+- **htmlpreview render delay.** First load of the preview URL takes 5–10 seconds while htmlpreview.github.io fetches the raw gist content. A blank page on first visit means refresh once.
+- **Filenames carry into the gist.** The gist filename is the same as the source file's name. Name your files for the artifact, not for filesystem convenience — `auth-migration-plan.html` reads better in the gist UI than `tmp_plan_v3_final.html`.
+- **Markers in code samples need escaping.** If you embed an example HTML snippet inside `<pre><code>` and that snippet contains the literal marker text, the hook will publish on first save. Either escape the comment angle brackets in the embedded sample, or write the marker as `<!- - @publish-as-gist - ->` in the embedded version.
+- **Self-contained HTML only.** The upload sends a single file. External CSS/JS via `<link href="./style.css">` or `<script src="./app.js">` will fail to load in the htmlpreview view. Inline everything — `<style>`, `<script>`, base64 images, SVG.
+- **Secret gist, not private.** `gh gist create` defaults to "secret" (anyone with the URL can view; not indexed; not on your public profile). Treat the preview URL like a shareable Google Doc — share with intent.
 
-## When this skill applies
+## When to include the marker
 
-Trigger on any of:
+Include `<!-- @publish-as-gist -->` when **the artifact is for sharing or reading**: writeups, plans, reports, explainers, decision records, runbooks, status updates, prototypes the user will look at. Skip the marker for: HTML that's part of a code change (React components, test fixtures), HTML you're authoring as a one-off scratch file you'll delete, embedded HTML samples inside other artifacts.
 
-- `/doc-gist`
-- "publish this as a gist"
-- "share my plan as a webpage"
-- "make a gist of this doc"
-- "render these notes to a webpage"
-- "publish this writeup as a webpage"
-- "share this decision record"
-- "post my plan"
+The user's prompt is the strongest signal. *"Make me a writeup of this PR"* → publish. *"Add this React component"* → don't publish.
 
-Refusal cases — first match wins:
+## The transport script — `scripts/gist_upload.py`
 
-- **No content supplied.** Respond exactly: `Provide markdown via stdin or pass --input <path>. Front-matter or --title is required so the H1 is set.`
-- **`gh` is not authenticated.** Respond exactly: `Run "gh auth login" and retry, or pass --no-gist to keep the report local.`
-
-## Process
-
-1. **Author the markdown.** Generate the doc body in chat (Claude's working memory). Front-matter is optional: a `title:`/`eyebrow:`/`summary:` block at the top sets metadata.
-
-2. **Pipe through the script.** Markdown lives only on stdin (or a non-`.md` path) — the hook will block any attempt to save it as a `.md` file outside `.claude/`. Use this PowerShell pattern:
-
-   ```powershell
-   $markdown = @'
-   ---
-   title: Plan: ...
-   eyebrow: plan · backend
-   summary: One-sentence TL;DR.
-   ---
-
-   ## Why
-
-   ...
-   '@; $markdown | python "C:/Users/jon/.claude/skills/doc-gist/scripts/publish.py" --input -
-   ```
-
-   Or pass a file: `python publish.py --input ./plan.html` for hand-authored HTML.
-
-   Pass through any user-specified `--title`, `--eyebrow`, `--summary`, `--repo`, `--output`, `--no-gist`, or `--no-open` flags verbatim.
-
-3. **Report the outcome.** Quote the **Preview** URL (the htmlpreview.github.io link) and the **Gist** URL from stderr to the user as clickable links. The preview URL is what the user opens to see the styled webpage; the gist URL is for editing/deleting.
-
-4. **If the script fails**, surface the exact error. Most failures map directly to a Gotcha entry — check there before guessing.
-
-### Run-and-report checklist
-
-Copy and check off:
-
-- [ ] Front-matter or `--title` provides the H1
-- [ ] Markdown delivered via stdin (or HTML via `--input file.html`)
-- [ ] Script exited 0
-- [ ] Preview URL printed on stdout
-- [ ] Both `Gist:` and `Preview:` lines from stderr quoted to the user
-
-## Examples
-
-**A plan, piped via stdin:**
-
-```powershell
-$markdown = @'
----
-title: Plan: Migrate event log to Postgres
-eyebrow: plan · ingestion
-summary: Replace the file-tailing log shipper with direct Postgres writes for sub-second visibility on event freshness.
----
-
-## Why
-
-The current shipper batches events on disk for 30 seconds before flushing.
-That window hides ingestion failures. Direct writes give us a real-time
-freshness signal and remove the disk-buffer failure mode.
-
-## Approach
-
-1. Add a Postgres sink alongside the file shipper
-2. Dual-write for one week, compare counts daily
-3. Cut over reads
-4. Remove the file shipper in a follow-up
-
-## Risks
-
-- **Postgres write amplification.** Bound by batching at the producer side.
-- **Schema drift.** Sink owns its own schema; producer holds an event-version field.
-'@; $markdown | python "C:/Users/jon/.claude/skills/doc-gist/scripts/publish.py" --input -
-```
-
-Stderr (verbatim shape):
-```
-Wrote C:/Users/.../Temp/doc-gist-abc.html
-Gist: https://gist.github.com/<user>/<id>
-Preview: https://htmlpreview.github.io/?https://gist.githubusercontent.com/<user>/<id>/raw/doc-gist-abc.html
-Opened gist preview in default browser.
-```
-
-**A WIP status update with explicit flags:**
-
-```powershell
-$markdown | python "C:/Users/jon/.claude/skills/doc-gist/scripts/publish.py" --input - --title "WIP: Auth migration" --eyebrow "wip · backend"
-```
-
-**Hand-authored HTML (advanced; tables, custom panels):**
+For manual invocation when the marker route doesn't apply (an existing file you want to publish, HTML piped from another tool, a one-off:
 
 ```
-python "C:/Users/jon/.claude/skills/doc-gist/scripts/publish.py" --input ./decision.html --title "Decision: Postgres for sessions"
+python scripts/gist_upload.py --input <path-or-->
+                              [--filename gist-file.html]
+                              [--description "short label"]
+                              [--no-open]
 ```
 
-**Local-only mode (no upload, no browser):**
+Reads HTML from `--input <path>` or stdin (`--input -`), runs `gh gist create`, prints `Gist:` and `Preview:` URLs to stderr, prints the preview URL to stdout (so callers can pipe), opens the preview in the default browser unless `--no-open`.
 
-```powershell
-$markdown | python "C:/Users/jon/.claude/skills/doc-gist/scripts/publish.py" --input - --output "Y:/Projects/foo/plan.html" --no-gist --no-open
-```
+## Designing fresh — the example gallery
+
+The skill ships [`references/examples/`](references/examples/) with all 20 of Thariq's html-effectiveness prototypes verbatim from [thariqs.github.io/html-effectiveness](https://thariqs.github.io/html-effectiveness/). They are *examples to learn from, not templates to fill.*
+
+When the user requests an artifact, decide the shape that fits. Use the gallery for grounding:
+
+| User wants | Gallery entries to study |
+|---|---|
+| PR writeup with file-by-file tour | `17-pr-writeup.html` |
+| Annotated diff or code review | `03-code-review-pr.html` |
+| Code-explainer with module map | `04-code-understanding.html` |
+| Implementation plan with timeline + risks | `16-implementation-plan.html` |
+| Side-by-side approach exploration | `01-exploration-code-approaches.html` |
+| Visual design comparison | `02-exploration-visual-designs.html` |
+| Design system swatches | `05-design-system.html` |
+| Component variants matrix | `06-component-variants.html` |
+| Animation tuning sandbox with sliders | `07-prototype-animation.html` |
+| Multi-screen interaction mockup | `08-prototype-interaction.html` |
+| Slide deck (keyboard-navigable) | `09-slide-deck.html` |
+| SVG illustration | `10-svg-illustrations.html` |
+| Status report (visual) | `11-status-report.html` |
+| Incident timeline / post-mortem | `12-incident-report.html` |
+| Flowchart / pipeline diagram | `13-flowchart-diagram.html` |
+| Feature explainer with collapsibles | `14-research-feature-explainer.html` |
+| Concept explainer (interactive learning) | `15-research-concept-explainer.html` |
+| Triage / kanban board (drag-drop) | `18-editor-triage-board.html` |
+| Feature flag toggles with deps | `19-editor-feature-flags.html` |
+| Live-updating template editor | `20-editor-prompt-tuner.html` |
+
+Read the matching example for the artifact you're designing. Crib palette, typography, spatial idioms, component patterns. **Adapt — do not copy.** A PR writeup for a hooks PR shouldn't look identical to one for a notification-queue PR. The gallery teaches what shapes work; the request decides which shape fits.
 
 ## Folder map
 
-- `SKILL.md` — this hub.
-- `config/` — magic values, gh-command tuples, frontmatter keys, template-replacement binder. Path exempts UPPER_SNAKE constants from the constants-location rule.
-- `scripts/` — runtime entry point and inline markdown converter. Run, don't read.
-- `templates/` — the HTML template the script fills.
-
-## File index
-
-| File | Purpose |
-|---|---|
-| `SKILL.md` | Hub — principle, gotchas, process, examples. |
-| `config/__init__.py` | Re-exports `constants` so `from config import constants` resolves statically. |
-| `config/constants.py` | gh-command tuples, gist URL builders, frontmatter keys, heading-level constants, `make_template_replacements` binder. |
-| `scripts/publish.py` | Runtime entry point. Reads stdin/file, parses front-matter, converts markdown, fills template, writes HTML, uploads as private gist, opens preview URL. |
-| `templates/document.html.tmpl` | Page layout, embedded CSS, and `<!-- TPL:KEY -->` markers the script fills. |
+- `SKILL.md` — this file.
+- `scripts/gist_upload.py` — transport: HTML in, gist + preview URLs out.
+- `scripts/config/gist_upload_constants.py` — the URL prefixes and template strings.
+- `references/examples/` — Thariq's 20 html-effectiveness prototypes.
+- (PostToolUse hook lives in `packages/claude-dev-env/hooks/workflow/doc_gist_auto_publish.py` — wired into the plugin's `hooks.json`.)

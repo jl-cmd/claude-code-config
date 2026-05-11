@@ -17,9 +17,9 @@ This skill runs as a 6-step workflow. Every step runs automatically -- no user p
 
 - **HTML output, not Markdown.** The repo's `md_to_html_blocker` PreToolUse hook rejects Write/Edit on `.md` files outside `.claude/` directories. The vault path resolves outside `.claude/`, so session reports are HTML. Frontmatter lives inside an HTML comment block at the top of the file.
 - **State-description-blocker rejects historical and comparative language.** The full trigger pattern set lives in `~/.claude/rules/no-historical-clutter.md`. Author the report in present-tense, current-state form. The git log records what changed.
-- **doc-gist requires `--title` for HTML input.** When passing `--input <file>.html` to publish.py, the markdown front-matter parser is bypassed. Pass `--title "..."` explicitly so the H1 is set.
+- **doc-gist uses `--description` for gist title text.** `gist_upload.py` uploads HTML verbatim with no content parsing. Pass `--description "Session [N] — [Title]"` to set the gist description.
 - **doc-gist preview URL takes a few seconds.** The htmlpreview.github.io renderer fetches the raw gist on first hit. Quote both URLs and tell the user to refresh once if the page is blank.
-- **gh must be authenticated.** Running publish.py with `gh` unauthenticated prints the auth prompt and exits non-zero. Surface that message to the user; the local HTML file in the vault is still the canonical artifact, so Step 6 still runs.
+- **gh must be authenticated.** Running gist_upload.py with `gh` unauthenticated prints the auth prompt and exits non-zero. Surface that message to the user; the local HTML file in the vault is still the canonical artifact, so Step 6 still runs.
 - **Obsidian frontmatter index is sacrificed.** Obsidian's native YAML-frontmatter parser reads only `.md` files. HTML files do not appear in the Obsidian UI's frontmatter index. Search by content still works; search by `type: session-report` does not.
 - **Existing files require the Edit tool.** The `write_existing_file_blocker` hook rejects the Write tool on existing paths. Use Write only when creating a fresh session report; use Edit for Step 2's append and Step 4's auto-fixes.
 
@@ -256,15 +256,14 @@ This step runs automatically after Step 3 completes. Scope: the current project'
 
 This step runs automatically after Step 4 completes.
 
-### 5a. Run publish.py
+### 5a. Run gist_upload.py
 
-Hand the freshly-written HTML file to `/doc-gist` via its publish.py script. Use the PowerShell tool so quoting handles spaces in the vault path:
+Hand the freshly-written HTML file to `/doc-gist` via its gist_upload.py script. Use the PowerShell tool so quoting handles spaces in the vault path:
 
 ```powershell
-python "C:/Users/jon/.claude/skills/doc-gist/scripts/publish.py" `
+python "$env:USERPROFILE/.claude/skills/doc-gist/scripts/gist_upload.py" `
   --input "<absolute path to the .html file>" `
-  --title "Session [N] — [Title]" `
-  --eyebrow "session-log · [Project]"
+  --description "Session [N] — [Title] · session-log · [Project]"
 ```
 
 Replace the bracketed values from Step 1's metadata. The script writes a temp copy, uploads as a secret gist, and prints two URLs to stderr — capture both:
@@ -274,9 +273,9 @@ Replace the bracketed values from Step 1's metadata. The script writes a temp co
 
 Quote both URLs back to the user as clickable links.
 
-**If gh is not authenticated**, publish.py exits non-zero with the `gh auth login` prompt. Surface that message to the user, skip 5b, and continue with Step 6 — the vault HTML is the canonical artifact. The publish step is a hand-off, not a gate.
+**If gh is not authenticated**, gist_upload.py exits non-zero with the `gh auth login` prompt. Surface that message to the user, skip 5b, and continue with Step 6 — the vault HTML is the canonical artifact. The publish step is a hand-off, not a gate.
 
-**If the user passed `--no-gist` upstream** (rare, but possible if a wrapping skill is in dry-run mode), append `--no-gist --no-open` to keep the local file only and skip 5b.
+**If publishing should be skipped** (dry-run mode), append `--no-open` to keep the local file only and skip 5b.
 
 ### 5b. Inject the gist URL back into the session log
 
@@ -303,7 +302,7 @@ The vault HTML now contains the gist URL inline. Subsequent re-publishes will ov
 
 ## Step 6: Finalize
 
-Copy a `/rename` command to the user's clipboard using `echo -n "/rename [Project] - [Primary Outcome]" | clip.exe`, then tell the user:
+Copy a `/rename` command to the user's clipboard via Bash: `echo -n "/rename [Project] - [Primary Outcome]" | clip.exe`. Then tell the user:
 
 > "Copied `/rename [Project] - [Primary Outcome]` to your clipboard. Paste it to rename this session."
 
@@ -330,7 +329,7 @@ Copy and check off:
 - [ ] Vault context line appended to Notes section (Edit tool)
 - [ ] Decision extraction surfaced any unrecorded items
 - [ ] Session tidy reported anomalies or stayed silent
-- [ ] doc-gist publish script invoked with `--input` and `--title`
+- [ ] doc-gist publish script invoked with `--input` and `--description`
 - [ ] Preview URL and Gist URL quoted to the user
 - [ ] Preview URL injected back into the vault HTML's Notes section
 - [ ] /rename command copied to clipboard via `clip.exe`

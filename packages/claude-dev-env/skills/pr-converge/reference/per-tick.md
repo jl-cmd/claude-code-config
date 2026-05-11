@@ -159,9 +159,10 @@ never falsely terminates:
    - **Audit pushed this tick AND `bugbot_down == true`:**
      Bugbot cannot acknowledge the re-trigger. Continue bugteam re-audit
      cycle — run pre-audit gate then AUDIT against `current_head`. Let
-     the bugteam loop run to convergence. When convergence is confirmed
-     and `bugbot_clean_at` is set to `current_head` (bugbot skipped per
-     user instruction), proceed to convergence-gates.
+     the bugteam loop run to convergence. When the re-audit confirms
+     convergence, set `bugbot_clean_at = current_head` (the re-audit
+     substitutes for bugbot's clean signal while bugbot is down), then
+     proceed to convergence-gates.
    - **Convergence AND `bugbot_clean_at == current_head` (no push):**
      Back-to-back clean — necessary, not sufficient. Run **[convergence-gates.md](convergence-gates.md)** to clear all six gates: Copilot findings,
      Claude reviewer, mergeability, post-convergence Copilot request,

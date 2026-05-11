@@ -38,7 +38,11 @@ from config.gist_upload_constants import (  # noqa: E402
 
 
 def _read_html(input_argument: str) -> str:
-    """Read HTML content from stdin (when input is '-') or a file path."""
+    """Read HTML content from stdin (when input is '-') or a file path.
+
+    Reads the full stdin stream when input_argument is '-'. Callers piping
+    content through an external process should ensure bounded input.
+    """
     if input_argument == "-":
         return sys.stdin.read()
     return Path(input_argument).expanduser().resolve().read_text(encoding="utf-8")
@@ -54,16 +58,16 @@ def _resolve_filename(input_argument: str, override: str | None) -> str:
     return default_filename
 
 
-def _write_to_temp(html_text: str, filename: str) -> Path:
-    """Write HTML to a temp file with the given filename so gh uploads under that name."""
-    temp_directory = Path(tempfile.mkdtemp(prefix="gist-upload-"))
-    target_path = temp_directory / filename
+def _write_to_temp(html_text: str, filename: str, parent_directory: Path) -> Path:
+    """Write HTML to a temp file inside parent_directory with the given filename."""
+    target_path = parent_directory / filename
     target_path.write_text(html_text, encoding="utf-8")
     return target_path
 
 
 def _create_secret_gist(html_path: Path, description: str) -> str:
     """Run `gh gist create` against html_path and return the gist URL."""
+    completed: subprocess.CompletedProcess[str] | None = None
     completed = subprocess.run(
         ["gh", "gist", "create", str(html_path), "--desc", description],
         check=False,
@@ -77,7 +81,10 @@ def _create_secret_gist(html_path: Path, description: str) -> str:
         raise SystemExit(
             f"gh gist create failed:\n{message_text}\nRun `gh auth login` and retry."
         )
-    last_line = completed.stdout.strip().splitlines()[-1].strip()
+    output_lines = completed.stdout.strip().splitlines()
+    if not output_lines:
+        raise SystemExit("gh gist create produced no output.")
+    last_line = output_lines[-1].strip()
     if not last_line.startswith(GIST_HOST_PREFIX):
         raise SystemExit(f"Unexpected gh gist create output: {last_line!r}")
     return last_line
@@ -135,10 +142,11 @@ def main() -> int:
 
     html_text = _read_html(arguments.input)
     filename = _resolve_filename(arguments.input, arguments.filename)
-    upload_path = _write_to_temp(html_text, filename)
 
-    gist_url = _create_secret_gist(upload_path, arguments.description)
-    preview_url = _compose_preview_url(gist_url, filename)
+    with tempfile.TemporaryDirectory(prefix="gist-upload-") as temp_directory:
+        upload_path = _write_to_temp(html_text, filename, Path(temp_directory))
+        gist_url = _create_secret_gist(upload_path, arguments.description)
+        preview_url = _compose_preview_url(gist_url, filename)
 
     print(f"Gist: {gist_url}", file=sys.stderr)
     print(f"Preview: {preview_url}", file=sys.stderr)

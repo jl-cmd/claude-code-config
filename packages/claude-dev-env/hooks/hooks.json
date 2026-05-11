@@ -227,7 +227,7 @@
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/workflow/doc_gist_auto_publish.py ${CLAUDE_PLUGIN_ROOT}",
+            "command": "python ${CLAUDE_PLUGIN_ROOT}/hooks/workflow/doc_gist_auto_publish.py ${CLAUDE_PLUGIN_ROOT}",
             "timeout": 60
           }
         ]

@@ -43,7 +43,8 @@ def _read_hook_payload() -> dict[str, object]:
     """Read the PostToolUse JSON payload from stdin. Empty/invalid payload exits clean."""
     try:
         payload = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as decode_error:
+        logging.warning("doc_gist_auto_publish: invalid JSON payload: %s", decode_error)
         sys.exit(0)
     if not isinstance(payload, dict):
         sys.exit(0)
@@ -74,6 +75,7 @@ def _file_contains_sentinel(target_path: Path) -> bool:
     try:
         contents = target_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
+        logging.warning("doc_gist_auto_publish: cannot read %s", target_path)
         return False
     return publish_sentinel in contents
 
@@ -105,8 +107,8 @@ def _invoke_upload(
     if completed.stderr:
         err_stream.write(completed.stderr)
     if completed.returncode != 0:
-        logging.warning("doc_gist_auto_publish: gist_upload exited %d", completed.returncode)
-        return
+        logging.error("doc_gist_auto_publish: gist_upload exited %d", completed.returncode)
+        sys.exit(1)
     if completed.stdout:
         out_stream.write(completed.stdout)
 

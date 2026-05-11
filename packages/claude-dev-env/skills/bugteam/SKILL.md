@@ -10,6 +10,8 @@ description: >-
 
 # Bugteam
 
+**Non-negotiable: every audit loop spawns all eleven A–K auditors plus `-validate`. No "focused audit," no single `code-quality-agent` substitution, no skipping categories. Small PRs run the full protocol; empty `<findings/>` per category is a valid result. See [CONSTRAINTS.md](CONSTRAINTS.md) line 5.**
+
 Audit–fix until convergence. Bugfind: `code-quality-agent`, fresh context each
 loop. Bugfix: `clean-coder`. Hard cap: 20 audit loops. Grant `.claude/**` at
 start, revoke always at end. Every audit loop creates eleven tasks and spawns

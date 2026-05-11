@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document title="Building agents with Skills: Equipping agents for specialized work">
+  <metadata>
+    <category>Agents, Claude Code</category>
+    <product>Claude Code</product>
+    <date>January 22, 2026</date>
+    <reading_time>5 minutes</reading_time>
+  </metadata>
+
+  <context>
+    MCP became the standard for agent connectivity with rapid adoption from industry leaders and the developer community. Claude Code launched as a general-purpose coding agent. The Claude Agent SDK now provides a production-ready agent out of the box. However, as the team built and deployed these agents, they kept encountering the same gap: agents have intelligence and capabilities, but not always the expertise to effectively tackle real work. This led to the creation of Agent Skills — organized collections of files that package domain expertise (workflows, best practices, scripts) in a format agents can access and apply. They turn a capable generalist into a knowledgeable specialist.
+  </context>
+
+  <purpose>
+    This post explains why the team stopped building specialized agents and started building skills instead, and how this shift is changing how they think about extending agent capabilities.
+  </purpose>
+
+  <concept name="the_new_paradigm_code_is_all_you_need">
+    The team initially assumed agents in different domains would look very different — a coding agent, a research agent, one for finance, one for marketing — each needing its own tools and scaffolding. The industry initially embraced domain-specific agents. But as models improved in intelligence and agent capabilities progressed, they converged on a different approach. Code became less a use case and more an interface for agents to do almost any digital work. Claude Code is a coding agent, but also a general-purpose agent that happens to work through code. Consider generating a financial report: call APIs for research, store data in the filesystem, analyze with Python, and synthesize insights — all through code. The scaffolding becomes as simple as bash and a filesystem.
+  </concept>
+
+  <concept name="the_missing_piece_domain_expertise">
+    Would you trust a math genius figuring out taxes from first principles, or an experienced tax professional who has filed thousands of returns? Most people choose the tax professional — not because they are smarter, but because they have the right expertise. Agents today are like that math genius: brilliant at reasoning through novel situations, but often lacking the accumulated expertise of a seasoned professional. They lack important context, cannot easily absorb an organization's expertise, and do not automatically learn from repeated tasks. Skills bridge this gap by packaging domain expertise in a format that agents can progressively access and apply.
+  </concept>
+
+  <concept name="what_are_agent_skills">
+    Skills package domain expertise and procedural knowledge for agents.
+  </concept>
+
+  <skill_component name="structure">
+    Files are a universal primitive. You can version them with Git, store them in Google Drive, share them with your team. Skill creation is not limited to engineers — product managers, analysts, and domain experts are already building skills to codify their workflows.
+    <directory name="anthropic_brand">
+      anthropic_brand/
+      ├── SKILL.md
+      ├── docs.md
+      ├── slide-decks.md
+      └── apply_template.py
+    </directory>
+  </skill_component>
+
+  <skill_component name="progressive_disclosure">
+    Skills can contain extensive information. To protect the context window and make skills composable, they use progressive disclosure: at runtime, only the metadata (name and description from the YAML frontmatter) is shown to the model. If Claude determines a skill is needed, it reads the full SKILL.md file. For additional detail, skills can include a references/ directory with supporting documentation loaded only on demand.
+    <yaml_frontmatter>
+      ---
+      name: Anthropic Brand Style Guidelines
+      description: Anthropic's official brand colors and typography...
+      ---
+    </yaml_frontmatter>
+    <token_costs>
+      <tier name="metadata">~50 tokens — YAML frontmatter pre-loaded into context</tier>
+      <tier name="skill_md">~500 tokens — full SKILL.md loaded when skill is needed</tier>
+      <tier name="reference_files">2000+ tokens — supporting documentation loaded only when specifically needed</tier>
+    </token_costs>
+    <benefit>This three-tier approach means you can equip an agent with hundreds of skills without overwhelming its context window.</benefit>
+  </skill_component>
+
+  <skill_component name="scripts_as_tools">
+    Traditional tools have problems: some have poorly written instructions, the model cannot always modify or extend them, and they often bloat the context window. Code, on the other hand, is self-documenting, modifiable, and does not need to be in context at all times.
+    <real_world_example name="slide_styling">
+      The team kept seeing Claude write the same script to apply Anthropic styling to slides. They asked Claude to save it as a tool for itself: a Python script (apply_template.py) using the pptx library. The corresponding documentation in slide-decks.md references this script, specifying background and foreground colors for intro/outro slides and section slides, and instructs the agent to use the script to update a pptx file in-place.
+    </real_world_example>
+  </skill_component>
+
+  <ecosystem name="the_skills_ecosystem">
+    <ecosystem_category name="foundational">
+      Core capabilities everyone needs: working with documents, spreadsheets, presentations. They encode best practices for document generation and manipulation. Available in the public repository.
+    </ecosystem_category>
+    <ecosystem_category name="partner">
+      As skills standardize how agents interact with specialized capabilities, companies are building skills to make their services agent-accessible. K-Dense, Browserbase, Notion, and many others are creating skills that integrate their services directly, extending Claude's capabilities in specific domains while maintaining the simplicity of the skills format.
+    </ecosystem_category>
+    <ecosystem_category name="enterprise">
+      Organizations build proprietary skills encoding their internal processes and domain expertise. Skills help capture the specific workflows, compliance requirements, and institutional knowledge that make an agent useful for enterprise work.
+    </ecosystem_category>
+  </ecosystem>
+
+  <trends>
+    <trend name="increasing_complexity">
+      Early skills were simple documentation references. Now the team sees sophisticated multi-step workflows that coordinate data retrieval, complex calculations, and formatted output across multiple tools.
+      <scale>
+        <level name="simple">Status report writer (~100 lines) — templates and formatting</level>
+        <level name="intermediate">Financial model builder (~800 lines) — data retrieval, Excel modeling with Python</level>
+        <level name="complex">RNA sequencing pipeline (2500+ lines) — coordinates HISAT2, StringTie, DESeq2 analysis</level>
+      </scale>
+    </trend>
+    <trend name="skills_and_mcp">
+      Skills and MCP servers work together naturally. A competitive analysis skill might coordinate web search, internal databases via MCP, Slack message history, and Notion pages to synthesize a comprehensive report.
+    </trend>
+    <trend name="non_developer_adoption">
+      Skill creation is expanding beyond engineers to product managers, analysts, and domain experts across disciplines. They can create and test their first skill in under 30 minutes using the skill-creator tool, which guides them through the process interactively. The team is working to make skill creation even more accessible with improved tooling and templates.
+    </trend>
+  </trends>
+
+  <architecture>
+    The emerging agent architecture combines:
+    <layer name="agent_loop">The core reasoning system that decides what to do next</layer>
+    <layer name="agent_runtime">Execution environment (code, filesystem)</layer>
+    <layer name="mcp_servers">Connections to external tools and data sources</layer>
+    <layer name="skills_library">Domain expertise and procedural knowledge</layer>
+    <principle>Each layer has a clear purpose: the loop reasons, the runtime executes, MCP connects, and skills guide. This separation makes the system comprehensible and allows each piece to evolve independently.</principle>
+    <deployment_example>
+      Adding the frontend design skill to this architecture transforms Claude's frontend capabilities instantly. It provides specialized guidance on typography, color theory, and animation, activating only when building web interfaces. Progressive disclosure means it loads only when relevant. Adding new capabilities is straightforward.
+    </deployment_example>
+  </architecture>
+
+  <verticals>
+    <vertical name="financial_services">
+      Skills that make Claude more useful for finance professionals:
+      <skill name="dcf_model_builder">Constructs discounted cash flow models with proper WACC calculations and sensitivity analysis</skill>
+      <skill name="comparable_company_analysis">Generates comps tables with relevant multiples and benchmarking</skill>
+      <skill name="earnings_analysis">Processes quarterly results and creates investment update reports</skill>
+      <skill name="initiation_coverage">Builds comprehensive research reports with financial models</skill>
+      <skill name="due_diligence">Structures M&A analysis with standardized frameworks</skill>
+      <skill name="pitch_materials">Creates client presentations following industry standards</skill>
+    </vertical>
+    <vertical name="healthcare_life_sciences">
+      Skills that make Claude more useful for researchers, clinicians, and healthcare developers:
+      <skill name="bioinformatics_bundles">Skills for scVI-tools and Nextflow deployments, essential for managing genomic pipelines and single-cell RNA sequencing</skill>
+      <skill name="clinical_trial_protocol_generation">Accelerates protocol development for clinical research</skill>
+      <skill name="scientific_problem_selection">Helps researchers identify and frame impactful research questions</skill>
+      <skill name="fhir_development">Helps developers write more accurate code for health data interoperability</skill>
+      <skill name="prior_authorization_review">Cuts administrative burden and accelerates patient access by cross-referencing coverage requirements, clinical guidelines, and patient records</skill>
+    </vertical>
+  </verticals>
+
+  <concept name="open_standard">
+    Agent Skills are being published as an open standard. Like MCP, skills should be portable across tools and platforms. The same skill should work whether you are using Claude or other AI platforms. The team has been collaborating with members of the ecosystem on the standard and is seeing early adoption. When someone starts using an AI agent for the first time, it should already know what you and your team care about because skills capture and transfer that expertise. As this ecosystem grows, a skill built by someone else in the community can make your agent more useful, reliable, and capable — regardless of which AI platform they are using.
+  </concept>
+
+  <resources>
+    <resource>"Don't Build Agents, Build Skills Instead" (YouTube Video)</resource>
+    <resource>Skills documentation</resource>
+    <resource>GitHub repository</resource>
+    <resource>Skills cookbook</resource>
+    <resource>Using skills in Claude</resource>
+    <resource>Skills API quickstart</resource>
+    <resource>Skills best practices documentation</resource>
+    <acknowledgments>Barry Zhang, Mahesh Murag, Keith Lazuka, Ryan Whitehead</acknowledgments>
+  </resources>
+</document>

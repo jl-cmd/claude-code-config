@@ -1,0 +1,398 @@
+<?xml version=”1.0” encoding=”UTF-8”?>
+<document title=”Harnessing Claude’s intelligence — three patterns for building apps”>
+  <source>
+    <url>https://claude.com/blog/harnessing-claudes-intelligence</url>
+    <publication>Claude blog</publication>
+    <date>April 2, 2026</date>
+  </source>
+
+  <overview>
+    Generative systems like Claude are “grown” more than hand-assembled, so agent harnesses encode time-stamped assumptions about what the model cannot do alone — assumptions that go stale as capabilities improve. The post argues teams should revisit harness design on each capability step-change while balancing intelligence, latency, and cost. It organizes guidance into three patterns: prefer tools and compositions the model already masters (especially bash and a text editor, extended into skills, programmatic calling, and memory); question what orchestration, context loading, and memory logic the harness can stop owning as the model can filter outputs, progressively load skills, edit context, fork subagents, compact, and persist to files; and set boundaries deliberately via caching-aware packaging, declarative tools for security/UX/observability, and ongoing pruning of “dead weight” compensations.
+  </overview>
+
+  <pattern name=”Use what Claude knows”>
+    <technique name=”Build on bash and text-editor tool literacy”>
+      <practice>
+        Ship agent experiences around general tools Claude already uses well — notably bash and a text editor for viewing, creating, and editing files — rather than inventing parallel abstractions when the model’s training trajectory already favors these primitives. Treat Claude Code as an existence proof: it is grounded in the same tools.
+      </practice>
+      <mechanism>
+        Bash tool, text editor tool, SWE-bench Verified as an external benchmark reference; Claude Code as product alignment.
+      </mechanism>
+      <payoff>
+        The article ties this to keeping pace with a model that “gets better at using” familiar tools over time and to strong coding/agent benchmark results with minimal specialized surface area (49% SWE-bench Verified for Claude 3.5 Sonnet with only bash + editor, described as then state of the art).
+      </payoff>
+      <anchor section=”1. Use what Claude knows”>
+        “We suggest building applications using tools that Claude understands well.”
+      </anchor>
+    </technique>
+
+    <technique name=”Compose higher-level agent features from the same primitives”>
+      <practice>
+        When you need Agent Skills, programmatic tool calling, or the memory tool, design them as layers on top of bash and the text editor rather than as unrelated subsystems — so the harness reuses the model’s strongest operational vocabulary.
+      </practice>
+      <mechanism>
+        Agent Skills (agentskills.io link in article), programmatic tool calling, memory tool, all explicitly framed as built from bash + text editor.
+      </mechanism>
+      <payoff>
+        Implied coherence and leverage: the model’s improving skill on general tools lifts composed patterns together (the article’s caption states the composition fact directly).
+      </payoff>
+      <anchor section=”Verbatim caption”>
+        “Programmatic tool calling, skills, and memory are compositions of our bash and text editor tools.”
+      </anchor>
+    </technique>
+  </pattern>
+
+  <pattern name=’Ask “what can I stop doing?”’>
+    <technique name=”Stop forcing every tool result through the context window”>
+      <practice>
+        Revisit the assumption that each tool result must be tokenized back to Claude before the next step. When the next hop only needs a slice of output or a handoff between tools, let the model decide what becomes tokens instead of the harness defaulting to “full result in, full result billed.”
+      </practice>
+      <mechanism>
+        Context window, tool results as tokens, harness-side orchestration defaults; contrast with model-side filtering/orchestration (paired with the next technique).
+      </mechanism>
+      <payoff>
+        Latency and cost when large payloads would otherwise flood context; task quality when irrelevant rows/columns drown signal (large-table example).
+      </payoff>
+      <anchor section=”Let Claude orchestrate its own actions”>
+        “Processing tool results in tokens can be slow, costly, and unnecessary if it only needs to be passed to the next tool or if Claude only cares about a small slice of the output.”
+      </anchor>
+    </technique>
+
+    <technique name=”Give Claude code execution to express multi-step tool logic”>
+      <practice>
+        Provide a code execution path (article names bash or a language-specific REPL under the code execution tool) so Claude can write code that sequences tool calls and intermediate logic. Structure the harness so only code execution’s output returns as model-visible context, not every intermediate tool payload.
+      </practice>
+      <mechanism>
+        Code execution tool, bash tool, language-specific REPL, harness orchestration vs. in-code orchestration.
+      </mechanism>
+      <payoff>
+        Token cost and context health by avoiding full intermediate dumps; task quality on BrowseComp when Opus 4.6 could filter its own tool outputs (45.3% to 61.6% accuracy).
+      </payoff>
+      <anchor section=”Let Claude orchestrate its own actions”>
+        “Since code is a general way for Claude to orchestrate actions, a strong coding model is also a strong general agent.”
+      </anchor>
+      <narrow_reading>
+        The article presents hard-coded filters (migration guide) as a tool-design mitigation that does not replace moving orchestration judgment to the model; it is a complementary pattern, not the main recommendation.
+      </narrow_reading>
+    </technique>
+
+    <technique name=”Replace monolithic preloaded instructions with skills and progressive disclosure”>
+      <practice>
+        Avoid stuffing system prompts with rarely used, task-specific instructions that scale poorly across many tasks. Use skills whose YAML frontmatter gives a short, always-on summary while the full skill body is loaded only when needed via a read file path.
+      </practice>
+      <mechanism>
+        System prompts, skills (overview doc), YAML frontmatter, read file tool, attention budget (linked engineering article).
+      </mechanism>
+      <payoff>
+        Context health and cost by not pre-spending attention on unused instructions.
+      </payoff>
+      <anchor section=”Let Claude manage its own context”>
+        “The full skill can be progressively disclosed by Claude calling a read file tool if a task calls for it.”
+      </anchor>
+    </technique>
+
+    <technique name=”Prune stale context with context editing”>
+      <practice>
+        Pair voluntary assembly of context (skills) with selective removal of stale or irrelevant material — examples given: old tool results, thinking blocks.
+      </practice>
+      <mechanism>
+        Context editing (platform doc).
+      </mechanism>
+      <payoff>
+        Context health (keeping the window focused as sessions lengthen).
+      </payoff>
+      <anchor section=”Let Claude manage its own context”>
+        “Context editing is the inverse, providing a way to selectively remove context that’s become stale or irrelevant.”
+      </anchor>
+    </technique>
+
+    <technique name=”Fork work into subagents for fresh context”>
+      <practice>
+        Let Claude spawn subagents when a subtask benefits from a clean context window rather than carrying parent-thread baggage.
+      </practice>
+      <mechanism>
+        Subagents (code.claude.com docs), BrowseComp measurement for Opus 4.6.
+      </mechanism>
+      <payoff>
+        Task quality: subagents improved BrowseComp by +2.8% vs. best single-agent runs (article’s Opus 4.6 note).
+      </payoff>
+      <anchor section=”Let Claude manage its own context”>
+        “With Opus 4.6, the ability to spawn subagents improved results on BrowseComp by 2.8% over the best single-agent runs.”
+      </anchor>
+    </technique>
+
+    <technique name=”Use compaction for long-horizon continuity”>
+      <practice>
+        For long-running agents, enable compaction so Claude summarizes prior context to preserve continuity instead of relying solely on external retrieval stacks.
+      </practice>
+      <mechanism>
+        Compaction doc, BrowseComp comparisons across models and “compaction budget.”
+      </mechanism>
+      <payoff>
+        Task quality scales with newer models under the same compaction setup: Sonnet 4.5 “stayed flat at 43% regardless of the compaction budget,” while Opus 4.5 reached 68% and Opus 4.6 84%.
+      </payoff>
+      <anchor section=”Let Claude persist its own context”>
+        “Sonnet 4.5 stayed flat at 43% regardless of the compaction budget we gave it. Yet Opus 4.5 scaled to 68% and Opus 4.6 reached 84% with the same setup.”
+      </anchor>
+    </technique>
+
+    <technique name=”Persist agent-chosen state with a memory folder”>
+      <practice>
+        Give Claude simple, direct persistence — a memory folder where it writes context to files and reads it back — rather than assuming memory must always be a separate retrieval system around the model.
+      </practice>
+      <mechanism>
+        Memory folder / memory tool doc, BrowseComp-Plus, Pokemon long-horizon play example.
+      </mechanism>
+      <payoff>
+        Task quality on BrowseComp-Plus: Sonnet 4.5 with memory folder 60.4% to 67.2%; qualitative better note-taking discipline in the Pokemon vignette (older model: transcript-like duplicate files; Opus 4.6: fewer, directory-organized files including distilled learnings).
+      </payoff>
+      <anchor section=”Let Claude persist its own context”>
+        “On BrowseComp-Plus, giving Sonnet 4.5 a memory folder lifted accuracy from 60.4% to 67.2%.”
+      </anchor>
+    </technique>
+  </pattern>
+
+  <pattern name=”Set boundaries carefully”>
+    <technique name=”Package stateless turns to maximize prompt-cache hits”>
+      <practice>
+        Because the Messages API is stateless, the harness must re-supply prior actions, tool definitions, and instructions each turn — so intentionally order and mutate that bundle to hit prompt caching breakpoints. Follow the article’s harness principles: stable prefix first, dynamic tail last; append new content via the messages channel rather than rewriting the cached prompt; avoid mid-session model switches (caches are model-specific — use a subagent if you need a cheaper model); treat the tool list as part of the cached prefix and avoid churn; use tool search so dynamic discovery appends without invalidating the prefix; for multi-turn agents, advance breakpoints toward the latest message (auto-caching referenced).
+      </practice>
+      <mechanism>
+        Messages API, prompt caching breakpoints, tool search, subagents, auto-caching, pricing link.
+      </mechanism>
+      <payoff>
+        Cost — cached tokens priced at 10% of base input tokens (article cites pricing doc).
+      </payoff>
+      <anchor section=”Design context to maximize cache hits”>
+        “Since cached tokens are 10% the cost of base input tokens, here are a few principles in the agent harness help maximize cache hits.”
+      </anchor>
+      <narrow_reading>
+        The table row describing message updates appears garbled in the captured HTML; the Description column’s intent is append via messages instead of editing the prompt to preserve cache behavior.
+      </narrow_reading>
+    </technique>
+
+    <technique name=”Promote actions to dedicated, typed tools at real boundaries”>
+      <practice>
+        Where bash gives only a uniform command string, lift sensitive or product-meaningful actions into dedicated tools with typed arguments so the harness can intercept, gate, render, or audit per action. Use reversibility as a guide: hard-to-reverse steps (e.g., external API calls) are candidates for user confirmation; write/edit tools can enforce staleness checks so Claude does not overwrite concurrently changed files.
+      </practice>
+      <mechanism>
+        Bash tool vs. dedicated tools, typed arguments, harness hooks.
+      </mechanism>
+      <payoff>
+        Safety, UX control, and observability (structured arguments).
+      </payoff>
+      <anchor section=”Use declarative tools for UX, observability, or security boundaries”>
+        “Promoting actions to dedicated tools gives the harness an action-specific hook with typed arguments it can intercept, gate, render, or audit.”
+      </anchor>
+    </technique>
+
+    <technique name=”Surface human decisions through tool-shaped UI (e.g., modals)”>
+      <practice>
+        When the agent must pose a question, offer options, or block until feedback, model that step as a tool the harness can render — article example: modal presentation.
+      </practice>
+      <mechanism>
+        Tool calls as UI events, modal rendering, agent loop blocking until user input.
+      </mechanism>
+      <payoff>
+        User experience clarity and controlled pacing.
+      </payoff>
+      <anchor section=”Use declarative tools for UX, observability, or security boundaries”>
+        “They can be rendered as a modal to display a question clearly to the user.”
+      </anchor>
+    </technique>
+
+    <technique name=”Log, trace, and replay via structured tool payloads”>
+      <practice>
+        Prefer typed tools when you need first-class telemetry: the harness receives structured arguments suitable for logging, tracing, and replay.
+      </practice>
+      <mechanism>
+        Structured arguments on tool calls.
+      </mechanism>
+      <payoff>
+        Observability and operational debuggability of agent behavior.
+      </payoff>
+      <anchor section=”Use declarative tools for UX, observability, or security boundaries”>
+        “When the action is a typed tool, the harness gets structured arguments it can log, trace, and replay.”
+      </anchor>
+    </technique>
+
+    <technique name=”Re-evaluate when general + guardrail replaces dedicated tools”>
+      <practice>
+        Treat the dedicated-tool decision as ongoing. The article cites Claude Code auto-mode (noted as research mode at publication): a second Claude reads the bash command string and judges safety, which can reduce how many bespoke tools you need — only where users trust that general direction; high-stakes actions may still warrant dedicated tools.
+      </practice>
+      <mechanism>
+        Claude Code auto-mode engineering post, dual-model command review over bash.
+      </mechanism>
+      <payoff>
+        Simpler surface area without abandoning security boundaries where stakes demand explicit tools.
+      </payoff>
+      <anchor section=”Use declarative tools for UX, observability, or security boundaries”>
+        “The decision to promote actions to tools should be continually re-evaluated.”
+      </anchor>
+    </technique>
+  </pattern>
+
+  <evidence_table name=”stacks_and_dependencies”>
+    <pattern_ref name=”various”>
+      <building_blocks>Programmatic tool calling</building_blocks>
+      <building_blocks>Bash, text editor</building_blocks>
+      <rationale>Composed from the same general tools Claude already masters.</rationale>
+    </pattern_ref>
+    <pattern_ref name=”various”>
+      <building_blocks>Agent Skills</building_blocks>
+      <building_blocks>Bash, text editor (plus read file for disclosure)</building_blocks>
+      <rationale>Skills are called out as compositions of those primitives; disclosure uses read file.</rationale>
+    </pattern_ref>
+    <pattern_ref name=”various”>
+      <building_blocks>Memory tool / memory folder</building_blocks>
+      <building_blocks>Bash, text editor</building_blocks>
+      <rationale>Explicitly listed alongside other compositions of bash + editor.</rationale>
+    </pattern_ref>
+    <pattern_ref name=”various”>
+      <building_blocks>Model-side orchestration / output filtering</building_blocks>
+      <building_blocks>Code execution (bash or REPL), tool calls executed in an environment</building_blocks>
+      <rationale>Code expresses calls and logic; only execution output must return as tokens.</rationale>
+    </pattern_ref>
+    <pattern_ref name=”various”>
+      <building_blocks>Long-horizon continuity</building_blocks>
+      <building_blocks>Compaction, optionally memory folder</building_blocks>
+      <rationale>Compaction summarizes past context; memory folder files provide durable externalized state.</rationale>
+    </pattern_ref>
+    <pattern_ref name=”various”>
+      <building_blocks>Fresh-context subtasks</building_blocks>
+      <building_blocks>Subagents</building_blocks>
+      <rationale>Forking isolates work without polluting the parent window.</rationale>
+    </pattern_ref>
+    <pattern_ref name=”various”>
+      <building_blocks>Cheaper model in-session</building_blocks>
+      <building_blocks>Subagents (instead of switching main model)</building_blocks>
+      <rationale>Model switches break caches; subagent avoids breaking the primary cached session.</rationale>
+    </pattern_ref>
+    <pattern_ref name=”various”>
+      <building_blocks>Safety without proliferating tools (conditional)</building_blocks>
+      <building_blocks>Bash + auto-mode second Claude reviewer</building_blocks>
+      <rationale>Can bound bash risk and limit dedicated-tool need where trust profile fits.</rationale>
+    </pattern_ref>
+  </evidence_table>
+
+  <evidence_table name=”evidence_led_examples”>
+    <varied display=”SWE-bench Verified”>
+      <outcome>49%, described as state of the art at the time</outcome>
+      <anchor section=”1. Use what Claude knows”>SWE-bench Sonnet engineering link in sentence.</anchor>
+    </varied>
+    <varied display=”BrowseComp (agentic web browsing benchmark)”>
+      <outcome>Accuracy 45.3% to 61.6%</outcome>
+      <anchor section=”Let Claude orchestrate its own actions”>Benchmark named BrowseComp with those figures.</anchor>
+      <improvement>+16.3 percentage points</improvement>
+    </varied>
+    <varied display=”BrowseComp + subagents”>
+      <outcome>+2.8%</outcome>
+      <anchor section=”Let Claude manage its own context”>Explicit percentage.</anchor>
+      <improvement>+2.8%</improvement>
+    </varied>
+    <varied display=”BrowseComp + compaction”>
+      <outcome>Sonnet 4.5 flat 43%; Opus 4.5 68%; Opus 4.6 84% with the same setup</outcome>
+      <anchor section=”Let Claude persist its own context”>Compaction budget vs. model generation.</anchor>
+    </varied>
+    <varied display=”BrowseComp-Plus + memory folder”>
+      <outcome>60.4% to 67.2%</outcome>
+      <anchor section=”Let Claude persist its own context”>Sonnet 4.5 with vs. without memory folder.</anchor>
+      <improvement>+6.8 percentage points</improvement>
+    </varied>
+    <varied display=”Pokemon long-horizon play”>
+      <outcome>Sonnet 3.5: 31 files, duplicate caterpillar notes, still early-game; Opus 4.6: 10 files, directory structure, three gym badges, distilled learnings.md</outcome>
+      <anchor section=”Let Claude persist its own context”>Subsection with YAML snippet examples.</anchor>
+    </varied>
+    <varied display=”Long-horizon harness resets”>
+      <outcome>Premature wrap behavior gone on Opus 4.5; context resets became unnecessary dead weight</outcome>
+      <anchor section=”Looking forward”>Narrative about harness resets added then obsoleted.</anchor>
+    </varied>
+    <varied display=”Prompt caching”>
+      <outcome>Cached tokens 10% the cost of base input tokens</outcome>
+      <anchor section=”Design context to maximize cache hits”>Cites pricing documentation.</anchor>
+    </varied>
+  </evidence_table>
+
+  <theme name=”Harness assumptions expire”>
+    As the model’s emergent capabilities grow, even blog guidance should be revisited frequently.
+    <anchor section=”Opening paragraphs”>”Agent harnesses encode assumptions ... but those assumptions grow stale as Claude gets more capable.”</anchor>
+  </theme>
+
+  <theme name=”Prefer primitives, compose upward”>
+    Prefer primitives the model is already learning (bash, editor) and compose upward rather than fragmenting the tool surface.
+    <anchor section=”Caption”>”Programmatic tool calling, skills, and memory are compositions of our bash and text editor tools.”</anchor>
+  </theme>
+
+  <theme name=”Shift orchestration toward the model”>
+    Shift orchestration and context decisions toward the model (code-mediated tool chains, skills, editing, subagents, compaction, memory files) to protect latency, tokens, and signal.
+    <anchor section=”Let Claude orchestrate its own actions”>Orchestration moves from harness to model.</anchor>
+  </theme>
+
+  <theme name=”Strong coding model generalizes”>
+    A strong coding model generalizes to non-coding agent tasks when code is the orchestration layer.
+    <anchor section=”Let Claude orchestrate its own actions”>”A strong coding model is also a strong general agent.”</anchor>
+  </theme>
+
+  <theme name=”Boundaries remain necessary”>
+    Boundaries remain necessary for UX, cost, and security — but should be designed, not accidental (caching layout, typed tools, confirmations).
+    <anchor section=”Set boundaries carefully”>”Agent harnesses provide structure around Claude to enforce UX, cost, or security.”</anchor>
+  </theme>
+
+  <theme name=”Remove outgrown compensations”>
+    Remove compensations that the model outgrows; leftover structure can bottleneck performance.
+    <anchor section=”Looking forward”>”Removing this dead weight is important because it can bottleneck Claude’s performance.”</anchor>
+  </theme>
+
+  <theme name=”Continually ask what can I stop doing”>
+    Continually ask “what can I stop doing?” as the through-line between simplification and pruning.
+    <anchor section=”Introductory three-pattern list”>”Ask what you can stop doing.”</anchor>
+  </theme>
+
+  <skill_integration number=”1”>
+    Include a harness hygiene checklist: re-test “what Claude can’t do alone” on each model generation or product release, mirroring the article’s stale assumptions warning.
+  </skill_integration>
+
+  <skill_integration number=”2”>
+    When drafting agent harness prompts, specify default tool-return policy: require explicit justification before the harness tokenizes full tool outputs; steer authors toward code execution patterns where intermediates should stay out of context.
+  </skill_integration>
+
+  <skill_integration number=”3”>
+    Teach the bash + text editor foundation and require skill/tool authors to state which primitive composition their feature assumes (skills, programmatic calling, memory).
+  </skill_integration>
+
+  <skill_integration number=”4”>
+    Document progressive disclosure for skills: YAML frontmatter always on; full body via read file only when relevant — paired with a warning against monolithic system prompts for rare tasks.
+  </skill_integration>
+
+  <skill_integration number=”5”>
+    Add a context stack subsection covering context editing, subagents, compaction, and memory folder, each with when-to-use cues tied to long-horizon and multi-step browse/search scenarios.
+  </skill_integration>
+
+  <skill_integration number=”6”>
+    Include prompt-caching authoring rules: static-first / dynamic-last, append messages vs. rewrite, no mid-session model swap (prefer subagent for cheaper models), stable tool lists plus tool search for extension, breakpoint / auto-caching guidance for multi-turn agents, and the 10% vs. base input cost anchor from pricing docs.
+  </skill_integration>
+
+  <skill_integration number=”7”>
+    Instruct authors to map actions to dedicated tools when the harness needs typed hooks for gating, UI, or telemetry, with examples: user confirmation for hard-to-reverse calls, staleness checks on writes, modal flows.
+  </skill_integration>
+
+  <skill_integration number=”8”>
+    Add a standing review item: re-evaluate dedicated tools vs. general bash + policy (e.g., auto-mode–style secondary review) for tasks where users accept broader autonomy.
+  </skill_integration>
+
+  <skill_integration number=”9”>
+    Cite the article’s benchmark vignettes (BrowseComp percentages, BrowseComp-Plus memory lift, compaction scaling across Sonnet/Opus) as quantitative motivation blocks — not as universal guarantees — when teaching harness simplification.
+  </skill_integration>
+
+  <skill_integration number=”10”>
+    Point implementers to Anthropic’s consolidated claude-api skill on GitHub for hands-on coverage of the patterns the post enumerates (“To use all tools and patterns discussed here, check out our claude-api skill”).
+  </skill_integration>
+
+  <skill_integration number=”11”>
+    Reference linked platform docs only where the article explicitly uses them as the mechanism: bash, text editor, code execution, skills overview, context editing, subagents, compaction, memory tool, prompt caching, Messages API, context windows, system prompts, migration guide (hard-coded filters), harness design for long-running apps, and Claude Code auto-mode — so skill readers can jump from concept to official spec.
+  </skill_integration>
+
+  <skill_integration number=”12”>
+    Frame scope in the skill: this article emphasizes harness evolution, tool composition, context economics, caching, and declarative boundaries; it does not attempt a full security threat model or product-specific compliance catalog — those stay out-of-scope unless paired with other sources.
+  </skill_integration>
+</document>

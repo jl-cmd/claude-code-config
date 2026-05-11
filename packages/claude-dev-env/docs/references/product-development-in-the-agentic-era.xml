@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document title="Product development in the agentic era">
+  <byline author="Jess Yan" role="Claude Managed Agents product manager" date="April 29, 2026" read_time_minutes="5"/>
+
+  <insight>
+    Jess Yan shares how she uses Claude's product suite to unblock herself and reclaim time for creative work.
+  </insight>
+
+  <insight quote="being a product manager in the age of AI is that my work feels more human than ever">
+    Jess Yan describes product management as a blend of craft and alignment, where much of her week was consumed by coordination — meetings, status reports, backlogs. Decisions felt instinctive but required constant advocacy. Shipping products "often felt more transactional than generative."
+  </insight>
+
+  <insight>
+    With Claude, she can "pressure test ideas, automate workflows, and get unstuck," finally investing time in the craft that mattered most. The most meaningful changes occurred while developing Claude Managed Agents (beta), a set of composable APIs for cloud-hosted agent deployment.
+  </insight>
+
+  <comparison domain="API design">
+    <before>
+      API design once lived in documents and comment threads. Specs that read well in a doc can break when built against.
+    </before>
+    <after>
+      On "the AI exponential, we build with what we ship." With Claude Code, Yan can sketch an agent against pre-production API specs and run a real prototype end-to-end within an afternoon.
+    </after>
+    <insight>
+      The team reshaped API abstractions and Claude Console UX based on learning from building with their own primitives — issues a multi-week doc review would never reveal, and that would otherwise surface too late through user feedback.
+    </insight>
+    <insight>
+      They still review shapes and run raw curl requests to validate the bare-metal experience, but Claude Code takes her "from the basic 'hello world' test to a functional agent in the same sitting."
+    </insight>
+  </comparison>
+
+  <workflow>
+    <description>
+      Her workflow now splits across products by stage:
+    </description>
+    <stage name="early_discovery" tool="Claude + Claude Cowork">
+      Early-stage discovery and open-ended research.
+    </stage>
+    <stage name="implementation" tool="Claude Code + Managed Agents">
+      Write and ship custom agents built atop Managed Agents once clarity emerges on the job to be done.
+    </stage>
+    <benefit>
+      The dual benefit: building against her own product raises "the ceiling on what I can imagine shipping next," and once live, the same development muscle automates operational work that had stalled in her backlog.
+    </benefit>
+  </workflow>
+
+  <use_cases_how_to>
+    Yan spins up bespoke agents for any "job to be done." Building involves loading the Managed Agents skill in Claude Code and outlining a quick sketch. Developers can also use Claude Code's built-in claude-api skill — just prompt with "start onboarding for managed agents in Claude API."
+  </use_cases_how_to>
+
+  <use_case name="Adoption analytics">
+    <description>
+      An agent with persistent database access and schema-understanding skills that surfaces outliers and patterns.
+    </description>
+    <capability>
+      With memory of prior runs, it builds on earlier findings.
+    </capability>
+  </use_case>
+
+  <use_case name="Developer sentiment monitoring">
+    <description>
+      An agent using the web search tool to scan domains for developer feedback, fanning out research to multiple agents in parallel, then synthesizing findings.
+    </description>
+  </use_case>
+
+  <use_case name="Demo building">
+    <description>
+      An agent with access to GitHub repos, branding assets, and event decks that turns templates into polished demos for conferences or customer meetings.
+    </description>
+  </use_case>
+
+  <insight>
+    Managed Agents run in the cloud, so Yan can walk away and return to finished work. Processes that never scaled because every launch has unique quirks "are now easy to automate using Managed Agents."
+  </insight>
+
+  <comparison domain="operational_scale">
+    <before>
+      A year ago, this work would have crawled through cross-functional staffing requests, chaotic spreadsheets, or half-baked concepts she never got to try.
+    </before>
+    <after>
+      Now she can scale herself, using time to partner with her team on the most impactful products. Her days now span generating ideas with customers, tackling ambiguous problems with engineers, and investing creative energy in frontier product work.
+    </after>
+  </comparison>
+
+  <advice quote="if you haven't built an agent yet, that's where I'd start this week.">
+    The experiments and tools you have wished for are "a single prompt and a few API calls away."
+  </advice>
+
+  <publication venue="Agents category — Claude Platform Blog" date="April 29, 2026">
+    Learn more at https://platform.claude.com/docs/en/managed-agents/overview
+  </publication>
+</document>

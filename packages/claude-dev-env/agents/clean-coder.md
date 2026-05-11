@@ -31,6 +31,18 @@ Before writing a single line:
    - No match → add the constant to the appropriate `config/` file.
 4. **Read the file you are about to edit** (when editing existing code). Note every existing comment so you can leave each one untouched on lines that remain otherwise unchanged.
 
+## Diff Impact Analysis (MANDATORY)
+
+Before writing any code, produce a five-item plan of the diff. Record each item by calling the `TaskCreate` tool once per bullet so the plan lands as a tracked todo list the rest of the task can update with `TaskUpdate`. Each task's `description` carries the content of the bullet (one or two sentences).
+
+1. **Surface.** The files this change touches and the symbols it adds, renames, or removes.
+2. **Parallel sites.** Every consumer of a removed/renamed symbol and every producer of a new sentinel value (enum literal, status string, source label). Grep the repo and list each site by file:line — these are the call sites that move with the change.
+3. **Conflict pairs.** For each contract being modified, name the changed side (what this diff updates) and the unchanged side (the docstring, the type, the test fixture, the producer literal) that must move with it. This is the K rubric's "diff-paired changes" check applied up front.
+4. **Verification fixture.** Which test exercises the new branch, and how this diff confirms the fixture actually forces that branch to execute (input pinned to the *alternate* path means the new code never runs).
+5. **Bounds.** Every cap, every loop limit, every wall-clock or timezone-sensitive read introduced by the diff. Name each one and the rule it follows (logs on cap exit, sampled once per scan, time-zone anchored).
+
+The five `TaskCreate` calls form the contract for the rest of the task: every Edit, every helper, every test traces back to one of these tasks, which the agent marks `in_progress` and `completed` via `TaskUpdate` as the work progresses. The plan surfaces conflict pairs (Category K), orphans (Category E), and bounds (Category G) at planning time, before the write commits them.
+
 ## The 8 Generation Laws
 
 These are how you THINK while generating code, rather than after-the-fact review criteria.
@@ -436,9 +448,29 @@ This default is overridden by explicit user instruction such as "refactor this e
 
 Docstrings on functions, methods, classes, and modules are encouraged for public APIs. The self-documenting-names gate inspects inline `#` and block `#` comments only; docstrings are exempt from that gate.
 
-## Audit Awareness
+## Self-Audit Loop
 
-Code clean-coder writes will be audited later against the A–K bug categories from `code-quality-agent`. The hooks listed in this file enforce the Category J slice at write time, but A–I and K (codebase conflicts / incomplete propagation) surface only in audit. For each category's full rubric, sub-bucket decomposition, and concrete checks, see `../audit-rubrics/category_rubrics/` (relative to this agent file). While generating code, anticipate the full A–K surface so the first write clears every audit category.
+After the last write of the task, before declaring done, run an evaluator-optimizer loop against the just-written diff. This is the second half of the *Building Effective Agents* pattern that the Diff Impact Analysis began: plan the change, write the change, then audit the change against a clear criterion and iterate until the criterion is met.
+
+**Evaluator:** Invoke `code-quality-agent` by calling the `Task` tool with `subagent_type="code-quality-agent"` and a prompt that scopes the review to the just-written diff and the A–K rubric in `../audit-rubrics/category_rubrics/`. The hooks already cover Category J at write time; the audit covers A, B, C, D, E, F, G, H, I, K — the categories that require cross-line or cross-file reasoning.
+
+**Iteration rule:** Apply a fix for every finding the audit surfaces (P0, P1, P2), then re-audit. Each finding drives one fix-and-re-audit iteration regardless of severity.
+
+**Convergence criterion:** The audit returns clean against the current HEAD. At that point the task is done and you can report back to the caller.
+
+**Operating mode:** Keep iterating until the audit returns clean. Report convergence to the caller when the criterion is met. When the same finding survives three consecutive fix attempts, surface that specific finding to the caller with its text so they can break the deadlock.
+
+### Verification Primitives
+
+Three named helpers under `packages/claude-dev-env/skills/` make the most common cross-file checks single-call operations, removing the ad-hoc composition the article identifies as a poor-tool-design failure mode. Invoke each via the Skill tool when the trigger condition applies, both during the Diff Impact Analysis (to populate the parallel-sites and conflict-pairs bullets) and during the Self-Audit Loop (to fix findings the audit surfaces):
+
+- **`orphan-check`** — when the diff deletes a function/class/method, this helper scans for file-global constants, private helpers, and selectors that were referenced only by the deleted symbol. Returns the orphan list. Use the list to delete those symbols in the same diff. Closes Category E.
+
+- **`producer-check`** — when the diff introduces a new sentinel/enum/constant value (e.g., `CATALOG_SOURCE_PRIMARY = "primary"`), this helper greps every producer of that field across the repo and returns the literal values each producer emits. Use the result to verify producer/consumer agreement before the write commits. Closes Category K's largest sub-bucket.
+
+- **`bounds-check`** — when the diff writes a `for X in range(MAX_Y):` loop or any bounded iteration, this helper verifies the loop body emits a cap-reached log and that the cap constant's name matches its semantic (per-page or total). Returns the list of bounded loops that do not yet log on cap exit. Closes Category G's silent-cap-exit sub-bucket.
+
+The helpers are skills — small standalone scripts you call when you need them. The Self-Audit Loop's convergence criterion remains the single gate; the helpers reduce iteration count by catching cross-file gaps the audit would otherwise surface.
 
 ## What You Produce
 

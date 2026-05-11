@@ -134,7 +134,8 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
 
      - **Non-empty inline:** Apply **Fix protocol** (see
        [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)).
-       Reset `bugbot_clean_at = null, copilot_clean_at = null`,
+       Reset `bugbot_clean_at = null, copilot_clean_at = null,
+       copilot_wait_count = 0`,
        stay in `phase = BUGBOT`. Run Step 3, schedule next wakeup,
        return.
      - **Empty inline (body-only findings):** Parse findings from
@@ -147,23 +148,28 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
        `bugbot_clean_at = null, copilot_clean_at = null`, stay in
        `phase = BUGBOT`. Run Step 3, schedule next wakeup, return.
    - **`classification == "clean"` (state `APPROVED`):** Set
-     `copilot_clean_at = current_head`, `phase = BUGTEAM`. Continue
+     `copilot_clean_at = current_head`. Reset
+     `copilot_wait_count = 0`, `phase = BUGTEAM`. Continue
      BUGTEAM in same tick — back-to-back convergence requires
      bugteam on same HEAD before next wakeup.
-   - **No Copilot review at `current_head`:** Set `phase = BUGTEAM`.
+   - **No Copilot review at `current_head`:** Reset
+     `copilot_wait_count = 0`, `phase = BUGTEAM`.
      Continue BUGTEAM in same tick — back-to-back convergence
      requires bugteam on same HEAD before next wakeup.
-   - **DISMISSED:** No actionable findings. Set `phase = BUGTEAM`.
+   - **DISMISSED:** No actionable findings. Reset
+     `copilot_wait_count = 0`, `phase = BUGTEAM`.
      Continue BUGTEAM in same tick — back-to-back convergence requires
      bugteam on same HEAD before next wakeup.
    - **COMMENTED with empty body:** Fetch Copilot inline comments for
      `current_head` (same filter as dirty-branch inline fetch above).
      - **Non-empty inline:** Apply Fix protocol (see
        [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)).
-       Reset `bugbot_clean_at = null, copilot_clean_at = null`,
+       Reset `bugbot_clean_at = null, copilot_clean_at = null,
+       copilot_wait_count = 0`,
        stay in `phase = BUGBOT`. Run Step 3, schedule next wakeup,
        return.
-     - **Empty inline:** No actionable findings. Set
+     - **Empty inline:** No actionable findings. Reset
+       `copilot_wait_count = 0`,
        `phase = BUGTEAM`. Continue BUGTEAM in same tick —
        back-to-back convergence requires bugteam on same HEAD
        before next wakeup.

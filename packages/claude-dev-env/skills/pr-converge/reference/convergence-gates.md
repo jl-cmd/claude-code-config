@@ -31,7 +31,8 @@ Decide (four branches; match first whose predicate holds):
   `add_reply_to_pull_request_comment` MCP → Step 3 in same tick (see
   [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
   full contract).
-  Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`, `phase =
+  Reset `bugbot_clean_at = null` AND `copilot_clean_at = null` AND
+  `copilot_wait_count = 0`, `phase =
   BUGBOT`, schedule next wakeup, return. Full back-to-back-clean cycle
   plus all four gates must hold again on new HEAD.
 - **`classification == "dirty"` with empty inline comments matching
@@ -41,12 +42,16 @@ Decide (four branches; match first whose predicate holds):
   top-level review reply using `pull_request_review_write(method="create", event="COMMENT", owner=OWNER, repo=REPO, pullNumber=NUMBER, body)` citing new HEAD SHA → Step 3 in same tick.
   Reset
   `bugbot_clean_at = null` AND
-  `copilot_clean_at = null`, `phase = BUGBOT`, Step 3 on new HEAD,
+  `copilot_clean_at = null` AND
+  `copilot_wait_count = 0`, `phase = BUGBOT`, Step 3 on new HEAD,
   schedule next wakeup, return. Convergence requires full
   back-to-back-clean on new HEAD.
 - **`classification == "clean"` (state `APPROVED`):** Set
-  `copilot_clean_at = current_head`. Continue to gate (b).
-- **No Copilot review on `current_head` yet:** Skip — gate (c) issues
+  `copilot_clean_at = current_head`. Reset `copilot_wait_count = 0`.
+  Continue to gate (b).
+- **No Copilot review on `current_head` yet:** Increment
+  `copilot_wait_count`. At `>= 3`, escalate as hard blocker per
+  [stop-conditions.md](stop-conditions.md). Skip — gate (c) issues
   proactive request. Continue to gate (b).
 
 ## (b) Mergeability gate
@@ -100,8 +105,9 @@ sequence re-runs:
     Agent (subagent_type: clean-coder) to fix, restart convergence from
     BUGBOT. Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`,
     `phase = BUGBOT`, schedule next wakeup, return.
-  - No review yet → schedule one more wakeup (270s), re-check next tick.
-    After three consecutive empty waits, escalate as hard blocker per
+  - No review yet → increment `copilot_wait_count`, schedule one more
+    wakeup (270s), re-check next tick. At `copilot_wait_count >= 3`:
+    escalate as hard blocker per
     [stop-conditions.md](stop-conditions.md).
 - **Gate (b)** re-checks mergeability (may have changed since Copilot
   request). If not clean, apply gate (b) rules — handle conflict via

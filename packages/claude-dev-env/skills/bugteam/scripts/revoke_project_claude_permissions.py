@@ -10,7 +10,9 @@ autoMode sections so repeated grant/revoke cycles leave no dead structure.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+parent_directory = str(Path(__file__).resolve().parent)
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
 
 from _claude_permissions_common import (  # noqa: E402
     build_permission_rules,
@@ -19,43 +21,83 @@ from _claude_permissions_common import (  # noqa: E402
     load_settings,
     prune_empty_list_then_empty_section,
     save_settings,
+)
+from config.claude_permissions_common_constants import (  # noqa: E402
+    ALL_PERMISSION_ALLOW_TOOLS,
     AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
-    PERMISSION_ALLOW_TOOLS,
+    CLAUDE_DIRECTORY_MARKER,
+    GIT_DIRECTORY_MARKER,
 )
 
 
 def is_valid_project_root(candidate_path: Path) -> bool:
-    git_marker_path = candidate_path / ".git"
-    claude_marker_path = candidate_path / ".claude"
-    return git_marker_path.exists() or claude_marker_path.exists()
+    """Check whether a candidate path has expected project-root markers.
+
+    Args:
+        candidate_path: Path to check for project-root markers.
+
+    Returns:
+        True when the path contains .git or .claude directory.
+    """
+    return (
+        (candidate_path / GIT_DIRECTORY_MARKER).exists()
+        or (candidate_path / CLAUDE_DIRECTORY_MARKER).exists()
+    )
 
 
-def remove_values_from_list(target_list: list[object], values_to_remove: set[str]) -> int:
-    original_length = len(target_list)
-    target_list[:] = [
+def remove_values_from_list(all_target_list: list[object], all_values_to_remove: set[str]) -> int:
+    """Remove matching values from a list in place.
+
+    Args:
+        all_target_list: The list to remove values from.
+        all_values_to_remove: Set of string values to remove.
+
+    Returns:
+        Number of values removed.
+    """
+    original_length = len(all_target_list)
+    all_target_list[:] = [
         each_value
-        for each_value in target_list
-        if not (isinstance(each_value, str) and each_value in values_to_remove)
+        for each_value in all_target_list
+        if not (isinstance(each_value, str) and each_value in all_values_to_remove)
     ]
-    return original_length - len(target_list)
+    return original_length - len(all_target_list)
 
 
 def remove_rules_from_allow_list(
-    settings: dict[str, object], rules_to_remove: list[str]
+    all_settings: dict[str, object], all_rules_to_remove: list[str]
 ) -> int:
-    permissions_section = settings.get("permissions")
+    """Remove matching permission rules from the settings allow list.
+
+    Args:
+        all_settings: The parsed settings dictionary.
+        all_rules_to_remove: Permission rule strings to remove.
+
+    Returns:
+        Number of rules removed.
+    """
+    permissions_section = all_settings.get("permissions")
     if not isinstance(permissions_section, dict):
         return 0
     existing_allow_list = permissions_section.get("allow")
     if not isinstance(existing_allow_list, list):
         return 0
-    return remove_values_from_list(existing_allow_list, set(rules_to_remove))
+    return remove_values_from_list(existing_allow_list, set(all_rules_to_remove))
 
 
 def remove_directory_from_additional_directories(
-    settings: dict[str, object], directory_path: str
+    all_settings: dict[str, object], directory_path: str
 ) -> int:
-    permissions_section = settings.get("permissions")
+    """Remove a project path from the additionalDirectories list.
+
+    Args:
+        all_settings: The parsed settings dictionary.
+        directory_path: The project directory path to remove.
+
+    Returns:
+        1 when the entry was removed, 0 when not found.
+    """
+    permissions_section = all_settings.get("permissions")
     if not isinstance(permissions_section, dict):
         return 0
     existing_directories = permissions_section.get("additionalDirectories")
@@ -65,9 +107,18 @@ def remove_directory_from_additional_directories(
 
 
 def remove_auto_mode_environment_entry(
-    settings: dict[str, object], entry_text: str
+    all_settings: dict[str, object], entry_text: str
 ) -> int:
-    auto_mode_section = settings.get("autoMode")
+    """Remove an auto-mode environment entry for the project.
+
+    Args:
+        all_settings: The parsed settings dictionary.
+        entry_text: The environment entry text to remove.
+
+    Returns:
+        1 when the entry was removed, 0 when not found.
+    """
+    auto_mode_section = all_settings.get("autoMode")
     if not isinstance(auto_mode_section, dict):
         return 0
     existing_environment = auto_mode_section.get("environment")
@@ -76,26 +127,44 @@ def remove_auto_mode_environment_entry(
     return remove_values_from_list(existing_environment, {entry_text})
 
 
-def prune_settings_after_revoke(settings: dict[str, object]) -> None:
-    prune_empty_list_then_empty_section(settings, "permissions", "allow")
+def prune_settings_after_revoke(all_settings: dict[str, object]) -> None:
+    """Remove empty lists and their parent sections after revoking entries.
+
+    Args:
+        all_settings: The parsed settings dictionary to prune in place.
+    """
+    prune_empty_list_then_empty_section(all_settings, "permissions", "allow")
     prune_empty_list_then_empty_section(
-        settings, "permissions", "additionalDirectories"
+        all_settings, "permissions", "additionalDirectories"
     )
-    prune_empty_list_then_empty_section(settings, "autoMode", "environment")
+    prune_empty_list_then_empty_section(all_settings, "autoMode", "environment")
 
 
 def revoke_permissions_for_current_directory() -> None:
-    claude_user_settings_path: Path = Path.home() / ".claude" / "settings.json"
+    """Revoke Edit/Write/Read permissions for the current project directory.
+
+    Reads the current project path, constructs permission rules from config
+    constants, removes them from ~/.claude/settings.json, and prunes any
+    newly empty sections.
+
+    Raises:
+        SystemExit(1): When the current directory is not a valid project root.
+        ValueError: Propagated from get_current_project_path() when the path
+                    contains glob metacharacters.
+    """
+    claude_user_settings_path: Path = (
+        Path.home() / CLAUDE_DIRECTORY_MARKER / "settings.json"
+    )
     project_root_path = Path.cwd()
     if not is_valid_project_root(project_root_path):
         print(
             f"ERROR: cwd {project_root_path} is not a project root "
-            f"(no .git or .claude). Run from a project root.",
+            f"(no {GIT_DIRECTORY_MARKER} or {CLAUDE_DIRECTORY_MARKER}). Run from a project root.",
             file=sys.stderr,
         )
         raise SystemExit(1)
     project_path = get_current_project_path()
-    permission_rules = build_permission_rules(project_path, PERMISSION_ALLOW_TOOLS)
+    permission_rules = build_permission_rules(project_path, ALL_PERMISSION_ALLOW_TOOLS)
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(
         project_path=project_path
     )

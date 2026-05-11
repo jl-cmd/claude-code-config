@@ -9,7 +9,9 @@ the changes applied. No-op when the entries already exist.
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+parent_directory = str(Path(__file__).resolve().parent)
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
 
 from _claude_permissions_common import (  # noqa: E402
     append_if_missing,
@@ -20,31 +22,62 @@ from _claude_permissions_common import (  # noqa: E402
     get_current_project_path,
     load_settings,
     save_settings,
+)
+from config.claude_permissions_common_constants import (  # noqa: E402
+    ALL_PERMISSION_ALLOW_TOOLS,
     AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
-    PERMISSION_ALLOW_TOOLS,
+    CLAUDE_DIRECTORY_MARKER,
+    GIT_DIRECTORY_MARKER,
 )
 
 
 def is_valid_project_root(candidate_path: Path) -> bool:
-    git_marker_path = candidate_path / ".git"
-    claude_marker_path = candidate_path / ".claude"
-    return git_marker_path.exists() or claude_marker_path.exists()
+    """Check whether a candidate path has expected project-root markers.
+
+    Args:
+        candidate_path: Path to check for project-root markers.
+
+    Returns:
+        True when the path contains .git or .claude directory.
+    """
+    return (
+        (candidate_path / GIT_DIRECTORY_MARKER).exists()
+        or (candidate_path / CLAUDE_DIRECTORY_MARKER).exists()
+    )
 
 
-def add_rules_to_allow_list(settings: dict[str, object], rules_to_add: list[str]) -> int:
-    permissions_section = ensure_dict_section(settings, "permissions")
+def add_rules_to_allow_list(all_settings: dict[str, object], all_rules_to_add: list[str]) -> int:
+    """Add permission rules to the settings allow list.
+
+    Args:
+        all_settings: The parsed settings dictionary.
+        all_rules_to_add: Permission rule strings to append.
+
+    Returns:
+        Number of rules actually added (new entries).
+    """
+    permissions_section = ensure_dict_section(all_settings, "permissions")
     existing_allow_list = ensure_list_entry(permissions_section, "allow")
     return sum(
         1
-        for each_rule in rules_to_add
+        for each_rule in all_rules_to_add
         if append_if_missing(existing_allow_list, each_rule)
     )
 
 
 def add_directory_to_additional_directories(
-    settings: dict[str, object], directory_path: str
+    all_settings: dict[str, object], directory_path: str
 ) -> int:
-    permissions_section = ensure_dict_section(settings, "permissions")
+    """Add a project path to the additionalDirectories allow list.
+
+    Args:
+        all_settings: The parsed settings dictionary.
+        directory_path: The project directory path to add.
+
+    Returns:
+        1 when the entry was added, 0 when it already existed.
+    """
+    permissions_section = ensure_dict_section(all_settings, "permissions")
     existing_directories = ensure_list_entry(
         permissions_section, "additionalDirectories"
     )
@@ -54,9 +87,18 @@ def add_directory_to_additional_directories(
 
 
 def add_auto_mode_environment_entry(
-    settings: dict[str, object], entry_text: str
+    all_settings: dict[str, object], entry_text: str
 ) -> int:
-    auto_mode_section = ensure_dict_section(settings, "autoMode")
+    """Add an auto-mode environment entry for the project.
+
+    Args:
+        all_settings: The parsed settings dictionary.
+        entry_text: The environment entry text to add.
+
+    Returns:
+        1 when the entry was added, 0 when it already existed.
+    """
+    auto_mode_section = ensure_dict_section(all_settings, "autoMode")
     existing_environment = ensure_list_entry(auto_mode_section, "environment")
     if append_if_missing(existing_environment, entry_text):
         return 1
@@ -64,17 +106,29 @@ def add_auto_mode_environment_entry(
 
 
 def grant_permissions_for_current_directory() -> None:
-    claude_user_settings_path: Path = Path.home() / ".claude" / "settings.json"
+    """Grant Edit/Write/Read permissions for the current project directory.
+
+    Reads the current project path, constructs permission rules from config
+    constants, and writes them to ~/.claude/settings.json atomically.
+
+    Raises:
+        SystemExit(1): When the current directory is not a valid project root.
+        ValueError: Propagated from get_current_project_path() when the path
+                    contains glob metacharacters.
+    """
+    claude_user_settings_path: Path = (
+        Path.home() / CLAUDE_DIRECTORY_MARKER / "settings.json"
+    )
     project_root_path = Path.cwd()
     if not is_valid_project_root(project_root_path):
         print(
             f"ERROR: cwd {project_root_path} is not a project root "
-            f"(no .git or .claude). Run from a project root.",
+            f"(no {GIT_DIRECTORY_MARKER} or {CLAUDE_DIRECTORY_MARKER}). Run from a project root.",
             file=sys.stderr,
         )
         raise SystemExit(1)
     project_path = get_current_project_path()
-    permission_rules = build_permission_rules(project_path, PERMISSION_ALLOW_TOOLS)
+    permission_rules = build_permission_rules(project_path, ALL_PERMISSION_ALLOW_TOOLS)
     environment_entry = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(
         project_path=project_path
     )

@@ -6,8 +6,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+from config.bugteam_preflight_constants import (
+    ALL_DISCOVERY_IGNORE_DIRECTORIES,
+    ALL_GIT_CONFIG_HOOKS_PATH_ARGUMENTS,
+    ALL_PRE_COMMIT_ARGUMENTS,
+    BUGTEAM_PREFLIGHT_PREFIX,
+    BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME,
+    ENFORCEMENT_ABSENT_MESSAGE,
+    EXIT_CODE_HOOKS_PATH_CHECK_FAILED,
+    EXPECTED_HOOKS_PATH_SUFFIX,
+    GIT_DIRECTORY_NAME,
+    PYTEST_EXIT_CODE_NO_TESTS_COLLECTED,
+)
 
-def verify_git_hooks_path(repository_root: Path | None = None) -> int:
+
+def verify_git_hooks_path(repository_root: Path | None) -> int:
     """Check that core.hooksPath resolves to the claude-dev-env git-hooks directory.
 
     When *repository_root* is provided, queries the effective config for that
@@ -15,20 +28,18 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     overrides such as Husky or lefthook. Falls back to the current working
     directory's effective config when *repository_root* is None.
 
-    Returns zero when the configured path ends with the expected hooks suffix.
-    Returns non-zero and prints a correction message when unset or pointing elsewhere.
+    Args:
+        repository_root: Optional repository root to check. When None, uses
+            the current working directory's effective config.
+
+    Returns:
+        Zero when the configured path ends with the expected hooks suffix.
+        Non-zero and prints a correction message when unset or pointing elsewhere.
     """
-    expected_hooks_path_suffix = "hooks/git-hooks"
-    enforcement_absent_message = (
-        "Git-side CODE_RULES enforcement is not active on this host.\n"
-        "Run: npx claude-dev-env .\n"
-        "Or set core.hooksPath at any scope, e.g.:\n"
-        "  git config --global core.hooksPath ~/.claude/hooks/git-hooks"
-    )
     git_command: list[str] = ["git"]
     if repository_root is not None:
         git_command.extend(["-C", str(repository_root)])
-    git_command.extend(["config", "--get", "core.hooksPath"])
+    git_command.extend(list(ALL_GIT_CONFIG_HOOKS_PATH_ARGUMENTS))
     try:
         query_result = subprocess.run(
             git_command,
@@ -40,49 +51,72 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
         )
     except FileNotFoundError:
         print(
-            "bugteam_preflight: git is not installed or not available on PATH.\n"
-            f"{enforcement_absent_message}",
+            f"{BUGTEAM_PREFLIGHT_PREFIX}git is not installed or not available on PATH.\n"
+            f"{ENFORCEMENT_ABSENT_MESSAGE}",
             file=sys.stderr,
         )
-        return 1
+        return EXIT_CODE_HOOKS_PATH_CHECK_FAILED
     except OSError as os_error:
         print(
-            f"bugteam_preflight: failed to run git: {os_error}\n"
-            f"{enforcement_absent_message}",
+            f"{BUGTEAM_PREFLIGHT_PREFIX}failed to run git: {os_error}\n"
+            f"{ENFORCEMENT_ABSENT_MESSAGE}",
             file=sys.stderr,
         )
-        return 1
+        return EXIT_CODE_HOOKS_PATH_CHECK_FAILED
     if query_result.returncode != 0:
         print(
-            f"bugteam_preflight: {enforcement_absent_message}",
+            f"{BUGTEAM_PREFLIGHT_PREFIX}{ENFORCEMENT_ABSENT_MESSAGE}",
             file=sys.stderr,
         )
-        return 1
+        return EXIT_CODE_HOOKS_PATH_CHECK_FAILED
     configured_path = query_result.stdout.strip().replace("\\", "/").rstrip("/")
-    if not configured_path.endswith(expected_hooks_path_suffix):
+    if not configured_path.endswith(EXPECTED_HOOKS_PATH_SUFFIX):
         print(
-            f"bugteam_preflight: core.hooksPath is '{configured_path}' — "
-            f"expected path ending in '{expected_hooks_path_suffix}'.\n"
-            f"{enforcement_absent_message}",
+            f"{BUGTEAM_PREFLIGHT_PREFIX}core.hooksPath is '{configured_path}' — "
+            f"expected path ending in '{EXPECTED_HOOKS_PATH_SUFFIX}'.\n"
+            f"{ENFORCEMENT_ABSENT_MESSAGE}",
             file=sys.stderr,
         )
-        return 1
+        return EXIT_CODE_HOOKS_PATH_CHECK_FAILED
     return 0
 
 
 def find_repository_root(start: Path) -> Path:
+    """Find the repository root by walking up from the starting directory.
+
+    Searches for a ``.git`` directory or file in parent directories. Falls
+    back to the nearest ancestor containing ``pytest.ini`` when no git
+    repository is found.
+
+    Args:
+        start: The directory to start searching from.
+
+    Returns:
+        The repository root path, or *start* when no repository is found.
+    """
     resolved = start.resolve()
     candidates = [resolved, *resolved.parents]
-    for candidate in candidates:
-        if (candidate / ".git").is_dir() or (candidate / ".git").is_file():
-            return candidate
-    for candidate in candidates:
-        if (candidate / "pytest.ini").is_file():
-            return candidate
+    for each_candidate in candidates:
+        if (each_candidate / GIT_DIRECTORY_NAME).is_dir() or (each_candidate / GIT_DIRECTORY_NAME).is_file():
+            return each_candidate
+    for each_candidate in candidates:
+        if (each_candidate / "pytest.ini").is_file():
+            return each_candidate
     return resolved
 
 
 def has_pytest_configuration(root: Path) -> bool:
+    """Check whether a directory has pytest configuration available.
+
+    Checks for ``pytest.ini`` directly, then falls back to searching for
+    ``[tool.pytest]`` in ``pyproject.toml``.
+
+    Args:
+        root: The directory to check for pytest configuration.
+
+    Returns:
+        True when pytest configuration is found in either location.
+    """
     if (root / "pytest.ini").is_file():
         return True
     pyproject = root / "pyproject.toml"
@@ -93,23 +127,45 @@ def has_pytest_configuration(root: Path) -> bool:
 
 
 def has_discoverable_tests(root: Path) -> bool:
-    ignore = {"site-packages", ".venv", "venv", "node_modules"}
-    for path in root.rglob("test_*.py"):
-        if any(part in ignore for part in path.parts):
+    """Check whether the directory tree contains discoverable test files.
+
+    Searches for files matching ``test_*.py`` and ``*_test.py`` patterns,
+    skipping directories in the configured ignore list (virtual environments,
+    node_modules).
+
+    Args:
+        root: The directory tree root to search.
+
+    Returns:
+        True when at least one test file is found outside ignored directories.
+    """
+    for each_path in root.rglob("test_*.py"):
+        if any(part_dir in ALL_DISCOVERY_IGNORE_DIRECTORIES for part_dir in each_path.parts):
             continue
         return True
-    for path in root.rglob("*_test.py"):
-        if any(part in ignore for part in path.parts):
+    for each_path in root.rglob("*_test.py"):
+        if any(part_dir in ALL_DISCOVERY_IGNORE_DIRECTORIES for part_dir in each_path.parts):
             continue
         return True
     return False
 
 
 def _pytest_exit_code_no_tests_collected() -> int:
-    return 5
+    return PYTEST_EXIT_CODE_NO_TESTS_COLLECTED
 
 
 def run_pytest(repository_root: Path, verbose: bool) -> int:
+    """Run pytest in the repository root and return the exit code.
+
+    Treats the "no tests collected" exit code as a pass (exit 0).
+
+    Args:
+        repository_root: The repository root for running pytest.
+        verbose: When True, pass no -q flag (shows individual test names).
+
+    Returns:
+        The pytest exit code, or 0 when no tests were collected.
+    """
     command = [sys.executable, "-m", "pytest"]
     if not verbose:
         command.append("-q")
@@ -124,15 +180,31 @@ def run_pytest(repository_root: Path, verbose: bool) -> int:
 
 
 def run_pre_commit(repository_root: Path) -> int:
+    """Run pre-commit on all files and return the exit code.
+
+    Args:
+        repository_root: The repository root for running pre-commit.
+
+    Returns:
+        The pre-commit exit code (0 on success, non-zero on failure).
+    """
     completed = subprocess.run(
-        ["pre-commit", "run", "--all-files"],
+        ALL_PRE_COMMIT_ARGUMENTS,
         cwd=str(repository_root),
         check=False,
     )
     return completed.returncode
 
 
-def parse_arguments(argv: list[str]) -> argparse.Namespace:
+def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
+    """Parse command-line arguments for the preflight script.
+
+    Args:
+        all_argv: Command-line argument list.
+
+    Returns:
+        Parsed namespace with repo_root, no_pytest, pre_commit, and verbose.
+    """
     parser = argparse.ArgumentParser(
         description="Run local checks before /bugteam (pytest, optional pre-commit).",
     )
@@ -158,44 +230,57 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Verbose pytest output.",
     )
-    return parser.parse_args(argv)
+    return parser.parse_args(all_argv)
 
 
-def main(argv: list[str] | None = None) -> int:
-    arguments = parse_arguments(sys.argv[1:] if argv is None else argv)
-    if os.environ.get("BUGTEAM_PREFLIGHT_SKIP", "").strip() == "1":
-        print("bugteam_preflight: skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
+def main(all_argv: list[str] | None, repository_root: Path | None) -> int:
+    """Run the bugteam preflight checks (pytest, optional pre-commit).
+
+    Args:
+        all_argv: Command-line arguments to parse. Pass None to use sys.argv.
+        repository_root: Repository root path. Pass None to discover from cwd.
+
+    Returns:
+        Zero on success, non-zero exit code on failure.
+    """
+    arguments = parse_arguments(sys.argv[1:] if all_argv is None else all_argv)
+    if os.environ.get(BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME, "").strip() == "1":
+        print(f"{BUGTEAM_PREFLIGHT_PREFIX}skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
         return 0
     start = Path.cwd()
-    repository_root = (
-        arguments.repo_root.resolve()
-        if arguments.repo_root is not None
-        else find_repository_root(start)
+    resolved_repository_root: Path = (
+        repository_root
+        if repository_root is not None
+        else (
+            arguments.repo_root.resolve()
+            if arguments.repo_root is not None
+            else find_repository_root(start)
+        )
     )
-    hooks_path_exit_code = verify_git_hooks_path(repository_root)
+    hooks_path_exit_code = verify_git_hooks_path(resolved_repository_root)
     if hooks_path_exit_code != 0:
         return hooks_path_exit_code
-    if not arguments.no_pytest and has_pytest_configuration(repository_root):
-        if not has_discoverable_tests(repository_root):
+    if not arguments.no_pytest and has_pytest_configuration(resolved_repository_root):
+        if not has_discoverable_tests(resolved_repository_root):
             print(
-                "bugteam_preflight: pytest configured but no tests found; skipping pytest.",
+                f"{BUGTEAM_PREFLIGHT_PREFIX}pytest configured but no tests found; skipping pytest.",
                 file=sys.stderr,
             )
         else:
-            exit_code = run_pytest(repository_root, arguments.verbose)
+            exit_code = run_pytest(resolved_repository_root, arguments.verbose)
             if exit_code != 0:
                 return exit_code
     elif not arguments.no_pytest:
         print(
-            "bugteam_preflight: no pytest configuration found; skipping pytest.",
+            f"{BUGTEAM_PREFLIGHT_PREFIX}no pytest configuration found; skipping pytest.",
             file=sys.stderr,
         )
-    if arguments.pre_commit and (repository_root / ".pre-commit-config.yaml").is_file():
-        exit_code = run_pre_commit(repository_root)
+    if arguments.pre_commit and (resolved_repository_root / ".pre-commit-config.yaml").is_file():
+        exit_code = run_pre_commit(resolved_repository_root)
         if exit_code != 0:
             return exit_code
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(None, None))

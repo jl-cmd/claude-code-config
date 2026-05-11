@@ -16,7 +16,7 @@ import stat
 import sys
 from collections.abc import Callable
 
-from bugteam_config.windows_safe_rmtree_constants import (
+from config.windows_safe_rmtree_constants import (
     EXIT_CODE_USAGE_ERROR,
     EXPECTED_ARGUMENT_COUNT,
     ONEXC_PYTHON_MAJOR_VERSION,
@@ -47,6 +47,11 @@ def _select_handler_keyword() -> dict[str, Callable[..., None]]:
 
 
 def remove_tree(target_path: str) -> None:
+    """Recursively remove a directory tree, handling Windows ReadOnly attributes.
+
+    Args:
+        target_path: Absolute path to the directory tree to remove.
+    """
     handler_keyword = _select_handler_keyword()
     try:
         shutil.rmtree(target_path, **handler_keyword)
@@ -59,6 +64,15 @@ def _print_usage_to_stderr() -> None:
 
 
 def main(all_arguments: list[str]) -> int:
+    """Parse command-line arguments and invoke remove_tree.
+
+    Args:
+        all_arguments: Command-line arguments including script name
+                       and the target directory path.
+
+    Returns:
+        Exit code 0 on success, EXIT_CODE_USAGE_ERROR on invalid usage.
+    """
     if len(all_arguments) != EXPECTED_ARGUMENT_COUNT:
         _print_usage_to_stderr()
         return EXIT_CODE_USAGE_ERROR

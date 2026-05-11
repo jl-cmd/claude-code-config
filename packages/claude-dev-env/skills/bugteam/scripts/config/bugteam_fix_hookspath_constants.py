@@ -15,3 +15,12 @@ ALL_HOME_ENV_VAR_NAMES: tuple[str, str] = ("HOME", "USERPROFILE")
 PREFLIGHT_NO_PYTEST_FLAG: str = "--no-pytest"
 
 PREFLIGHT_REPO_ROOT_FLAG: str = "--repo-root"
+
+ALL_GLOBAL_HOOKS_PATH_ARGUMENTS: tuple[str, ...] = (
+    "git",
+    "config",
+    "--global",
+    "--get",
+    "core.hooksPath",
+)
+GIT_DIRECTORY_NAME: str = ".git"

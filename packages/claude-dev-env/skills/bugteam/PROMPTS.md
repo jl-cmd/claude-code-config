@@ -90,7 +90,19 @@ cd into `<worktree_path>` before any git or file operation.
   and return. Skip steps 3–5 — category auditors do not post PR reviews.
 
   Consolidator/validator (-validate) and single-opus auditors: run all steps
-  below.
+  below. Before starting, create one task per checklist item via TaskCreate. Use
+  TaskUpdate to mark each in_progress as you begin it and completed when
+  done.
+
+  <self_audit_checklist>
+    [ ] Walk all 11 categories (A–K), each with Shape A or Shape B
+    [ ] Assign finding IDs (loop<L>-<K>)
+    [ ] Capture excerpts, validate anchors, format finding bodies
+    [ ] Publish audit summary via /doc-gist, capture URL
+    [ ] Build review body with summary URL, post review (or fallback)
+    [ ] Handle fallback if review POST failed
+    [ ] Write outcome XML
+  </self_audit_checklist>
 
   1. Audit the diff against the 11 categories above. Buffer the findings
      in memory; all posting happens at step 4 once anchors are validated.
@@ -234,6 +246,25 @@ cd into `<worktree_path>` before any git or file operation.
 </bugs_to_fix>
 
 <execution>
+  Before starting, create one task per checklist item via TaskCreate. Use
+  TaskUpdate to mark each in_progress as you begin it and completed when
+  done.
+
+  <self_audit_checklist>
+    [ ] Read each referenced file
+    [ ] Apply all addressable fixes
+    [ ] py_compile on every modified file
+    [ ] Test suite passes
+    [ ] Post-fix violation count ≤ previous loop total (skip on L=1)
+    [ ] git add + commit
+    [ ] git push
+    [ ] Publish fix summary via /doc-gist, capture URL
+    [ ] Post fix reply on each finding thread
+    [ ] Resolve each thread via resolve_thread
+    [ ] Append fix summary URL to parent review via add_reply_to_pull_request_comment
+    [ ] Write fix outcomes XML
+  </self_audit_checklist>
+
   1. Read each referenced file before editing.
   2. Apply each fix you can address.
   3. Run `python -m py_compile` (or language-equivalent) on every modified file.

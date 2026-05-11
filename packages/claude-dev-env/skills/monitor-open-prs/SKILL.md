@@ -24,6 +24,25 @@ per PR, poll for late findings, report.
 - Post-convergence polling — backoff poll for late bugbot findings
 - Final report
 
+## Gotchas
+
+- **Teammates cannot spawn teams.** `Agent` with `team_name` or `TeamCreate`
+  from within a teammate silently fails. Teammates spawn only
+  `Agent(subagent_type: "clean-coder", run_in_background=true)` for fixes.
+- **`bugbot run` duplicate while review queued.** Skip trigger when the
+  latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction. Wait
+  for review or HEAD change first.
+- **Review body and inline comments desync.** "Dirty body, zero inline at
+  `current_head`" is `inline_lag`, not `dirty`. Bump streak, wait 90s,
+  retry. Do not spawn clean-coder for lag.
+- **Bot login fields differ by endpoint.** `get_reviews` returns
+  `.user.login` (object); `get_review_comments` returns `.author`
+  (string). Use case-insensitive substring matching, never strict equality.
+- **`state.json` lost-update on parallel writes.** Naive read-modify-write
+  loses merges when teammates finish in the same window. Use the
+  atomic lock + replace protocol from
+  pr-converge's multi-pr-orchestration.md §Concurrency.
+
 ## Architecture
 
 The skill spawns one orchestrated team. The orchestrator discovers PRs
@@ -31,23 +50,36 @@ and assigns one teammate per PR. Each teammate owns the full bugbot
 cycle for its PR from trigger through clean. Teammates spawn
 `clean-coder` subagents for fixes but never spawn their own teams.
 
-**Orchestrator (main session):**
-1. Discover open PRs via `scripts/discover_open_prs.py`
-2. Create team via `TeamCreate`
-3. Create one task per PR in the team task list
-4. Spawn one `general-purpose` teammate per PR in a single parallel
-   `Agent` call
-5. Teammates read this skill and execute the bugbot cycle independently
-6. Orchestrator waits for all teammates to go idle, collects results,
-   emits final report
+**Dependencies:** pr-converge skill (for per-tick.md and fix-protocol.md
+spokes), clean-coder agent (for fix implementation), GitHub MCP server.
 
-**Teammate (one per PR):**
-1. Reads `state.json` for its PR assignment
-2. Runs the full bugbot cycle (trigger → classify → fix → repeat)
-3. Spawns `Agent(subagent_type: "clean-coder")` for fixes — never
-   `TeamCreate` or `Agent` with `team_name`
-4. Writes `state.json` with result before going idle
-5. Reports converged / blocked / stuck to orchestrator
+**Orchestrator workflow:**
+
+Use `TaskCreate` to build a task list the orchestrator works through.
+Mark each complete with `TaskUpdate` when done.
+
+1. `TaskCreate(subject: "Discover open PRs")` — Run
+   `scripts/discover_open_prs.py`. Mark complete.
+2. `TaskCreate(subject: "Create orchestration team")` — Call
+   `TeamCreate`. Mark complete.
+3. For each discovered PR, `TaskCreate(subject: "<owner>/<repo>#<number>")`
+   with description holding owner/repo/number/branch. These are the
+   per-PR work items assigned to teammates.
+4. Spawn one `Agent` teammate per PR in a single parallel call. Each
+   teammate reads this skill and claims its assigned task.
+5. Wait for all teammates to go idle.
+6. `TaskCreate(subject: "Emit final report")` — Collect teammate
+   results, emit the report from the Final report section. Mark complete.
+
+**Teammate checklist (bugbot-sweep-agent):**
+
+```
+[ ] Read this skill and follow the Bugbot cycle section below
+[ ] Run the cycle until clean, blocked, or stuck
+[ ] Spawn Agent(subagent_type: "clean-coder") for fixes — never TeamCreate
+[ ] Write state.json with result before going idle
+[ ] Report converged / blocked / stuck to orchestrator
+```
 
 ## When this skill applies
 
@@ -91,52 +123,32 @@ cleanly.
 
 For each discovered PR, run the BUGBOT phase from
 [pr-converge](~/skills/pr-converge/reference/per-tick.md) until bugbot
-reports clean on the current HEAD. The cycle per tick:
+reports clean on the current HEAD. Copy this checklist into your response
+and check off each step as you go.
 
-1. **Resolve PR context** — per-tick.md Step 1. Capture `current_head`,
-   owner, repo, branch, number.
-
-2. **Trigger bugbot** — per-tick.md Step 3. Post `bugbot run` via
-   `add_issue_comment`. Run bugbot-down detection: capture comment ID,
-   wait 15s, check reactions. Zero reactions → `bugbot_down = true`,
-   skip to step 6 (terminate). Reactions present → proceed.
-
-3. **Wait for review** — poll
-   `pull_request_read(method="get_reviews")` every 60s (up to 10 polls)
-   until a review anchored to `current_head` appears with `commit_id ==
-   current_head`. Timeout → blocked, report and move to next PR.
-
-4. **Classify** — per-tick.md Step 2 BUGBOT section c, four branches
-   (first match wins):
-   - No review or `commit_id != current_head` → back to step 2
-   - `commit_id == current_head`, zero unaddressed inline, body clean →
-     **clean**. This PR is done.
-   - `commit_id == current_head` with unaddressed inline → **dirty**.
-     Apply fix (step 5), then back to step 2.
-   - `commit_id == current_head`, body findings, inline API zero
-     matching → **inline_lag**. Increment `inline_lag_streak`. >= 3 →
-     hard blocker, report and move to next PR. Else wait 90s, retry
-     step 4.
-
-5. **Fix** — per
-   [fix-protocol.md](~/skills/pr-converge/reference/fix-protocol.md)
-   Single-PR fix workflow, executed via `Agent` subagent. The agent
-   prompt follows the structured prompt pattern from
-   [pr-converge fix dispatch](https://github.com/jl-cmd/claude-code-config/pull/422):
-   - Read each referenced file:line
-   - Write failing test first when finding has behavior to test
-   - Implement via `Agent` (`subagent_type: "clean-coder"`).
-     Full-stop if unavailable.
-   - Stage, commit, push (honor pre-commit and pre-push hooks;
-     full-stop on bypass)
-   - Reply inline on each addressed thread via
-     `add_reply_to_pull_request_comment`
-   - Set `current_head` to new SHA
-   - Back to step 2
-
-6. **Bugbot-down** — when `bugbot_down == true`, terminate immediately.
-   Bugbot is unreachable; further cycles would busy-loop. Report the PR
-   as blocked with reason `bugbot_down`.
+```
+[ ] 1. Resolve PR context — per-tick.md Step 1
+       Capture current_head, owner, repo, branch, number.
+[ ] 2. Trigger bugbot — per-tick.md Step 3
+       Post "bugbot run" via add_issue_comment. Run bugbot-down
+       detection: capture comment ID, wait 15s, check reactions.
+       Zero reactions → bugbot_down = true → skip to step 6.
+       Reactions present → proceed.
+[ ] 3. Wait for review
+       Poll pull_request_read(method="get_reviews") every 60s (max 10)
+       until a review at current_head appears. Timeout → blocked.
+[ ] 4. Classify — per-tick.md Step 2 BUGBOT §c, first match wins:
+       - No review or commit_id != current_head → back to step 2
+       - Clean (body clean, zero unaddressed inline) → DONE
+       - Dirty (unaddressed inline at current_head) → step 5
+       - inline_lag (body dirty, inline API zero) → bump streak,
+         wait 90s, retry step 4 (>= 3 → hard blocker)
+[ ] 5. Fix — delegating to clean-coder per fix-protocol.md Single-PR
+       Spawn Agent(subagent_type: "clean-coder", run_in_background=true)
+       listing the dirty file:line findings. After clean-coder returns,
+       set current_head to new SHA, go to step 2.
+[ ] 6. Bugbot-down — terminate immediately, report blocked/bugbot_down
+```
 
 
 ## Post-convergence polling

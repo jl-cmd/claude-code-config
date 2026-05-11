@@ -101,9 +101,17 @@ After phase 2 completes, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` fr
 
 ### Shutdown (bugfind)
 
-Each teammate self-terminates after marking its task complete — the task list reflects completion. The lead polls `TaskList` to detect when all eleven tasks are `completed`. Tasks that stay `in_progress` without an idle notification signal a crashed teammate. For each stuck task: verify whether the outcome XML exists at `<run_temp_dir>/pr-{N}/loop-{L}-{letter}.outcomes.xml`. XML present → mark task `completed` (teammate finished, crashed before marking). No XML → re-spawn that letter's teammate.
+Each teammate self-terminates after marking its task complete — the task list reflects completion. The lead polls `TaskList` to detect when all eleven tasks are `completed`. Each Agent spawn returns immediately with an `agentId`; the lead records `<letter> → spawn_at: <now ISO 8601>` per teammate so the wall-clock budget below has a clean start point.
 
-`last_action = "audited"`. Append audit metadata to `audit_log`.
+**Wall-clock budget per spawned auditor: 30 minutes.** A category auditor that has been live for 30 minutes without producing its outcome XML at `<run_temp_dir>/pr-{N}/loop-{L}-{letter}.outcomes.xml` is treated as effectively crashed regardless of whether its task is still `in_progress` or has gone `idle`. The 30-minute window is the empirical envelope for an opus auditor that loaded its rubric, prompt file, and PROMPTS.md and walked the diff once; runs longer than that are not making forward progress and waste the loop.
+
+For each task that is `pending` or `in_progress`:
+
+- **XML on disk** at `<run_temp_dir>/pr-{N}/loop-{L}-{letter}.outcomes.xml` → teammate finished, crashed before marking; the lead calls `TaskUpdate` to mark the task `completed` and treats this letter as done.
+- **No XML AND `now - spawn_at < 30 min`** → still in budget; the lead waits, polls again on the next `TaskList` cycle.
+- **No XML AND `now - spawn_at >= 30 min`** → over budget; the lead terminates the stalled teammate (best effort) and re-spawns that letter's auditor with a fresh `spawn_at` timestamp. Note this in `audit_log` so the consolidator's anchored-finding count makes sense post-recovery.
+
+`last_action = "audited"`. Append audit metadata to `audit_log`, including the per-letter `spawn_at`/completion timestamps so re-entry diagnostics have ground truth.
 
 ### AUDIT phase 1 — eleven category auditors as teammates (every loop)
 

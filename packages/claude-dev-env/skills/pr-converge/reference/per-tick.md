@@ -42,7 +42,9 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `
 
 If owner/repo/number are not yet known, extract them from the PR URL.
 If `current_head` changed since last tick, reset `bugbot_down` to `false`
-(new HEAD invalidates prior down-detection state).
+AND reset `bugbot_acknowledged_at` to `null` (new HEAD invalidates prior
+down-detection state and starts a fresh 30-minute acknowledgement
+budget for whatever bugbot review fires next).
 
 Capture `number`, `head.sha` (= `current_head`), owner/repo, branch.
 
@@ -50,14 +52,24 @@ Capture `number`, `head.sha` (= `current_head`), owner/repo, branch.
 
 ### `phase == BUGBOT`
 
-a. Fetch Cursor Bugbot reviews newest-first, walk back until first clean:
+a. Fetch Cursor Bugbot reviews newest-first, walk back until first clean.
+**Always go through `gh api --paginate --slurp` from the `Bash` tool, not
+the MCP `pull_request_read` `get_reviews` method**: the MCP truncates at
+~28-30 entries regardless of `page`/`perPage`, so on busy PRs the latest
+cursor[bot] review for `current_head` lands past the cutoff and the MCP
+walk reports "no review yet" while the data is in fact present (see
+`SKILL.md` § Gotchas, "MCP `pull_request_read(...)` silently truncates").
 
-   ```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
-   → filter `.user.login` for cursor/bugbot, sort by `.submitted_at` descending
+   ```bash
+   gh api 'repos/<owner>/<repo>/pulls/<N>/reviews?per_page=100' --paginate --slurp \
+     | jq '[.[][] | select((.user.login | ascii_downcase) | contains("cursor"))]
+            | sort_by(.submitted_at) | reverse'
    ```
 
-   Track dirty entries (review body contains `BUGBOT_REVIEW` markers with finding content); Fix protocol reads them back later this tick.
+   The result is the cursor[bot] review list newest-first across the full
+   page set. Track dirty entries (review body contains `BUGBOT_REVIEW`
+   markers with finding content); Fix protocol reads them back later this
+   tick.
 
    Iterate from index 0 (most recent) toward older:
 
@@ -72,18 +84,41 @@ review for decisions below. When branch routes to **Fix protocol**, address
 **every** entry in `$dirty_reviews_path` — not just index 0.
 
 b. Fetch unaddressed inline comments from `cursor[bot]` for newest Bugbot
-review on `current_head`:
+review on `current_head`. **Same MCP-truncation gotcha applies — use the
+paginated `gh api` walk from `Bash`**:
 
-   ```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-   → filter threads where `is_outdated == false` AND `is_resolved == false`
-     AND any comment has `.author` matching cursor/bugbot (case-insensitive substring)
+   ```bash
+   gh api 'repos/<owner>/<repo>/pulls/<N>/comments?per_page=100' --paginate --slurp \
+     | jq '[.[][] | select((.user.login | ascii_downcase) | contains("cursor"))
+                  | select(.in_reply_to_id == null)]
+            | sort_by(.created_at) | reverse'
    ```
 
-c. Decide (four branches; match first whose predicate holds):
+   Then narrow to threads where `is_outdated == false` AND `is_resolved
+   == false` (when those flags are surfaced; the threads endpoint
+   `pull_request_read(method="get_review_comments")` is still the canonical
+   thread-shape source for `is_outdated`/`is_resolved` and is safe to use
+   when the PR has fewer than ~25 threads — the cap also applies here, so
+   on busy PRs cross-check thread state from the same paginated comments
+   payload above by joining on `pull_request_review_id`).
+
+c. Decide (five branches; match first whose predicate holds):
    - **No bugbot review yet, OR latest review's `commit_id` ≠
-     `current_head`:** Re-trigger bugbot (Step 3), set `bugbot_clean_at =
-     null`, reset `inline_lag_streak = 0`, schedule next wakeup, return.
+     `current_head` AND `bugbot_acknowledged_at` is unset OR
+     `now - bugbot_acknowledged_at <= 30 min`:** Re-trigger bugbot (Step 3,
+     skipped if the latest `bugbot run` comment already carries an
+     `:eyes:`/`:+1:` reaction per duplicate-trigger gotcha), set
+     `bugbot_clean_at = null`, reset `inline_lag_streak = 0`, schedule
+     next wakeup, return.
+   - **Latest review's `commit_id` ≠ `current_head` AND `bugbot_acknowledged_at`
+     set AND `now - bugbot_acknowledged_at > 30 min`:** Bugbot effectively
+     down on this commit even though the trigger was acknowledged. Set
+     `bugbot_down = true`, `phase = BUGTEAM`, jump to Step 2 BUGTEAM same
+     tick. The 30-minute budget is the empirical worst-case turnaround
+     observed for Cursor Bugbot on large diffs; once exceeded with no
+     surfaced review, the loop must move on rather than stall. Reset
+     `bugbot_acknowledged_at` to `null` on the BUGTEAM jump (a fresh push
+     during BUGTEAM will start a new acknowledgement window in Step 3).
    - **`commit_id == current_head` AND zero unaddressed inline AND review
      body clean:** Set `bugbot_clean_at = current_head`, reset
      `inline_lag_streak = 0`, `phase = BUGTEAM`. Continue BUGTEAM in same
@@ -231,8 +266,15 @@ select the comment whose `id` matches the captured ID, and check its
 reactions. If the comment has zero reactions, bugbot did not
 acknowledge — it is down. Set `bugbot_down = true`, `phase = BUGTEAM`, and
 **jump to Step 2 BUGTEAM branch in this same tick** so bugteam runs
-immediately against this HEAD without a wakeup cycle. If reactions are present, bugbot acknowledged; proceed with normal
-pacing (Step 4).
+immediately against this HEAD without a wakeup cycle. If reactions are
+present, bugbot acknowledged; record `bugbot_acknowledged_at = <now ISO
+8601>` in the next-tick state line and proceed with normal pacing
+(Step 4). The recorded timestamp arms the 30-minute wall-clock budget
+checked in Step 2 BUGBOT (c) — once `now - bugbot_acknowledged_at > 30
+min` with no review surfaced at `current_head`, the BUGBOT phase
+escalates to bugbot-down even though the reaction was present, because
+empirical Cursor Bugbot turnaround on this PR class never exceeds 30
+minutes.
 
 ## Step 4: Loop pacing
 

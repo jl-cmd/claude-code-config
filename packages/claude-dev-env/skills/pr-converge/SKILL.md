@@ -48,13 +48,79 @@ post a fresh PR in a fresh branch based on origin main to the user.
   matching on the captured ID. Zero reactions means bugbot is down; set
   `bugbot_down = true`, `phase = BUGTEAM`, and jump to Step 2 BUGTEAM
   branch in this same tick so bugteam runs immediately against this
-  HEAD without a wakeup cycle.
+  HEAD without a wakeup cycle. **Reactions present (`:eyes:` or `:+1:`)
+  → record `bugbot_acknowledged_at = <now ISO 8601>` on the trigger
+  comment id and proceed with normal pacing. Subsequent BUGBOT ticks
+  honor a 30-minute wall-clock budget after `bugbot_acknowledged_at`:
+  while the latest cursor[bot] review's `commit_id` ≠ `current_head`
+  AND the budget is unspent, schedule the next 270s wakeup. Once
+  `now - bugbot_acknowledged_at > 30 min` with no review surfaced at
+  `current_head`, treat as bugbot effectively down — set
+  `bugbot_down = true`, `phase = BUGTEAM`, jump to Step 2 BUGTEAM same
+  tick.** The 30-minute budget is the empirical worst-case turnaround
+  seen on 80+ KB diffs; 2-4 minutes is typical, but bursts back up to
+  ~30 minutes on Cursor-side queue saturation.
 - **Bot login fields differ by endpoint** — `get_reviews` returns
   `.user.login` (object), but `get_review_comments` returns `.author`
   (string, not an object). Threads use `is_outdated` (not `commit_id`) to
   indicate staleness. Always check the correct fields and use
   case-insensitive substring matching on login values, never strict
   equality.
+- **MCP `pull_request_read(method="get_reviews"|"get_review_comments")`
+  silently truncates large lists** — the GitHub MCP server caps each
+  response at ~28-30 entries regardless of the `page` and `perPage`
+  parameters. On PRs with heavy review activity (one bugteam audit
+  loop alone posts 26 inline review-replies, all tagged with the same
+  HEAD SHA), the latest cursor[bot] / Copilot review for `current_head`
+  lands past the cutoff and the MCP-only walk reports "no review yet"
+  for tens of minutes after the review actually exists. `inline_lag` is
+  the wrong diagnosis; **the data is in GitHub, the MCP just refuses to
+  return it**. Bypass the MCP for any review/comment fetch on a PR with
+  more than ~25 reviews or comments. The canonical bypass uses `gh api
+  --paginate --slurp | jq` from the `Bash` tool (this rule lives in
+  `~/.claude/rules/gh-paginate.md`):
+
+  ```bash
+  # Latest cursor[bot] review across the whole PR (newest first)
+  gh api 'repos/<owner>/<repo>/pulls/<N>/reviews?per_page=100' --paginate --slurp \
+    | jq '[.[][] | select((.user.login | ascii_downcase) | contains("cursor"))]
+           | sort_by(.submitted_at) | reverse | .[0]'
+
+  # Newest cursor[bot] review pinned to a specific HEAD SHA
+  gh api 'repos/<owner>/<repo>/pulls/<N>/reviews?per_page=100' --paginate --slurp \
+    | jq --arg sha '<current_head>' \
+        '[.[][] | select((.user.login | ascii_downcase) | contains("cursor"))
+                | select(.commit_id == $sha)]
+         | sort_by(.submitted_at) | reverse | .[0]'
+
+  # Unaddressed cursor[bot] inline threads on the latest HEAD
+  gh api 'repos/<owner>/<repo>/pulls/<N>/comments?per_page=100' --paginate --slurp \
+    | jq '[.[][] | select((.user.login | ascii_downcase) | contains("cursor"))]
+           | sort_by(.created_at) | reverse'
+
+  # Newest Copilot review at HEAD
+  gh api 'repos/<owner>/<repo>/pulls/<N>/reviews?per_page=100' --paginate --slurp \
+    | jq --arg sha '<current_head>' \
+        '[.[][] | select((.user.login | ascii_downcase) | contains("copilot"))
+                | select(.commit_id == $sha)]
+         | sort_by(.submitted_at) | reverse | .[0]'
+
+  # All issue comments on the PR (for bugbot-trigger reaction lookup)
+  gh api 'repos/<owner>/<repo>/issues/<N>/comments?per_page=100' --paginate --slurp \
+    | jq '[.[][]] | sort_by(.created_at) | reverse'
+  ```
+
+  `--paginate --slurp` walks every page AND emits a single merged
+  `[[page1...], [page2...], ...]` array — the `.[][]` flatten is what
+  makes cross-page `sort_by(.submitted_at) | reverse | .[0]` correct.
+  `--paginate --jq` is forbidden here because `gh`'s `--jq` runs
+  per-page, so the cross-page sort silently returns the wrong entry.
+  Only the BUGBOT / COPILOT_WAIT review-existence and inline-comment
+  fetches need this bypass; single-object MCP reads (`pull_request_read`
+  with `method="get"`, `add_issue_comment`,
+  `add_reply_to_pull_request_comment`,
+  `pull_request_review_write`) stay on the MCP — they return one record
+  with no pagination involved.
 
 ## First tick of a session
 

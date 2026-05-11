@@ -149,6 +149,11 @@
           },
           {
             "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session/deepseek_env_cleanup.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session/untracked_repo_detector.py",
             "timeout": 10
           }

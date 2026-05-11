@@ -177,6 +177,7 @@ def _repo_boundary_sentinels() -> frozenset[str]:
 def _test_function_patterns() -> tuple[re.Pattern[str], ...]:
     return (
         re.compile(r"\bdef\s+test_"),
+        re.compile(r"\bdef\s+should_"),
         re.compile(r"\b(?:it|test|describe)\s*\("),
     )
 

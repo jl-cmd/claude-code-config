@@ -1,101 +1,193 @@
 ---
 name: monitor-open-prs
 description: >-
-  Discover every open pull request across the jl-cmd/* and JonEcho/*
-  owner scopes, spawn /bugteam on each in parallel with the Groq-backed
-  FIX implementer (BUGTEAM_FIX_IMPLEMENTER=groq-coder) and the bugbot
-  re-trigger flag (--bugbot-retrigger), wrap the session in `bws run`
-  to inject GROQ_API_KEY, and poll Cursor's bugbot replies after
-  convergence so any post-Groq findings loop back through /bugteam.
-  Triggers: '/monitor-open-prs', 'sweep the open PRs', 'groq-bugteam the backlog'.
+  Discover every open pull request across configured owner scopes, run a
+  bugbot-only fix loop on each (trigger → classify → fix via clean-coder →
+  repeat until clean), and poll for late bugbot findings after convergence.
+  Triggers: '/monitor-open-prs', 'sweep the open PRs', 'audit the open PR
+  backlog'.
 ---
 
 # Monitor Open PRs
 
-**Core principle:** One sweep covers every open PR across both owner scopes. Claude discovers PRs live via `scripts/discover_open_prs.py` which shells out to `gh search prs --owner <owner> --state open --json ...`, dispatches `/bugteam` per PR with `BUGTEAM_FIX_IMPLEMENTER=groq-coder` and `--bugbot-retrigger`, then polls Cursor's bugbot replies until each PR is quiet for a full backoff cycle.
+Bugbot-only sweep over every open PR across configured owner scopes.
+Discover live via `scripts/discover_open_prs.py`, run the bugbot cycle
+per PR, poll for late findings, report.
 
 ## Contents
 
+- Architecture — orchestrated team: one orchestrator, one teammate per PR
 - When this skill applies — refusal cases and trigger conditions
-- Discovery — `scripts/discover_open_prs.py` queries via `gh search prs` across both owner scopes
-- Wrapping — `bws run` for GROQ_API_KEY injection
-- Dispatch — `/bugteam --bugbot-retrigger <pr_numbers...>` with groq-coder + retrigger
-- Post-convergence polling — bugbot replies and re-invocation
-- `scripts/discover_open_prs.py` — the discovery helper
+- Configuration — git-ignored owner scope config file
+- Discovery — `scripts/discover_open_prs.py` queries `gh search prs` across configured owner scopes
+- Bugbot cycle — trigger, classify, fix, repeat per PR (delegated to teammates)
+- Post-convergence polling — backoff poll for late bugbot findings
+- Final report
+
+## Gotchas
+
+- **Teammates cannot spawn teams.** `Agent` with `team_name` or `TeamCreate`
+  from within a teammate silently fails. Teammates spawn only
+  `Agent(subagent_type: "clean-coder", run_in_background=true)` for fixes.
+- **`bugbot run` duplicate while review queued.** Skip trigger when the
+  latest `bugbot run` PR comment has an `:eyes:` or `:+1:` reaction. Wait
+  for review or HEAD change first.
+- **Review body and inline comments desync.** "Dirty body, zero inline at
+  `current_head`" is `inline_lag`, not `dirty`. Bump streak, wait 90s,
+  retry. Do not spawn clean-coder for lag.
+- **Bot login fields differ by endpoint.** `get_reviews` returns
+  `.user.login` (object); `get_review_comments` returns `.author`
+  (string). Use case-insensitive substring matching, never strict equality.
+- **`state.json` lost-update on parallel writes.** Naive read-modify-write
+  loses merges when teammates finish in the same window. Use the
+  atomic lock + replace protocol from
+  pr-converge's multi-pr-orchestration.md §Concurrency.
+
+## Architecture
+
+The skill spawns one orchestrated team. The orchestrator discovers PRs
+and assigns one teammate per PR. Each teammate owns the full bugbot
+cycle for its PR from trigger through clean. Teammates spawn
+`clean-coder` subagents for fixes but never spawn their own teams.
+
+**Dependencies:** pr-converge skill (for per-tick.md and fix-protocol.md
+spokes), clean-coder agent (for fix implementation), GitHub MCP server.
+
+**Orchestrator workflow:**
+
+Use `TaskCreate` to build a task list the orchestrator works through.
+Mark each complete with `TaskUpdate` when done.
+
+1. `TaskCreate(subject: "Discover open PRs")` — Run
+   `scripts/discover_open_prs.py`. Mark complete.
+2. `TaskCreate(subject: "Create orchestration team")` — Call
+   `TeamCreate`. Mark complete.
+3. For each discovered PR, `TaskCreate(subject: "<owner>/<repo>#<number>")`
+   with description holding owner/repo/number/branch. These are the
+   per-PR work items assigned to teammates.
+4. Spawn one `Agent` teammate per PR in a single parallel call. Each
+   teammate reads this skill and claims its assigned task.
+5. Wait for all teammates to go idle.
+6. `TaskCreate(subject: "Emit final report")` — Collect teammate
+   results, emit the report from the Final report section. Mark complete.
+
+**Teammate checklist (bugbot-sweep-agent):**
+
+```
+[ ] Read this skill and follow the Bugbot cycle section below
+[ ] Run the cycle until clean, blocked, or stuck
+[ ] Spawn Agent(subagent_type: "clean-coder") for fixes — never TeamCreate
+[ ] Write state.json with result before going idle
+[ ] Report converged / blocked / stuck to orchestrator
+```
 
 ## When this skill applies
 
-`/monitor-open-prs` authorizes one full sweep over all open PRs in both owner scopes.
+`/monitor-open-prs` authorizes one full sweep over all open PRs in the
+configured owner scopes.
 
 Refusals — first match wins; respond with the quoted line exactly and stop:
 
-- **bws not on PATH.** `bws not installed. /monitor-open-prs injects GROQ_API_KEY via Bitwarden Secrets Manager.`
-- **GitHub API not accessible.** `get_me failed. /monitor-open-prs needs active GitHub MCP credentials.`
-- **Dirty tree on the caller's repo.** `Uncommitted changes detected. Stash, commit, or revert before /monitor-open-prs.`
-- **Required subagents missing.** Confirm `code-quality-agent`, `clean-coder`, and `groq-coder` exist. Else: `Required subagent type <name> not installed.`
+- **GitHub MCP not accessible.** `get_me failed. /monitor-open-prs needs active GitHub MCP credentials.`
+- **`clean-coder` subagent not available.** Fetch from
+  `jl-cmd/claude-code-config` public repo. If still unavailable:
+  `Required subagent type clean-coder not installed.`
+
+## Configuration
+
+Owner scopes are read from a git-ignored config file at
+`scripts/config/owners.json` in the skill directory. Format:
+
+```json
+{
+  "owners": ["jl-cmd", "JonEcho"]
+}
+```
+
+If the file is absent, the skill prompts for the owner list on first run
+and writes the config. The `scripts/` directory ships a `.gitignore`
+entry for `config/` so owner lists are never committed.
 
 ## Discovery
 
-Call `scripts/discover_open_prs.discover_open_prs(all_owners=["jl-cmd", "JonEcho"])` to merge the live open-PR list across both scopes. The helper shells out to `gh search prs --owner <owner> --state open --json number,repository,url,headRefName,baseRefName` for each owner scope and flattens the result to a uniform dict shape with keys `number`, `owner`, `repo`, `head_ref`, `base_ref`, `url`. Empty scopes contribute empty lists; an entirely empty sweep returns `[]` and exits cleanly.
+Call `scripts/discover_open_prs.discover_open_prs(all_owners=<owners from config>)`
+to retrieve the live open-PR list across all configured owner scopes.
+The helper shells out to `gh search prs --owner <owner> --state open
+--json number,repository,url,headRefName,baseRefName` for each owner
+scope and flattens the result to a uniform dict shape with keys
+`number`, `owner`, `repo`, `head_ref`, `base_ref`, `url`. Empty scopes
+contribute empty lists; an entirely empty sweep returns `[]` and exits
+cleanly.
 
-## Secret Wrapping
+## Bugbot cycle
 
-Every `/bugteam` dispatch runs inside `bws run` so `GROQ_API_KEY` is injected from Bitwarden Secrets Manager without touching the filesystem. The project and secret UUIDs are fixed for this skill:
+For each discovered PR, run the BUGBOT phase from
+[pr-converge](~/skills/pr-converge/reference/per-tick.md) until bugbot
+reports clean on the current HEAD. Copy this checklist into your response
+and check off each step as you go.
 
-```bash
-bws run \
-  --project-id c69cedc5-aea1-4aa8-b350-b4300145d978 \
-  -- \
-  env BUGTEAM_FIX_IMPLEMENTER=groq-coder \
-  /bugteam --bugbot-retrigger <pr_numbers...>
+```
+[ ] 1. Resolve PR context — per-tick.md Step 1
+       Capture current_head, owner, repo, branch, number.
+[ ] 2. Trigger bugbot — per-tick.md Step 3
+       Post "bugbot run" via add_issue_comment. Run bugbot-down
+       detection: capture comment ID, wait 15s, check reactions.
+       Zero reactions → bugbot_down = true → skip to step 6.
+       Reactions present → proceed.
+[ ] 3. Wait for review
+       Poll pull_request_read(method="get_reviews") every 60s (max 10)
+       until a review at current_head appears. Timeout → blocked.
+[ ] 4. Classify — per-tick.md Step 2 BUGBOT §c, first match wins:
+       - No review or commit_id != current_head → back to step 2
+       - Clean (body clean, zero unaddressed inline) → DONE
+       - Dirty (unaddressed inline at current_head) → step 5
+       - inline_lag (body dirty, inline API zero) → bump streak,
+         wait 90s, retry step 4 (>= 3 → hard blocker)
+[ ] 5. Fix — delegating to clean-coder per fix-protocol.md Single-PR
+       Spawn Agent(subagent_type: "clean-coder", run_in_background=true)
+       listing the dirty file:line findings. After clean-coder returns,
+       set current_head to new SHA, go to step 2.
+[ ] 6. Bugbot-down — terminate immediately, report blocked/bugbot_down
 ```
 
-The `bws run` subshell resolves the project's secrets and exports them for the wrapped command. The `GROQ_API_KEY` secret's UUID inside that project is `b7e99a7f-2ecc-42b3-99a5-b434010622f9`. GitHub auth is not sourced through `bws` — existing MCP `get_me` credentials carry the session.
 
-## Dispatch
+## Post-convergence polling
 
-For each discovered PR:
-
-1. Resolve the PR's repo checkout (existing worktree or fresh `git clone`).
-2. From that checkout, invoke `/bugteam --bugbot-retrigger <pr_number>` under the `bws run` wrapper from §Secret Wrapping.
-3. The `BUGTEAM_FIX_IMPLEMENTER=groq-coder` env var routes the FIX role to the `groq-coder` subagent. The `--bugbot-retrigger` flag tells bugteam to post `bugbot run` as an issue comment after every successful FIX push so Cursor's bugbot re-evaluates the new commit.
-4. Bugteam runs its own 10-loop audit/fix cycle per PR; this skill waits for each bugteam invocation to return before dispatching the next (or fanning out — see below).
-
-**Fan-out (optional):** when the discovered list has more than one PR, the skill may spawn `/bugteam` dispatches in parallel by issuing multiple `Agent` calls in a single assistant message. Each dispatch operates in its own per-PR worktree (bugteam Step 1.1). Serialize when the caller sets an explicit `--serial` flag.
-
-## Post-Convergence Polling
-
-After a `/bugteam` invocation returns (converged, cap reached, stuck, or error), the PR may accumulate new Cursor bugbot comments within minutes. Poll for them:
+After a PR's bugbot cycle returns clean, poll for late findings:
 
 1. Baseline: capture `since_timestamp` as the PR's last commit timestamp.
-2. Every 60 seconds, call `pull_request_read(method="get", pullNumber=<pr_number>, owner=<owner>, repo=<repo>)` and filter the response's `comments` array for entries whose `.author.login` matches `"bugbot"` or `"cursor"` and `.createdAt` is after `<since_timestamp>`.
-3. Back off: 60s → 120s → 240s → 480s → 960s. If five successive polls return empty, exit polling for this PR.
-4. If bugbot posts a new finding in any poll, re-invoke `/bugteam <pr_number>` via the same `bws run` wrapper with the bugbot finding text seeded into the invocation's `bugs_to_fix` preamble. Reset the backoff.
+2. Every 120s, call `pull_request_read(method="get",
+   pullNumber=<pr_number>, owner=<owner>, repo=<repo>)` and filter
+   comments for bugbot/cursor entries with `.createdAt` after
+   `<since_timestamp>`.
+3. Back off: 120s → 240s → 480s → 960s → 15000s. Five successive empty
+   polls → exit polling for this PR.
+4. If bugbot posts a new finding, re-enter the bugbot cycle at step 2.
 
-### Polling Cost and Cadence
-
-The five-step backoff sums to `60 + 120 + 240 + 480 + 960 = 1860` seconds (~31 minutes) of idle polling per PR before the skill declares bugbot quiet. A sweep over ten open PRs therefore retains up to ~5 wall-clock hours of bugbot-watch time beyond the active `/bugteam` work. Callers who need faster turnaround should pass `--serial` to disable fan-out (so polling starts only after the previous PR finishes) or accept the tradeoff: the backoff exists specifically to catch late bugbot analyses that can take several minutes to appear after a push.
-
-## Final Report
-
-After every PR has exited polling, emit:
+## Final report
 
 ```
 /monitor-open-prs sweep summary
 PRs discovered: <N>
-  jl-cmd/*: <count>
-  JonEcho/*: <count>
-PRs converged clean: <count>
-PRs hit 10-loop cap: <count>
-PRs stuck: <count>
+  <owner>/*: <count>  (one line per configured owner)
+PRs clean: <count>
+PRs blocked (inline_lag >= 3): <count>
+PRs blocked (bugbot_down): <count>
 PRs errored: <count>
+PRs stuck (review timeout): <count>
 Bugbot re-triggers fired: <count>
-Total Groq tokens consumed: <approx from /bugteam outcome summaries>
 ```
 
-## Non-Negotiable Guardrails
+## Non-negotiable guardrails
 
-- Never source secrets outside `bws run` — no `.env` files, no shell history, no logs.
-- Never pass `--no-verify` or `--no-gpg-sign` to git in any dispatched bugteam run.
+- Never pass `--no-verify` or `--no-gpg-sign` to git.
 - Never open a PR from this skill; only comment on existing ones.
-- Never merge or close PRs; the skill is read + audit + patch only.
+- Never merge or close PRs; read + audit + patch only.
+
+## Folder map
+
+- `SKILL.md` — this hub
+- `scripts/discover_open_prs.py` — `gh search prs` discovery helper
+- `scripts/config/owners.json` — git-ignored owner scope configuration
+- `scripts/test_discover_open_prs.py` — tests for the discovery helper
+- `test_skill_contract.py` — skill-level contract tests

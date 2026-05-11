@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document title="Common workflow patterns for AI agents and when to use them">
+  <metadata>
+    <category>Agents</category>
+    <product>Claude Platform</product>
+    <date>2026-03-05</date>
+    <reading_time>5 min</reading_time>
+    <key_insight>When multiple agents need to work together, the key decision is which pattern fits your problem. Three patterns cover most production use cases: sequential, parallel, and evaluator-optimizer. Choosing the wrong one costs in latency, tokens, or reliability.</key_insight>
+  </metadata>
+
+  <definition subject="workflow_vs_autonomous_agent">
+    <type name="fully_autonomous_agent">A fully autonomous agent decides everything: which tools to use, what order to execute tasks, and when to stop.</type>
+    <type name="workflow">A workflow provides structure: it establishes the overall flow, defines checkpoints, and sets boundaries for how agents operate at each step, while still allowing dynamic behavior within those boundaries.</type>
+    <key_insight>Workflows do not replace agent autonomy; they shape where and how agents apply it. Each step in a workflow can still use an agent's reasoning and tool use, but the overall orchestration follows a defined path.</key_insight>
+  </definition>
+
+  <comparison_table>
+    <entry pattern="Sequential">
+      <problem_solved>Tasks have dependencies: step B needs step A's output.</problem_solved>
+      <when_to_use>Multi-stage processes, data pipelines, draft-review-polish cycles.</when_to_use>
+      <tradeoff>Adds latency (each step waits for the previous one).</tradeoff>
+      <benefit>Can improve accuracy by letting each agent focus on one thing.</benefit>
+    </entry>
+    <entry pattern="Parallel">
+      <problem_solved>Tasks are independent but doing them one at a time is slow.</problem_solved>
+      <when_to_use>Evaluations across multiple dimensions, code review, document analysis.</when_to_use>
+      <tradeoff>Costs more (multiple concurrent API calls) and requires an aggregation strategy.</tradeoff>
+      <benefit>Faster completion and separation of concerns across engineering teams.</benefit>
+    </entry>
+    <entry pattern="Evaluator-Optimizer">
+      <problem_solved>First-draft quality is not good enough.</problem_solved>
+      <when_to_use>Technical documentation, customer communications, code generation against specific standards.</when_to_use>
+      <tradeoff>Multiplies token usage and adds iteration time.</tradeoff>
+      <benefit>Can generate better outputs through structured feedback loops.</benefit>
+    </entry>
+  </comparison_table>
+
+  <workflow_pattern name="sequential">
+    <description>Sequential workflows execute tasks in a predetermined order. Agents at each stage process inputs, make decisions, make tool calls as needed, then pass results to the next stage. Outputs flow linearly through the system.</description>
+    <when_to_use>
+      <scenario>Multi-stage processes where each step depends on the previous output.</scenario>
+      <scenario>Data transformation pipelines where each stage adds specific value.</scenario>
+      <scenario>Tasks that cannot be parallelized due to inherent dependencies.</scenario>
+      <scenario>Iterative improvement cycles like draft-review-polish cycles.</scenario>
+      <summary>These excel when tasks naturally break down into distinct stages with clear dependencies. You trade some latency for higher accuracy by focusing each agent on a specific subtask rather than handling everything at once.</summary>
+    </when_to_use>
+    <when_to_avoid>
+      <scenario>When a single agent can handle the entire task effectively.</scenario>
+      <scenario>When agents need to collaborate rather than hand off work sequentially.</scenario>
+    </when_to_avoid>
+    <examples>
+      <example>Generating marketing copy then translating it into multiple languages.</example>
+      <example>Extracting data from documents then validating it against a schema and loading it into a database.</example>
+      <example>Content moderation pipelines.</example>
+    </examples>
+    <pro_tip>"First try your pipeline as a single agent, where the steps are just part of the prompt." If that is good enough, you have solved the problem. Only split into a multi-step workflow when a single agent cannot handle it reliably.</pro_tip>
+  </workflow_pattern>
+
+  <workflow_pattern name="parallel">
+    <description>Parallel workflows distribute independent tasks across multiple agents that execute simultaneously, then merge their results. The approach resembles the fan-out/fan-in pattern from distributed systems. Agents do not hand off work to each other — they operate autonomously and produce results that contribute to the overall task.</description>
+    <when_to_use>
+      <scenario type="sectioning">Sectioning approaches where different agents handle different aspects of a task simultaneously.</scenario>
+      <scenario type="evaluation">Evaluation scenarios where each agent assesses different quality dimensions.</scenario>
+      <scenario type="voting">Voting patterns where multiple agents analyze the same content and you aggregate their assessments.</scenario>
+      <summary>Parallelization makes sense when you can divide work into independent subtasks that benefit from simultaneous processing, or when you need multiple perspectives on the same problem. It also enables separation of concerns where different engineers can own and optimize individual agents independently.</summary>
+    </when_to_use>
+    <when_to_avoid>
+      <scenario>When agents need cumulative context or must build on each other's work.</scenario>
+      <scenario>When resource constraints like API quotas make concurrent processing inefficient.</scenario>
+    </when_to_avoid>
+    <examples>
+      <example>Automating evaluations (each agent checks different quality metrics).</example>
+      <example>Code review (multiple agents examine different vulnerability categories).</example>
+      <example>Document analysis by parallelizing extraction of key themes, sentiment analysis, and factual verification.</example>
+    </examples>
+    <pro_tip>"Design your aggregation strategy before implementing parallel agents." Will you take the majority vote, average confidence scores, or defer to the most specialized agent? Having a clear plan prevents collecting conflicting outputs with no way to resolve them.</pro_tip>
+  </workflow_pattern>
+
+  <workflow_pattern name="evaluator_optimizer">
+    <description>Evaluator-optimizer workflows pair two agents in an iterative cycle: one generates content, another evaluates it against specific criteria, and the generator refines based on that feedback. This continues until output meets your quality threshold or hits a maximum iteration count.</description>
+    <key_insight>Generation and evaluation are different cognitive tasks. Separating them lets each agent specialize.</key_insight>
+    <when_to_use>
+      <scenario>Code generation with specific requirements (security standards, performance benchmarks, style guidelines).</scenario>
+      <scenario>Professional communications where tone and precision matter.</scenario>
+      <scenario>Any scenario where first-draft quality consistently falls short of requirements.</scenario>
+      <summary>This pattern works when you have clear, measurable quality criteria that an AI evaluator can apply consistently, and when the gap between first-attempt and final quality is meaningful enough to justify the extra tokens and latency.</summary>
+    </when_to_use>
+    <when_to_avoid>
+      <scenario>When first-attempt quality already meets your needs.</scenario>
+      <scenario>Real-time applications requiring immediate responses.</scenario>
+      <scenario>Simple routine tasks like basic classification.</scenario>
+      <scenario>When evaluation criteria are too subjective for an AI evaluator to apply consistently.</scenario>
+      <scenario>When deterministic tools exist (like linters for code style) — use those instead.</scenario>
+    </when_to_avoid>
+    <examples>
+      <example>Generating API documentation: writer produces docs, evaluator checks for completeness and accuracy.</example>
+      <example>Creating customer communications: draft an email, assess tone and policy compliance.</example>
+      <example>Producing SQL queries: write the query, check for efficiency and security issues.</example>
+    </examples>
+    <pro_tip>"Set clear stopping criteria before you start iterating." Define maximum iteration counts and specific quality thresholds. Without these guardrails, you can end up in expensive loops where quality plateaus well before you stop iterating.</pro_tip>
+  </workflow_pattern>
+
+  <choosing_guide>
+    <principle>Start with the simplest pattern that solves your problem. Default to sequential, move to parallel when latency is the bottleneck and tasks are independent, and add evaluator-optimizer loops only when you can measure the quality improvement.</principle>
+
+    <first_step>Before choosing, try the task as a single agent call first. If that meets your quality bar, you are done. If not, identify where it falls short — that tells you which pattern to reach for.</first_step>
+
+    <decision_questions>
+      <question>Can a single agent handle this task effectively? If yes, do not use workflows at all.</question>
+      <question>Does the task have clear sequential dependencies? Use sequential workflows.</question>
+      <question>Can subtasks be processed independently and simultaneously, and would faster completion help? Consider parallel workflows.</question>
+      <question>Does quality improve meaningfully with iterative refinement? Consider evaluator-optimizer patterns.</question>
+    </decision_questions>
+
+    <considerations>
+      <consideration name="failure_handling">Define fallback behavior and retry logic for each step.</consideration>
+      <consideration name="latency_and_cost">These determine how many agents you can run and how many iterations you can afford.</consideration>
+      <consideration name="measuring_improvement">Set a baseline with a single agent so you can tell whether the workflow actually helps.</consideration>
+    </considerations>
+
+    <combination_guidance>
+      <principle>These patterns are not mutually exclusive and can be nested.</principle>
+      <example>An evaluator-optimizer workflow might use parallel evaluation where multiple evaluators assess different quality dimensions simultaneously.</example>
+      <example>A sequential workflow might include parallel processing at certain stages.</example>
+      <recommendation>Match pattern complexity to actual requirements.</recommendation>
+    </combination_guidance>
+  </choosing_guide>
+
+  <evolution_guidance>
+    <principle>Start with the simplest pattern that works. If a sequential workflow handles your use case, do not add parallelization. If first-attempt quality is good enough, skip the evaluator-optimizer loop.</principle>
+    <upgrade_path>A sequential workflow can incorporate parallel processing at bottleneck stages.</upgrade_path>
+    <upgrade_path>An agentic approach can add evaluation when quality standards tighten.</upgrade_path>
+    <benefit>Because these patterns are modular, you will not need complete rewrites as requirements change.</benefit>
+  </evolution_guidance>
+</document>

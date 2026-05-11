@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document title="Harnessing Claude's Intelligence: Building applications that balance intelligence, latency, and cost">
+  <metadata>
+    <category>Agents</category>
+    <product>Claude Platform</product>
+    <date>April 2, 2026</date>
+    <reading_time>5 minutes</reading_time>
+  </metadata>
+
+  <context>
+    <observation source="Chris Olah, Anthropic co-founder">
+      Generative AI systems like Claude "are grown more than they are built." Researchers shape the conditions for growth, but the precise structure or capabilities that emerge are not always predictable.
+    </observation>
+    <challenge>
+      Agent harnesses embed assumptions about Claude's limitations, but those assumptions become outdated as Claude improves. The article presents three patterns for building applications that keep pace with Claude's evolving capabilities while managing latency and cost.
+    </challenge>
+  </context>
+
+  <pattern name="use_what_claude_knows">
+    <principle>Build applications with tools Claude already understands well.</principle>
+    <evidence>In late 2024, Claude 3.5 Sonnet achieved 49% on SWE-bench Verified using just a bash tool and a text editor tool.</evidence>
+    <mechanism>
+      Claude Code is built on the same primitives (bash and text editor). Bash was not designed for agents, but it is a tool Claude knows how to use and continues to improve at using. Agent Skills, programmatic tool calling, and the memory tool are all compositions of bash and text editor tools.
+    </mechanism>
+  </pattern>
+
+  <pattern name="ask_what_can_i_stop_doing">
+    <principle>Agent harnesses encode assumptions about what Claude cannot do alone. As Claude becomes more capable, those assumptions need re-examination.</principle>
+
+    <technique name="let_claude_orchestrate_its_own_actions">
+      <assumption>A common assumption is that every tool result must flow back through Claude's context window. Processing tool results as tokens can be slow and costly when the output only needs routing to the next tool or Claude only needs a small portion of it.</assumption>
+      <mechanism>
+        Giving Claude a code execution tool (bash or a language-specific REPL) addresses this. Claude can write code to express tool calls and the logic between them. Claude decides what to pass through, filter, or pipe forward without touching the context window, rather than the harness deciding every tool result is token-processed.
+      </mechanism>
+      <principle>The orchestration decision shifts from harness to model. Because code is a general orchestration mechanism, a strong coding model becomes a strong general agent.</principle>
+      <evidence improvement="+16.3 percentage points">
+        On BrowseComp, giving Opus 4.6 the ability to filter its own tool outputs raised accuracy from 45.3% to 61.6%.
+      </evidence>
+    </technique>
+
+    <technique name="let_claude_manage_its_own_context">
+      <assumption>
+        System prompts are often hand-crafted with task-specific instructions, but this does not scale. Every added token depletes Claude's attention budget, and it is wasteful to pre-load rarely used instructions.
+      </assumption>
+      <mechanism name="skills">
+        Giving Claude access to skills addresses this: each skill's YAML frontmatter provides a short description pre-loaded into context. Claude can call a read file tool to progressively disclose the full skill when needed.
+      </mechanism>
+      <mechanism name="context_editing">
+        Context editing provides the inverse — selectively removing stale or irrelevant context like old tool results or thinking blocks.
+      </mechanism>
+      <mechanism name="subagents">
+        Claude is improving at knowing when to fork into a fresh context window for isolated work.
+      </mechanism>
+      <evidence improvement="+2.8 percentage points">
+        Opus 4.6's ability to spawn subagents improved BrowseComp results by 2.8% over the best single-agent runs.
+      </evidence>
+    </technique>
+
+    <technique name="let_claude_persist_its_own_context">
+      <assumption>
+        A common assumption is that memory systems need retrieval infrastructure around the model. Much of Anthropic's work has focused on giving Claude simple ways to choose what to persist.
+      </assumption>
+      <mechanism name="compaction">
+        Compaction lets Claude summarize past context for long-horizon continuity.
+      </mechanism>
+      <evidence improvement="Sonnet 4.5 flat at 43%; Opus 4.5 scaled to 68%; Opus 4.6 reached 84%">
+        On BrowseComp, Sonnet 4.5 stayed flat at 43% regardless of compaction budget, while Opus 4.5 scaled to 68% and Opus 4.6 reached 84%.
+      </evidence>
+      <mechanism name="memory_folder">
+        A memory folder allows Claude to write context to files and read them later.
+      </mechanism>
+      <evidence improvement="+6.8 percentage points">
+        On BrowseComp-Plus, giving Sonnet 4.5 a memory folder lifted accuracy from 60.4% to 67.2%.
+      </evidence>
+      <contrast name="pokemon">
+        Sonnet 3.5 treated memory as a transcript, recording NPC dialogue rather than what mattered — after 14,000 steps it had 31 files and was still in the second town. Opus 4.6 at the same step count had 10 files organized into directories, three gym badges, and a learnings file distilled from its own failures.
+      </contrast>
+    </technique>
+  </pattern>
+
+  <pattern name="set_boundaries_carefully">
+    <principle>Agent harnesses provide structure around Claude for UX, cost, or security constraints.</principle>
+
+    <technique name="design_context_to_maximize_cache_hits">
+      <mechanism>
+        The Messages API is stateless, so the harness repackages context at each turn. Prompts can be cached using breakpoints, and cached tokens cost 10% of base input tokens.
+      </mechanism>
+      <principle name="static_first_dynamic_last">Stable content (system prompt, tools) comes first in the context.</principle>
+      <principle name="messages_for_updates">Append a system-reminder rather than editing the prompt.</principle>
+      <principle name="dont_change_models">Caches are model-specific; switching models breaks them.</principle>
+      <principle name="carefully_manage_tools">Tools sit in the cached prefix; adding or removing one invalidates it. Use tool search for dynamic discovery.</principle>
+      <principle name="update_breakpoints">For multi-turn apps, move the breakpoint to the latest message; use auto-caching.</principle>
+    </technique>
+
+    <technique name="use_declarative_tools_for_ux_observability_or_security">
+      <assumption>
+        Claude does not inherently know an application's security boundary or UX surface.
+      </assumption>
+      <mechanism>
+        A bash tool gives broad programmatic leverage but only a command string to the harness. Promoting actions to dedicated tools gives the harness typed arguments it can intercept, gate, render, or audit. Hard-to-reverse actions like external API calls are natural candidates for user confirmation gating. Write tools like edit can include staleness checks so Claude does not overwrite a changed file. Tools also help when an action needs user presentation — rendered as modals with options that block the agent loop until feedback arrives. And tools aid observability, giving the harness structured arguments for logging, tracing, and replay.
+      </mechanism>
+      <evidence>
+        Claude Code's auto-mode provides a security boundary around bash by having a second Claude judge whether a command is safe. This pattern can reduce the need for dedicated tools, though dedicated tools still earn their place for high-stakes actions.
+      </evidence>
+      <principle>The decision to promote actions to tools should be continually re-evaluated.</principle>
+    </technique>
+  </pattern>
+
+  <conclusion>
+    <observation>"The frontier of Claude's intelligence is always changing."</observation>
+    <principle>Assumptions about Claude's limitations need re-testing with each capability step change.</principle>
+    <example name="resets_becoming_dead_weight">
+      In an agent built for long-horizon tasks, Sonnet 4.5 would prematurely wrap up as it sensed context limits approaching. Resets were added to clear the context window. With Opus 4.5, that behavior disappeared — the resets had become "dead weight in the agent harness." Removing such dead weight matters because it can bottleneck Claude's performance.
+    </example>
+    <guiding_question>What can I stop doing?</guiding_question>
+  </conclusion>
+
+  <credits>
+    <author>Lance Martin, member of technical staff on the Claude Platform team</author>
+    <related_skill>claude-api skill available at github.com/anthropics/skills</related_skill>
+  </credits>
+</document>

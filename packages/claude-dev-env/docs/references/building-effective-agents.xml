@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document title="Building effective agents">
+  <metadata>
+    <published_date>2024-12-19</published_date>
+    <source>Anthropic</source>
+    <key_insight>Most effective approaches consistently relied on "simple, composable patterns" rather than elaborate frameworks or specialized libraries.</key_insight>
+  </metadata>
+
+  <definition subject="agentic_system">
+    <description>"Agent" carries multiple meanings. Some view agents as fully autonomous systems operating independently over long periods, using various tools for complex tasks. Others use the term for more prescriptive implementations following predefined workflows. Anthropic categorizes all these as agentic systems, but distinguishes architecturally between two types.</description>
+    <distinction>
+      <type name="workflow">Systems where LLMs and tools are orchestrated via predefined code paths.</type>
+      <type name="agent">Systems where LLMs dynamically direct their own processes and tool usage, maintaining control over how tasks are accomplished.</type>
+    </distinction>
+  </definition>
+
+  <principle name="simplicity_first">
+    <statement>Find the simplest solution possible, and only increase complexity when needed.</statement>
+    <application>
+      <when_to_use type="workflow">Workflows offer predictability for well-defined tasks.</when_to_use>
+      <when_to_use type="agent">Agents excel when flexibility and model-driven decisions are needed at scale.</when_to_use>
+      <when_not_to_use>For many applications, optimizing single LLM calls with retrieval and in-context examples is sufficient. That may mean not building agentic systems at all. Agentic systems often trade latency and cost for improved task performance, and developers should assess whether that tradeoff makes sense.</when_not_to_use>
+    </application>
+  </principle>
+
+  <frameworks>
+    <description>Several frameworks simplify agentic system implementation.</description>
+    <framework>Claude Agent SDK</framework>
+    <framework>AWS Strands Agents SDK</framework>
+    <framework>Rivet (drag-and-drop GUI LLM workflow builder)</framework>
+    <framework>Vellum (GUI tool for building and testing workflows)</framework>
+    <benefit>Frameworks lower the barrier to entry by handling standard low-level tasks.</benefit>
+    <risk>They "often create extra layers of abstraction that can obscure the underlying prompts and responses," making debugging harder. They can also tempt developers to add complexity when a simpler setup would work.</risk>
+    <recommendation>Start by using LLM APIs directly — many patterns only need a few lines of code. If using a framework, ensure you understand the underlying code, since "incorrect assumptions about what's under the hood" are a frequent source of errors.</recommendation>
+  </frameworks>
+
+  <building_block name="augmented_llm">
+    <description>The basic building block is an LLM enhanced with retrieval, tools, and memory. Current models can actively use these capabilities — generating search queries, selecting tools, and managing what to retain.</description>
+    <implementation_advice>
+      <advice>Tailor capabilities to your specific use case.</advice>
+      <advice>Provide a clean, well-documented interface for the LLM.</advice>
+    </implementation_advice>
+    <protocol>Model Context Protocol (MCP) lets developers integrate with a growing ecosystem of third-party tools.</protocol>
+  </building_block>
+
+  <workflow name="prompt_chaining">
+    <description>This decomposes a task into sequential steps, with each LLM call processing the previous one's output. Programmatic checks can be added at intermediate steps to verify progress.</description>
+    <when_to_use>Best for tasks that decompose cleanly into fixed subtasks. The goal is trading latency for higher accuracy by making each call simpler.</when_to_use>
+    <examples>
+      <example>Generating marketing copy then translating it.</example>
+      <example>Writing a document outline, checking it against criteria, then writing the full document.</example>
+    </examples>
+  </workflow>
+
+  <workflow name="routing">
+    <description>Routing classifies an input and directs it to a specialized followup task, enabling separation of concerns and more targeted prompts. Without it, optimizing for one input type can hurt performance on others.</description>
+    <when_to_use>Works well for complex tasks with distinct categories that benefit from separate handling, where classification can be done accurately by an LLM or traditional model.</when_to_use>
+    <examples>
+      <example>Directing customer service queries (general, refunds, technical support) to different processes.</example>
+      <example>Routing easy questions to smaller models like Claude Haiku 4.5 and hard ones to more capable models like Claude Sonnet 4.5.</example>
+    </examples>
+  </workflow>
+
+  <workflow name="parallelization">
+    <description>LLMs work simultaneously on a task with outputs aggregated programmatically. Two variations exist:</description>
+    <variation name="sectioning">
+      <description>Breaking a task into independent parallel subtasks, each handled by a separate LLM call.</description>
+      <examples>
+        <example>Implementing guardrails where one model processes queries while another screens for inappropriate content.</example>
+        <example>Automating evals where each call evaluates a different performance aspect.</example>
+      </examples>
+    </variation>
+    <variation name="voting">
+      <description>Running the same task multiple times for diverse outputs, then aggregating results.</description>
+      <examples>
+        <example>Reviewing code for vulnerabilities with several different prompts.</example>
+        <example>Evaluating content appropriateness with multiple prompts and vote thresholds.</example>
+      </examples>
+    </variation>
+    <when_to_use>Effective when subtasks can be parallelized for speed, or when multiple perspectives boost confidence. For complex tasks, handling each consideration in a separate call generally performs better.</when_to_use>
+  </workflow>
+
+  <workflow name="orchestrator_workers">
+    <description>A central LLM dynamically breaks down tasks, delegates to worker LLMs, and synthesizes results.</description>
+    <when_to_use>Suited for complex tasks where needed subtasks cannot be predicted in advance. The key difference from parallelization is flexibility — subtasks are determined by the orchestrator based on input, not predefined.</when_to_use>
+    <examples>
+      <example>Coding products making complex multi-file changes.</example>
+      <example>Search tasks requiring information gathering and analysis from multiple sources.</example>
+    </examples>
+  </workflow>
+
+  <workflow name="evaluator_optimizer">
+    <description>One LLM call generates a response while another provides evaluation and feedback in a loop.</description>
+    <when_to_use>Effective when clear evaluation criteria exist and iterative refinement adds measurable value. Two signs of good fit: LLM responses demonstrably improve with human feedback, and the LLM can provide such feedback.</when_to_use>
+    <examples>
+      <example>Literary translation where the translator might miss nuances but an evaluator can offer critiques.</example>
+      <example>Complex search requiring multiple rounds of analysis.</example>
+    </examples>
+  </workflow>
+
+  <agent_system>
+    <description>Agents are emerging in production as LLMs mature in understanding inputs, reasoning, planning, using tools reliably, and recovering from errors. They begin with a command or discussion, then plan and operate independently, potentially returning to the human for input. During execution, agents need "ground truth" from the environment at each step to assess progress. They can pause for human feedback at checkpoints or blockers. Agents are typically "just LLMs using tools based on environmental feedback in a loop." Clear tool design and documentation are therefore essential.</description>
+    <when_to_use>For open-ended problems where the number of steps is unpredictable and a fixed path cannot be hardcoded. The LLM may operate for many turns, requiring trust in its decision-making. Their autonomy suits scaling tasks in trusted environments.</when_to_use>
+    <risks>Agents bring higher costs and potential for compounding errors. Extensive testing in sandboxed environments with appropriate guardrails is recommended.</risks>
+    <examples>
+      <example>A coding agent resolving SWE-bench tasks involving multi-file edits.</example>
+      <example>The "computer use" reference implementation where Claude uses a computer to accomplish tasks.</example>
+    </examples>
+  </agent_system>
+
+  <principle name="combining_patterns">
+    <description>These patterns are not prescriptive — they are common patterns developers can shape and combine. The key is measuring performance and iterating. Complexity should be added "only when it demonstrably improves outcomes."</description>
+  </principle>
+
+  <summary>
+    <core_principle order="1" name="simplicity">Maintain simplicity in agent design.</core_principle>
+    <core_principle order="2" name="transparency">Prioritize transparency by explicitly showing planning steps.</core_principle>
+    <core_principle order="3" name="aci">Carefully craft the agent-computer interface (ACI) through thorough tool documentation and testing.</core_principle>
+    <final_recommendation>Success in the LLM space means building the right system for your needs. Start with simple prompts, optimize with evaluation, and add multi-step agentic systems only when simpler approaches fall short. Frameworks help get started quickly, but developers should "reduce abstraction layers and build with basic components" when moving to production.</final_recommendation>
+  </summary>
+
+  <acknowledgements>
+    Written by Erik S. and Barry Zhang, drawing on experiences building agents at Anthropic and insights from customers.
+  </acknowledgements>
+
+  <appendix number="1" title="Agents in practice">
+    <description>Customer work reveals two especially promising applications for AI agents that demonstrate the practical value of the patterns above. Both add the most value for tasks requiring conversation and action, with clear success criteria, feedback loops, and meaningful human oversight.</description>
+
+    <domain name="customer_support">
+      <description>Customer support combines familiar chatbot interfaces with tool integration. It suits open-ended agents because interactions follow a conversation flow while needing external information and actions.</description>
+      <fit_reasons>
+        <reason>Tools can pull customer data, order history, and knowledge base articles.</reason>
+        <reason>Actions like refunds or ticket updates can be handled programmatically.</reason>
+        <reason>Success can be measured through user-defined resolutions.</reason>
+      </fit_reasons>
+    </domain>
+
+    <domain name="coding_agents">
+      <description>Software development shows remarkable potential, with capabilities evolving from code completion to autonomous problem-solving.</description>
+      <fit_reasons>
+        <reason>Code solutions are verifiable through automated tests.</reason>
+        <reason>Agents can iterate using test results as feedback.</reason>
+        <reason>The problem space is well-defined.</reason>
+        <reason>Output quality can be measured objectively.</reason>
+      </fit_reasons>
+      <evidence>In Anthropic's implementation, agents solve real GitHub issues in the SWE-bench Verified benchmark from pull request descriptions alone.</evidence>
+      <caution>While automated testing helps verify functionality, human review remains crucial for ensuring solutions align with broader system requirements.</caution>
+    </domain>
+  </appendix>
+
+  <appendix number="2" title="Prompt engineering your tools">
+    <principle>Tools are an important part of any agentic system. They let Claude interact with external services and APIs through exact structure and definition specifications. Tool definitions deserve as much prompt engineering attention as overall prompts.</principle>
+
+    <observation>Multiple ways often exist to specify the same action — for example, specifying a file edit via diff or by rewriting the entire file. Some formats are much harder for an LLM to write than others. Writing a diff requires knowing how many lines change in the chunk header; writing code inside JSON requires extra escaping.</observation>
+
+    <recommendations>
+      <recommendation>Give the model enough tokens to "think" before writing itself into a corner.</recommendation>
+      <recommendation>Keep formats close to what the model has seen naturally in text on the internet.</recommendation>
+      <recommendation>Avoid formatting "overhead" like counting thousands of lines of code or string-escaping.</recommendation>
+    </recommendations>
+
+    <analogy>Invest as much effort in creating good agent-computer interfaces (ACI) as goes into human-computer interfaces (HCI).</analogy>
+
+    <aci_guidance>
+      <practice>Consider whether tool usage is obvious from the description and parameters. Good definitions include example usage, edge cases, input format requirements, and clear boundaries.</practice>
+      <practice>Adjust parameter names and descriptions for clarity, like writing a great docstring for a junior developer.</practice>
+      <practice>Test tool usage with many example inputs in the workbench and iterate.</practice>
+      <practice>Poka-yoke (error-proof) your tools by designing arguments that make mistakes harder.</practice>
+    </aci_guidance>
+
+    <evidence>In building the SWE-bench agent, more time was spent optimizing tools than the overall prompt. For example, the model made mistakes with relative filepaths after moving out of the root directory, so the tool was changed to always require absolute filepaths — and "the model used this method flawlessly."</evidence>
+  </appendix>
+</document>

@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document title="Best practices for prompt engineering">
+  <metadata>
+    <category>Agents</category>
+    <product>Claude apps</product>
+    <date>November 10, 2025</date>
+    <reading_time>5 minutes</reading_time>
+  </metadata>
+
+  <context>
+    Context engineering has emerged as an increasingly important part of working with LLMs, with prompt engineering as its essential building block. Prompt engineering is the craft of structuring instructions to get better outputs from AI models. It covers how you phrase queries, specify style, provide context, and guide the model's behavior to achieve your goals. The difference between a vague instruction and a well-crafted prompt can mean the gap between generic outputs and exactly what you need. A poorly structured prompt might require multiple back-and-forth exchanges to clarify intent, while a well-engineered prompt gets you there in one shot.
+  </context>
+
+  <purpose>
+    To assemble the team's best practices, including practical methods designed to improve your results right away, starting with simple habits and scaling up to advanced methods for complex projects.
+  </purpose>
+
+  <core_techniques>
+
+    <technique name="be_explicit_and_clear">
+      <principle>Tell the model exactly what you want to see. Modern AI models respond exceptionally well to clear, explicit instructions. Do not assume the model will infer what you want — state it directly. Use simple language that states exactly what you want without ambiguity.</principle>
+      <example>
+        <bad>Create an analytics dashboard</bad>
+        <good>Create an analytics dashboard. Include as many relevant features and interactions as possible. Go beyond the basics to create a fully-featured implementation.</good>
+        <explanation>The second version explicitly requests comprehensive features and signals that you want the model to go above and beyond the minimum.</explanation>
+      </example>
+      <best_practices>
+        <best_practice>Lead with direct action verbs: "Write," "Analyze," "Generate," "Create"</best_practice>
+        <best_practice>Skip preambles and get straight to the request</best_practice>
+        <best_practice>State what you want the output to include, not just what to work on</best_practice>
+        <best_practice>Be specific about quality and depth expectations</best_practice>
+      </best_practices>
+    </technique>
+
+    <technique name="provide_context_and_motivation">
+      <principle>Explaining why something matters helps AI models better understand your goals and deliver more targeted responses. This is particularly effective with newer models that can reason about your underlying objectives.</principle>
+      <example>
+        <less_effective>NEVER use bullet points</less_effective>
+        <more_effective>I prefer responses in natural paragraph form rather than bullet points because I find flowing prose easier to read and more conversational. Bullet points feel too formal and list-like for my casual learning style.</more_effective>
+        <explanation>The second version helps the model understand the reasoning behind the rule, which allows it to make better decisions about related formatting choices.</explanation>
+      </example>
+      <when_to_use>
+        <scenario>Explaining the purpose or audience for the output</scenario>
+        <scenario>Clarifying why certain constraints exist</scenario>
+        <scenario>Describing how the output will be used</scenario>
+        <scenario>Indicating what problem you are trying to solve</scenario>
+      </when_to_use>
+    </technique>
+
+    <technique name="be_specific">
+      <principle>Specificity means structuring your instructions with explicit guidelines and requirements. The more specific you are about what you want, the better the results.</principle>
+      <example>
+        <bad>Create a meal plan for a Mediterranean diet</bad>
+        <good>Design a Mediterranean diet meal plan for pre-diabetic management. 1,800 calories daily, emphasis on low glycemic foods. List breakfast, lunch, dinner, and one snack with complete nutritional breakdowns.</good>
+      </example>
+      <ingredients>
+        <ingredient>Clear constraints (word count, format, timeline)</ingredient>
+        <ingredient>Relevant context (who is the audience, what is the goal)</ingredient>
+        <ingredient>Desired output structure (table, list, paragraph)</ingredient>
+        <ingredient>Any requirements or restrictions (dietary needs, budget limits, technical constraints)</ingredient>
+      </ingredients>
+    </technique>
+
+    <technique name="use_examples">
+      <principle>Examples are not always necessary, but they shine when explaining concepts or demonstrating specific formats. Also known as one-shot or few-shot prompting, examples show rather than tell, clarifying subtle requirements that are difficult to express through description alone.</principle>
+      <important>Claude 4.x and similar advanced models pay very close attention to details in examples. Ensure your examples align with the behaviors you want to encourage and minimize any patterns you want to avoid.</important>
+      <example>
+        <bad>Summarize this article</bad>
+        <good>
+          Here's an example of the summary style I want:
+
+          Article: [link to article about AI regulation]
+          Summary: EU passes comprehensive AI Act targeting high-risk systems. Key provisions include transparency requirements and human oversight mandates. Takes effect 2026.
+
+          Now summarize this article in the same style: [link to your new article]
+        </good>
+      </example>
+      <when_to_use>
+        <scenario>The desired format is easier to show than describe</scenario>
+        <scenario>You need a specific tone or style</scenario>
+        <scenario>The task involves subtle patterns or conventions</scenario>
+        <scenario>Simple instructions have not produced consistent results</scenario>
+      </when_to_use>
+      <pro_tip>Start with one example (one-shot). Only add more examples (few-shot) if the output still does not match your needs.</pro_tip>
+    </technique>
+
+    <technique name="give_permission_to_express_uncertainty">
+      <principle>Give the AI explicit permission to express uncertainty rather than guessing. This reduces hallucinations and increases reliability.</principle>
+      <example>
+        <good>Analyze this financial data and identify trends. If the data is insufficient to draw conclusions, say so rather than speculating.</good>
+      </example>
+      <benefit>This simple addition makes responses more trustworthy by allowing the model to acknowledge limitations.</benefit>
+    </technique>
+
+  </core_techniques>
+
+  <advanced_techniques>
+
+    <advanced_technique name="prefill_the_ais_response">
+      <principle>Prefilling lets you start the AI's response for it, guiding format, tone, or structure. Particularly powerful for enforcing output formats or skipping preambles.</principle>
+      <mechanism>
+        In API usage, providing an assistant message with the opening content starts the response from that point. For example, passing {"role": "assistant", "content": "{"} causes the AI to continue from the opening brace, outputting only valid JSON.
+      </mechanism>
+      <when_to_use>
+        <scenario>You need the AI to output JSON, XML, or other structured formats</scenario>
+        <scenario>You want to skip conversational preambles and get straight to content</scenario>
+        <scenario>You need to maintain a specific voice or character</scenario>
+        <scenario>You want to control how the AI begins its response</scenario>
+      </when_to_use>
+      <chat_alternative>In chat interfaces, approximate by being very explicit: "Output only valid JSON with no preamble. Begin your response with an opening brace."</chat_alternative>
+    </advanced_technique>
+
+    <advanced_technique name="chain_of_thought_prompting">
+      <principle>Chain of thought (CoT) prompting involves requesting step-by-step reasoning before answering. Helps with complex analytical tasks that benefit from structured thinking.</principle>
+      <note>Claude offers an extended thinking feature that automates structured reasoning. When available, extended thinking is generally preferable to manual chain of thought prompting. However, manual CoT remains valuable when extended thinking is not available or when you need transparent reasoning you can review.</note>
+      <when_to_use>
+        <scenario>Extended thinking is not available (e.g., the free claude.ai plan)</scenario>
+        <scenario>You need transparent reasoning that you can review</scenario>
+        <scenario>The task requires multiple analytical steps</scenario>
+        <scenario>You want to ensure the AI considers specific factors</scenario>
+      </when_to_use>
+      <variants>
+        <variant name="basic_chain_of_thought">
+          <mechanism>Simply add "Think step-by-step" to your instructions.</mechanism>
+        </variant>
+        <variant name="guided_chain_of_thought">
+          <mechanism>Structure your prompt to provide specific reasoning stages.</mechanism>
+        </variant>
+        <variant name="structured_chain_of_thought">
+          <mechanism>Use XML tags to separate reasoning from the final answer.</mechanism>
+        </variant>
+      </variants>
+      <note>Even when extended thinking is available, explicit CoT prompting can still be beneficial for complex tasks. The two approaches are complementary, not mutually exclusive.</note>
+    </advanced_technique>
+
+    <advanced_technique name="control_the_output_format">
+      <principle>For modern AI models, several effective ways to control response formatting exist.</principle>
+      <method name="tell_what_to_do_not_what_not_to_do">
+        <anti_pattern>Do not use markdown in your response</anti_pattern>
+        <good_pattern>Your response should be composed of smoothly flowing prose paragraphs</good_pattern>
+      </method>
+      <method name="match_prompt_style_to_desired_output">
+        <principle>The formatting style used in your prompt may influence the AI's response style. If you want minimal markdown, reduce markdown in your prompt.</principle>
+      </method>
+      <method name="be_explicit_about_formatting_preferences">
+        <example>
+          When writing reports or analyses, write in clear, flowing prose using complete paragraphs. Use standard paragraph breaks for organization. Reserve markdown primarily for inline code, code blocks, and simple headings.
+
+          DO NOT use ordered lists or unordered lists unless you are presenting truly discrete items where a list format is the best option, or the user explicitly requests a list.
+
+          Rather than listing items with bullets, incorporate them naturally into sentences. Your goal is readable, flowing text that guides the reader naturally through ideas.
+        </example>
+      </method>
+    </advanced_technique>
+
+    <advanced_technique name="prompt_chaining">
+      <principle>Chaining breaks down complex tasks into smaller sequential steps with separate prompts. Each prompt handles one stage, and the output feeds into the next instruction. This approach trades latency for higher accuracy by making each individual task easier.</principle>
+      <example name="research_summary">
+        <step number="1">First prompt: "Summarize this medical paper covering methodology, findings, and clinical implications."</step>
+        <step number="2">Second prompt: "Review the summary above for accuracy, clarity, and completeness. Provide graded feedback."</step>
+        <step number="3">Third prompt: "Improve the summary based on this feedback: [feedback from step 2]"</step>
+      </example>
+      <when_to_use>
+        <scenario>You have a complex request that needs breaking down into steps</scenario>
+        <scenario>You need iterative refinement</scenario>
+        <scenario>You are doing multi-stage analysis</scenario>
+        <scenario>Intermediate validation adds value</scenario>
+        <scenario>A single prompt produces inconsistent results</scenario>
+      </when_to_use>
+      <tradeoff>Chaining increases latency (multiple API calls) but often dramatically improves accuracy and reliability for complex tasks.</tradeoff>
+    </advanced_technique>
+
+  </advanced_techniques>
+
+  <legacy_techniques>
+    <heading>Techniques you might have heard about — less necessary with modern models but still encountered in older documentation.</heading>
+
+    <technique name="xml_tags_for_structure">
+      <context>XML tags were once a recommended way to add structure and clarity to prompts, especially when incorporating large amounts of data. While modern models are better at understanding structure without XML tags, they can still be useful in specific situations.</context>
+      <example>
+        <athlete_information>
+        - Height: 6'2"
+        - Weight: 180 lbs
+        - Goal: Build muscle
+        - Dietary restrictions: Vegetarian
+        </athlete_information>
+
+        Generate a meal plan based on the athlete information above.
+      </example>
+      <when_to_use>
+        <scenario>You are working with extremely complex prompts mixing multiple types of content</scenario>
+        <scenario>You need to be absolutely certain about content boundaries</scenario>
+        <scenario>You are working with older model versions</scenario>
+      </when_to_use>
+      <modern_alternative>For most use cases, clear headings, whitespace, and explicit language ("Using the athlete information below...") work just as well with less overhead.</modern_alternative>
+    </technique>
+
+    <technique name="role_prompting">
+      <context>Role prompting defines expert personas and perspectives in how you phrase your query. While this can be effective, modern models are sophisticated enough that heavy-handed role prompting is often unnecessary.</context>
+      <example>You are a financial advisor. Analyze this investment portfolio...</example>
+      <caution>Avoid over-constraining the role. "You are a helpful assistant" is often better than a highly specific, jargon-laden persona that limits helpfulness.</caution>
+      <when_to_use>
+        <scenario>You need consistent tone across many outputs</scenario>
+        <scenario>You are building an application that requires a specific persona</scenario>
+        <scenario>You want domain expertise framing for complex topics</scenario>
+      </when_to_use>
+      <modern_alternative>Often, being explicit about what perspective you want is more effective: "Analyze this investment portfolio, focusing on risk tolerance and long-term growth potential" rather than assigning a role.</modern_alternative>
+    </technique>
+
+  </legacy_techniques>
+
+  <combined_technique_example>
+    <example>
+      Extract key financial metrics from this quarterly report and present them in JSON format.
+
+      I need this data for automated processing, so it is critical that your response contains ONLY valid JSON with no preamble or explanation.
+
+      Use this structure:
+      {
+        "revenue": "value with units",
+        "profit_margin": "percentage",
+        "growth_rate": "percentage"
+      }
+
+      If any metric is not clearly stated in the report, use null rather than guessing.
+
+      Begin your response with an opening brace: {
+    </example>
+    <techniques_combined>
+      <technique_ref>Explicit instructions (exactly what to extract)</technique_ref>
+      <technique_ref>Context (why format matters)</technique_ref>
+      <technique_ref>Example structure (showing the format)</technique_ref>
+      <technique_ref>Permission to express uncertainty (use null if unsure)</technique_ref>
+      <technique_ref>Format control (begin with opening brace)</technique_ref>
+    </techniques_combined>
+  </combined_technique_example>
+
+  <decision_framework>
+    <heading>Choosing the right techniques — not every prompt needs every technique.</heading>
+    <start_here>
+      <step question="Is your request clear and explicit?">If no, work on clarity first.</step>
+      <step question="Is the task simple?">Use core techniques only (be specific, be clear, provide context).</step>
+      <step question="Does the task require specific formatting?">Use examples or prefilling.</step>
+      <step question="Is the task complex?">Consider breaking it down (chaining).</step>
+      <step question="Does it need reasoning?">Use extended thinking (if available) or chain of thought.</step>
+    </start_here>
+    <technique_selection_guide>
+      <need use="specific_output_format">Examples, prefilling, or explicit format instructions</need>
+      <need use="step_by_step_reasoning">Extended thinking (Claude 4.x) or chain of thought</need>
+      <need use="complex_multi_stage_task">Prompt chaining</need>
+      <need use="transparent_reasoning">Chain of thought with structured output</need>
+      <need use="prevent_hallucinations">Permission to say "I don't know"</need>
+    </technique_selection_guide>
+  </decision_framework>
+
+  <troubleshooting>
+    <problem solution="Add specificity, examples, or explicit requests for comprehensive output. Ask the AI to go beyond the basics.">Response is too generic</problem>
+    <problem solution="Be more explicit about your actual goal. Provide context about why you are asking.">Response is off-topic or misses the point</problem>
+    <problem solution="Add examples (few-shot) or use prefilling to control the start of the response.">Response format is inconsistent</problem>
+    <problem solution="Break into multiple prompts (chaining). Each prompt should do one thing well.">Task is too complex, results are unreliable</problem>
+    <problem solution="Use prefilling or explicitly request: Skip the preamble and get straight to the answer.">AI includes unnecessary preambles</problem>
+    <problem solution="Explicitly give permission to say I don't know when uncertain.">AI makes up information</problem>
+    <problem solution="Be explicit about action: Change this function rather than Can you suggest changes?">AI suggests changes when you wanted implementation</problem>
+    <pro_tip>Start simple and add complexity only when needed. Test each addition to see if it actually improves results.</pro_tip>
+  </troubleshooting>
+
+  <anti_patterns>
+    <anti_pattern>Do not over-engineer: Longer, more complex prompts are not always better.</anti_pattern>
+    <anti_pattern>Do not ignore the basics: Advanced techniques will not help if your core prompt is unclear or vague.</anti_pattern>
+    <anti_pattern>Do not assume the AI reads minds: Be specific about what you want. Leaving things ambiguous gives the AI room to misinterpret.</anti_pattern>
+    <anti_pattern>Do not use every technique at once: Select techniques that address your specific challenge.</anti_pattern>
+    <anti_pattern>Do not forget to iterate: The first prompt rarely works perfectly. Test and refine.</anti_pattern>
+    <anti_pattern>Do not rely on outdated techniques: XML tags and heavy role prompting are less necessary with modern models. Start with explicit, clear instructions.</anti_pattern>
+  </anti_patterns>
+
+  <considerations>
+
+    <consideration name="working_with_long_content">
+      <challenge>Advanced prompt engineering adds context overhead through additional token usage. Examples, multiple prompts, detailed instructions — all consume tokens. Context management is a skill in its own right.</challenge>
+      <principle>Use prompt engineering techniques when they make sense and justify their usage.</principle>
+      <note>Modern AI models, including Claude 4.x, have significantly improved context awareness capabilities that help address historical "lost-in-the-middle" issues.</note>
+      <task_splitting_rationale>Even with these improvements, breaking large tasks into smaller, discrete chunks remains valuable — not because of context limitations, but because it helps the model focus on doing its best work within a very specific set of requirements and scope. A focused task with clear boundaries consistently produces higher quality results than trying to accomplish multiple objectives in a single prompt.</task_splitting_rationale>
+      <strategy>When working with long contexts, structure your information clearly with the most critical details at the beginning or end. When working with complex tasks, consider whether breaking them into focused subtasks would improve the quality and reliability of each component.</strategy>
+    </consideration>
+
+    <consideration name="what_does_a_good_prompt_look_like">
+      <principle>Prompt engineering is a skill that takes practice. The only way to know if you are doing it right is to test it and see.</principle>
+      <evaluation_tips>
+        <tip>Does the output match your specific requirements?</tip>
+        <tip>Did you get the result in one attempt or need multiple iterations?</tip>
+        <tip>Is the format consistent across multiple attempts?</tip>
+        <tip>Are you avoiding the common mistakes listed above?</tip>
+      </evaluation_tips>
+      <resource>Prompt engineering course at anthropic.skilljar.com for objective measurement.</resource>
+    </consideration>
+
+  </considerations>
+
+  <final_words>
+    <principle>Prompt engineering is ultimately about communication: speaking the language that helps AI most clearly understand your intent.</principle>
+    <recommendation>Start with the core techniques. Use them consistently until they become second nature. Only layer in advanced techniques when they solve a specific problem.</recommendation>
+    <guideline>The best prompt is not the longest or most complex. It is the one that achieves your goals reliably with the minimum necessary structure.</guideline>
+    <outlook>The shift toward context engineering does not diminish prompt engineering's importance. Prompt engineering is a fundamental building block within context engineering. Every well-crafted prompt becomes part of the larger context that shapes AI behavior, working alongside conversation history, attached files, and system instructions to create better outcomes.</outlook>
+  </final_words>
+
+  <resources>
+    <resource>Prompt engineering documentation</resource>
+    <resource>Interactive prompt engineering tutorial</resource>
+    <resource>Prompt engineering course</resource>
+    <resource>Context engineering guide</resource>
+  </resources>
+</document>

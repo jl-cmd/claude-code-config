@@ -95,7 +95,7 @@ Every audit loop runs the two-phase, twelve-teammate flow defined in `SKILL.md` 
 
 Each loop calls `Agent` twelve times with fresh invocations so every teammate starts with its own context window. Doc line on lead history: [`../sources.md`](../sources.md).
 
-See [`../PROMPTS.md`](../PROMPTS.md) for AUDIT spawn-prompt XML, the per-letter category-auditor binding, the consolidator/validator schema, and the outcome schema. Substitute placeholders (`repo`, `branch`, `base_branch`, `pr_url`, `loop`, `diff_path`, `letter`) into the `prompt` argument.
+See [`../PROMPTS.md`](../PROMPTS.md) for AUDIT spawn-prompt XML, the per-letter category-auditor binding, the consolidator/validator schema, and the outcome schema. The spawn XML includes TaskCreate/self_audit_checklist for task tracking — every consolidator/validator MUST create tasks before starting. Substitute placeholders (`repo`, `branch`, `base_branch`, `pr_url`, `loop`, `diff_path`, `letter`) into the `prompt` argument.
 
 After phase 2 completes, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` from the worktree directory with the `Read` tool, parses it, and populates `loop_comment_index` from `<finding>` elements.
 
@@ -171,7 +171,7 @@ Same self-termination model as bugfind. Missing notification → hard blocker.
 
 `approve: false` → `error: bugfix teammate refused shutdown` → Step 4 then 5.
 
-Substitute placeholders from `last_findings` into the fix prompt per [`../PROMPTS.md`](../PROMPTS.md).
+Substitute placeholders from `last_findings` into the fix prompt per [`../PROMPTS.md`](../PROMPTS.md). The spawn XML includes TaskCreate/self_audit_checklist for task tracking — the FIX subagent MUST create tasks before starting.
 
 **Verify push:** `git rev-parse HEAD` after fix must differ from before; new HEAD must exist on `origin/<branch>` (`git fetch origin <branch> && git rev-parse origin/<branch>` matches `HEAD`). If HEAD did not change → `stuck — bugfix teammate could not address findings`.
 

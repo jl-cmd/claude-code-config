@@ -283,7 +283,7 @@ cd into `<worktree_path>` before any git or file operation.
      - "Could not address this loop: <one-line reason>" if you skipped or failed it
      - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
      Body text is passed directly as string parameters -- no temp files, no jq, no shell pipes.
-  9. Write `.bugteam-pr<N>-loop<L>.fix-outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
+  9. Write `.bugteam-pr<N>-loop<L>.outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
 </execution>
 
 <outcome_xml_schema>

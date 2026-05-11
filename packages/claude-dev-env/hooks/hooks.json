@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/content_search_to_zoekt_redirector.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/content_search_to_zoekt_redirector.py",
             "timeout": 10
           }
         ]
@@ -17,47 +17,47 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/md_to_html_blocker.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/md_to_html_blocker.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/write_existing_file_blocker.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/write_existing_file_blocker.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/sensitive_file_protector.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/sensitive_file_protector.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/validation/hook_format_validator.py",
+            "command": "python3 $HOME/.claude/hooks/validation/hook_format_validator.py",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/code_rules_enforcer.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/code_rules_enforcer.py",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "python3 -c \"import sys; sys.path.insert(0, r'${CLAUDE_PLUGIN_ROOT}/hooks'); from validators.run_all_validators import main; sys.exit(main())\"",
+            "command": "python3 -c \"import sys; sys.path.insert(0, r'$HOME/.claude/hooks'); from validators.run_all_validators import main; sys.exit(main())\"",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/tdd_enforcer.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/tdd_enforcer.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/windows_rmtree_blocker.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/windows_rmtree_blocker.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/state_description_blocker.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/state_description_blocker.py",
             "timeout": 10
           }
         ]
@@ -67,12 +67,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/advisory/refactor_guard.py",
+            "command": "python3 $HOME/.claude/hooks/advisory/refactor_guard.py",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/advisory/migration_safety_advisor.py",
+            "command": "python3 $HOME/.claude/hooks/advisory/migration_safety_advisor.py",
             "timeout": 15
           }
         ]
@@ -82,42 +82,42 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/es_exe_path_rewriter.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/es_exe_path_rewriter.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/destructive_command_blocker.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/destructive_command_blocker.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/gh_body_arg_blocker.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/gh_body_arg_blocker.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/block_main_commit.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/block_main_commit.py",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/pr_description_enforcer.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/pr_description_enforcer.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/test_preflight_check.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/test_preflight_check.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/content_search_to_zoekt_redirector.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/content_search_to_zoekt_redirector.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/windows_rmtree_blocker.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/windows_rmtree_blocker.py",
             "timeout": 10
           }
         ]
@@ -127,7 +127,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/notification/attention_needed_notify.py",
+            "command": "python3 $HOME/.claude/hooks/notification/attention_needed_notify.py",
             "timeout": 15
           }
         ]
@@ -139,17 +139,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session/plugin_data_dir_cleanup.py",
+            "command": "python3 $HOME/.claude/hooks/session/plugin_data_dir_cleanup.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session/session_env_cleanup.py",
+            "command": "python3 $HOME/.claude/hooks/session/session_env_cleanup.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session/untracked_repo_detector.py",
+            "command": "python3 $HOME/.claude/hooks/session/untracked_repo_detector.py",
             "timeout": 10
           }
         ]
@@ -161,22 +161,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/notification/attention_needed_notify.py",
+            "command": "python3 $HOME/.claude/hooks/notification/attention_needed_notify.py",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/hedging_language_blocker.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/hedging_language_blocker.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/question_to_user_enforcer.py",
+            "command": "python3 $HOME/.claude/hooks/blocking/question_to_user_enforcer.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/diagnostic/hook_log_stop_wrapper.py",
+            "command": "python3 $HOME/.claude/hooks/diagnostic/hook_log_stop_wrapper.py",
             "timeout": 30
           }
         ]
@@ -188,7 +188,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/lifecycle/session_end_cleanup.py",
+            "command": "python3 $HOME/.claude/hooks/lifecycle/session_end_cleanup.py",
             "timeout": 15
           }
         ]
@@ -200,7 +200,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/lifecycle/config_change_guard.py",
+            "command": "python3 $HOME/.claude/hooks/lifecycle/config_change_guard.py",
             "timeout": 10
           }
         ]
@@ -212,17 +212,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/workflow/md_to_html_companion.py",
+            "command": "python3 $HOME/.claude/hooks/workflow/md_to_html_companion.py",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/validation/mypy_validator.py",
+            "command": "python3 $HOME/.claude/hooks/validation/mypy_validator.py",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/workflow/auto_formatter.py",
+            "command": "python3 $HOME/.claude/hooks/workflow/auto_formatter.py",
             "timeout": 30
           }
         ]
@@ -232,7 +232,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/workflow/investigation_tracker_reset.py",
+            "command": "python3 $HOME/.claude/hooks/workflow/investigation_tracker_reset.py",
             "timeout": 10
           }
         ]
@@ -244,7 +244,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/notification/claude_notification_handler.py",
+            "command": "python3 $HOME/.claude/hooks/notification/claude_notification_handler.py",
             "timeout": 15
           }
         ]
@@ -256,7 +256,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/observability/instructions_loaded_logger.py",
+            "command": "python3 $HOME/.claude/hooks/observability/instructions_loaded_logger.py",
             "timeout": 10
           }
         ]

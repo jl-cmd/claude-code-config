@@ -153,10 +153,20 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_
    - **No Copilot review at `current_head`:** Set `phase = BUGTEAM`.
      Continue BUGTEAM in same tick — back-to-back convergence
      requires bugteam on same HEAD before next wakeup.
-   - **Any other state (DISMISSED, COMMENTED with empty body):** No
-     actionable findings. Set `phase = BUGTEAM`. Continue BUGTEAM
-     in same tick — back-to-back convergence requires bugteam on
-     same HEAD before next wakeup.
+   - **DISMISSED:** No actionable findings. Set `phase = BUGTEAM`.
+     Continue BUGTEAM in same tick — back-to-back convergence requires
+     bugteam on same HEAD before next wakeup.
+   - **COMMENTED with empty body:** Fetch Copilot inline comments for
+     `current_head` (same filter as dirty-branch inline fetch above).
+     - **Non-empty inline:** Apply Fix protocol (see
+       [fix-protocol.md](fix-protocol.md#single-pr-fix-workflow)).
+       Reset `bugbot_clean_at = null, copilot_clean_at = null`,
+       stay in `phase = BUGBOT`. Run Step 3, schedule next wakeup,
+       return.
+     - **Empty inline:** No actionable findings. Set
+       `phase = BUGTEAM`. Continue BUGTEAM in same tick —
+       back-to-back convergence requires bugteam on same HEAD
+       before next wakeup.
 
 ### `phase == BUGTEAM`
 
@@ -180,7 +190,8 @@ its run. `current_head` from Step 1 is potentially stale:
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `.head.sha`
    ```
 If `new_head != current_head`, set `current_head = new_head`,
-`bugbot_clean_at = null`, `copilot_clean_at = null`. New commits
+`bugbot_clean_at = null`, `copilot_clean_at = null`,
+`bugbot_down = false`. New commits
 invalidate both bugbot's and Copilot's prior clean state.
 
    **Propagation guard:** If a push happened this tick, schedule a 90-second

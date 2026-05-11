@@ -14,10 +14,13 @@ plus inline comments anchored to most recent Copilot review on
 ```
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
   → filter `.user.login` for copilot (case-insensitive substring "copilot")
+    AND `.commit_id == current_head`
   → sort by `.submitted_at` descending
 
 pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-  → filter threads where `is_outdated == false` AND any comment has `.author` matching Copilot (case-insensitive substring "copilot")
+  → filter threads where `is_outdated == false` AND `is_resolved == false`
+    AND `pull_request_review_id` matches the newest Copilot review on `current_head`
+    AND any comment has `.author` matching Copilot (case-insensitive substring "copilot")
 ```
 
 Decide (four branches; match first whose predicate holds):
@@ -67,7 +70,7 @@ Persist `mergeable_state` into `merge_state_status`. Decide:
   `copilot_clean_at = null`, `merge_state_status = null`, `phase = BUGBOT`,
   Step 3 on new HEAD, schedule next wakeup, return. Loop re-runs from
   scratch on new HEAD.
-- **`mergeable_state` is `"blocked"`, `"behind"`, or `"unknown"` for
+- **`mergeable_state` is `"blocked"`, `"behind"`, `"unstable"`, or `"unknown"` for
   non-conflict reasons** (required checks pending, branch behind base
   without conflicts GitHub cannot auto-resolve): **hard blocker** per
   [stop-conditions.md](stop-conditions.md) — do not invent a fix. Report specific

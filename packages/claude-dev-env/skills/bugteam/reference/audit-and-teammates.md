@@ -117,24 +117,24 @@ audits its category, writes outcome XML, marks the task complete, and shuts down
 all audit loops — the cleanup task resets them to `pending` between loops.
 
 ```
-TaskCreate(subject="{owner}/{repo}#{N} audit {letter} loop {L}",
-           description="Audit category {letter} for {owner}/{repo}#{N}. "
-                       "Loop number in subject is updated by cleanup at end of each loop. "
+TaskCreate(subject="{owner}/{repo}#{N} audit {letter}",
+           description="Audit category {letter} for {owner}/{repo}#{N} loop {L}. "
                        "Load rubric from $HOME/.claude/audit-rubrics/category_rubrics/category-{letter}-{slug}.md. "
                        "Load prompt from $HOME/.claude/audit-rubrics/prompts/category-{letter}-{slug}.md. "
                        "Diff: <run_temp_dir>/pr-{N}/loop-{L}.patch. "
                        "Write outcome XML to <run_temp_dir>/pr-{N}/loop-{L}-{letter}.outcomes.xml. "
                        "Worktree: <worktree_path>.")
 # ... (11 calls, A through K)
-TaskCreate(subject="{owner}/{repo}#{N} consolidate loop {L}",
-           description="Consolidate and validate all 11 audit outcome XMLs for {owner}/{repo}#{N}. "
-                       "Loop number in subject is updated by cleanup at end of each loop. "
+TaskCreate(subject="{owner}/{repo}#{N} consolidate",
+           description="Consolidate and validate all 11 audit outcome XMLs for {owner}/{repo}#{N} loop {L}. "
                        "Read sibling XMLs from <run_temp_dir>/pr-{N}/loop-{L}-{a..k}.outcomes.xml. "
                        "Validate, de-dup, post review. Write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml.")
-TaskCreate(subject="{owner}/{repo}#{N} cleanup loop {L}",
+TaskCreate(subject="{owner}/{repo}#{N} cleanup",
            description="Reset task list for next audit loop on {owner}/{repo}#{N}. "
                        "Lead-managed: after consolidator completes, update this task to completed, "
-                       "then reset all 12 other tasks to pending and update their loop number in subject.")
+                       "then reset all 12 other tasks to pending via TaskUpdate. "
+                       "Subjects are loop-agnostic; the loop number for each teammate is passed "
+                       "via the spawn prompt's <context><loop>L</loop></context> block.")
 ```
 
 Between loops, the lead claims and completes the cleanup task, then resets

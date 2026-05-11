@@ -41,8 +41,9 @@ pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get") → `
 ```
 
 If owner/repo/number are not yet known, extract them from the PR URL.
-If `current_head` changed since last tick, reset `bugbot_down` to `false`
-(new HEAD invalidates prior down-detection state).
+If `current_head` changed since last tick, reset `bugbot_clean_at` to `null`.
+Leave `bugbot_down` unchanged — it persists across fix pushes while true and is
+only cleared by a later acknowledged `bugbot run`.
 
 Capture `number`, `head.sha` (= `current_head`), owner/repo, branch.
 
@@ -141,8 +142,9 @@ pushed commits during its run. `current_head` from Step 1 is stale:
    Re-resolve HEAD next tick.
 
    If `new_head != current_head`, set `current_head = new_head`,
-   `bugbot_clean_at = null`, `bugbot_down = false`. New commits invalidate
-   bugbot's prior clean and down-detection state.
+   `bugbot_clean_at = null`. Leave `bugbot_down` unchanged — it persists
+   across fix pushes while true and is only cleared by a later acknowledged
+   `bugbot run`. New commits invalidate bugbot's prior clean status.
 
 c. Inspect bugteam outcome. Reports `convergence (zero findings)` or list
 of unfixed findings with file:line.

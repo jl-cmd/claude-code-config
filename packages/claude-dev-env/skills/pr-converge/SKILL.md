@@ -60,7 +60,8 @@ post a fresh PR in a fresh branch based on origin main to the user.
   convergence check. This skips the re-audit needed to confirm zero findings,
   creating a fix → push → re-trigger → down → bugteam loop. Fix: when
   bugbot_down is true post-push, continue the bugteam re-audit cycle to
-  convergence before re-triggering. Only exit BUGTEAM when convergence confirmed.
+  convergence. Only exit BUGTEAM when convergence confirmed — bugbot cannot
+  acknowledge a re-trigger while down, so the re-audit cycle runs independently.
 
 ## First tick of a session
 

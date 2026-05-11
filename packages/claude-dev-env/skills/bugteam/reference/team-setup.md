@@ -75,7 +75,7 @@ Background subagents for a PR operate inside that PR's worktree. Step 4 teardown
 
 ### Run specification
 
-- **Run name:** `bugteam-pr-<number>-<YYYYMMDDHHMMSS>` for single-PR invocations, `bugteam-<YYYYMMDDHHMMSS>` for multi-PR invocations (or `bugteam-<sanitized-head-branch>-<YYYYMMDDHHMMSS>` if no PR). The timestamp is captured once at invocation start and prevents two concurrent invocations on the same PR from colliding.
+- **Run name:** `bugteam-pr-<number>` for single-PR invocations, `bugteam-<sanitized-head-branch>` for multi-PR or no-PR invocations. The name is deterministic so `<run_temp_dir>` and the team task list are re-entrant across sessions.
 
 - **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the `run_name` template, replace every character outside `[A-Za-z0-9._-]` with `-`. The whitelist keeps safe portable filename characters only; OS-reserved and shell-special characters (`/ \ : * ? < > | "` plus ASCII control characters `0x00`–`0x1F`) fall outside the whitelist and become `-`. Example: `feat/foo*bar` → `feat-foo-bar`; `run_name` becomes `bugteam-feat-foo-bar-<YYYYMMDDHHMMSS>`. Apply sanitization when `run_name` is first assembled so every downstream use (temp dir, cleanup) sees the safe form.
 
@@ -104,6 +104,33 @@ The block above mixes lead-internal variables and one shell command (`starting_s
 **`loop_comment_index` scope (per-loop, not cross-loop):** Reset at the start of every AUDIT action, populated as finding comments are posted during AUDIT, consumed by the matching FIX action when it posts fix replies, and discarded after FIX completes. It does not persist across loops; each loop starts with an empty index and its own fresh set of comment URLs.
 
 Each entry: `{loop, finding_id, finding_comment_id, finding_comment_url, used_fallback, fix_status}`. Populated by AUDIT, consumed by FIX.
+
+### Team creation (required)
+
+After `run_temp_dir` is resolved, create the audit team:
+
+```
+TeamCreate(team_name="bugteam",
+           description="Bugteam audit-fix orchestrator")
+```
+
+The team is the master container — all PRs, loops, and teammates run under it.
+Per-PR logical grouping uses task subject prefixes and teammate naming (see
+below). The team is cleaned up at teardown, only when the PR is fully converged.
+
+#### Multi-PR sub-team tracking
+
+When `/bugteam` runs against multiple PRs across repos, each PR operates as a
+logical sub-team within the master `bugteam` team. The PR identity token is
+`{owner}/{repo}#{N}` (e.g. `jl-cmd/claude-code-config#422`). In teammate
+names and filesystem paths, it is slugified to `{owner}-{repo}-pr-{N}`.
+
+- **Teammate name:** `bugfind-{owner}-{repo}-pr{N}-loop{L}-{letter}`
+- **Task subject:** `{owner}/{repo}#{N} audit {letter} loop {L}`
+- **Outcome XML:** `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml`
+
+The lead filters by the slugified prefix to group tasks and teammates by PR.
+Self-claiming by task subject prefix keeps each teammate on its assigned PR.
 
 ### --bugbot-retrigger flag
 

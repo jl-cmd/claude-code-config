@@ -20,11 +20,11 @@ Each invariant cites the normative section or companion file it derives from. Al
 |---|---|---|
 | I-1 | `Bash` invoking `scripts/grant_project_claude_permissions.py` precedes the first audit `Agent` spawn. | `SKILL.md` § Step 0 |
 | I-2 | `Bash` invoking `scripts/revoke_project_claude_permissions.py` runs exactly once per invocation on every exit path, after teardown. | `SKILL.md` § Step 5 |
-| I-3 | Orchestration uses `Agent(..., run_in_background=true)` only — no `TeamCreate`, `TeamDelete`, `SendMessage`, or `Task` tool calls. | `SKILL.md` § Step 2; § Step 4 |
+| I-3 | `TeamCreate(team_name="bugteam")` at Step 2. Invocation start creates 13 tasks (11 audit A–K + 1 consolidator + 1 cleanup) via `TaskCreate`. AUDIT spawns 11 auditor teammates + 1 consolidator teammate with `team_name="bugteam"`. Cleanup task resets all 12 other tasks to `pending` between loops via `TaskUpdate`. `TeamDelete` at teardown. | `SKILL.md` § Step 2; `reference/team-setup.md` § Team creation |
 | I-4 | `Agent` calls are fresh per loop (`run_in_background=true`; new `name` each loop). | `CONSTRAINTS.md` — **Fresh subagent per loop** |
 | I-5 | Every audit and fix spawn passes `model="opus"` (eleven category auditors `-a` through `-k`, the consolidator/validator `-validate`, and the fix subagent). | `SKILL.md` § AUDIT action (parallel auditors); § FIX action; `CONSTRAINTS.md` — **Opus 4.7 at xhigh effort for every auditor, validator, and fix subagent** |
 | I-6 | Loop count ≤ 20 audits. 21st audit never fires. | `SKILL.md` YAML `description` (20-loop cap); § Step 3 (**Pre-audit** / **FIX** increment rules) |
-| I-7 | Every audit loop runs the two-phase, twelve-teammate flow: phase 1 issues eleven parallel `Agent(..., run_in_background=true)` calls (one per A–K rubric, names `bugfind-pr<N>-loop<L>-a` through `-k`) in one assistant message; phase 2 issues one `Agent(name="bugfind-pr<N>-loop<L>-validate", run_in_background=true)` only after all eleven phase-1 notifications have arrived. There is no single-auditor mode and no loop-count gate. | `SKILL.md` § AUDIT action (**Phase 1** / **Phase 2**) |
+| I-7 | Invocation start creates 13 tasks (11 audit A–K, 1 consolidator, 1 cleanup). Every audit loop spawns 11 auditor teammates (names `bugfind-{owner}-{repo}-pr{N}-loop{L}-{a..k}`) into the `bugteam` team in one assistant message; after all eleven audit tasks are `completed`, spawns 1 consolidator teammate (`bugfind-{owner}-{repo}-pr{N}-loop{L}-validate`, `team_name="bugteam"`). Cleanup resets all 12 tasks to `pending` for the next loop. | `SKILL.md` § AUDIT action (**Phase 1** / **Phase 2**) |
 | I-8 | Lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` with the `Read` tool after each audit, before the next action. | `SKILL.md` § AUDIT action |
 | I-9 | Teardown sequence: `git worktree remove` each PR → `rmtree` `<run_temp_dir>` → Step 4.5 → revoke. | `SKILL.md` § Step 4; § Step 4.5; § Step 5 |
 | I-10 | The bugfind subagent posts ONE per-loop review; the bugfix subagent posts fix replies. The lead's only PR-write action is the Step 4.5 description rewrite. | `CONSTRAINTS.md` — **Audit/fix comment posting** |
@@ -174,7 +174,7 @@ Patch this table to match observation and annotate each correction.
 **Layer A invariants.** All of I-1 through I-10.
 
 **Layer B predicted behavior.**
-- Every loop (1–20) runs the two-phase, twelve-teammate flow: phase 1 issues eleven parallel `Agent(...)` calls in one assistant message — eleven opus category auditors named `bugfind-pr<N>-loop<L>-[a..k]`, each bound to one A–K rubric. After all eleven phase-1 notifications arrive, phase 2 issues one `Agent(name="bugfind-pr<N>-loop<L>-validate", run_in_background=true)`; lead awaits the consolidator/validator notification.
+- 13 tasks created once at invocation start (11 audit A–K, 1 consolidator, 1 cleanup). Every loop spawns 11 auditor teammates + 1 consolidator into `team_name="bugteam"`. Cleanup resets all 12 tasks to `pending` between loops via `TaskUpdate`.
 - Each loop produces one `Agent(name="bugfix-pr<N>-loop<L>", run_in_background=true)`.
 - Exactly 20 audit phases, exactly 20 fix phases.
 - Steps 19–26 from Eval 5 fire at teardown.

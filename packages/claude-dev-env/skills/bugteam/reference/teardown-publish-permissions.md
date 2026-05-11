@@ -12,9 +12,11 @@ From the repository root, run the command in `SKILL.md`. If the exit code is non
 
 When the cycle exits (any reason), run these steps in order from **this** session (the lead).
 
-1. For each PR in `all_prs`: `git worktree remove "<run_temp_dir>/pr-<N>/worktree"` (from Step 1) — tolerate already-removed worktrees.
+1. **Delete the team:** `TeamDelete` removes `~/.claude/teams/bugteam/` and `~/.claude/tasks/bugteam/`. Only at convergence/cap/stuck — not between loops.
 
-2. **Delete the per-run temp directory** by invoking [`../scripts/windows_safe_rmtree.py`](../scripts/windows_safe_rmtree.py) with the same literal `<run_temp_dir>` from Step 2:
+2. For each PR in `all_prs`: `git worktree remove "<run_temp_dir>/pr-<N>/worktree"` (from Step 1) — tolerate already-removed worktrees.
+
+3. **Delete the per-run temp directory** by invoking [`../scripts/windows_safe_rmtree.py`](../scripts/windows_safe_rmtree.py) with the same literal `<run_temp_dir>` from Step 2:
 
    ```bash
    python "${CLAUDE_SKILL_DIR}/scripts/windows_safe_rmtree.py" "<run_temp_dir>"

@@ -12,9 +12,10 @@ description: >-
 
 Audit–fix until convergence. Bugfind: `code-quality-agent`, fresh context each
 loop. Bugfix: `clean-coder`. Hard cap: 20 audit loops. Grant `.claude/**` at
-start, revoke always at end. Every audit loop runs the two-phase, twelve-teammate
-flow — eleven category auditors (`-a` through `-k`) in parallel, then the
-consolidator/validator (`-validate`) after they all return.
+start, revoke always at end. Every audit loop creates eleven tasks and spawns
+eleven category-auditor teammates into the master `bugteam` agent team
+(created once in Step 2) — one per A–K letter. After all eleven complete,
+the consolidator/validator (`-validate`) merges and posts the review.
 
 Auditing pairs **two** kinds of content. Neither alone is sufficient: every
 phase-1 auditor loads the envelope/schema from [`PROMPTS.md`](PROMPTS.md) AND

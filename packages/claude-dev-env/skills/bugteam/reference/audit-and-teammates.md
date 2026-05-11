@@ -82,18 +82,18 @@ Repeat until an exit condition fires.
 
 **Note:** The first iteration uses **pre-audit path** then **AUDIT**. After a **FIX**, the next iteration runs **pre-audit path** again (gate → then AUDIT), so `validate_content` stays green before semantic audit.
 
-## AUDIT action (twelve fresh teammates per loop, two-phase)
+## AUDIT action (eleven task-based teammates per loop, two-phase)
 
 Capture a fresh PR diff for this loop into the per-PR scoped directory so concurrent `/bugteam` runs keep patches isolated. Use the literal `<run_temp_dir>` resolved once in Step 2 — Claude resolves the absolute path; every shell receives the same literal value.
 
 1. Create the directory: `mkdir -p "<run_temp_dir>/pr-<N>"`.
 2. Call `pull_request_read(method="get_diff", pullNumber=N, owner=O, repo=R)` to capture the diff text, then write it to `"<run_temp_dir>/pr-<N>/loop-<L>.patch"` using the `Write` tool.
 
-Every audit loop runs the two-phase, twelve-teammate flow defined in `SKILL.md` § AUDIT action: phase 1 spawns the eleven category auditors (`-a` through `-k`) in one assistant message; once **all eleven return**, phase 2 spawns the consolidator/validator (`-validate`). There is no single-auditor mode and no loop-count gate.
+Every audit loop runs the two-phase flow defined in `SKILL.md` § AUDIT action: the lead spawns eleven category-auditor teammates into the master `bugteam` team (tasks created once in Step 2, reset between loops). Once **all eleven audit tasks are complete**, the lead spawns the consolidator/validator teammate, then handles cleanup.
 
-`<run_temp_dir>` includes the sanitized `team_name` and timestamp; `team_name` is already prefixed with `bugteam-`. Claude resolves `Path(tempfile.gettempdir()) / team_name` once and passes that absolute path to every shell. `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, `TMP` and falls back to the OS temp directory, so the same approach works on macOS, Linux, Windows cmd.exe, and PowerShell.
+`<run_temp_dir>` is the deterministic path resolved in Step 2. Tasks and the team config persist in `~/.claude/tasks/bugteam/` and `~/.claude/teams/bugteam/` across sessions — the lead re-enters by listing tasks and re-spawning any incomplete auditors.
 
-Each loop calls `Agent` twelve times with fresh invocations so every teammate starts with its own context window. Doc line on lead history: [`../sources.md`](../sources.md).
+Each loop creates 11 tasks and spawns 11 teammates with fresh invocations. Doc line on lead history: [`../sources.md`](../sources.md).
 
 See [`../PROMPTS.md`](../PROMPTS.md) for AUDIT spawn-prompt XML, the per-letter category-auditor binding, the consolidator/validator schema, and the outcome schema. The spawn XML includes TaskCreate/self_audit_checklist for task tracking — every consolidator/validator MUST create tasks before starting. Substitute placeholders (`repo`, `branch`, `base_branch`, `pr_url`, `loop`, `diff_path`, `letter`) into the `prompt` argument.
 
@@ -101,47 +101,105 @@ After phase 2 completes, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` fr
 
 ### Shutdown (bugfind)
 
-Each of the twelve teammates self-terminates when complete — the background-completion notification arrives and the lead advances to the next phase. If any phase 1 auditor fails to notify within the lead timeout (120s), treat as a hard blocker and abort the loop without spawning the consolidator/validator. If the consolidator/validator fails to notify within 120s, treat as a hard blocker and abort the loop.
+Each teammate self-terminates after marking its task complete — the task list reflects completion. The lead polls `TaskList` to detect when all eleven tasks are `completed`. Tasks that stay `in_progress` without an idle notification signal a crashed teammate. For each stuck task: verify whether the outcome XML exists at `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml`. XML present → mark task `completed` (teammate finished, crashed before marking). No XML → re-spawn that letter's teammate.
 
 `last_action = "audited"`. Append audit metadata to `audit_log`.
 
-### AUDIT phase 1 — eleven category auditors in parallel (every loop)
+### AUDIT phase 1 — eleven category auditors as teammates (every loop)
 
-The pre-audit gate must pass immediately before this step. There is no
-loop-count gate: every audit loop runs the eleven category auditors in
-parallel, then the single consolidator/validator after they all return.
-Issue eleven `Agent` calls in **one** assistant message so phase 1 runs
-fully in parallel:
+The pre-audit gate must pass immediately before this step. Every audit loop
+creates 11 tasks and spawns 11 teammates into the master `bugteam` team
+(created once in Step 2). Each teammate self-claims a task by subject prefix,
+audits its category, writes outcome XML, marks the task complete, and shuts down.
 
-```
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-a", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category A", prompt="<audit XML; bound to category A; load $HOME/.claude/audit-rubrics/category_rubrics/category-a-api-contracts.md and $HOME/.claude/audit-rubrics/prompts/category-a-api-contracts.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-a.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-b", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category B", prompt="<audit XML; bound to category B; load $HOME/.claude/audit-rubrics/category_rubrics/category-b-selector-engine-compat.md and $HOME/.claude/audit-rubrics/prompts/category-b-selector-engine-compat.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-b.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-c", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category C", prompt="<audit XML; bound to category C; load $HOME/.claude/audit-rubrics/category_rubrics/category-c-resource-cleanup.md and $HOME/.claude/audit-rubrics/prompts/category-c-resource-cleanup.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-c.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-d", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category D", prompt="<audit XML; bound to category D; load $HOME/.claude/audit-rubrics/category_rubrics/category-d-scoping-and-ordering.md and $HOME/.claude/audit-rubrics/prompts/category-d-scoping-and-ordering.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-d.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-e", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category E", prompt="<audit XML; bound to category E; load $HOME/.claude/audit-rubrics/category_rubrics/category-e-dead-code.md and $HOME/.claude/audit-rubrics/prompts/category-e-dead-code.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-e.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-f", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category F", prompt="<audit XML; bound to category F; load $HOME/.claude/audit-rubrics/category_rubrics/category-f-silent-failures.md and $HOME/.claude/audit-rubrics/prompts/category-f-silent-failures.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-f.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-g", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category G", prompt="<audit XML; bound to category G; load $HOME/.claude/audit-rubrics/category_rubrics/category-g-bounds-and-overflow.md and $HOME/.claude/audit-rubrics/prompts/category-g-bounds-and-overflow.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-g.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-h", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category H", prompt="<audit XML; bound to category H; load $HOME/.claude/audit-rubrics/category_rubrics/category-h-security-boundaries.md and $HOME/.claude/audit-rubrics/prompts/category-h-security-boundaries.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-h.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-i", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category I", prompt="<audit XML; bound to category I; load $HOME/.claude/audit-rubrics/category_rubrics/category-i-concurrency.md and $HOME/.claude/audit-rubrics/prompts/category-i-concurrency.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-i.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-j", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category J", prompt="<audit XML; bound to category J; load $HOME/.claude/audit-rubrics/category_rubrics/category-j-code-rules-compliance.md and $HOME/.claude/audit-rubrics/prompts/category-j-code-rules-compliance.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-j.outcomes.xml; skip PR posting>")
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-k", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind audit PR <N> loop <L> category K", prompt="<audit XML; bound to category K; load $HOME/.claude/audit-rubrics/category_rubrics/category-k-codebase-conflicts.md and $HOME/.claude/audit-rubrics/prompts/category-k-codebase-conflicts.md; write outcome to <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml; skip PR posting>")
-```
-
-Each category auditor is bound to one rubric file and one prompt file under `$HOME/.claude/audit-rubrics/`, and may file findings only for its bound category letter. None of the eleven posts to the PR — they only write per-letter XML.
-
-The lead awaits **all eleven** background-completion notifications before moving to phase 2. If any of the eleven times out (120s), treat as a hard blocker and abort the loop; do not spawn the consolidator/validator with a partial sibling set.
-
-### AUDIT phase 2 — consolidator/validator after the eleven return
-
-Once every sibling XML at `<run_temp_dir>/pr-<N>/loop-<L>-{a..k}.outcomes.xml` is on disk, spawn the consolidator/validator in a fresh `Agent` call (`run_in_background=true`):
+**Task creation (once per invocation):** After team creation in Step 2, issue 13
+`TaskCreate` calls in **one** assistant message. These tasks persist across
+all audit loops — the cleanup task resets them to `pending` between loops.
 
 ```
-Agent(subagent_type="code-quality-agent", name="bugfind-pr<N>-loop<L>-validate", team_name="<team_name>", model="opus", run_in_background=true, description="Bugfind consolidate/validate PR <N> loop <L>", prompt="<validate XML; read each of the 11 sibling XMLs at <run_temp_dir>/pr-<N>/loop-<L>-a.outcomes.xml through <run_temp_dir>/pr-<N>/loop-<L>-k.outcomes.xml (literal absolute paths, all already on disk); validate each finding: file exists, line in bounds, excerpt matches claimed line, category matches the auditor's bound letter, category A-K, severity P0/P1/P2; quarantine hallucinated findings to <run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins, keep longest description on conflict; re-id as loop<L>-<K>; write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml; before posting, re-read the full review once as the PR author would — merge duplicates, drop findings that miss their mark, rephrase anything confusing — your job is to make the author want to fix these bugs, not to demonstrate the rubric ran; then post review>")
+TaskCreate(subject="{owner}/{repo}#{N} audit {letter} loop {L}",
+           description="Audit category {letter} for {owner}/{repo}#{N}. "
+                       "Loop number in subject is updated by cleanup at end of each loop. "
+                       "Load rubric from $HOME/.claude/audit-rubrics/category_rubrics/category-{letter}-{slug}.md. "
+                       "Load prompt from $HOME/.claude/audit-rubrics/prompts/category-{letter}-{slug}.md. "
+                       "Diff: <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}.patch. "
+                       "Write outcome XML to <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml. "
+                       "Worktree: <worktree_path>.")
+# ... (11 calls, A through K)
+TaskCreate(subject="{owner}/{repo}#{N} consolidate loop {L}",
+           description="Consolidate and validate all 11 audit outcome XMLs for {owner}/{repo}#{N}. "
+                       "Loop number in subject is updated by cleanup at end of each loop. "
+                       "Read sibling XMLs from <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{a..k}.outcomes.xml. "
+                       "Validate, de-dup, post review. Write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml.")
+TaskCreate(subject="{owner}/{repo}#{N} cleanup loop {L}",
+           description="Reset task list for next audit loop on {owner}/{repo}#{N}. "
+                       "Lead-managed: after consolidator completes, update this task to completed, "
+                       "then reset all 12 other tasks to pending and update their loop number in subject.")
 ```
 
-Teammate `-validate` is the opus consolidator/validator: reads all eleven sibling XMLs at explicit absolute paths under `<run_temp_dir>/pr-<N>` (no polling — the lead has already confirmed the files are on disk), then validates each finding: file exists, line in bounds, excerpt matches claimed line, category matches the auditor's bound letter, category is A–K, severity is P0/P1/P2. Hallucinated findings are quarantined to `<run_temp_dir>/pr-<N>/loop-<L>-diagnostics.json` under `validator_rejected`. Valid findings are de-duplicated by `(file, line, category)` (max severity wins, keep longest description on conflict) and re-assigned merged IDs as `loop<L>-<K>`. The `-validate` prompt must embed sibling paths as literal absolutes so `Read` works without discovery.
+Between loops, the lead claims and completes the cleanup task, then resets
+all 12 other tasks to `pending` via `TaskUpdate` — ready for the next loop's
+teammates to claim.
 
-All subagents self-terminate via background completion. The lead awaits the eleven category auditors in phase 1 and then the consolidator/validator notification in phase 2 (120s timeout each). Missing notification → hard blocker.
+**Teammate spawn:** Issue 11 `Agent` calls in **one** assistant message:
+
+```
+Agent(subagent_type="code-quality-agent",
+      name="bugfind-{owner}-{repo}-pr{N}-loop{L}-{letter}",
+      team_name="bugteam",
+      model="opus",
+      run_in_background=true,
+      description="Audit {owner}/{repo}#{N} loop {L} category {letter}",
+      prompt="<audit XML; claim task by subject prefix; bound to category {letter}; load rubric and prompt; write outcome XML; mark task complete; shutdown>")
+```
+
+**Recovery (re-entry or API error):** Before spawning, the lead lists tasks
+(`TaskList`). For each task with status `pending` or `in_progress`:
+
+- Check if the outcome XML exists at `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml`
+- If XML exists → teammate finished but crashed before marking; call `TaskUpdate` to `completed`
+- If no XML → re-spawn that letter's teammate
+
+Tasks already `completed` are skipped.
+
+Each category auditor is bound to one rubric file and one prompt file under
+`$HOME/.claude/audit-rubrics/`, and may file findings only for its bound
+category letter. None of the eleven posts to the PR — they only write
+per-letter XML.
+
+The lead polls `TaskList` until all eleven tasks are `completed`, then
+verifies every XML is on disk before spawning phase 2.
+
+### AUDIT phase 2 — consolidator/validator after all eleven complete
+
+Once every sibling XML at `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{a..k}.outcomes.xml`
+is on disk, spawn the consolidator/validator in a fresh `Agent` call
+(`run_in_background=true`):
+
+```
+Agent(subagent_type="code-quality-agent",
+      name="bugfind-{owner}-{repo}-pr{N}-loop{L}-validate",
+      team_name="bugteam",
+      model="opus",
+      run_in_background=true,
+      description="Consolidate/validate {owner}/{repo}#{N} loop {L}",
+      prompt="<validate XML; read each of the 11 sibling XMLs at <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-a.outcomes.xml through <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-k.outcomes.xml (literal absolute paths, all already on disk); validate each finding: file exists, line in bounds, excerpt matches claimed line, category matches the auditor's bound letter, category A-K, severity P0/P1/P2; quarantine hallucinated findings to <run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-diagnostics.json under validator_rejected; de-dup by (file, line, category), max severity wins, keep longest description on conflict; re-id as loop<L>-<K>; write <worktree_path>/.bugteam-pr<N>-loop<L>.outcomes.xml; before posting, re-read the full review once as the PR author would — merge duplicates, drop findings that miss their mark, rephrase anything confusing — your job is to make the author want to fix these bugs, not to demonstrate the rubric ran; then post review>")
+```
+
+Teammate `-validate` is the opus consolidator/validator: reads all eleven
+sibling XMLs at explicit absolute paths under `<run_temp_dir>/{owner}-{repo}-pr-{N}`
+(no polling — the lead has already confirmed the files are on disk), then
+validates each finding: file exists, line in bounds, excerpt matches claimed
+line, category matches the auditor's bound letter, category is A–K, severity
+is P0/P1/P2. Hallucinated findings are quarantined to
+`<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-diagnostics.json` under
+`validator_rejected`. Valid findings are de-duplicated by `(file, line, category)`
+(max severity wins, keep longest description on conflict) and re-assigned
+merged IDs as `loop<L>-<K>`. The `-validate` prompt must embed sibling paths
+as literal absolutes so `Read` works without discovery.
+
+After the consolidator posts its review and returns, the lead terminates any
+remaining teammates and proceeds to FIX or convergence.
 
 ## FIX action (fresh teammate)
 

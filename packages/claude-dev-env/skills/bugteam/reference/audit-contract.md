@@ -89,25 +89,7 @@ After the primary finding list is complete, every audit runs a second pass again
 
 The audit must either produce new Shape A findings citing new file:line references not present in the first pass, or cite explicit Shape B adversarial-probe entries for each category it re-examined. An adversarial pass that returns "nothing new, confident first pass was complete" is REJECTED — produce evidence or findings, not confidence.
 
-## Haiku secondary auditor
-
-For single-subagent skills (`/qbug`, `/findbugs`) the LEAD spawns two `Agent()` calls in one message:
-
-- **Primary** — `subagent_type=clean-coder`, `model=sonnet` (for qbug cycle) or `subagent_type=code-quality-agent`, `model=sonnet` (for findbugs clean-room).
-- **Secondary (Haiku)** — `subagent_type=code-quality-agent`, `model=haiku`, same self-contained clean-room prompt shape used by `/findbugs`.
-
-Both audit the same diff. The secondary returns findings to the LEAD only — never posted to the PR.
-
-Merge rules:
-
-- **De-dup key**: `(file, line, category)`.
-- **Severity conflict**: max wins (P0 > P1 > P2).
-- **Unique-to-Haiku findings**: added to the primary set with Haiku's severity and source annotation.
-- **Unique-to-primary findings**: kept as-is.
-- **Zero Haiku findings**: primary set trusted; proceed.
-- **Malformed or non-parseable Haiku output**: lead trusts the primary set, logs the event in `loop-<L>-diagnostics.json` under `haiku_findings` as `[{"parse_error": "<message>"}]`.
-
-For multi-subagent skills (`/bugteam`) the parallel-auditors pattern in [`audit-and-teammates.md`](audit-and-teammates.md) already provides per-category coverage via 11 opus category auditors (one per A–K rubric) + an opus consolidator/validator.
+For `/bugteam`, the single audit agent provides per-category coverage by walking all A–K rubrics in one invocation.
 
 ## Post-fix self-audit
 

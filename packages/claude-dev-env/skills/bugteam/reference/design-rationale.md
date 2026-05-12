@@ -2,7 +2,7 @@
 
 ## Core principle (expanded)
 
-The audit-and-fix loop runs inside the master `bugteam` agent team (created once at Step 2). Category-auditor teammates (`code-quality-agent`, opus) and the consolidator spawn into this team as task-claiming teammates with fresh context per loop. The bugfix teammate (`clean-coder`, opus) addresses each audit's findings. Teammates self-terminate after marking tasks complete. A 20-loop hard cap prevents runaway cost. Project permissions are granted at session start and revoked at session end.
+One audit agent (`code-quality-agent`, opus) walks all A–K categories per loop. One fix agent (`clean-coder`, opus) addresses the audit's findings.
 
 Fresh-spawn clean-room isolation: each `Agent` call creates a new subagent with its own context window and no access to prior conversation. After the subagent writes its outcome XML and self-terminates, the lead reads the file. Results never accumulate in the lead’s context beyond the XML artifact. Verbatim Anthropic quotes and URLs: [`../sources.md`](../sources.md).
 

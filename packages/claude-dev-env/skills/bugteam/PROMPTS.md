@@ -69,29 +69,13 @@ cd into `<worktree_path>` before any git or file operation.
 </constraints>
 
 <comment_posting>
-  Category auditors (-a through -k): each is bound to one category letter and
-  loads exactly one rubric from
-  `$HOME/.claude/audit-rubrics/category_rubrics/category-<letter>-<slug>.md`
-  and the matching ready-to-send prompt from
-  `$HOME/.claude/audit-rubrics/prompts/category-<letter>-<slug>.md`. The
-  prompt file is a TEMPLATE — a strong default for the output shape, not a
-  straitjacket. Use its sections, ordering, and depth as the starting frame.
-  When the diff under audit raises a problem that does not fit the template's
-  buckets, or when the template's section makes no sense for what is actually
-  in this diff, reorganize, merge, or drop sections so the bugs are clearest
-  to the reader. Findings, evidence, file:line references, traces, and
-  rationale come from the diff. The template tells you what a thorough audit
-  usually looks like; the diff tells you what this audit actually needs.
-  The rubric file supplies the category's sub-bucket decomposition and
-  decision criteria; the prompt file supplies the output shape. Both must
-  be loaded; neither may be substituted for the other. Findings may be filed only for the
-  bound category letter. Run only steps 1–3 (audit, assign IDs, capture
-  excerpt, validate anchors, format finding bodies), then write outcome XML
-  per <output_format> and return. Skip steps 4–5 — category auditors do not
-  post PR reviews.
+  Load all A–K rubrics from
+  `$HOME/.claude/audit-rubrics/{category_rubrics,prompts}/`. The prompt file
+  is a template for output shape, not a straitjacket — reorganize when the
+  diff demands it. The diff supplies the findings; the rubric supplies the
+  sub-bucket decomposition and decision criteria. Both must be loaded.
 
-  Consolidator/validator (-validate) and single-opus auditors: run all steps
-  below. Before starting, create one task per checklist item via TaskCreate. Use
+  Before starting, create one task per checklist item via TaskCreate. Use
   TaskUpdate to mark each in_progress as you begin it and completed when
   done.
 
@@ -182,19 +166,12 @@ cd into `<worktree_path>` before any git or file operation.
 </comment_posting>
 
 <output_format>
-  For the (-validate) consolidator/validator: write the outcome XML below to
-  .bugteam-pr<N>-loop<L>.outcomes.xml inside the PR's worktree directory
-  (<worktree_path>). For category auditors (-a through -k): write to
-  <run_temp_dir>/pr-<N>/loop-<L>-<letter>.outcomes.xml (absolute path passed
-  in prompt). Category auditors do not post PR reviews; set review_url,
-  finding_comment_id, and finding_comment_url to empty strings, and
-  used_fallback to "false". Omit unanchored findings from category-auditor
-  output — only the consolidator/validator handles those. Return only that
-  path on stdout. The schema:
+  Run `python scripts/write_audit_outcomes.py` to write the outcome XML.
+  The script owns the canonical path, filename, and format.
 </output_format>
 ```
 
-## AUDIT outcome XML schema (bugfind writes this)
+## AUDIT outcome XML schema
 
 ```xml
 <bugteam_audit loop="<L>" review_url="<url>">
@@ -217,8 +194,6 @@ cd into `<worktree_path>` before any git or file operation.
   </verified_clean>
 </bugteam_audit>
 ```
-
-After the teammate writes the XML and returns, the lead reads `.bugteam-pr<N>-loop<L>.outcomes.xml` from the PR's worktree directory with the `Read` tool, parses it, and populates `loop_comment_index` from `<finding>` elements.
 
 ## FIX spawn-prompt XML (bugfix teammate)
 

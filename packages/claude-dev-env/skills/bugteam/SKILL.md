@@ -10,19 +10,13 @@ description: >-
 
 # Bugteam
 
-**Non-negotiable: every audit loop spawns all eleven A–K auditors plus `-validate`. No "focused audit," no single `code-quality-agent` substitution, no skipping categories. Small PRs run the full protocol; empty `<findings/>` per category is a valid result. See [CONSTRAINTS.md](CONSTRAINTS.md) line 5.**
-
 Audit–fix until convergence. Bugfind: `code-quality-agent`, fresh context each
-loop. Bugfix: `clean-coder`. Hard cap: 20 audit loops. Grant `.claude/**` at
-start, revoke always at end. Every audit loop creates eleven tasks and spawns
-eleven category-auditor teammates into the master `bugteam` agent team
-(created once in Step 2) — one per A–K letter. After all eleven complete,
-the consolidator/validator (`-validate`) merges and posts the review.
+loop, auditing all A–K categories. Bugfix: `clean-coder`. Hard cap: 20 audit
+loops. Grant `.claude/**` at start, revoke always at end.
 
-Auditing pairs **two** kinds of content. Neither alone is sufficient: every
-phase-1 auditor loads the envelope/schema from [`PROMPTS.md`](PROMPTS.md) AND
-its bound per-category rubric + ready-to-send prompt from
-`$HOME/.claude/audit-rubrics/{category_rubrics,prompts}/`.
+The audit agent loads the A–K category rubrics from
+`$HOME/.claude/audit-rubrics/{category_rubrics,prompts}/` alongside
+[`PROMPTS.md`](PROMPTS.md) and produces a single outcome XML per loop.
 
 ## Pre-flight
 
@@ -71,8 +65,7 @@ end-to-end mental model before starting Step 0.
 |---|---|
 | Pre-flight, project permissions, PR scope, loop state, run-name / temp-dir | [reference/team-setup.md](reference/team-setup.md) |
 | `--bugbot-retrigger` flag behavior | [reference/team-setup.md](reference/team-setup.md) |
-| Code-rules pre-audit gate, pre-cycle walk on re-invocation, cycle decision tree | [reference/audit-and-teammates.md](reference/audit-and-teammates.md) |
-| AUDIT phase 1 (eleven category auditors) and phase 2 (consolidator/validator) | [reference/audit-and-teammates.md](reference/audit-and-teammates.md) |
+| AUDIT action and code-rules pre-audit gate, pre-cycle walk, cycle decision tree | [reference/audit-and-teammates.md](reference/audit-and-teammates.md) |
 | FIX action and verify-push semantics | [reference/audit-and-teammates.md](reference/audit-and-teammates.md) |
 | Posting per-loop reviews, fix replies, fallback PR comments via GitHub MCP | [reference/github-pr-reviews.md](reference/github-pr-reviews.md) |
 | Teardown, PR description rewrite via `pr-description-writer`, permission revoke, final report | [reference/teardown-publish-permissions.md](reference/teardown-publish-permissions.md) |
@@ -94,6 +87,6 @@ end-to-end mental model before starting Step 0.
 - `EXAMPLES.md` — exit scenarios.
 - `sources.md` — doc URLs and verbatim quotes.
 - `~/.claude/audit-rubrics/` — installed by `npx claude-dev-env` from
-  `packages/claude-dev-env/audit-rubrics/`; each phase-1 auditor binds to one
-  rubric file under `category_rubrics/` and one ready-to-send Variant C prompt
-  under `prompts/`. Required at audit time alongside `PROMPTS.md`.
+  `packages/claude-dev-env/audit-rubrics/`; the audit agent reads all A–K
+  rubrics under `category_rubrics/` and prompts under `prompts/`. Required
+  at audit time alongside `PROMPTS.md`.

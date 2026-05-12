@@ -77,7 +77,20 @@ def load_validate_content() -> ValidateContentCallable:
             file=sys.stderr,
         )
         raise SystemExit(EXIT_CODE_ENFORCER_MISSING)
-    previously_cached_config = sys.modules.pop("config", None)
+    previously_cached_config = {}
+    for each_cached_module_name in [
+        each_module_key
+        for each_module_key in list(sys.modules)
+        if each_module_key == "config" or each_module_key.startswith("config.")
+    ]:
+        previously_cached_config[each_cached_module_name] = sys.modules.pop(
+            each_cached_module_name
+        )
+    hooks_directory = package_root / "hooks"
+    hooks_directory_str = str(hooks_directory)
+    hooks_was_in_path = hooks_directory_str in sys.path
+    if hooks_directory_str not in sys.path:
+        sys.path.insert(0, hooks_directory_str)
     try:
         specification = importlib.util.spec_from_file_location(
             "code_rules_enforcer",
@@ -90,8 +103,9 @@ def load_validate_content() -> ValidateContentCallable:
         specification.loader.exec_module(module)
         return module.validate_content
     finally:
-        if previously_cached_config is not None:
-            sys.modules["config"] = previously_cached_config
+        sys.modules.update(previously_cached_config)
+        if not hooks_was_in_path:
+            sys.path.remove(hooks_directory_str)
 
 
 def resolve_merge_base(repository_root: Path, base_reference: str) -> str:

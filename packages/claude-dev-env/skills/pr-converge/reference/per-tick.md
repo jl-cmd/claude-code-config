@@ -278,7 +278,7 @@ BUGBOT.
 
 Use the `add_issue_comment` MCP tool:
 
-    add_issue_comment(owner="OWNER", repo="REPO", issueNumber=NUMBER, body="bugbot run")
+    add_issue_comment(owner="OWNER", repo="REPO", issue_number=NUMBER, body="bugbot run")
 
 `bugbot run` is empirically the only re-trigger Cursor Bugbot recognizes;
 alternative phrasings (`re-review`, `bugbot please`, etc.) silently no-op.

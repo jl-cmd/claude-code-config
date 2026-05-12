@@ -38,7 +38,7 @@ Access `.head.sha` from the response.
 
 Post the bugbot re-trigger comment:
 
-    add_issue_comment(owner="OWNER", repo="REPO", issueNumber=NUMBER, body="bugbot run")
+    add_issue_comment(owner="OWNER", repo="REPO", issue_number=NUMBER, body="bugbot run")
 
 `bugbot run` is the only recognized re-trigger phrase; alternative phrasings silently no-op.
 
@@ -88,7 +88,7 @@ Two options:
 
 1. Comment-based trigger:
    ```
-   add_issue_comment(owner=OWNER, repo=REPO, issueNumber=NUMBER, body="@copilot review")
+   add_issue_comment(owner=OWNER, repo=REPO, issue_number=NUMBER, body="@copilot review")
    ```
 2. Dedicated MCP tool (when available):
    ```

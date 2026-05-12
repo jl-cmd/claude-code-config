@@ -131,7 +131,7 @@ Copilot review yet, AND Claude clean or absent at `current_head`, AND
 request_copilot_review(owner=OWNER, repo=REPO, pullNumber=NUMBER)
 ```
 
-When the `request_copilot_review` MCP tool is unavailable, use `add_issue_comment` as fallback: `add_issue_comment(owner=OWNER, repo=REPO, issueNumber=NUMBER, body="@copilot review")`.
+When the `request_copilot_review` MCP tool is unavailable, use `add_issue_comment` as fallback: `add_issue_comment(owner=OWNER, repo=REPO, issue_number=NUMBER, body="@copilot review")`.
 
 After request, set `phase = COPILOT_WAIT`, schedule next wakeup, and return.
 The COPILOT_WAIT phase prevents the agent from re-entering convergence gates

@@ -31,7 +31,7 @@ def _strip_read_only_and_retry(
     *_exc_info: object,
 ) -> None:
     try:
-        os.chmod(target_path, stat.S_IWRITE)
+        os.chmod(target_path, os.stat(target_path).st_mode | stat.S_IWRITE)
         removal_function(target_path)
     except OSError as residual_error:
         sys.stderr.write(
@@ -61,6 +61,8 @@ def remove_tree(target_path: str) -> int:
         the chmod-and-retry handler could not finish cleanup; callers must
         treat a non-zero return as "tree may still be present".
     """
+    if not os.path.exists(target_path):
+        return 0
     handler_keyword = _select_handler_keyword()
     try:
         shutil.rmtree(target_path, **handler_keyword)

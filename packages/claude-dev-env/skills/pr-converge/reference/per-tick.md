@@ -29,6 +29,34 @@ inline-lag handling.
 - **`/pr-converge`** (default): loops until convergence. After each tick
   (unless converged or stopped), run **Step 4**.
 
+## Step 0: Ensure on PR branch (worktree-aware)
+
+Before any GitHub interaction, confirm the session is on the PR's actual
+branch. If the PR branch is checked out in a different git worktree, the
+current session must switch into that worktree — pushing from a
+differently-named local branch to the PR branch via refspec silently works,
+but the divergence surface grows with every tick and rebase/history
+operations become unsafe.
+
+1. Resolve the PR's head ref from the API:
+   ```
+   pull_request_read(method="get", pullNumber=N, owner=O, repo=R) → `.head.ref`
+   ```
+2. Run ``git branch --show-current`` in the current session. If it matches
+   `.head.ref`, continue to Step 1.
+3. If it does NOT match, run ``git worktree list``. Scan for the entry whose
+   branch column matches `.head.ref`.
+   - **Found:** call `EnterWorktree(path=<that worktree path>)` to switch
+     the session into the correct worktree, then continue to Step 1.
+   - **Not found:** the PR branch is not checked out anywhere. Create a
+     fresh worktree: `git worktree add <temp_dir>/pr-<N>-worktree
+     origin/<head.ref>`, then `EnterWorktree(path=<that path>)`.
+4. After switching, `git fetch origin <head.ref>` and `git merge --ff-only
+   origin/<head.ref>` to ensure the worktree is at the latest PR HEAD.
+
+This step runs on every tick — it is cheap (two local git commands + one
+API call) and guards against session drift across wakeup cycles.
+
 ## Step 1: Resolve current HEAD and PR context
 
 Read prior tick's state line from most recent assistant message (or

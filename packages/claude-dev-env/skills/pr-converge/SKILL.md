@@ -121,6 +121,8 @@ post a fresh PR in a fresh branch based on origin main to the user.
   `add_reply_to_pull_request_comment`,
   `pull_request_review_write`) stay on the MCP — they return one record
   with no pagination involved.
+- **PR branch checked out in a different worktree** —
+  `git branch --show-current != .head.ref` → run `per-tick.md` Step 0.
 
 ## First tick of a session
 

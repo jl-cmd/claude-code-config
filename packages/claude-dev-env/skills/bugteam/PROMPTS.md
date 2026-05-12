@@ -298,8 +298,8 @@ cd into `<worktree_path>` before any git or file operation.
       threadId=<finding_comment_id>)`.
 
   11. Append the fix summary gist URL (from step 9) to the parent review
-      via `add_reply_to_pull_request_comment(owner=<O>, repo=<R>,
-      issue_number=<N>, body=<summary_markdown>)`. The body carries the
+      via `add_reply_to_pull_request_comment(commentId=<id>, body=...,
+      owner=<O>, repo=<R>, pullNumber=<N>)`. The body carries the
       gist URL plus a one-line summary of fixes applied this loop.
 
   12. Write `.bugteam-pr<N>-loop<L>.fix-outcomes.xml` inside

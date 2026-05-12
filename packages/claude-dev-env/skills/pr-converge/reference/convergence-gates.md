@@ -62,18 +62,21 @@ Decide (four branches; match first whose predicate holds):
 ## (b) Claude reviewer gate
 
 Fetch latest Claude reviewer (`claude[bot]`) review plus inline comments
-anchored to most recent Claude review on `current_head`:
+anchored to most recent Claude review on `current_head`. **Same
+MCP-truncation gotcha — use `gh api --paginate --slurp`**:
 
-```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
-  → filter `.user.login` for claude (case-insensitive substring "claude")
-    AND `.commit_id == current_head`
-  → sort by `.submitted_at` descending
+```bash
+# Newest Claude review at HEAD
+gh api 'repos/<owner>/<repo>/pulls/<N>/reviews?per_page=100' --paginate --slurp \
+  | jq --arg sha '<current_head>' \
+      '[.[][] | select((.user.login | ascii_downcase) | contains("claude"))
+              | select(.commit_id == $sha)]
+       | sort_by(.submitted_at) | reverse | .[0]'
 
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-  → filter threads where `is_outdated == false` AND `is_resolved == false`
-    AND `pull_request_review_id` matches the newest Claude review on `current_head`
-    AND any comment has `.author` matching Claude (case-insensitive substring "claude")
+# Claude inline comments from newest review
+gh api 'repos/<owner>/<repo>/pulls/<N>/comments?per_page=100' --paginate --slurp \
+  | jq --arg review_id '<review_id>' \
+      '[.[][] | select(.pull_request_review_id == ($review_id | tonumber))]'
 ```
 
 Decide (four branches; match first whose predicate holds):
@@ -139,8 +142,8 @@ When the `request_copilot_review` MCP tool is unavailable, use `add_issue_commen
 After request, set `phase = COPILOT_WAIT`, schedule next wakeup, and return.
 The COPILOT_WAIT phase prevents the agent from re-entering convergence gates
 while Copilot processes. Next tick with `phase == COPILOT_WAIT`:
-re-run `get_reviews` + `get_review_comments` filtered for Copilot
-(identical to gate (a) fetch) against `current_head`. Decide:
+re-run the gate (a) `gh api --paginate --slurp` fetch for Copilot
+against `current_head`. Decide:
 
 - **Copilot review present at `current_head`:**
   - `state: APPROVED` → set `copilot_clean_at = current_head`. Record
@@ -165,13 +168,16 @@ re-run `get_reviews` + `get_review_comments` filtered for Copilot
 Before marking ready, count unresolved review threads from all bot
 reviewers (Bugbot, Copilot, Claude) anchored to `current_head`:
 
+```bash
+gh api 'repos/<owner>/<repo>/pulls/<N>/comments?per_page=100' --paginate --slurp \
+  | jq '[.[][] | select(.in_reply_to_id == null)
+              | select((.user.login | ascii_downcase) | test("copilot|cursor|bugbot|claude"))]
+         | sort_by(.created_at) | reverse'
 ```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-  → filter threads where `is_outdated == false` AND `is_resolved == false`
-    AND any comment has `.author` matching a bot reviewer
-    (case-insensitive substring "copilot", "cursor", "bugbot", or "claude")
-  → count
-```
+
+Then cross-check thread state (`is_outdated`, `is_resolved`) from
+`pull_request_read(method="get_review_comments")` — safe for thread
+state on PRs with fewer than ~25 unresolved threads.
 
 Decide:
 

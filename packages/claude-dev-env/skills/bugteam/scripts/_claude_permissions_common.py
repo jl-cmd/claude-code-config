@@ -15,11 +15,23 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
+_previously_cached_config = {}
+for each_cached_module_name in [
+    each_module_key
+    for each_module_key in list(sys.modules)
+    if each_module_key == "config" or each_module_key.startswith("config.")
+]:
+    _previously_cached_config[each_cached_module_name] = sys.modules.pop(
+        each_cached_module_name
+    )
+
 from config.claude_permissions_common_constants import (
     ATOMIC_WRITE_TEMPORARY_SUFFIX,
     DEFAULT_SETTINGS_FILE_MODE,
     TEXT_FILE_ENCODING,
 )
+
+sys.modules.update(_previously_cached_config)
 
 
 def exit_with_error(message: str) -> NoReturn:

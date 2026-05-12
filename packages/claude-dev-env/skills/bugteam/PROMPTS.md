@@ -85,9 +85,10 @@ cd into `<worktree_path>` before any git or file operation.
   The rubric file supplies the category's sub-bucket decomposition and
   decision criteria; the prompt file supplies the output shape. Both must
   be loaded; neither may be substituted for the other. Findings may be filed only for the
-  bound category letter. Run only steps 1–2 (audit, assign IDs, capture
-  excerpt, validate anchors), then write outcome XML per <output_format>
-  and return. Skip steps 3–5 — category auditors do not post PR reviews.
+  bound category letter. Run only steps 1–3 (audit, assign IDs, capture
+  excerpt, validate anchors, format finding bodies), then write outcome XML
+  per <output_format> and return. Skip steps 4–5 — category auditors do not
+  post PR reviews.
 
   Consolidator/validator (-validate) and single-opus auditors: run all steps
   below. Before starting, create one task per checklist item via TaskCreate. Use
@@ -120,6 +121,10 @@ cd into `<worktree_path>` before any git or file operation.
        <2-3 sentence description with concrete trace>
 
        _From /bugteam audit loop <L>._
+
+  3.5. Publish the audit summary via `/doc-gist`. Pass the full findings
+       list as the gist body. Capture the returned gist URL for inclusion
+       in the review body at step 4.
 
   4. **Before posting, read the full review once as if you were the PR
      author.** Ask: would I understand what to fix and why? Do any two
@@ -283,7 +288,22 @@ cd into `<worktree_path>` before any git or file operation.
      - "Could not address this loop: <one-line reason>" if you skipped or failed it
      - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
      Body text is passed directly as string parameters -- no temp files, no jq, no shell pipes.
-  9. Write `.bugteam-pr<N>-loop<L>.fix-outcomes.xml` inside `<worktree_path>` (schema below) and return its path.
+  9. Publish the fix summary gist via `/doc-gist`. Pass the fix report
+     (what was fixed, what was skipped, what was left unaddressed) as the
+     gist body. Capture the returned gist URL.
+
+  10. For each resolved finding, call
+      `pull_request_review_write(method="resolve_thread", owner=<O>,
+      repo=<R>, pullNumber=<N>,
+      threadId=<finding_comment_id>)`.
+
+  11. Append the fix summary gist URL (from step 9) to the parent review
+      via `add_reply_to_pull_request_comment(owner=<O>, repo=<R>,
+      issue_number=<N>, body=<summary_markdown>)`. The body carries the
+      gist URL plus a one-line summary of fixes applied this loop.
+
+  12. Write `.bugteam-pr<N>-loop<L>.fix-outcomes.xml` inside
+      `<worktree_path>` (schema below) and return its path.
 </execution>
 
 <outcome_xml_schema>

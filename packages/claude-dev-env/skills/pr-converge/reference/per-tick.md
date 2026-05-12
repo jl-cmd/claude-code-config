@@ -233,18 +233,21 @@ review. Do **not** run bugteam here — that only happens after BUGBOT clean
 on this HEAD.
 
 a. Fetch latest Copilot review at `current_head` plus unaddressed inline
-   comments:
+   comments. **Same MCP-truncation gotcha as BUGBOT — use `gh api
+   --paginate --slurp` from `Bash`**:
 
-   ```
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
-  → filter `.user.login` for copilot (case-insensitive substring "copilot")
-    AND `.commit_id == current_head`
-  → sort by `.submitted_at` descending
+   ```bash
+   # Newest Copilot review at HEAD
+   gh api 'repos/<owner>/<repo>/pulls/<N>/reviews?per_page=100' --paginate --slurp \
+     | jq --arg sha '<current_head>' \
+         '[.[][] | select((.user.login | ascii_downcase) | contains("copilot"))
+                 | select(.commit_id == $sha)]
+          | sort_by(.submitted_at) | reverse | .[0]'
 
-pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
-  → filter threads where `is_outdated == false` AND `is_resolved == false`
-    AND `pull_request_review_id` matches the newest Copilot review
-    AND any comment has `.author` matching Copilot (case-insensitive substring "copilot")
+   # Copilot inline comments from newest review
+   gh api 'repos/<owner>/<repo>/pulls/<N>/comments?per_page=100' --paginate --slurp \
+     | jq --arg review_id '<review_id>' \
+         '[.[][] | select(.pull_request_review_id == ($review_id | tonumber))]'
    ```
 
 b. Decide (three branches; match first whose predicate holds):

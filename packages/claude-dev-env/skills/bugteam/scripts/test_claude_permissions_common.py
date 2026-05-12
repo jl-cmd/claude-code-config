@@ -1,5 +1,7 @@
+import importlib
 import sys
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import patch
 
 import pytest
@@ -128,3 +130,52 @@ def test_is_valid_project_root_helper_is_not_orphaned_in_common_module() -> None
     )
     assert callable(grant_module.is_valid_project_root)
     assert callable(revoke_module.is_valid_project_root)
+
+
+def _reload_with_stale_config_cache(module_name: str) -> ModuleType:
+    fake_submodule_name = "config.claude_permissions_common_constants"
+    fake_parent_name = "config"
+    sentinel_module_a = ModuleType(fake_parent_name)
+    sentinel_module_b = ModuleType(fake_submodule_name)
+    sys.modules[fake_parent_name] = sentinel_module_a
+    sys.modules[fake_submodule_name] = sentinel_module_b
+    try:
+        target_module = sys.modules.get(module_name)
+        if target_module is None:
+            target_module = importlib.import_module(module_name)
+        else:
+            target_module = importlib.reload(target_module)
+    finally:
+        sys.modules.pop(fake_parent_name, None)
+        sys.modules.pop(fake_submodule_name, None)
+    return target_module
+
+
+def test_grant_module_import_evicts_cached_config_submodules() -> None:
+    """grant_project_claude_permissions must evict cached `config.*` on import.
+
+    Regression for loop1-2: without a defensive cache pop above sys.path.insert,
+    a cached `config` package shadows scripts/config/ and the from-import raises.
+    """
+    reloaded_module = _reload_with_stale_config_cache(
+        "grant_project_claude_permissions"
+    )
+    assert hasattr(reloaded_module, "is_valid_project_root"), (
+        "reloaded grant module must bind its top-level helpers normally even "
+        "when sys.modules contained a stale `config` package at import time"
+    )
+
+
+def test_revoke_module_import_evicts_cached_config_submodules() -> None:
+    """revoke_project_claude_permissions must evict cached `config.*` on import.
+
+    Regression for loop1-3: without a defensive cache pop above sys.path.insert,
+    a cached `config` package shadows scripts/config/ and the from-import raises.
+    """
+    reloaded_module = _reload_with_stale_config_cache(
+        "revoke_project_claude_permissions"
+    )
+    assert hasattr(reloaded_module, "is_valid_project_root"), (
+        "reloaded revoke module must bind its top-level helpers normally even "
+        "when sys.modules contained a stale `config` package at import time"
+    )

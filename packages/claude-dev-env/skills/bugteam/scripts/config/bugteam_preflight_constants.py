@@ -12,9 +12,6 @@ ENFORCEMENT_ABSENT_MESSAGE: str = (
 )
 PYTEST_EXIT_CODE_NO_TESTS_COLLECTED: int = 5
 EXIT_CODE_HOOKS_PATH_CHECK_FAILED: int = 1
-EXIT_CODE_ENFORCEMENT_ABSENT: int = 1
-EXIT_CODE_PYTEST_FAILED: int = 2
-EXIT_CODE_PRE_COMMIT_FAILED: int = 3
 ALL_DISCOVERY_IGNORE_DIRECTORIES: frozenset[str] = frozenset(
     {"site-packages", ".venv", "venv", "node_modules"}
 )
@@ -32,3 +29,7 @@ ALL_PRE_COMMIT_ARGUMENTS: tuple[str, ...] = (
     "--all-files",
 )
 GIT_DIRECTORY_NAME: str = ".git"
+PYTEST_INI_FILENAME: str = "pytest.ini"
+PYPROJECT_FILENAME: str = "pyproject.toml"
+PYPROJECT_PYTEST_SECTION_PREFIX: str = "[tool.pytest"
+PRE_COMMIT_CONFIG_FILENAME: str = ".pre-commit-config.yaml"

@@ -5,6 +5,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+for each_cached_module_name in [
+    each_module_key
+    for each_module_key in list(sys.modules)
+    if each_module_key == "config" or each_module_key.startswith("config.")
+]:
+    sys.modules.pop(each_cached_module_name, None)
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -87,6 +93,12 @@ def list_local_core_hooks_path_values(
         env=all_environment_overrides,
     )
     if completed_process.returncode != 0:
+        if completed_process.stderr.strip():
+            raise RuntimeError(
+                f"git config --local --get-all core.hooksPath failed on "
+                f"{repository_root} (exit {completed_process.returncode}): "
+                f"{completed_process.stderr.strip()}"
+            )
         return []
     return [
         each_line.strip()
@@ -116,6 +128,12 @@ def read_global_core_hooks_path(
         env=all_environment_overrides,
     )
     if completed_process.returncode != 0:
+        if completed_process.stderr.strip():
+            raise RuntimeError(
+                f"git config --global --get core.hooksPath failed "
+                f"(exit {completed_process.returncode}): "
+                f"{completed_process.stderr.strip()}"
+            )
         return ""
     return completed_process.stdout.strip()
 

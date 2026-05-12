@@ -9,6 +9,12 @@ the changes applied. No-op when the entries already exist.
 import sys
 from pathlib import Path
 
+for each_cached_module_name in [
+    each_module_key
+    for each_module_key in list(sys.modules)
+    if each_module_key == "config" or each_module_key.startswith("config.")
+]:
+    sys.modules.pop(each_cached_module_name, None)
 parent_directory = str(Path(__file__).resolve().parent)
 if parent_directory not in sys.path:
     sys.path.insert(0, parent_directory)
@@ -27,7 +33,13 @@ from config.claude_permissions_common_constants import (  # noqa: E402
     ALL_PERMISSION_ALLOW_TOOLS,
     AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
     CLAUDE_DIRECTORY_MARKER,
+    CLAUDE_USER_SETTINGS_FILENAME,
     GIT_DIRECTORY_MARKER,
+    SETTINGS_ADDITIONAL_DIRECTORIES_KEY,
+    SETTINGS_ALLOW_KEY,
+    SETTINGS_AUTO_MODE_KEY,
+    SETTINGS_ENVIRONMENT_KEY,
+    SETTINGS_PERMISSIONS_KEY,
 )
 
 
@@ -56,8 +68,8 @@ def add_rules_to_allow_list(all_settings: dict[str, object], all_rules_to_add: l
     Returns:
         Number of rules actually added (new entries).
     """
-    permissions_section = ensure_dict_section(all_settings, "permissions")
-    existing_allow_list = ensure_list_entry(permissions_section, "allow")
+    permissions_section = ensure_dict_section(all_settings, SETTINGS_PERMISSIONS_KEY)
+    existing_allow_list = ensure_list_entry(permissions_section, SETTINGS_ALLOW_KEY)
     return sum(
         1
         for each_rule in all_rules_to_add
@@ -77,9 +89,9 @@ def add_directory_to_additional_directories(
     Returns:
         1 when the entry was added, 0 when it already existed.
     """
-    permissions_section = ensure_dict_section(all_settings, "permissions")
+    permissions_section = ensure_dict_section(all_settings, SETTINGS_PERMISSIONS_KEY)
     existing_directories = ensure_list_entry(
-        permissions_section, "additionalDirectories"
+        permissions_section, SETTINGS_ADDITIONAL_DIRECTORIES_KEY
     )
     if append_if_missing(existing_directories, directory_path):
         return 1
@@ -98,8 +110,8 @@ def add_auto_mode_environment_entry(
     Returns:
         1 when the entry was added, 0 when it already existed.
     """
-    auto_mode_section = ensure_dict_section(all_settings, "autoMode")
-    existing_environment = ensure_list_entry(auto_mode_section, "environment")
+    auto_mode_section = ensure_dict_section(all_settings, SETTINGS_AUTO_MODE_KEY)
+    existing_environment = ensure_list_entry(auto_mode_section, SETTINGS_ENVIRONMENT_KEY)
     if append_if_missing(existing_environment, entry_text):
         return 1
     return 0
@@ -117,7 +129,7 @@ def grant_permissions_for_current_directory() -> None:
                     contains glob metacharacters.
     """
     claude_user_settings_path: Path = (
-        Path.home() / CLAUDE_DIRECTORY_MARKER / "settings.json"
+        Path.home() / CLAUDE_DIRECTORY_MARKER / CLAUDE_USER_SETTINGS_FILENAME
     )
     project_root_path = Path.cwd()
     if not is_valid_project_root(project_root_path):

@@ -13,8 +13,10 @@ from __future__ import annotations
 import importlib.util
 import os
 import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import patch
 
 import pytest
 
@@ -266,3 +268,117 @@ def test_should_handle_paths_with_spaces(tmp_path: Path) -> None:
 
     assert exit_code == 0
     assert _read_local_hooks_path(repository_path, environment) == ""
+
+
+def test_list_local_core_hooks_path_values_raises_on_unexpected_git_failure(
+    tmp_path: Path,
+) -> None:
+    """A non-empty stderr from git config must propagate as an error.
+
+    Regression for loop1-5: returning [] on every non-zero git exit collapses
+    "key unset" with "git failed for some other reason" — the caller then
+    skips the unset call, leaving a stale local override in place.
+    """
+    repository_path = tmp_path / "repo"
+    repository_path.mkdir()
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=128,
+            stdout="",
+            stderr="fatal: unable to read config file: permission denied\n",
+        )
+
+    with patch.object(subprocess, "run", fake_run):
+        with pytest.raises(RuntimeError):
+            bugteam_fix_hookspath.list_local_core_hooks_path_values(
+                repository_path,
+                None,
+            )
+
+
+def test_read_global_core_hooks_path_raises_on_unexpected_git_failure() -> None:
+    """A non-empty stderr from git config must propagate as an error.
+
+    Regression for loop1-6: returning "" on every non-zero git exit conflates
+    "global hooksPath unset" with "git failed for some other reason" — the
+    caller then overwrites global git config based on a non-truthful read.
+    """
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=128,
+            stdout="",
+            stderr="fatal: bad config line\n",
+        )
+
+    with patch.object(subprocess, "run", fake_run):
+        with pytest.raises(RuntimeError):
+            bugteam_fix_hookspath.read_global_core_hooks_path(None)
+
+
+def test_list_local_core_hooks_path_values_returns_empty_when_key_unset(
+    tmp_path: Path,
+) -> None:
+    """Genuine key-unset (exit 1 + empty stderr) must continue to return []."""
+    repository_path = tmp_path / "repo"
+    repository_path.mkdir()
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="",
+        )
+
+    with patch.object(subprocess, "run", fake_run):
+        result = bugteam_fix_hookspath.list_local_core_hooks_path_values(
+            repository_path,
+            None,
+        )
+    assert result == []
+
+
+def test_read_global_core_hooks_path_returns_empty_when_key_unset() -> None:
+    """Genuine key-unset (exit 1 + empty stderr) must continue to return ''."""
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="",
+        )
+
+    with patch.object(subprocess, "run", fake_run):
+        result = bugteam_fix_hookspath.read_global_core_hooks_path(None)
+    assert result == ""
+
+
+def test_module_import_evicts_cached_config_submodules() -> None:
+    """Importing bugteam_fix_hookspath must evict cached `config.*` submodules.
+
+    Regression for loop1-1: without a defensive cache pop above sys.path.insert,
+    a previously-cached `config` package shadows scripts/config/ and the
+    from-import raises ModuleNotFoundError.
+    """
+    fake_submodule_name = "config.bugteam_fix_hookspath_constants"
+    fake_parent_name = "config"
+    sentinel_module_a = ModuleType(fake_parent_name)
+    sentinel_module_b = ModuleType(fake_submodule_name)
+    sys.modules[fake_parent_name] = sentinel_module_a
+    sys.modules[fake_submodule_name] = sentinel_module_b
+    try:
+        _load_fix_module()
+    finally:
+        sys.modules.pop(fake_parent_name, None)
+        sys.modules.pop(fake_submodule_name, None)
+    assert sys.modules.get(fake_parent_name) is not sentinel_module_a, (
+        "parent `config` cache entry must be evicted on module import"
+    )
+    assert sys.modules.get(fake_submodule_name) is not sentinel_module_b, (
+        "cached `config.<submodule>` entries must be evicted on module import"
+    )

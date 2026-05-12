@@ -6,7 +6,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.modules.pop("config", None)
+for each_cached_module_name in [
+    each_module_key
+    for each_module_key in list(sys.modules)
+    if each_module_key == "config" or each_module_key.startswith("config.")
+]:
+    sys.modules.pop(each_cached_module_name, None)
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -20,7 +25,11 @@ from config.bugteam_preflight_constants import (
     EXIT_CODE_HOOKS_PATH_CHECK_FAILED,
     EXPECTED_HOOKS_PATH_SUFFIX,
     GIT_DIRECTORY_NAME,
+    PRE_COMMIT_CONFIG_FILENAME,
+    PYPROJECT_FILENAME,
+    PYPROJECT_PYTEST_SECTION_PREFIX,
     PYTEST_EXIT_CODE_NO_TESTS_COLLECTED,
+    PYTEST_INI_FILENAME,
 )
 
 
@@ -104,7 +113,7 @@ def find_repository_root(start: Path) -> Path:
         if (each_candidate / GIT_DIRECTORY_NAME).is_dir() or (each_candidate / GIT_DIRECTORY_NAME).is_file():
             return each_candidate
     for each_candidate in candidates:
-        if (each_candidate / "pytest.ini").is_file():
+        if (each_candidate / PYTEST_INI_FILENAME).is_file():
             return each_candidate
     return resolved
 
@@ -121,13 +130,13 @@ def has_pytest_configuration(root: Path) -> bool:
     Returns:
         True when pytest configuration is found in either location.
     """
-    if (root / "pytest.ini").is_file():
+    if (root / PYTEST_INI_FILENAME).is_file():
         return True
-    pyproject = root / "pyproject.toml"
+    pyproject = root / PYPROJECT_FILENAME
     if not pyproject.is_file():
         return False
     text = pyproject.read_text(encoding="utf-8", errors="replace")
-    return "[tool.pytest" in text
+    return PYPROJECT_PYTEST_SECTION_PREFIX in text
 
 
 def has_discoverable_tests(root: Path) -> bool:
@@ -274,7 +283,7 @@ def main(all_argv: list[str] | None = None) -> int:
             f"{BUGTEAM_PREFLIGHT_PREFIX}no pytest configuration found; skipping pytest.",
             file=sys.stderr,
         )
-    if arguments.pre_commit and (resolved_repository_root / ".pre-commit-config.yaml").is_file():
+    if arguments.pre_commit and (resolved_repository_root / PRE_COMMIT_CONFIG_FILENAME).is_file():
         exit_code = run_pre_commit(resolved_repository_root)
         if exit_code != 0:
             return exit_code

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import importlib.util
 import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
@@ -207,3 +208,61 @@ def test_should_exit_nonzero_when_subprocess_run_raises_os_error(
     assert "permission denied" in captured.err, (
         "Error message must include the underlying OSError detail for diagnosis"
     )
+
+
+def test_module_import_evicts_cached_config_submodules() -> None:
+    """Importing bugteam_preflight must evict cached `config.*` submodules.
+
+    Regression for loop1-4: a single `sys.modules.pop("config", None)` only
+    removes the parent key, leaving stale `config.<submodule>` entries that
+    satisfy the next from-import with the wrong bindings.
+    """
+    fake_submodule_name = "config.bugteam_preflight_constants"
+    fake_parent_name = "config"
+    sentinel_module_a = ModuleType(fake_parent_name)
+    sentinel_module_b = ModuleType(fake_submodule_name)
+    sys.modules[fake_parent_name] = sentinel_module_a
+    sys.modules[fake_submodule_name] = sentinel_module_b
+    try:
+        _load_preflight_module()
+    finally:
+        sys.modules.pop(fake_parent_name, None)
+        sys.modules.pop(fake_submodule_name, None)
+    assert sys.modules.get(fake_parent_name) is not sentinel_module_a, (
+        "parent `config` cache entry must be evicted on module import"
+    )
+    assert sys.modules.get(fake_submodule_name) is not sentinel_module_b, (
+        "cached `config.<submodule>` entries must be evicted on module import"
+    )
+
+
+def test_has_pytest_configuration_finds_pytest_ini(tmp_path: Path) -> None:
+    """has_pytest_configuration must detect pytest.ini at the repo root.
+
+    Regression for loop1-17/loop1-18: the literals "pytest.ini",
+    "pyproject.toml", and "[tool.pytest" were inlined in production function
+    bodies; centralizing them in config and importing here pins the contract.
+    """
+    repository_root = tmp_path / "repo"
+    repository_root.mkdir()
+    (repository_root / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    assert bugteam_preflight.has_pytest_configuration(repository_root) is True
+
+
+def test_has_pytest_configuration_finds_pyproject_pytest_section(
+    tmp_path: Path,
+) -> None:
+    repository_root = tmp_path / "repo"
+    repository_root.mkdir()
+    (repository_root / "pyproject.toml").write_text(
+        "[tool.pytest.ini_options]\nminversion = '6.0'\n", encoding="utf-8"
+    )
+    assert bugteam_preflight.has_pytest_configuration(repository_root) is True
+
+
+def test_has_pytest_configuration_returns_false_without_either_file(
+    tmp_path: Path,
+) -> None:
+    repository_root = tmp_path / "repo"
+    repository_root.mkdir()
+    assert bugteam_preflight.has_pytest_configuration(repository_root) is False

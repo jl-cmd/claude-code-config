@@ -195,6 +195,10 @@ def write_atomically_with_mode(
         writer = os.fdopen(file_descriptor, "w", encoding=TEXT_FILE_ENCODING)
     except (OSError, MemoryError):
         os.close(file_descriptor)
+        try:
+            os.unlink(str(temporary_path))
+        except OSError:
+            pass
         raise
     with writer:
         writer.write(serialized_content)
@@ -212,8 +216,11 @@ def save_settings(settings_path: Path, all_settings: dict[str, object]) -> None:
     """
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     serialized_settings = serialize_settings_to_json_text(all_settings)
+    process_keyed_temporary_suffix = (
+        f"{ATOMIC_WRITE_TEMPORARY_SUFFIX}.{os.getpid()}"
+    )
     temporary_path = settings_path.with_suffix(
-        settings_path.suffix + ATOMIC_WRITE_TEMPORARY_SUFFIX
+        settings_path.suffix + process_keyed_temporary_suffix
     )
     mode_to_preserve = get_mode_to_preserve(settings_path)
     is_temp_owned_by_this_invocation = False

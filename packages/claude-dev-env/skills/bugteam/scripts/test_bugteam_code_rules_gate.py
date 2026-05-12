@@ -283,17 +283,22 @@ def test_is_staged_file_newly_added_raises_on_git_failure(
     assert "git diff --cached --name-status" in captured.err
 
 
-def test_whole_file_line_set_logs_on_oserror(
+def test_whole_file_line_set_raises_system_exit_on_oserror(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """OSError reading a file must emit a stderr trace identifying the path."""
+    """OSError reading a file must propagate as SystemExit, not silently return ``set()``.
+
+    Regression for loop1-7: returning an empty set on OSError caused the gate
+    to route every violation to the advisory bucket and exit 0 — silently
+    downgrading blocking violations to non-blocking on a read failure.
+    """
     unreadable_path = tmp_path / "broken.py"
     with unittest.mock.patch.object(
         Path, "read_text", side_effect=PermissionError("denied")
     ):
-        result_set = gate_module.whole_file_line_set(unreadable_path)
-    assert result_set == set()
+        with pytest.raises(SystemExit):
+            gate_module.whole_file_line_set(unreadable_path)
     captured = capsys.readouterr()
     assert str(unreadable_path) in captured.err
     assert "denied" in captured.err or "PermissionError" in captured.err

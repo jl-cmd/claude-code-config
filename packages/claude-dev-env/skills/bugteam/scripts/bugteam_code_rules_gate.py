@@ -625,7 +625,7 @@ def whole_file_line_set(file_path: Path) -> set[int]:
             f"{file_path}: {type(read_error).__name__}: {read_error}",
             file=sys.stderr,
         )
-        return set()
+        raise SystemExit(EXIT_CODE_ENFORCER_MISSING) from read_error
     if total_lines <= 0:
         return set()
     return set(range(1, total_lines + 1))

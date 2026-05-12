@@ -86,11 +86,16 @@ def load_validate_content() -> ValidateContentCallable:
         previously_cached_config[each_cached_module_name] = sys.modules.pop(
             each_cached_module_name
         )
-    hooks_directory = package_root / "hooks"
-    hooks_directory_str = str(hooks_directory)
-    hooks_was_in_path = hooks_directory_str in sys.path
-    if hooks_directory_str not in sys.path:
-        sys.path.insert(0, hooks_directory_str)
+    hooks_config_init = package_root / "hooks" / "config" / "__init__.py"
+    if hooks_config_init.is_file():
+        hooks_config_spec = importlib.util.spec_from_file_location(
+            "config",
+            hooks_config_init,
+        )
+        if hooks_config_spec is not None and hooks_config_spec.loader is not None:
+            hooks_config_module = importlib.util.module_from_spec(hooks_config_spec)
+            sys.modules["config"] = hooks_config_module
+            hooks_config_spec.loader.exec_module(hooks_config_module)
     try:
         specification = importlib.util.spec_from_file_location(
             "code_rules_enforcer",
@@ -104,8 +109,6 @@ def load_validate_content() -> ValidateContentCallable:
         return module.validate_content
     finally:
         sys.modules.update(previously_cached_config)
-        if not hooks_was_in_path:
-            sys.path.remove(hooks_directory_str)
 
 
 def resolve_merge_base(repository_root: Path, base_reference: str) -> str:

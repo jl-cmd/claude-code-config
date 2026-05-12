@@ -126,7 +126,7 @@ logical sub-team within the master `bugteam` team. The PR identity token is
 names and filesystem paths, it is slugified to `{owner}-{repo}-pr-{N}`.
 
 - **Teammate name:** `bugfind-{owner}-{repo}-pr{N}-loop{L}-{letter}`
-- **Task subject:** `{owner}/{repo}#{N} audit {letter} loop {L}`
+- **Task subject:** `{owner}/{repo}#{N} audit {letter}`
 - **Outcome XML:** `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml`
 
 The lead filters by the slugified prefix to group tasks and teammates by PR.

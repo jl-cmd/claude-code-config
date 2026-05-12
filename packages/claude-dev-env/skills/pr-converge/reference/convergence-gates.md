@@ -131,13 +131,14 @@ Persist `mergeable_state` into `merge_state_status`. Decide:
 
 Once gates (a), (b), and (c) all pass (Copilot clean at `current_head` *or* no
 Copilot review yet, AND Claude clean or absent at `current_head`, AND
-`mergeable_state == "clean"`), request Copilot review:
+`mergeable_state == "clean"`), request Copilot review via the REST API:
 
-```
-request_copilot_review(owner=OWNER, repo=REPO, pullNumber=NUMBER)
+```bash
+gh api --method POST 'repos/<owner>/<repo>/pulls/<N>/requested_reviewers' \
+  -f 'reviewers[]=copilot-pull-request-reviewer[bot]'
 ```
 
-When the `request_copilot_review` MCP tool is unavailable, use `add_issue_comment` as fallback: `add_issue_comment(owner=OWNER, repo=REPO, issue_number=NUMBER, body="@copilot review")`.
+A `201` response confirms Copilot is a requested reviewer.
 
 After request, set `phase = COPILOT_WAIT`, schedule next wakeup, and return.
 The COPILOT_WAIT phase prevents the agent from re-entering convergence gates

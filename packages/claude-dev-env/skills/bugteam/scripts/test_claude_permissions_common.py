@@ -151,31 +151,45 @@ def _reload_with_stale_config_cache(module_name: str) -> ModuleType:
     return target_module
 
 
-def test_grant_module_import_evicts_cached_config_submodules() -> None:
+def test_grant_module_import_evicts_cached_config_submodules(
+    tmp_path: Path,
+) -> None:
     """grant_project_claude_permissions must evict cached `config.*` on import.
 
     Regression for loop1-2: without a defensive cache pop above sys.path.insert,
     a cached `config` package shadows scripts/config/ and the from-import raises.
+    Calls the rebound `is_valid_project_root` to confirm the real implementation
+    survived the cache eviction (a stale shadow would either raise on import or
+    bind a placeholder that returns the wrong value).
     """
     reloaded_module = _reload_with_stale_config_cache(
         "grant_project_claude_permissions"
     )
-    assert hasattr(reloaded_module, "is_valid_project_root"), (
-        "reloaded grant module must bind its top-level helpers normally even "
-        "when sys.modules contained a stale `config` package at import time"
-    )
+    real_project_root = tmp_path / "project_root"
+    (real_project_root / ".claude").mkdir(parents=True)
+    bare_directory = tmp_path / "no_claude_marker"
+    bare_directory.mkdir()
+    assert reloaded_module.is_valid_project_root(real_project_root) is True
+    assert reloaded_module.is_valid_project_root(bare_directory) is False
 
 
-def test_revoke_module_import_evicts_cached_config_submodules() -> None:
+def test_revoke_module_import_evicts_cached_config_submodules(
+    tmp_path: Path,
+) -> None:
     """revoke_project_claude_permissions must evict cached `config.*` on import.
 
     Regression for loop1-3: without a defensive cache pop above sys.path.insert,
     a cached `config` package shadows scripts/config/ and the from-import raises.
+    Calls the rebound `is_valid_project_root` to confirm the real implementation
+    survived the cache eviction (a stale shadow would either raise on import or
+    bind a placeholder that returns the wrong value).
     """
     reloaded_module = _reload_with_stale_config_cache(
         "revoke_project_claude_permissions"
     )
-    assert hasattr(reloaded_module, "is_valid_project_root"), (
-        "reloaded revoke module must bind its top-level helpers normally even "
-        "when sys.modules contained a stale `config` package at import time"
-    )
+    real_project_root = tmp_path / "project_root"
+    (real_project_root / ".claude").mkdir(parents=True)
+    bare_directory = tmp_path / "no_claude_marker"
+    bare_directory.mkdir()
+    assert reloaded_module.is_valid_project_root(real_project_root) is True
+    assert reloaded_module.is_valid_project_root(bare_directory) is False

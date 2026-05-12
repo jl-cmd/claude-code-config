@@ -614,8 +614,12 @@ def whole_file_line_set(file_path: Path) -> set[int]:
         file_path: Path to the file.
 
     Returns:
-        Set of line numbers (1-based), or an empty set when the file is
-        unreadable or empty.
+        Set of line numbers (1-based), or an empty set when the file is empty.
+
+    Raises:
+        SystemExit: When the file cannot be read; an empty set must not be
+            returned on read failure because the caller treats it as
+            "no lines changed" and silently downgrades blocking violations.
     """
     try:
         total_lines = len(file_path.read_text().splitlines())

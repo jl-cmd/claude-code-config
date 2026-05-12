@@ -73,6 +73,11 @@ def list_local_core_hooks_path_values(
 
     Returns:
         List of local core.hooksPath strings, or empty list when unset.
+
+    Raises:
+        RuntimeError: When git emits a non-zero exit with non-empty stderr;
+            distinguishes a real git failure from the expected "key unset"
+            case (exit 1 with empty stderr).
     """
     git_command = [
         "git",
@@ -117,6 +122,11 @@ def read_global_core_hooks_path(
 
     Returns:
         The global core.hooksPath value, or empty string when unset.
+
+    Raises:
+        RuntimeError: When git emits a non-zero exit with non-empty stderr;
+            distinguishes a real git failure from the expected "key unset"
+            case (exit 1 with empty stderr).
     """
     completed_process = subprocess.run(
         list(ALL_GLOBAL_HOOKS_PATH_ARGUMENTS),

@@ -35,12 +35,12 @@
     <step id="2" name="find_canonical_sources">
       Before running detection rules, identify the canonical source files. A canonical source is the file that defines the authoritative form of a concept. Signs that a file is canonical:
 
-      - It contains structured schemas, payload definitions, or API contracts (files named `gh-payloads.md`, `mcp_tool_signatures.json`, `constants.py`, `config.py`).
+      - It contains structured schemas, payload definitions, or API contracts (files named `gh-payloads.md`, `mcp_tool_signatures.json`, `config.py`).
       - Its name includes "reference", "spec", "schema", "payload", "contract", or "canonical".
       - Other files in the diff cite it as the source of truth ("see X for the full schema", "as defined in Y", "per Z").
       - It defines the implementation that docstrings describe (the `.py` file that contains the function, not the `.md` file that talks about it).
 
-      For each canonical source, note in your manifest what concept it is canonical for. Example: `gh-payloads.md` is canonical for MCP tool parameter names. `constants.py` is canonical for timeout values. `check_bugbot_ci.py` is canonical for how to invoke check_bugbot_ci.
+      For each canonical source, note in your manifest what concept it is canonical for. Example: `gh-payloads.md` is canonical for MCP tool parameter names. `check_bugbot_ci.py` is canonical for how to invoke check_bugbot_ci.
 
       When a detection rule needs to decide what is "correct", the canonical source wins. Always. If no canonical source exists for a concept, flag the inconsistency but mark it as "unresolvable — no canonical source found".
     </step>

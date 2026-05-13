@@ -486,6 +486,26 @@ def _git_reset_hard_allowed_for_command(command: str, current_working_directory:
     return False
 
 
+_CONVERGENCE_BRANCH_PREFIXES = ("claude/", "worktree-")
+
+
+def _force_push_targets_convergence_branch(command: str) -> bool:
+    branch_match = re.search(
+        r"\bgit\s+push\s+(?:--force|-f)\s+\S+\s+(\S+)",
+        command,
+    ) or re.search(
+        r"\bgit\s+push\s+\S+\s+(\S+)\s+(?:--force|-f)",
+        command,
+    )
+    if not branch_match:
+        return False
+    branch = branch_match.group(1)
+    for prefix in _CONVERGENCE_BRANCH_PREFIXES:
+        if branch.startswith(prefix):
+            return True
+    return bool(re.match(r"pr-.*-converge", branch))
+
+
 def main() -> None:
     try:
         hook_input = json.load(sys.stdin)
@@ -526,6 +546,14 @@ def main() -> None:
     if matched_description is not None and "git reset --hard" in matched_description:
         if _git_reset_hard_allowed_for_command(command, os.getcwd()):
             sys.exit(0)
+
+    if (
+        matched_description is not None
+        and "git push" in matched_description
+        and "force" in matched_description
+        and _force_push_targets_convergence_branch(command)
+    ):
+        sys.exit(0)
 
     if matched_description is not None:
         ask_response = {

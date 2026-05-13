@@ -53,15 +53,13 @@ def _read_hook_payload() -> dict[str, object]:
 
 def _resolve_target_path(payload: dict[str, object]) -> Path | None:
     """Extract a writable .html file path from the hook payload, or None to skip."""
-    target_tool_names = ALL_TARGET_TOOL_NAMES
-    html_extension = HTML_FILE_EXTENSION
-    if payload.get("tool_name") not in target_tool_names:
+    if payload.get("tool_name") not in ALL_TARGET_TOOL_NAMES:
         return None
     tool_input = payload.get("tool_input", {})
     if not isinstance(tool_input, dict):
         return None
     raw_path = tool_input.get("file_path", "")
-    if not isinstance(raw_path, str) or not raw_path.lower().endswith(html_extension):
+    if not isinstance(raw_path, str) or not raw_path.lower().endswith(HTML_FILE_EXTENSION):
         return None
     candidate = Path(raw_path)
     if not candidate.is_file():
@@ -71,13 +69,12 @@ def _resolve_target_path(payload: dict[str, object]) -> Path | None:
 
 def _file_contains_sentinel(target_path: Path) -> bool:
     """Read the HTML and check for the publish marker."""
-    publish_sentinel = PUBLISH_SENTINEL
     try:
         contents = target_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         logging.warning("doc_gist_auto_publish: cannot read %s", target_path)
         return False
-    return publish_sentinel in contents
+    return PUBLISH_SENTINEL in contents
 
 
 def _resolve_upload_script() -> Path:

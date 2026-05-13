@@ -25,7 +25,7 @@ if str(_pr_converge_dir) not in sys.path:
 from config.constants import (
     ALL_CLAUDE_DIRTY_REVIEW_STATES,
     ALL_COPILOT_DIRTY_REVIEW_STATES,
-    BUGBOT_CHECK_RUN_COMPLETE_CONCLUSION,
+    ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS,
     BUGBOT_CHECK_RUN_NAME_SUBSTRING,
     BUGBOT_DIRTY_BODY_REGEX,
     CHECK_RUNS_PER_PAGE,
@@ -118,12 +118,12 @@ def _check_bugbot(*, owner: str, repo: str, sha: str) -> tuple[bool, str]:
         if BUGBOT_CHECK_RUN_NAME_SUBSTRING.lower() not in each_name.lower():
             continue
         conclusion = check_entry.get("conclusion", "")
-        if conclusion == BUGBOT_CHECK_RUN_COMPLETE_CONCLUSION:
+        if conclusion in ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS:
             check_id = check_entry.get("id", "?")
             detail_url = check_entry.get("html_url", "")
             details_suffix = f" ({detail_url})" if detail_url else ""
-            return True, f"check run #{check_id}, conclusion: success{details_suffix}"
-        return False, f"check run conclusion is '{conclusion}', expected 'success'"
+            return True, f"check run #{check_id}, conclusion: {conclusion}{details_suffix}"
+        return False, f"check run conclusion is '{conclusion}', expected {ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS}"
     return False, "no bugbot check run found"
 
 

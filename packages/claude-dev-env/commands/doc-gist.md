@@ -3,7 +3,7 @@ description: Upload an HTML file as a secret gist and open the htmlpreview URL. 
 allowed-tools: Bash
 ---
 
-Argument: `$ARGUMENTS` is the path to an existing `.html` file (or `-` to read HTML from a fresh stdin pipe).
+Argument: `$ARGUMENTS` is the path to an existing `.html` file.
 
 Run the doc-gist skill's transport script directly:
 

@@ -9,16 +9,27 @@ import os
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "doc_gist_auto_publish.py")
 SENTINEL = "<!-- @publish-as-gist -->"
 
 
+STUB_PREVIEW_URL = "https://htmlpreview.github.io/?stub"
+
 class _RunHook:
     def __call__(self, tool_name: str, tool_input: dict) -> subprocess.CompletedProcess:
         payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
         with tempfile.TemporaryDirectory() as isolation_root:
+            stub_dir = Path(isolation_root) / "skills" / "doc-gist" / "scripts"
+            stub_dir.mkdir(parents=True)
+            (stub_dir / "gist_upload.py").write_text(
+                f"import sys; print({STUB_PREVIEW_URL!r}); "
+                f"print('Gist: stub', file=sys.stderr); "
+                f"print('Preview: stub', file=sys.stderr)",
+                encoding="utf-8",
+            )
             return subprocess.run(
                 [sys.executable, HOOK_SCRIPT_PATH, isolation_root],
                 input=payload,
@@ -85,7 +96,7 @@ def test_exits_zero_when_html_has_sentinel():
 
         result = _run_hook("Write", {"file_path": html_path, "content": "<html>"})
     assert result.returncode == 0
-    assert result.stderr != ""
+    assert STUB_PREVIEW_URL in result.stdout
 
 
 def test_skips_non_write_tool():

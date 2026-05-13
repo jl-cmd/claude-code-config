@@ -49,7 +49,7 @@ def _read_html(input_argument: str) -> str:
         return sys.stdin.read()
     try:
         return Path(input_argument).expanduser().resolve().read_text(encoding="utf-8")
-    except OSError as error:
+    except (OSError, UnicodeError) as error:
         raise SystemExit(f"Cannot read {input_argument}: {error}")
 
 

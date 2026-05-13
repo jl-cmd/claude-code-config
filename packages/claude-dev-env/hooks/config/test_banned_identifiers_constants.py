@@ -42,6 +42,7 @@ def test_all_banned_identifiers_includes_code_rules_section_5_abbreviations() ->
         "btn",
         "idx",
         "cnt",
+        "tmp",
         "elem",
         "val",
     }

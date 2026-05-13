@@ -1332,8 +1332,8 @@ def _annotation_node_references_any(annotation_node: ast.expr | None) -> bool:
 
 
 def _file_has_exempt_boundary_filename(file_path: str) -> bool:
-    filename = file_path.replace("\\", "/").rsplit("/", 1)[-1]
-    return filename in ALL_BOUNDARY_TYPE_EXEMPT_FILENAMES
+    filename = file_path.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return filename in {each_name.lower() for each_name in ALL_BOUNDARY_TYPE_EXEMPT_FILENAMES}
 
 
 def _signature_annotations(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[

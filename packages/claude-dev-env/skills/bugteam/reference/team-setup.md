@@ -29,7 +29,7 @@ python "${CLAUDE_SKILL_DIR}/scripts/bugteam_fix_hookspath.py"
 
 The fix script removes any non-canonical local-scope override on the active
 repository, sets the global `core.hooksPath` to `~/.claude/hooks/git-hooks` if
-missing or wrong, and re-runs `preflight.py`. Its exit code becomes the
+missing or wrong, and re-runs `bugteam_preflight.py`. Its exit code becomes the
 preflight outcome. Exit 0 → continue to Step 0. Non-zero only when the
 canonical hooks directory is missing (run `npx claude-dev-env .` first) or
 `git config --global` writes are blocked. Other preflight failures (pytest,

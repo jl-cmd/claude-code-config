@@ -34,7 +34,7 @@ from typing import Optional
 import logging
 
 logger = logging.getLogger("code_rules_enforcer")
-_handler = logging.StreamHandler(sys.stdout)
+_handler = logging.StreamHandler(sys.stderr)
 _handler.setFormatter(logging.Formatter("%(message)s"))
 logger.addHandler(_handler)
 logger.setLevel(logging.DEBUG)
@@ -4084,7 +4084,7 @@ def main() -> None:
                 "permissionDecisionReason": f"BLOCKED: [CODE_RULES] {len(issues)} violation(s): {issue_list}",
             }
         }
-        logger.info(json.dumps(deny_payload))
+        print(json.dumps(deny_payload))
         sys.stdout.flush()
 
     sys.exit(0)

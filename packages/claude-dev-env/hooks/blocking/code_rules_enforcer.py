@@ -3811,6 +3811,7 @@ def validate_content(
     """
     extension = get_file_extension(file_path)
     all_issues = []
+    effective_content = full_file_content or content
 
     if extension in PYTHON_EXTENSIONS:
         if not is_test_file(file_path):
@@ -3823,16 +3824,16 @@ def validate_content(
         all_issues.extend(check_constants_outside_config(content, file_path))
         all_issues.extend(check_constants_outside_config_advisory(content, file_path))
         all_issues.extend(check_file_global_constants_use_count(content, file_path))
-        all_issues.extend(check_type_escape_hatches(content, file_path))
+        all_issues.extend(check_type_escape_hatches(effective_content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))
-        all_issues.extend(check_banned_prefixes(content, file_path))
-        all_issues.extend(check_stub_implementations(content, file_path))
-        all_issues.extend(check_typed_dict_encode_decode(content, file_path))
-        all_issues.extend(check_test_branching_in_production(content, file_path))
-        all_issues.extend(check_bare_except(content, file_path))
-        all_issues.extend(check_thin_wrapper_files(full_file_content or content, file_path))
-        all_issues.extend(check_boundary_types(content, file_path))
-        all_issues.extend(check_docstring_format(content, file_path))
+        all_issues.extend(check_banned_prefixes(effective_content, file_path))
+        all_issues.extend(check_stub_implementations(effective_content, file_path))
+        all_issues.extend(check_typed_dict_encode_decode(effective_content, file_path))
+        all_issues.extend(check_test_branching_in_production(effective_content, file_path))
+        all_issues.extend(check_bare_except(effective_content, file_path))
+        all_issues.extend(check_thin_wrapper_files(effective_content, file_path))
+        all_issues.extend(check_boundary_types(effective_content, file_path))
+        all_issues.extend(check_docstring_format(effective_content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
         all_issues.extend(check_existence_check_tests(content, file_path))

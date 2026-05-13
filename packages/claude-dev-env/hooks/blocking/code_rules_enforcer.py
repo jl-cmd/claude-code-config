@@ -305,7 +305,10 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
             elif "//" in line:
                 before_slash = line[:line.index("//")]
                 if before_slash.strip():
-                    inline_comments.add(stripped[stripped.index("//"):])
+                    comment_start = stripped.index("//")
+                    comment_text = stripped[comment_start + 2 :].strip()
+                    if not comment_text.startswith(("TODO", "FIXME", "HACK", "XXX")):
+                        inline_comments.add(stripped[comment_start:])
 
     return inline_comments, standalone_comments
 

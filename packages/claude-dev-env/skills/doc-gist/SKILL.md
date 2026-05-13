@@ -25,7 +25,7 @@ Per Thariq's html-effectiveness thesis: *"twenty self-contained .html files an a
 
 1. You write HTML to any path (no directory rule, no naming rule).
 2. The HTML contains the marker comment `<!-- @publish-as-gist -->` — typically as the first child of `<head>` or just inside `<body>`.
-3. The PostToolUse hook ([`workflow/doc_gist_auto_publish.py`](../../hooks/workflow/doc_gist_auto_publish.py)) fires after the Write/Edit completes, sees the marker, and runs [`scripts/gist_upload.py`](scripts/gist_upload.py) against the file.
+3. The PostToolUse hook ([`workflow/doc_gist_auto_publish.py`](../../hooks/workflow/doc_gist_auto_publish.py)) fires after the Write/Edit completes, sees the marker, and runs [`skills/doc-gist/scripts/gist_upload.py`](scripts/gist_upload.py) against the file.
 4. The upload script's gist + preview URLs print into your tool output. Quote them back to the user.
 
 The hook is a no-op for any HTML that lacks the marker — React components, test fixtures, scraped pages, partial fragments. The marker is the *intent signal*; absent marker means "this HTML isn't for sharing."
@@ -46,12 +46,12 @@ Include `<!-- @publish-as-gist -->` when **the artifact is for sharing or readin
 
 The user's prompt is the strongest signal. *"Make me a writeup of this PR"* → publish. *"Add this React component"* → don't publish.
 
-## The transport script — `scripts/gist_upload.py`
+## The transport script — `skills/doc-gist/scripts/gist_upload.py`
 
 For manual invocation when the marker route doesn't apply (an existing file you want to publish, HTML piped from another tool, a one-off):
 
 ```
-python scripts/gist_upload.py --input <path-or-->
+python skills/doc-gist/scripts/gist_upload.py --input <path-or-->
                               [--filename gist-file.html]
                               [--description "short label"]
                               [--no-open]
@@ -93,7 +93,7 @@ Read the matching example for the artifact you're designing. Crib palette, typog
 ## Folder map
 
 - `SKILL.md` — this file.
-- `scripts/gist_upload.py` — transport: HTML in, gist + preview URLs out.
-- `scripts/config/gist_upload_constants.py` — the URL prefixes and template strings.
+- `skills/doc-gist/scripts/gist_upload.py` — transport: HTML in, gist + preview URLs out.
+- `skills/doc-gist/scripts/config/gist_upload_constants.py` — the URL prefixes and template strings.
 - `references/examples/` — Thariq's 20 html-effectiveness prototypes.
 - (PostToolUse hook lives in `packages/claude-dev-env/hooks/workflow/doc_gist_auto_publish.py` — wired into the plugin's `hooks.json`.)

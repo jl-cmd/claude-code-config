@@ -132,6 +132,16 @@
           }
         ]
       }
+      {
+        "matcher": "mcp__plugin_github_github__add_issue_comment",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/bot_mention_comment_blocker.py",
+            "timeout": 10
+          }
+        ]
+      }
     ],
     "SessionStart": [
       {

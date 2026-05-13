@@ -31,14 +31,6 @@ import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
-import logging
-
-logger = logging.getLogger("code_rules_enforcer")
-_handler = logging.StreamHandler(sys.stderr)
-_handler.setFormatter(logging.Formatter("%(message)s"))
-logger.addHandler(_handler)
-logger.setLevel(logging.DEBUG)
-logger.propagate = False
 
 _BLOCKING_DIR = str(Path(__file__).resolve().parent)
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)

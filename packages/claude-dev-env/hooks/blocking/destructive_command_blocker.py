@@ -9,6 +9,16 @@ import sys
 import tempfile
 from pathlib import Path
 
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from config.convergence_branch_constants import (  # noqa: E402
+    ALL_CONVERGENCE_BRANCH_PREFIXES,
+    CONVERGENCE_BRANCH_SUFFIX_PATTERN,
+    CONVERGENCE_FORCE_PUSH_DETECTION_PATTERN,
+)
+
 CLAUDE_DIRECTORY_PATH = os.path.normpath(os.path.expanduser("~/.claude"))
 GH_REDIRECT_ACTIVE_ENV_VAR = "CLAUDE_GH_REDIRECT_ACTIVE"
 GH_REDIRECT_ACTIVE_TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -487,11 +497,11 @@ def _git_reset_hard_allowed_for_command(command: str, current_working_directory:
 
 
 def _is_convergence_branch(branch: str) -> bool:
-    convergence_branch_prefixes = ("claude/", "worktree-")
+    convergence_branch_prefixes = ALL_CONVERGENCE_BRANCH_PREFIXES
     for each_prefix in convergence_branch_prefixes:
         if branch.startswith(each_prefix):
             return True
-    return bool(re.match(r"pr-.*-converge$", branch))
+    return bool(re.match(CONVERGENCE_BRANCH_SUFFIX_PATTERN, branch))
 
 
 def _all_refspecs_are_convergence_branches(post_remote_text: str) -> bool:
@@ -509,16 +519,17 @@ def _all_refspecs_are_convergence_branches(post_remote_text: str) -> bool:
 
 
 def _force_push_targets_convergence_branch(command: str) -> bool:
+    convergence_force_push_detection_pattern = (
+        CONVERGENCE_FORCE_PUSH_DETECTION_PATTERN
+    )
     is_force_push_found = False
-    for each_pattern in (
-        r"\bgit\s+push\s+(?:--force|-f)\s+\S+\s+(.*)",
-        r"\bgit\s+push\s+\S+\s+(.*)\s+(?:--force|-f)",
+    for each_match in re.finditer(
+        convergence_force_push_detection_pattern, command
     ):
-        for each_match in re.finditer(each_pattern, command):
-            is_force_push_found = True
-            post_remote_text = each_match.group(1).strip()
-            if not _all_refspecs_are_convergence_branches(post_remote_text):
-                return False
+        is_force_push_found = True
+        post_remote_text = each_match.group(1).strip()
+        if not _all_refspecs_are_convergence_branches(post_remote_text):
+            return False
     return is_force_push_found
 
 

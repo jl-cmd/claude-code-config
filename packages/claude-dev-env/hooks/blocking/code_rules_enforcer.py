@@ -845,30 +845,40 @@ def check_type_escape_hatches(content: str, file_path: str) -> list[str]:
     is_any_exempt = _file_path_matches_any_exemption(file_path)
 
     if not is_any_exempt:
+        any_annotation_issues: list[str] = []
         for each_any_line in _find_any_annotation_lines(content):
-            issues.append(f"Line {each_any_line}: Any annotation - replace with explicit type")
+            any_annotation_issues.append(f"Line {each_any_line}: Any annotation - replace with explicit type")
+        issues.extend(any_annotation_issues[:MAX_TYPE_ESCAPE_HATCH_ISSUES])
 
+        any_import_issues: list[str] = []
         for each_import_line in _find_typing_any_imports(content):
-            issues.append(
+            any_import_issues.append(
                 f"Line {each_import_line}: 'from typing import Any' - remove the Any import and use explicit types"
             )
+        issues.extend(any_import_issues[:MAX_TYPE_ESCAPE_HATCH_ISSUES])
 
+        wildcard_issues: list[str] = []
         for each_wildcard_line in _find_typing_wildcard_imports(content):
-            issues.append(
+            wildcard_issues.append(
                 f"Line {each_wildcard_line}: 'from typing import *' wildcard import - import explicit names instead"
             )
+        issues.extend(wildcard_issues[:MAX_TYPE_ESCAPE_HATCH_ISSUES])
 
+        cast_issues: list[str] = []
         for each_cast_line in _find_cast_call_lines(content):
-            issues.append(
+            cast_issues.append(
                 f"Line {each_cast_line}: cast() call - escape hatch around the type system; use explicit types or runtime validation"
             )
+        issues.extend(cast_issues[:MAX_TYPE_ESCAPE_HATCH_ISSUES])
 
+    type_ignore_issues: list[str] = []
     for each_ignore_line in _find_unjustified_type_ignore_lines(content):
-        issues.append(
+        type_ignore_issues.append(
             f"Line {each_ignore_line}: Unjustified # type: ignore - add trailing '# reason' explaining why"
         )
+    issues.extend(type_ignore_issues[:MAX_TYPE_ESCAPE_HATCH_ISSUES])
 
-    return issues[:MAX_TYPE_ESCAPE_HATCH_ISSUES]
+    return issues
 
 
 def is_migration_file(file_path: str) -> bool:
@@ -1665,6 +1675,15 @@ def _function_is_abstract(function_node: ast.FunctionDef | ast.AsyncFunctionDef)
     )
 
 
+def _class_is_protocol(class_node: ast.ClassDef) -> bool:
+    for each_base in class_node.bases:
+        if isinstance(each_base, ast.Name) and each_base.id == "Protocol":
+            return True
+        if isinstance(each_base, ast.Attribute) and each_base.attr == "Protocol":
+            return True
+    return False
+
+
 def _class_inherits_from_protocol_or_abc(class_node: ast.ClassDef) -> bool:
     for each_base in class_node.bases:
         if isinstance(each_base, ast.Name) and each_base.id in {"Protocol", "ABC"}:
@@ -1743,8 +1762,11 @@ def check_stub_implementations(content: str, file_path: str) -> list[str]:
     abstract_class_function_ids: set[int] = set()
     for each_node in ast.walk(parsed_tree):
         if isinstance(each_node, ast.ClassDef) and _class_inherits_from_protocol_or_abc(each_node):
+            is_protocol = _class_is_protocol(each_node)
             for each_class_member in each_node.body:
-                if isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)) and _function_is_abstract(each_class_member):
+                if not isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if is_protocol or _function_is_abstract(each_class_member):
                     abstract_class_function_ids.add(id(each_class_member))
 
     stub_function_nodes: list[ast.FunctionDef | ast.AsyncFunctionDef] = []

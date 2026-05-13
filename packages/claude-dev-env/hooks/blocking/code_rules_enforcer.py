@@ -224,7 +224,7 @@ def check_comments_javascript(content: str) -> list[str]:
     """Check for comments in JavaScript/TypeScript code."""
     issues = []
     lines = content.split("\n")
-    is_is_in_multiline_comment = False
+    is_in_multiline_comment = False
 
     for line_number, line in enumerate(lines, 1):
         stripped = line.strip()
@@ -232,13 +232,13 @@ def check_comments_javascript(content: str) -> list[str]:
         if not stripped:
             continue
 
-        if is_is_in_multiline_comment:
+        if is_in_multiline_comment:
             if "*/" in stripped:
-                is_is_in_multiline_comment = False
+                is_in_multiline_comment = False
             continue
 
         if stripped.startswith("/*"):
-            is_is_in_multiline_comment = "*/" not in stripped
+            is_in_multiline_comment = "*/" not in stripped
             if not stripped.startswith("/**"):
                 issues.append(f"Line {line_number}: Block comment found - refactor to self-documenting code")
             continue
@@ -2404,9 +2404,9 @@ def _collect_optional_param_defaults(
 _NON_LITERAL_DEFAULT_SENTINEL = object()
 
 
-def _is_non_literal_default(each_default_value: object) -> bool:
+def _is_non_literal_default(candidate_default: object) -> bool:
     """Return True when a value is the sentinel for a non-literal default."""
-    return each_default_value is _NON_LITERAL_DEFAULT_SENTINEL
+    return candidate_default is _NON_LITERAL_DEFAULT_SENTINEL
 
 
 def _ast_constant_value(node: ast.expr) -> object:

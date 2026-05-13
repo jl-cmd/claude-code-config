@@ -16,8 +16,8 @@ This skill runs as a 6-step workflow. Every step runs automatically -- no user p
 
 ## Gotchas
 
-- **HTML output, not Markdown.** The repo's `md_to_html_blocker` PreToolUse hook rejects Write/Edit on `.md` files outside `.claude/` directories. The vault path resolves outside `.claude/`, so session reports are HTML. Frontmatter lives inside an HTML comment block at the top of the file.
-- **State-description-blocker rejects historical and comparative language.** The full trigger pattern set lives in `~/.claude/rules/no-historical-clutter.md`. Author the report in present-tense, current-state form. The git log records what changed.
+- **HTML output, not Markdown.** The repo's `md_to_html_blocker` PreToolUse hook rejects Write/Edit on `.md` files outside `.claude/` directories. Headless vault paths (e.g., `$OBSIDIAN_VAULT_PATH`) resolve outside `.claude/`, so session reports use HTML. (The local vault at `~/.claude/vault/` is exempt, but HTML is the uniform format regardless of backend.)
+- **Avoid historical and comparative language.** The `state_description_blocker` hook enforces this for markdown and code files. While the hook does not scan `.html`, the same present-tense, current-state style applies to session reports. The trigger pattern set lives in `~/.claude/rules/no-historical-clutter.md`.
 - **doc-gist uses `--description` for gist title text.** `gist_upload.py` uploads HTML verbatim with no content parsing. Pass `--description "Session [N] — [Title]"` to set the gist description.
 - **doc-gist preview URL takes a few seconds.** The htmlpreview.github.io renderer fetches the raw gist on first hit. Quote both URLs and tell the user to refresh once if the page is blank.
 - **gh must be authenticated.** Running gist_upload.py with `gh` unauthenticated prints the auth prompt and exits non-zero. Surface that message to the user; the local HTML file in the vault is still the canonical artifact, so Step 6 still runs.
@@ -141,7 +141,7 @@ tags: [session, [project-tag]]
 - Play-by-play of debugging steps or failed approaches
 - Process narration ("First I tried X, then Y")
 - Redundant sections -- if nothing was blocked, skip the blocked section
-- Historical or comparative language — see `~/.claude/rules/no-historical-clutter.md` for the trigger pattern set; the `state_description_blocker` hook rejects the write
+- Historical or comparative language — see `~/.claude/rules/no-historical-clutter.md` for the trigger pattern set. The `state_description_blocker` hook rejects writes containing these patterns in markdown/code; the same rule applies to session report HTML.
 
 ### Example
 
@@ -197,8 +197,7 @@ This step runs automatically after Step 1 completes.
    - `mcp__obsidian__read_note`
    - `mcp__obsidian__read_multiple_notes`
 
-   If any were used, set `vault_context_retrieved: true`. Otherwise `false`.
-   If true, also note which vault notes were read (list the paths).
+   Track whether vault context was used and which notes were read (if any). This determines the Notes line appended in step 2.
 
 2. **Append a tracking line to the Notes section** via the Edit tool. Target the closing `</ul>` of the last `<h2>...Notes</h2>` block:
    - If retrieved: `<li><strong>Vault context:</strong> Retrieved ([list of note paths])</li>`

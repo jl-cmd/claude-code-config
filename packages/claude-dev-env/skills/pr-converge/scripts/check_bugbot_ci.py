@@ -117,6 +117,8 @@ def is_bugbot_run_active(*, owner: str, repo: str, sha: str) -> bool:
             isinstance(each_status, str)
             and each_status in ALL_BUGBOT_CHECK_RUN_ACTIVE_STATUSES
         ):
+            json.dump(check_entry, sys.stdout)
+            sys.stdout.write("\n")
             return True
     return False
 
@@ -160,6 +162,8 @@ def main(all_arguments: list[str]) -> int:
             repo=arguments.repo,
             sha=arguments.sha,
         )
+        if not found:
+            print("bugbot: not found")
         return 0 if found else 1
     return check_bugbot_ci(
         owner=arguments.owner,

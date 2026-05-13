@@ -22,11 +22,23 @@ for the literal string `ScheduleWakeup`. If you see it, proceed. If the
 string is absent after scanning, report `pr-converge requires
 ScheduleWakeup; aborting` and stop.
 
-If the current working directory path does not contain `.claude/worktrees/`,
-call `EnterWorktree` with no arguments. This isolates the convergence loop
-from the user's working copy so parallel jobs and manual edits cannot
-interleave. If `EnterWorktree` fails (not a git repo, or already in a
-worktree), continue in place.
+Call `EnterWorktree` with no arguments before any API call, file read, or
+edit. Agent-view sessions start in the shared checkout. While Write/Edit
+tools auto-isolate on first use, Bash calls (`gh`, `git`) do not trigger
+isolation and will modify shared state. This step is mandatory — do not
+proceed to any state-modifying operation until the working directory
+contains `.claude/worktrees/`. If `EnterWorktree` fails, report the failure
+and stop; do not continue in place.
+
+## State persistence
+
+Single-PR mode persists loop state to `$CLAUDE_JOB_DIR/pr-converge-state.json`.
+On tick entry, read this file if it exists to restore phase, tick_count, and
+clean-at SHAs. On tick exit, write updated state before calling ScheduleWakeup
+so the next tick resumes with accurate state.
+
+Fields: `phase`, `tick_count`, `bugbot_clean_at`, `bugteam_clean_at`,
+`copilot_clean_at`, `current_head`, `bugbot_acknowledged_at`, `bugbot_down`.
 
 ## Gotchas
 
@@ -52,6 +64,16 @@ post a fresh PR in a fresh branch based on origin main to the user.
   indicate staleness. Always check the correct fields and use
   case-insensitive substring matching on login values, never strict
   equality.
+- **Tilde paths fail on Windows Git Bash** — `~/.claude/skills/...`
+  resolves to the wrong home directory in Bash-tool contexts. Use
+  `$HOME/.claude/skills/...` in shell invocations or `Path.home() /
+  ".claude/skills/..."` in Python scripts. Script invocations through
+  Bash that reference `~` produce "file not found" errors
+  indistinguishable from actual script failures.
+- **PowerShell cmdlets fail in Bash tool** — `.ps1` scripts and
+  `pwsh` calls run through the PowerShell tool, not Bash. Bash on
+  Windows is Git Bash which cannot execute PowerShell cmdlets. Route all
+  PowerShell work through the PowerShell tool or `pwsh -NoProfile -File`.
 
 ## Progress checklist
 
@@ -189,7 +211,18 @@ resolve the thread. Count unresolved threads before advancing.
       - [ ] unresolved → Fix (spawn `clean-coder`) → reply → resolve → push → return to Step 4
 
       **(e) Mark ready**
-      - [ ] Verify all pre-conditions ([`convergence-gates.md` § f](reference/convergence-gates.md))
+      - [ ] Verify ALL seven pre-conditions with explicit evidence:
+        1. `bugbot_clean_at == current_head` (verified at Step 4 exit)
+        2. `bugteam_clean_at == current_head` (verified at Step 5 exit)
+        3. `copilot_clean_at == current_head` (verified at Step 6a exit)
+        4. Zero unresolved bot threads (verified at Step 6d)
+        5. PR is mergeable (verified at Step 6b)
+        6. Copilot review is clean against current_head (verified at Step 6a)
+        7. No pending requested reviews (verified at Step 6c)
+      - [ ] Each condition must have explicit evidence — print the SHA,
+        thread count, mergeability status, and review state before marking
+        ready. Do not advance if any condition lacks evidence or is
+        assumed. A missing Copilot review is not implicit approval.
       - [ ] `update_pull_request(draft=false)`
       - [ ] Advance to Step 7
 

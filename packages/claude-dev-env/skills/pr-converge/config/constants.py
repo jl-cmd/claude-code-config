@@ -40,6 +40,9 @@ GH_CHECK_RUNS_PATH_TEMPLATE = "repos/{owner}/{repo}/commits/{sha}/check-runs"
 GH_INLINE_COMMENT_CREATE_PATH_TEMPLATE = (
     "repos/{owner}/{repo}/pulls/{number}/comments"
 )
+GH_INLINE_COMMENT_REPLY_PATH_TEMPLATE = (
+    "repos/{owner}/{repo}/pulls/{number}/comments/{comment_id}/replies"
+)
 GH_ISSUE_COMMENT_CREATE_PATH_TEMPLATE = (
     "repos/{owner}/{repo}/issues/{number}/comments"
 )

@@ -26,7 +26,7 @@ if str(_pr_converge_dir) not in sys.path:
 
 from config.constants import (
     EXIT_CODE_GH_ERROR,
-    GH_INLINE_COMMENT_CREATE_PATH_TEMPLATE,
+    GH_INLINE_COMMENT_REPLY_PATH_TEMPLATE,
     GH_ISSUE_COMMENT_CREATE_PATH_TEMPLATE,
 )
 
@@ -51,8 +51,8 @@ def post_inline_reply(
     Returns:
         0 on success, 1 on failure.
     """
-    endpoint_path = GH_INLINE_COMMENT_CREATE_PATH_TEMPLATE.format(
-        owner=owner, repo=repo, number=number
+    endpoint_path = GH_INLINE_COMMENT_REPLY_PATH_TEMPLATE.format(
+        owner=owner, repo=repo, number=number, comment_id=in_reply_to
     )
     completed_process = subprocess.run(
         [
@@ -61,8 +61,6 @@ def post_inline_reply(
             endpoint_path,
             "-f",
             f"body={body}",
-            "-f",
-            f"in_reply_to={in_reply_to}",
         ],
         capture_output=True,
         text=True,

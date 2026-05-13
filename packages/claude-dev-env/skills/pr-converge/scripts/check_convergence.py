@@ -28,18 +28,20 @@ from config.constants import (
     BUGBOT_CHECK_RUN_COMPLETE_CONCLUSION,
     BUGBOT_CHECK_RUN_NAME_SUBSTRING,
     BUGBOT_DIRTY_BODY_REGEX,
+    CLAUDE_CLEAN_REVIEW_STATE,
     CLAUDE_LOGIN_FILTER_SUBSTRING,
-    CLAUDE_REVIEWER_LOGIN,
+    COPILOT_CLEAN_REVIEW_STATE,
     COPILOT_LOGIN_FILTER_SUBSTRING,
     COPILOT_REVIEWER_LOGIN,
     CURSOR_LOGIN_FILTER_SUBSTRING,
     EXIT_CODE_GH_ERROR,
     GH_CHECK_RUNS_PATH_TEMPLATE,
-    GH_INLINE_COMMENTS_PATH_TEMPLATE,
     GH_PR_OBJECT_PATH_TEMPLATE,
     GH_REQUESTED_REVIEWERS_PATH_TEMPLATE,
     GH_REVIEWS_PATH_TEMPLATE,
+    GRAPHQL_REVIEW_THREADS_PAGE_SIZE,
     REVIEWS_PER_PAGE,
+    UNRESOLVED_THREAD_DETAIL_MAX,
 )
 
 
@@ -209,56 +211,129 @@ def _check_bot_review(
     return False, f"no {label} review found on {head_sha[:7]}"
 
 
+def _gh_graphql(query: str, variables: dict[str, object]) -> tuple[int, str]:
+    args: list[str] = ["gh", "api", "graphql", "-f", f"query={query}"]
+    for each_key, each_value in variables.items():
+        if each_value is None:
+            continue
+        if isinstance(each_value, int):
+            args.extend(["-F", f"{each_key}={each_value}"])
+        else:
+            args.extend(["-f", f"{each_key}={each_value}"])
+    completed_process = subprocess.run(
+        args,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    return completed_process.returncode, completed_process.stdout
+
+
 def _count_unresolved_bot_threads(
     *, owner: str, repo: str, number: int
 ) -> tuple[bool, str]:
-    endpoint = GH_INLINE_COMMENTS_PATH_TEMPLATE.format(
-        owner=owner, repo=repo, number=number
-    )
-    returncode, stdout = _gh_api_paginated(f"{endpoint}?per_page=100")
-    if returncode != 0:
-        return False, f"gh api error: {stdout}"
-    raw_output = json.loads(stdout)
-    if not isinstance(raw_output, list):
-        return True, "0 unresolved"
-    all_pages = [p for p in raw_output if isinstance(p, list)]
-    all_flat = [
-        each_entry
-        for page in all_pages
-        for each_entry in page
-        if isinstance(each_entry, dict)
-    ]
+    query = """
+query($owner: String!, $repo: String!, $number: Int!, $first: Int!, $cursor: String) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      reviewThreads(first: $first, after: $cursor) {
+        nodes {
+          isResolved
+          isOutdated
+          path
+          comments(first: 1) {
+            nodes {
+              author { login }
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}
+"""
     bot_logins = (
         CURSOR_LOGIN_FILTER_SUBSTRING,
         CLAUDE_LOGIN_FILTER_SUBSTRING,
         COPILOT_LOGIN_FILTER_SUBSTRING,
     )
-    unresolved_count = 0
-    details_parts: list[str] = []
-    for each_comment in all_flat:
-        user_obj = each_comment.get("user")
-        author = ""
-        if isinstance(user_obj, dict):
-            raw_login = user_obj.get("login")
-            if isinstance(raw_login, str):
-                author = raw_login
-        if not author:
-            continue
-        is_bot = any(bot in author.lower() for bot in bot_logins)
-        if not is_bot:
-            continue
-        is_outdated = each_comment.get("is_outdated", False)
-        is_resolved = each_comment.get("is_resolved", False)
-        if not is_outdated and not is_resolved:
-            unresolved_count += 1
-            comment_id = each_comment.get("id", "?")
-            details_parts.append(f"#{comment_id} by {author}")
-    if unresolved_count == 0:
+    unresolved: list[dict[str, object]] = []
+    cursor: str | None = None
+
+    while True:
+        variables: dict[str, object] = {
+            "owner": owner,
+            "repo": repo,
+            "number": number,
+            "first": GRAPHQL_REVIEW_THREADS_PAGE_SIZE,
+            "cursor": cursor,
+        }
+        returncode, stdout = _gh_graphql(query, variables)
+        if returncode != 0:
+            return False, f"gh api graphql error: {stdout}"
+        try:
+            response_body = json.loads(stdout)
+        except json.JSONDecodeError:
+            return False, "gh api graphql response not valid JSON"
+        response_data = response_body.get("data", {})
+        repository = response_data.get("repository", {}) if isinstance(response_data, dict) else {}
+        pull_request = repository.get("pullRequest", {}) if isinstance(repository, dict) else {}
+        threads = pull_request.get("reviewThreads", {}) if isinstance(pull_request, dict) else {}
+        if not isinstance(threads, dict):
+            return False, "unexpected GraphQL response shape"
+        nodes = threads.get("nodes", [])
+        if isinstance(nodes, list):
+            for each_thread in nodes:
+                if not isinstance(each_thread, dict):
+                    continue
+                if each_thread.get("isResolved") is True:
+                    continue
+                if each_thread.get("isOutdated") is True:
+                    continue
+                comments_wrapper = each_thread.get("comments", {})
+                if not isinstance(comments_wrapper, dict):
+                    continue
+                comments_nodes = comments_wrapper.get("nodes", [])
+                if not isinstance(comments_nodes, list) or not comments_nodes:
+                    continue
+                first_comment = comments_nodes[0]
+                if not isinstance(first_comment, dict):
+                    continue
+                author_wrapper = first_comment.get("author")
+                if not isinstance(author_wrapper, dict):
+                    continue
+                login = author_wrapper.get("login", "")
+                if not isinstance(login, str):
+                    continue
+                is_bot = any(bot in login.lower() for bot in bot_logins)
+                if not is_bot:
+                    continue
+                unresolved.append(each_thread)
+        page_info = threads.get("pageInfo", {})
+        if not isinstance(page_info, dict) or not page_info.get("hasNextPage"):
+            break
+        next_cursor = page_info.get("endCursor")
+        if isinstance(next_cursor, str):
+            cursor = next_cursor
+        else:
+            break
+
+    if not unresolved:
         return True, "0 unresolved"
-    detail_text = "; ".join(details_parts[:5])
-    if unresolved_count > 5:
-        detail_text += f" ... and {unresolved_count - 5} more"
-    return False, f"{unresolved_count} unresolved ({detail_text})"
+    details_parts: list[str] = []
+    for each_thread in unresolved[:UNRESOLVED_THREAD_DETAIL_MAX]:
+        thread_path = each_thread.get("path", "?")
+        details_parts.append(str(thread_path))
+    detail_text = "; ".join(details_parts)
+    if len(unresolved) > UNRESOLVED_THREAD_DETAIL_MAX:
+        detail_text += f" ... and {len(unresolved) - UNRESOLVED_THREAD_DETAIL_MAX} more"
+    return False, f"{len(unresolved)} unresolved ({detail_text})"
 
 
 def _check_no_pending_reviews(
@@ -323,7 +398,7 @@ def check_all(*, owner: str, repo: str, number: int) -> int:
                 number=number,
                 head_sha=head_sha,
                 login_substring=CLAUDE_LOGIN_FILTER_SUBSTRING,
-                clean_state="APPROVED",
+                clean_state=CLAUDE_CLEAN_REVIEW_STATE,
                 dirty_states=ALL_CLAUDE_DIRTY_REVIEW_STATES,
                 label="claude[bot]",
             ),
@@ -339,7 +414,7 @@ def check_all(*, owner: str, repo: str, number: int) -> int:
                 number=number,
                 head_sha=head_sha,
                 login_substring=COPILOT_LOGIN_FILTER_SUBSTRING,
-                clean_state="APPROVED",
+                clean_state=COPILOT_CLEAN_REVIEW_STATE,
                 dirty_states=ALL_COPILOT_DIRTY_REVIEW_STATES,
                 label="copilot",
             ),
@@ -364,21 +439,21 @@ def check_all(*, owner: str, repo: str, number: int) -> int:
         )
     )
 
-    all_passed = True
+    is_all_passed = True
     index = 1
     for label, (passed, detail) in conditions:
         status = "PASS" if passed else "FAIL"
         print(f"{index}. {label}: {status} — {detail}")
         if not passed:
-            all_passed = False
+            is_all_passed = False
         index += 1
 
     print()
-    if all_passed:
+    if is_all_passed:
         print("All pre-conditions met — PR is ready to mark ready.")
     else:
         print("One or more pre-conditions not met — do not mark ready.")
-    return 0 if all_passed else 1
+    return 0 if is_all_passed else 1
 
 
 def parse_arguments(all_argv: list[str]) -> argparse.Namespace:

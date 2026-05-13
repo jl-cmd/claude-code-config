@@ -486,11 +486,9 @@ def _git_reset_hard_allowed_for_command(command: str, current_working_directory:
     return False
 
 
-_CONVERGENCE_BRANCH_PREFIXES = ("claude/", "worktree-")
-
-
 def _is_convergence_branch(branch: str) -> bool:
-    for each_prefix in _CONVERGENCE_BRANCH_PREFIXES:
+    convergence_branch_prefixes = ("claude/", "worktree-")
+    for each_prefix in convergence_branch_prefixes:
         if branch.startswith(each_prefix):
             return True
     return bool(re.match(r"pr-.*-converge$", branch))
@@ -507,17 +505,17 @@ def _all_refspecs_are_convergence_branches(post_remote_text: str) -> bool:
 
 
 def _force_push_targets_convergence_branch(command: str) -> bool:
-    any_force_push_found = False
+    is_force_push_found = False
     for each_pattern in (
         r"\bgit\s+push\s+(?:--force|-f)\s+\S+\s+(.*)",
         r"\bgit\s+push\s+\S+\s+(.*)\s+(?:--force|-f)",
     ):
         for each_match in re.finditer(each_pattern, command):
-            any_force_push_found = True
+            is_force_push_found = True
             post_remote_text = each_match.group(1).strip()
             if not _all_refspecs_are_convergence_branches(post_remote_text):
                 return False
-    return any_force_push_found
+    return is_force_push_found
 
 
 def main() -> None:

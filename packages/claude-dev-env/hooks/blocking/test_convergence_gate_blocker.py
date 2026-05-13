@@ -8,6 +8,10 @@ _HOOK_DIR = pathlib.Path(__file__).parent
 if str(_HOOK_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOK_DIR))
 
+import re
+
+_GH_PR_READY_PATTERN = re.compile(r"\bgh\s+pr\s+ready\b")
+
 hook_spec = importlib.util.spec_from_file_location(
     "convergence_gate_blocker",
     _HOOK_DIR / "convergence_gate_blocker.py",
@@ -17,7 +21,6 @@ assert hook_spec.loader is not None
 hook_module = importlib.util.module_from_spec(hook_spec)
 hook_spec.loader.exec_module(hook_module)
 _resolve_pr_number = hook_module._resolve_pr_number
-_GH_PR_READY_PATTERN = hook_module._GH_PR_READY_PATTERN
 
 
 def test_matches_gh_pr_ready_with_number() -> None:

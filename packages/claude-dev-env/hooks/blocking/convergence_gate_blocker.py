@@ -14,10 +14,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-_CHECK_CONVERGENCE_SCRIPT = str(
-    Path.home() / ".claude/skills/pr-converge/scripts/check_convergence.py"
-)
-
 _GH_PR_READY_PATTERN = re.compile(r"\bgh\s+pr\s+ready\b")
 
 
@@ -26,7 +22,7 @@ def _resolve_pr_number(command: str, cwd: str | None) -> int | None:
     if direct_match:
         return int(direct_match.group(1))
     try:
-        result = subprocess.run(
+        completed_process = subprocess.run(
             ["gh", "pr", "view", "--json", "number", "--jq", ".number"],
             capture_output=True,
             text=True,
@@ -35,17 +31,17 @@ def _resolve_pr_number(command: str, cwd: str | None) -> int | None:
         )
     except OSError:
         return None
-    if result.returncode != 0:
+    if completed_process.returncode != 0:
         return None
     try:
-        return int(result.stdout.strip())
+        return int(completed_process.stdout.strip())
     except (ValueError, TypeError):
         return None
 
 
 def _resolve_owner_repo(cwd: str | None) -> tuple[str, str] | None:
     try:
-        result = subprocess.run(
+        completed_process = subprocess.run(
             ["gh", "repo", "view", "--json", "owner,name", "--jq", ".owner.login,.name"],
             capture_output=True,
             text=True,
@@ -54,13 +50,13 @@ def _resolve_owner_repo(cwd: str | None) -> tuple[str, str] | None:
         )
     except OSError:
         return None
-    if result.returncode != 0:
+    if completed_process.returncode != 0:
         return None
-    parts = result.stdout.strip().splitlines()
-    if len(parts) < 2:
+    parts = completed_process.stdout.strip().splitlines()
+    if len(parts) <= 1:
         match = re.match(
             r"https://github\.com/([^/]+)/([^/]+?)(?:\.git)?$",
-            result.stdout.strip(),
+            completed_process.stdout.strip(),
         )
         if match:
             return match.group(1), match.group(2)
@@ -69,6 +65,10 @@ def _resolve_owner_repo(cwd: str | None) -> tuple[str, str] | None:
 
 
 def main() -> None:
+    check_convergence_script = str(
+        Path.home() / ".claude/skills/pr-converge/scripts/check_convergence.py"
+    )
+
     try:
         hook_input = json.load(sys.stdin)
     except json.JSONDecodeError:
@@ -92,10 +92,10 @@ def main() -> None:
         sys.exit(0)
     owner, repo = owner_repo
 
-    result = subprocess.run(
+    completed_process = subprocess.run(
         [
             sys.executable,
-            _CHECK_CONVERGENCE_SCRIPT,
+            check_convergence_script,
             "--owner",
             owner,
             "--repo",
@@ -108,7 +108,7 @@ def main() -> None:
         check=False,
     )
 
-    if result.returncode == 0:
+    if completed_process.returncode == 0:
         sys.exit(0)
 
     deny_payload = {
@@ -116,7 +116,7 @@ def main() -> None:
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
             "permissionDecisionReason": (
-                "Convergence check failed — PR is not ready to mark ready:\n\n" + result.stdout
+                "Convergence check failed — PR is not ready to mark ready:\n\n" + completed_process.stdout
             ),
         }
     }

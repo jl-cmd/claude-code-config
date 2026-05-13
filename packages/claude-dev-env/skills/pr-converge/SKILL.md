@@ -213,7 +213,7 @@ resolve the thread. Count unresolved threads before advancing.
       **(e) Mark ready**
       - [ ] Run automated convergence check:
             ```
-            python ~/.claude/skills/pr-converge/scripts/check_convergence.py \
+            python $HOME/.claude/skills/pr-converge/scripts/check_convergence.py \
               --owner <O> --repo <R> --pr-number <N>
             ```
       - [ ] Exit 0 (all pass) → `update_pull_request(draft=false)` → advance to Step 7

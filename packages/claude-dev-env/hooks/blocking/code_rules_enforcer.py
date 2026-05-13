@@ -827,12 +827,8 @@ def _find_cast_call_lines(source: str) -> list[int]:
 
 
 def _file_path_matches_any_exemption(file_path: str) -> bool:
-    normalized_path = file_path.replace("\\", "/").lower()
-    return any(
-        normalized_path.endswith(each_pattern.lower())
-        or normalized_path.endswith("/" + each_pattern.lower())
-        for each_pattern in ALL_ANY_ALLOWED_PATTERNS
-    )
+    filename = file_path.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return filename in {each_pattern.lower() for each_pattern in ALL_ANY_ALLOWED_PATTERNS}
 
 
 def check_type_escape_hatches(content: str, file_path: str) -> list[str]:
@@ -1335,6 +1331,11 @@ def _signature_annotations(function_node: ast.FunctionDef | ast.AsyncFunctionDef
             collected_annotations.append(
                 (each_argument.annotation, f"{function_name}({each_argument.arg})", each_argument.lineno)
             )
+    for each_argument in function_node.args.posonlyargs:
+        if each_argument.annotation is not None:
+            collected_annotations.append(
+                (each_argument.annotation, f"{function_name}({each_argument.arg})", each_argument.lineno)
+            )
     for each_argument in function_node.args.kwonlyargs:
         if each_argument.annotation is not None:
             collected_annotations.append(
@@ -1468,22 +1469,30 @@ def _annotation_is_explicit_none_return(annotation_node: ast.expr | None) -> boo
     return isinstance(annotation_node, ast.Name) and annotation_node.id == "None"
 
 
+def _walk_skipping_nested_functions(node: ast.AST):
+    for each_child in ast.iter_child_nodes(node):
+        if isinstance(each_child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        yield each_child
+        yield from _walk_skipping_nested_functions(each_child)
+
+
 def _function_body_contains_raise(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
-    for each_descendant in ast.walk(function_node):
-        if isinstance(each_descendant, ast.Raise):
-            return True
-    return False
+    return any(
+        isinstance(each_descendant, ast.Raise)
+        for each_descendant in _walk_skipping_nested_functions(function_node)
+    )
 
 
 def _function_body_contains_yield(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
-    for each_descendant in ast.walk(function_node):
-        if isinstance(each_descendant, (ast.Yield, ast.YieldFrom)):
-            return True
-    return False
+    return any(
+        isinstance(each_descendant, (ast.Yield, ast.YieldFrom))
+        for each_descendant in _walk_skipping_nested_functions(function_node)
+    )
 
 
 def _function_docstring_text(

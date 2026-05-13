@@ -103,7 +103,7 @@ Manifest: <tmp>/audit-manifest-<timestamp>.json
 | File | Purpose |
 |------|---------|
 | `SKILL.md` | Hub — process, constraints, gotchas |
-| `reference/detection-rules.md` | All 10 detection rules with how-to instructions |
+| `reference/detection-rules.md` | All 10 detection rules with examples |
 | `reference/illustrations.md` | Concrete findings with why-they-matter explanations |
 | `scripts/config/constants.py` | Severity labels, output templates, rule IDs |
 

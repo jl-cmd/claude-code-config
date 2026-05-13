@@ -1,4 +1,4 @@
-"""Constants for the pr-consistency-audit skill."""
+"""Constants for the diff-inconsistency-auditor skill."""
 
 P0_LABEL = "P0"
 P1_LABEL = "P1"

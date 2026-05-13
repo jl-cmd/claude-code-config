@@ -489,21 +489,25 @@ def _git_reset_hard_allowed_for_command(command: str, current_working_directory:
 _CONVERGENCE_BRANCH_PREFIXES = ("claude/", "worktree-")
 
 
-def _force_push_targets_convergence_branch(command: str) -> bool:
-    branch_match = re.search(
-        r"\bgit\s+push\s+(?:--force|-f)\s+\S+\s+(\S+)",
-        command,
-    ) or re.search(
-        r"\bgit\s+push\s+\S+\s+(\S+)\s+(?:--force|-f)",
-        command,
-    )
-    if not branch_match:
-        return False
-    branch = branch_match.group(1)
+def _is_convergence_branch(branch: str) -> bool:
     for prefix in _CONVERGENCE_BRANCH_PREFIXES:
         if branch.startswith(prefix):
             return True
-    return bool(re.match(r"pr-.*-converge", branch))
+    return bool(re.match(r"pr-.*-converge$", branch))
+
+
+def _force_push_targets_convergence_branch(command: str) -> bool:
+    any_force_push_found = False
+    for each_pattern in (
+        r"\bgit\s+push\s+(?:--force|-f)\s+\S+\s+(\S+)",
+        r"\bgit\s+push\s+\S+\s+(\S+)\s+(?:--force|-f)",
+    ):
+        for each_match in re.finditer(each_pattern, command):
+            any_force_push_found = True
+            destination_branch = each_match.group(1).split(":")[-1]
+            if not _is_convergence_branch(destination_branch):
+                return False
+    return any_force_push_found
 
 
 def main() -> None:
@@ -550,7 +554,7 @@ def main() -> None:
     if (
         matched_description is not None
         and "git push" in matched_description
-        and "force" in matched_description
+        and ("force" in matched_description or "-f" in matched_description)
         and _force_push_targets_convergence_branch(command)
     ):
         sys.exit(0)

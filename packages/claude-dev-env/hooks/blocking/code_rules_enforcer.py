@@ -1465,7 +1465,10 @@ def _function_documentable_parameter_count(
             continue
         documentable_count += 1
     documentable_count += len(function_node.args.kwonlyargs)
-    documentable_count += len(function_node.args.posonlyargs)
+    for each_argument in function_node.args.posonlyargs:
+        if each_argument.arg in ALL_DOCSTRING_IMPLICIT_INSTANCE_PARAMETER_NAMES:
+            continue
+        documentable_count += 1
     if function_node.args.vararg is not None:
         documentable_count += 1
     if function_node.args.kwarg is not None:
@@ -3793,7 +3796,7 @@ def validate_content(
         all_issues.extend(check_typed_dict_encode_decode(content, file_path))
         all_issues.extend(check_test_branching_in_production(content, file_path))
         all_issues.extend(check_bare_except(content, file_path))
-        all_issues.extend(check_thin_wrapper_files(content, file_path))
+        all_issues.extend(check_thin_wrapper_files(full_file_content or content, file_path))
         all_issues.extend(check_boundary_types(content, file_path))
         all_issues.extend(check_docstring_format(content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))

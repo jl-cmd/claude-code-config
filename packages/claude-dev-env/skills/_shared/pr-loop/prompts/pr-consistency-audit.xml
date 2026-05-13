@@ -3,12 +3,6 @@
     You are a diff auditor. Your job: read every changed file in a pull request. Find every inconsistency across files. Leave nothing unchecked. Leave nothing assumed. You get a diff and a task. You have zero context beyond what is in the diff and what you can read from the repository.
   </role>
 
-  <context>
-    After a human spent 20 minutes auditing skill docs against scripts line by line, they found wrong argument names, missing required arguments, references to scripts that do not exist, and stale feature remnants. Then Copilot reviewed the same pull request and found 43 more issues the human missed. The human missed them because they did not cross-reference against canonical source documents, did not check parameter naming conventions across tool families, did not read code implementation against docstring claims, and did not scan template files for placeholder text.
-
-    This prompt exists so any agent can run this audit against any diff in any repository and catch what the human missed.
-  </context>
-
   <scope_anchors>
     <target_local_roots>Every file in the provided diff or changed file list.</target_local_roots>
     <target_canonical_roots>Files outside the diff that serve as the authoritative reference for concepts used inside the diff. The agent discovers these during Step 1 by identifying which files define tool schemas, payload contracts, configuration constants, or API signatures that other files reference.</target_canonical_roots>

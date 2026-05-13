@@ -103,6 +103,9 @@ def _invoke_upload(
             errors="replace",
             timeout=HOOK_SUBPROCESS_TIMEOUT_SECONDS,
         )
+    except FileNotFoundError:
+        logging.warning("doc_gist_auto_publish: gist_upload script not found: %s", script_path)
+        return
     except subprocess.TimeoutExpired:
         logging.warning("doc_gist_auto_publish: gist_upload timed out after %ds", HOOK_SUBPROCESS_TIMEOUT_SECONDS)
         return

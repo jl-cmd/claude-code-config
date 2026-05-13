@@ -1209,6 +1209,15 @@ def _bare_except_handler_label(handler_node: ast.ExceptHandler) -> str | None:
         and handler_type.attr in ALL_BARE_EXCEPT_BANNED_HANDLER_NAMES
     ):
         return f"except {handler_type.attr}:"
+    if isinstance(handler_type, ast.Tuple):
+        for each_element in handler_type.elts:
+            if isinstance(each_element, ast.Name) and each_element.id in ALL_BARE_EXCEPT_BANNED_HANDLER_NAMES:
+                return f"except {each_element.id} (in tuple):"
+            if (
+                isinstance(each_element, ast.Attribute)
+                and each_element.attr in ALL_BARE_EXCEPT_BANNED_HANDLER_NAMES
+            ):
+                return f"except {each_element.attr} (in tuple):"
     return None
 
 

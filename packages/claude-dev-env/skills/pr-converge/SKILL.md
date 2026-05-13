@@ -206,7 +206,6 @@ resolve the thread. Count unresolved threads before advancing.
             - [ ] Resolve each addressed thread via `pull_request_review_write(method="resolve_thread")`
             - [ ] Push → `phase = BUGBOT` → return to Step 4
       - [ ] **no review yet** →
-            increment `copilot_wait_count` → ≥ 3 = hard blocker → stop
             schedule 360s wakeup → return to Step 6a next tick
 
 - [ ] **Step 7: Clean working tree**

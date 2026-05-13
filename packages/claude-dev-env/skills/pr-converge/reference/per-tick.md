@@ -191,9 +191,8 @@ b. Decide (three branches; match first whose predicate holds):
      back-to-back-clean cycle on the new HEAD. Schedule next wakeup, return.
    - **No Copilot review at `current_head` yet:** Increment
      `copilot_wait_count` (init 0 on COPILOT_WAIT entry; reset to 0 on
-     every push and on every successful Copilot review). `>= 3` → hard
-     blocker per [stop-conditions.md](stop-conditions.md). Otherwise
-     schedule next wakeup (360s), return.
+     every push and on every successful Copilot review). Schedule next
+     wakeup (360s), return.
 
 **Non-negotiable:** After any Copilot fix push, `phase` MUST route to
 `BUGBOT`. Never cycle COPILOT_WAIT → fix → COPILOT_WAIT. The

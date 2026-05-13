@@ -151,10 +151,7 @@ against `current_head`. Decide:
 - **No Copilot review at `current_head` yet:** Record evidence: "No Copilot
   review at <SHA> (wait count: <N>)". Increment `copilot_wait_count`
   (init 0 on first COPILOT_WAIT entry; reset to 0 on every push and on every
-  successful Copilot review). After three consecutive empty waits
-  (`copilot_wait_count >= 3`), escalate as hard blocker — report
-  "Copilot did not surface a review on current_head after 3 wakeups"
-  and omit loop pacing. Otherwise schedule next wakeup (360s), return.
+  successful Copilot review). Schedule next wakeup (360s), return.
 
 ## (e) Thread-resolution gate
 

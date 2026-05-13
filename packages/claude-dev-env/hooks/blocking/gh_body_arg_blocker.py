@@ -69,6 +69,10 @@ def _logical_line_has_bare_body_token(logical_line: str) -> bool:
     return bool(_BARE_BODY_TOKEN_PATTERN.search(logical_line))
 
 
+def _contains_backtick(command: str) -> bool:
+    return "`" in get_logical_first_line(command)
+
+
 def _uses_body_string_arg(command: str) -> bool:
     """Return True if command calls an affected gh subcommand with --body <string>.
 
@@ -112,6 +116,9 @@ def main() -> None:
         sys.exit(0)
 
     if not _uses_body_string_arg(command):
+        sys.exit(0)
+
+    if not _contains_backtick(command):
         sys.exit(0)
 
     deny_payload = {

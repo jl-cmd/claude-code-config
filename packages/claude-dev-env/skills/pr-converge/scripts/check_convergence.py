@@ -99,14 +99,16 @@ def _check_bugbot(*, owner: str, repo: str, sha: str) -> tuple[bool, str]:
     returncode, stdout = _gh_api(f"{endpoint}?per_page=30")
     if returncode != 0:
         return False, f"gh api error: {stdout}"
-    for each_line in stdout.splitlines():
-        stripped_line = each_line.strip()
-        if not stripped_line:
-            continue
-        try:
-            check_entry = json.loads(stripped_line)
-        except json.JSONDecodeError:
-            continue
+    try:
+        response_body = json.loads(stdout)
+    except json.JSONDecodeError:
+        return False, "gh api response not valid JSON"
+    check_runs: list[dict[str, object]] = []
+    if isinstance(response_body, dict):
+        raw_runs = response_body.get("check_runs")
+        if isinstance(raw_runs, list):
+            check_runs = [r for r in raw_runs if isinstance(r, dict)]
+    for check_entry in check_runs:
         each_name = check_entry.get("name", "")
         if not isinstance(each_name, str):
             continue
@@ -234,8 +236,13 @@ def _count_unresolved_bot_threads(
     unresolved_count = 0
     details_parts: list[str] = []
     for each_comment in all_flat:
-        author = each_comment.get("author", "")
-        if not isinstance(author, str):
+        user_obj = each_comment.get("user")
+        author = ""
+        if isinstance(user_obj, dict):
+            raw_login = user_obj.get("login")
+            if isinstance(raw_login, str):
+                author = raw_login
+        if not author:
             continue
         is_bot = any(bot in author.lower() for bot in bot_logins)
         if not is_bot:

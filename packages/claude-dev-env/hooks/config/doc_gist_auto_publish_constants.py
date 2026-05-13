@@ -15,5 +15,4 @@ PUBLISH_SENTINEL = "<!-- @publish-as-gist -->"
 HTML_FILE_EXTENSION = ".html"
 ALL_TARGET_TOOL_NAMES = ("Write", "Edit")
 HOOK_SUBPROCESS_TIMEOUT_SECONDS = 50
-SENTINEL_SCAN_LIMIT_CHARS = 4096
 UPLOAD_SCRIPT_RELATIVE_PATH = "skills/doc-gist/scripts/gist_upload.py"

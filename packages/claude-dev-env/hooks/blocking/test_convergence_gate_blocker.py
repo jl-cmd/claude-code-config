@@ -10,7 +10,7 @@ if str(_HOOK_DIR) not in sys.path:
 
 import re
 
-_GH_PR_READY_PATTERN = re.compile(r"\bgh\s+pr\s+ready\b")
+_GH_PR_READY_PATTERN = re.compile(r"\bgh\s+pr\s+ready\b(?!.*--undo)")
 
 hook_spec = importlib.util.spec_from_file_location(
     "convergence_gate_blocker",
@@ -32,7 +32,7 @@ def test_matches_gh_pr_ready_without_number() -> None:
 
 
 def test_matches_gh_pr_ready_with_flags() -> None:
-    assert _GH_PR_READY_PATTERN.search("gh pr ready --undo")
+    assert not _GH_PR_READY_PATTERN.search("gh pr ready --undo")
 
 
 def test_does_not_match_gh_pr_create() -> None:
@@ -60,4 +60,4 @@ def test_returns_none_when_no_number_and_no_repo() -> None:
 
 
 def test_matches_gh_pr_ready_in_compound_command() -> None:
-    assert _GH_PR_READY_PATTERN.search("gh pr ready --undo && gh pr create")
+    assert not _GH_PR_READY_PATTERN.search("gh pr ready --undo && gh pr create")

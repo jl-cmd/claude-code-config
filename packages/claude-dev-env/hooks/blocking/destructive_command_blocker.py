@@ -495,13 +495,17 @@ def _is_convergence_branch(branch: str) -> bool:
 
 
 def _all_refspecs_are_convergence_branches(post_remote_text: str) -> bool:
+    if not post_remote_text.strip():
+        return False
+    is_any_refspec_checked = False
     for each_token in post_remote_text.split():
         if each_token.startswith("-"):
             continue
+        is_any_refspec_checked = True
         destination_branch = each_token.split(":")[-1]
         if not _is_convergence_branch(destination_branch):
             return False
-    return True
+    return is_any_refspec_checked
 
 
 def _force_push_targets_convergence_branch(command: str) -> bool:
@@ -565,7 +569,14 @@ def main() -> None:
         and ("force" in matched_description or "-f" in matched_description)
         and _force_push_targets_convergence_branch(command)
     ):
-        sys.exit(0)
+        for each_pattern, each_description in DESTRUCTIVE_BASH_PATTERNS:
+            if "git push" in each_description and ("force" in each_description or "-f" in each_description):
+                continue
+            if each_pattern.search(command):
+                matched_description = each_description
+                break
+        else:
+            sys.exit(0)
 
     if matched_description is not None:
         ask_response = {

@@ -14,9 +14,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-_GH_PR_READY_PATTERN = re.compile(r"\bgh\s+pr\s+ready\b")
-
-
 def _resolve_pr_number(command: str, cwd: str | None) -> int | None:
     direct_match = re.search(r"\bgh\s+pr\s+ready\s+(\d+)", command)
     if direct_match:
@@ -79,7 +76,8 @@ def main() -> None:
         sys.exit(0)
 
     command = hook_input.get("tool_input", {}).get("command", "")
-    if not _GH_PR_READY_PATTERN.search(command):
+    gh_pr_ready_pattern = re.compile(r"\bgh\s+pr\s+ready\b(?!.*--undo)")
+    if not gh_pr_ready_pattern.search(command):
         sys.exit(0)
 
     cwd = hook_input.get("tool_input", {}).get("cwd")

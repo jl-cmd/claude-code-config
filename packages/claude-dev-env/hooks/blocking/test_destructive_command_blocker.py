@@ -1025,6 +1025,7 @@ _hook_module = importlib.util.module_from_spec(_hook_spec)
 _hook_spec.loader.exec_module(_hook_module)
 _force_push_targets_convergence_branch = _hook_module._force_push_targets_convergence_branch
 _is_convergence_branch = _hook_module._is_convergence_branch
+_all_refspecs_are_convergence_branches = _hook_module._all_refspecs_are_convergence_branches
 
 
 def test_convergence_branch_claude_prefix_allowed() -> None:
@@ -1105,3 +1106,51 @@ def test_is_convergence_branch_main_rejected() -> None:
 
 def test_is_convergence_branch_pr_converge_no_end_anchor() -> None:
     assert not _is_convergence_branch("pr-423-converge-extra")
+
+
+def test_all_refspecs_empty_string_returns_false() -> None:
+    assert not _all_refspecs_are_convergence_branches("")
+
+
+def test_all_refspecs_whitespace_only_returns_false() -> None:
+    assert not _all_refspecs_are_convergence_branches("   ")
+
+
+def test_all_refspecs_flag_only_returns_false() -> None:
+    assert not _all_refspecs_are_convergence_branches("--no-verify")
+
+
+def test_all_refspecs_multiple_flags_only_returns_false() -> None:
+    assert not _all_refspecs_are_convergence_branches("--no-verify --force")
+
+
+def test_all_refspecs_flag_then_branch_checks_branch() -> None:
+    assert not _all_refspecs_are_convergence_branches("--force main")
+
+
+def test_all_refspecs_convergence_branch_with_flags() -> None:
+    assert _all_refspecs_are_convergence_branches("--force claude/fix-123")
+
+
+def test_force_push_convergence_with_no_verify_blocked() -> None:
+    payload = _make_bash_payload(
+        "git push --force origin --no-verify claude/fix-123"
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "--no-verify" in response["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_force_push_convergence_with_no_gpg_sign_blocked() -> None:
+    payload = _make_bash_payload(
+        "git push --force origin --no-gpg-sign claude/fix-123"
+    )
+
+    result = _run_rm_hook(payload)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "--no-gpg-sign" in response["hookSpecificOutput"]["permissionDecisionReason"]

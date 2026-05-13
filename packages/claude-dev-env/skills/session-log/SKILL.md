@@ -261,7 +261,7 @@ This step runs automatically after Step 4 completes.
 Hand the freshly-written HTML file to `/doc-gist` via its gist_upload.py script. Use the PowerShell tool so quoting handles spaces in the vault path:
 
 ```powershell
-python "$env:USERPROFILE/.claude/skills/doc-gist/scripts/gist_upload.py" `
+python "$HOME/.claude/skills/doc-gist/scripts/gist_upload.py" `
   --input "<absolute path to the .html file>" `
   --description "Session [N] — [Title] · session-log · [Project]"
 ```

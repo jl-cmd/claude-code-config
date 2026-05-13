@@ -83,6 +83,10 @@ def _create_secret_gist(html_path: Path, description: str) -> str:
         raise SystemExit(
             "gh CLI not found. Install GitHub CLI (https://cli.github.com) and run `gh auth login`."
         )
+    except subprocess.TimeoutExpired:
+        raise SystemExit(
+            f"gh gist create timed out after {UPLOAD_TIMEOUT_SECONDS}s. Check network and retry."
+        )
     if completed.returncode != 0:
         message_text = completed.stderr.strip() or completed.stdout.strip()
         raise SystemExit(

@@ -107,8 +107,8 @@ def _invoke_upload(
     if completed.stderr:
         err_stream.write(completed.stderr)
     if completed.returncode != 0:
-        logging.error("doc_gist_auto_publish: gist_upload exited %d", completed.returncode)
-        sys.exit(1)
+        logging.warning("doc_gist_auto_publish: gist_upload exited %d", completed.returncode)
+        return
     if completed.stdout:
         out_stream.write(completed.stdout)
 

@@ -8,7 +8,7 @@ Argument: `$ARGUMENTS` is the path to an existing `.html` file (or `-` to read H
 Run the doc-gist skill's transport script directly:
 
 ```
-python "${CLAUDE_PLUGIN_ROOT}/skills/doc-gist/scripts/gist_upload.py" --input "$ARGUMENTS"
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/doc-gist/scripts/gist_upload.py" --input "$ARGUMENTS"
 ```
 
 Quote both URLs (`Gist:` and `Preview:`) from stderr back to the user as clickable markdown links. Surface any `gh gist create failed` error with the suggested `gh auth login` next-step.

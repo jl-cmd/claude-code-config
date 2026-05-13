@@ -232,7 +232,7 @@ def check_comments_javascript(content: str) -> list[str]:
             continue
 
         if stripped.startswith("//"):
-            if not stripped.startswith(("// @ts-", "// eslint-", "// prettier-", "/// ")):
+            if not stripped.startswith(("// @ts-", "// eslint-", "// prettier-", "/// ", "// TODO", "// FIXME", "// HACK", "// XXX")):
                 issues.append(f"Line {line_number}: Comment found - refactor to self-documenting code")
 
         if len(issues) >= 3:
@@ -300,7 +300,7 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
                     standalone_comments.add(stripped)
                 continue
             if stripped.startswith("//"):
-                if not stripped.startswith(("// @ts-", "// eslint-", "// prettier-", "/// ")):
+                if not stripped.startswith(("// @ts-", "// eslint-", "// prettier-", "/// ", "// TODO", "// FIXME", "// HACK", "// XXX")):
                     standalone_comments.add(stripped)
             elif "//" in line:
                 before_slash = line[:line.index("//")]
@@ -1341,6 +1341,14 @@ def _signature_annotations(function_node: ast.FunctionDef | ast.AsyncFunctionDef
             collected_annotations.append(
                 (each_argument.annotation, f"{function_name}({each_argument.arg})", each_argument.lineno)
             )
+    if function_node.args.vararg is not None and function_node.args.vararg.annotation is not None:
+        collected_annotations.append(
+            (function_node.args.vararg.annotation, f"{function_name}(*{function_node.args.vararg.arg})", function_node.args.vararg.lineno)
+        )
+    if function_node.args.kwarg is not None and function_node.args.kwarg.annotation is not None:
+        collected_annotations.append(
+            (function_node.args.kwarg.annotation, f"{function_name}(**{function_node.args.kwarg.arg})", function_node.args.kwarg.lineno)
+        )
     if function_node.returns is not None:
         collected_annotations.append(
             (function_node.returns, f"{function_name} -> return", function_node.returns.lineno)

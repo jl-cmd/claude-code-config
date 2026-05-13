@@ -1576,7 +1576,7 @@ def check_docstring_format(content: str, file_path: str) -> list[str]:
 
 
 def _pascal_to_snake_case(pascal_name: str) -> str:
-    pascal_to_snake_word_boundary = re.compile(r"(?<!^)(?=[A-Z])")
+    pascal_to_snake_word_boundary = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
     return pascal_to_snake_word_boundary.sub("_", pascal_name).lower()
 
 

@@ -242,7 +242,7 @@
       <finding>
         file_path: SKILL.md
         line_number: 100
-        rule_id: rule-9
+        rule_id: 9
         severity: P0
         what_is_wrong: check_bugbot_ci.py --check-active --sha <SHA>
         what_it_should_be: check_bugbot_ci.py --owner <O> --repo <R> --check-active --sha <SHA>
@@ -257,7 +257,7 @@
       <finding>
         file_path: SKILL.md
         line_number: 162
-        rule_id: rule-2
+        rule_id: 2
         severity: P0
         what_is_wrong: add_issue_comment(owner="OWNER", repo="REPO", issue_number=NUMBER, body="bugbot run")
         what_it_should_be: add_issue_comment(owner="OWNER", repo="REPO", issueNumber=NUMBER, body="bugbot run")
@@ -272,7 +272,7 @@
       <finding>
         file_path: scripts/remove_tree.py
         line_number: 15
-        rule_id: rule-3
+        rule_id: 3
         severity: P0
         what_is_wrong: Docstring says "returns 0 when the path never existed". Implementation calls shutil.rmtree(target_path) which raises FileNotFoundError, caught as OSError, returning EXIT_CODE_REMOVE_TREE_FAILURE.
         what_it_should_be: Either check Path(target_path).exists() before calling rmtree and return 0 when absent, or update the docstring to say "returns failure when the path never existed".
@@ -287,7 +287,7 @@
       <finding>
         file_path: SKILL.md
         line_number: 34
-        rule_id: rule-7
+        rule_id: 7
         severity: P1
         what_is_wrong: Gotcha describes "inline_lag" as a distinct case with its own streak counter (inline_lag_streak) and 90s wait, but no implementation file in the diff defines inline_lag_streak or has an inline_lag decision branch.
         what_it_should_be: Remove the gotcha entry. The inline_lag feature was removed from per-tick.md decision branches but the gotcha was left behind.
@@ -302,7 +302,7 @@
       <finding>
         file_path: bugteam/obstacles/self-population.md
         line_number: 5
-        rule_id: rule-5
+        rule_id: 5
         severity: P1
         what_is_wrong: "Spawn  — brief it: check  for an open PR  " contains double spaces where an agent invocation, repo identifier, and PR number should be. This text is not executable.
         what_it_should_be: Fill in the concrete Agent call or remove the self-population section until populated.

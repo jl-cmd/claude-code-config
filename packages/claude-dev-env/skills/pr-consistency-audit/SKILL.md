@@ -105,10 +105,8 @@ Manifest: <tmp>/audit-manifest-<timestamp>.json
 | `SKILL.md` | Hub — process, constraints, gotchas |
 | `reference/detection-rules.md` | All 10 detection rules with examples |
 | `reference/illustrations.md` | Concrete findings with why-they-matter explanations |
-| `scripts/config/constants.py` | Severity labels, output templates, rule IDs |
 
 ## Folder map
 
 - `SKILL.md` — hub.
 - `reference/` — detection rules and illustrations.
-- `scripts/` — helpers and config.

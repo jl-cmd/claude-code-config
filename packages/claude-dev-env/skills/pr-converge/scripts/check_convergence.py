@@ -29,9 +29,9 @@ from config.constants import (
     BUGBOT_CHECK_RUN_NAME_SUBSTRING,
     BUGBOT_DIRTY_BODY_REGEX,
     CHECK_RUNS_PER_PAGE,
-    CLAUDE_CLEAN_REVIEW_STATE,
+    ALL_CLAUDE_CLEAN_REVIEW_STATES,
     CLAUDE_LOGIN_FILTER_SUBSTRING,
-    COPILOT_CLEAN_REVIEW_STATE,
+    ALL_COPILOT_CLEAN_REVIEW_STATES,
     COPILOT_LOGIN_FILTER_SUBSTRING,
     COPILOT_REVIEWER_LOGIN,
     CURSOR_LOGIN_FILTER_SUBSTRING,
@@ -176,7 +176,7 @@ def _check_bot_review(
     number: int,
     head_sha: str,
     login_substring: str,
-    clean_state: str,
+    clean_states: tuple[str, ...],
     dirty_states: tuple[str, ...],
     label: str,
 ) -> tuple[bool, str]:
@@ -214,7 +214,7 @@ def _check_bot_review(
         review_state = each_review.get("state", "")
         if not isinstance(commit_id, str) or not commit_id.startswith(head_sha):
             continue
-        if review_state == clean_state:
+        if review_state in clean_states:
             review_id = each_review.get("id", "?")
             return (
                 True,
@@ -416,7 +416,7 @@ def check_all(*, owner: str, repo: str, number: int) -> int:
                 number=number,
                 head_sha=head_sha,
                 login_substring=CLAUDE_LOGIN_FILTER_SUBSTRING,
-                clean_state=CLAUDE_CLEAN_REVIEW_STATE,
+                clean_states=ALL_CLAUDE_CLEAN_REVIEW_STATES,
                 dirty_states=ALL_CLAUDE_DIRTY_REVIEW_STATES,
                 label="claude[bot]",
             ),
@@ -432,7 +432,7 @@ def check_all(*, owner: str, repo: str, number: int) -> int:
                 number=number,
                 head_sha=head_sha,
                 login_substring=COPILOT_LOGIN_FILTER_SUBSTRING,
-                clean_state=COPILOT_CLEAN_REVIEW_STATE,
+                clean_states=ALL_COPILOT_CLEAN_REVIEW_STATES,
                 dirty_states=ALL_COPILOT_DIRTY_REVIEW_STATES,
                 label="copilot",
             ),

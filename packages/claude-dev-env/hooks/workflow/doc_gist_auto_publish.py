@@ -35,7 +35,7 @@ from config.doc_gist_auto_publish_constants import (  # noqa: E402
     ALL_TARGET_TOOL_NAMES,
     HTML_FILE_EXTENSION,
     PUBLISH_SENTINEL,
-    UPLOAD_TIMEOUT_SECONDS,
+    HOOK_SUBPROCESS_TIMEOUT_SECONDS,
 )
 
 
@@ -104,10 +104,10 @@ def _invoke_upload(
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=UPLOAD_TIMEOUT_SECONDS,
+            timeout=HOOK_SUBPROCESS_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
-        logging.warning("doc_gist_auto_publish: gist_upload timed out after %ds", UPLOAD_TIMEOUT_SECONDS)
+        logging.warning("doc_gist_auto_publish: gist_upload timed out after %ds", HOOK_SUBPROCESS_TIMEOUT_SECONDS)
         return
     if completed.stderr:
         err_stream.write(completed.stderr)

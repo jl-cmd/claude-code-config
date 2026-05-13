@@ -14,4 +14,4 @@ can be applied to.
 PUBLISH_SENTINEL = "<!-- @publish-as-gist -->"
 HTML_FILE_EXTENSION = ".html"
 ALL_TARGET_TOOL_NAMES = ("Write", "Edit")
-UPLOAD_TIMEOUT_SECONDS = 45
+HOOK_SUBPROCESS_TIMEOUT_SECONDS = 60

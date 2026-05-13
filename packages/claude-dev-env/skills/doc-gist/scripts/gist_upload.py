@@ -69,15 +69,20 @@ def _write_to_temp(html_text: str, filename: str, parent_directory: Path) -> Pat
 
 def _create_secret_gist(html_path: Path, description: str) -> str:
     """Run `gh gist create` against html_path and return the gist URL."""
-    completed = subprocess.run(
-        ["gh", "gist", "create", str(html_path), "--desc", description],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=UPLOAD_TIMEOUT_SECONDS,
-    )
+    try:
+        completed = subprocess.run(
+            ["gh", "gist", "create", str(html_path), "--desc", description],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=UPLOAD_TIMEOUT_SECONDS,
+        )
+    except FileNotFoundError:
+        raise SystemExit(
+            "gh CLI not found. Install GitHub CLI (https://cli.github.com) and run `gh auth login`."
+        )
     if completed.returncode != 0:
         message_text = completed.stderr.strip() or completed.stdout.strip()
         raise SystemExit(

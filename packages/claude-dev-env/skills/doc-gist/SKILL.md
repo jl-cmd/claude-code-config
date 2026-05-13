@@ -1,6 +1,14 @@
 ---
 name: doc-gist
-description: Use when the user asks to share, publish, preview, or open as a webpage any HTML doc, writeup, report, plan, decision record, runbook, explainer, status update, or interactive artifact. Triggers on `/doc-gist`, "publish this", "share as a gist", "open this as a webpage", "make me a writeup", "publish my report", or any request that ends in a shareable HTML preview URL. Provides the `gist_upload` transport script, an auto-publish hook keyed off the `<!-- @publish-as-gist -->` HTML comment, and a 20-file gallery of HTML artifact patterns to draw from when designing fresh.
+description: >
+  Use when the user asks to share, publish, preview, or open as a webpage any
+  HTML doc, writeup, report, plan, decision record, runbook, explainer, status
+  update, or interactive artifact. Triggers on `/doc-gist`, "publish this",
+  "share as a gist", "open this as a webpage", "make me a writeup", "publish my
+  report", or any request that ends in a shareable HTML preview URL. Provides
+  the `gist_upload` transport script, an auto-publish hook keyed off the
+  `<!-- @publish-as-gist -->` HTML comment, and a 20-file gallery of HTML
+  artifact patterns to draw from when designing fresh.
 ---
 
 # doc-gist
@@ -40,7 +48,7 @@ The user's prompt is the strongest signal. *"Make me a writeup of this PR"* → 
 
 ## The transport script — `scripts/gist_upload.py`
 
-For manual invocation when the marker route doesn't apply (an existing file you want to publish, HTML piped from another tool, a one-off:
+For manual invocation when the marker route doesn't apply (an existing file you want to publish, HTML piped from another tool, a one-off):
 
 ```
 python scripts/gist_upload.py --input <path-or-->

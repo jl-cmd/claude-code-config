@@ -1045,11 +1045,11 @@ def _without_parse_args_namespace_exemption(
 
 
 def _synthesize_alias_name_node(
-    bound_identifier: str, statement_node: ast.stmt
+    bound_identifier: str, alias_node: ast.alias
 ) -> ast.Name:
     synthetic_name = ast.Name(id=bound_identifier, ctx=ast.Store())
-    synthetic_name.lineno = statement_node.lineno
-    synthetic_name.col_offset = statement_node.col_offset
+    synthetic_name.lineno = alias_node.lineno
+    synthetic_name.col_offset = alias_node.col_offset
     return synthetic_name
 
 
@@ -1061,7 +1061,7 @@ def _collect_banned_names_from_import(
         bound_identifier = each_alias.asname or each_alias.name
         if bound_identifier in ALL_BANNED_IDENTIFIERS:
             banned_alias_nodes.append(
-                _synthesize_alias_name_node(bound_identifier, import_statement)
+                _synthesize_alias_name_node(bound_identifier, each_alias)
             )
     return banned_alias_nodes
 
@@ -3699,8 +3699,7 @@ def check_inline_tuple_string_magic(content: str, file_path: str) -> list[str]:
     """
     if is_test_file(file_path):
         return []
-    normalized_path = file_path.replace("\\", "/")
-    if INLINE_TUPLE_CONFIG_PATH_SEGMENT in normalized_path:
+    if is_config_file(file_path):
         return []
     if is_workflow_registry_file(file_path) or is_migration_file(file_path):
         return []

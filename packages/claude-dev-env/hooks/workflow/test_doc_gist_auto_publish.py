@@ -18,6 +18,7 @@ SENTINEL = "<!-- @publish-as-gist -->"
 
 STUB_PREVIEW_URL = "https://htmlpreview.github.io/?stub"
 
+
 class _RunHook:
     def __call__(self, tool_name: str, tool_input: dict) -> subprocess.CompletedProcess:
         payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})

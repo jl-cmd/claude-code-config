@@ -38,6 +38,7 @@ from config.doc_gist_auto_publish_constants import (  # noqa: E402
     HTML_FILE_EXTENSION,
     PUBLISH_SENTINEL,
     SENTINEL_SCAN_LIMIT_BYTES,
+    UPLOAD_SCRIPT_RELATIVE_PATH,
 )
 
 
@@ -84,9 +85,9 @@ def _resolve_upload_script() -> Path:
     """Locate the gist_upload.py script bundled with the doc-gist skill."""
     plugin_root_argument = sys.argv[1] if len(sys.argv) > 1 else None
     if plugin_root_argument:
-        return Path(plugin_root_argument) / "skills" / "doc-gist" / "scripts" / "gist_upload.py"
+        return Path(plugin_root_argument) / UPLOAD_SCRIPT_RELATIVE_PATH
     plugin_root_directory = Path(__file__).resolve().parent.parent.parent
-    return plugin_root_directory / "skills" / "doc-gist" / "scripts" / "gist_upload.py"
+    return plugin_root_directory / UPLOAD_SCRIPT_RELATIVE_PATH
 
 
 def _invoke_upload(

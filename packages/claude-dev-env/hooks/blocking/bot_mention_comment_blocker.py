@@ -9,23 +9,12 @@ catches both mistakes and returns the correct procedure for each.
 import json
 import sys
 
-_TOOL_NAME = "mcp__plugin_github_github__add_issue_comment"
-
-_CURSOR_MENTION_TOKEN = "@cursor"
-_COPILOT_MENTION_TOKEN = "@copilot"
-
-_CORRECTIVE_MESSAGE_CURSOR = (
-    "BLOCKED [bot-mention]: Invalid comment. "
-    "Post exactly ``bugbot run`` with no other text as your issue comment "
-    "to trigger Bugbot."
-)
-
-_CORRECTIVE_MESSAGE_COPILOT = (
-    "BLOCKED [bot-mention]: Invalid comment. "
-    "To request a Copilot review, use the GitHub REST API:\n"
-    "  gh api --method POST repos/<owner>/<repo>/pulls/<number>/requested_reviewers \\\n"
-    "    -f 'reviewers[]=copilot-pull-request-reviewer[bot]'\n"
-    "See ~/.claude/skills/pr-converge/reference/convergence-gates.md."
+from config.bot_mention_comment_blocker_constants import (
+    COPILOT_MENTION_TOKEN,
+    CORRECTIVE_MESSAGE_COPILOT,
+    CORRECTIVE_MESSAGE_CURSOR,
+    CURSOR_MENTION_TOKEN,
+    TOOL_NAME,
 )
 
 
@@ -35,10 +24,14 @@ def _body_contains_token(body: str, token: str) -> bool:
 
 def _detect_bot_mention(body: str) -> str | None:
     """Return corrective message if body contains a blocked mention, else None."""
-    if _body_contains_token(body, _COPILOT_MENTION_TOKEN):
-        return _CORRECTIVE_MESSAGE_COPILOT
-    if _body_contains_token(body, _CURSOR_MENTION_TOKEN):
-        return _CORRECTIVE_MESSAGE_CURSOR
+    copilot_mention_token = COPILOT_MENTION_TOKEN
+    corrective_message_copilot = CORRECTIVE_MESSAGE_COPILOT
+    cursor_mention_token = CURSOR_MENTION_TOKEN
+    corrective_message_cursor = CORRECTIVE_MESSAGE_CURSOR
+    if _body_contains_token(body, copilot_mention_token):
+        return corrective_message_copilot
+    if _body_contains_token(body, cursor_mention_token):
+        return corrective_message_cursor
     return None
 
 
@@ -48,8 +41,8 @@ def main() -> None:
     except json.JSONDecodeError:
         sys.exit(0)
 
-    tool_name = hook_input.get("tool_name", "")
-    if tool_name != _TOOL_NAME:
+    tool_name_value = TOOL_NAME
+    if hook_input.get("tool_name", "") != tool_name_value:
         sys.exit(0)
 
     body = hook_input.get("tool_input", {}).get("body", "")

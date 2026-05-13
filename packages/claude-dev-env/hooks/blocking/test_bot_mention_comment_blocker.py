@@ -21,9 +21,12 @@ hook_spec.loader.exec_module(hook_module)
 
 _detect_bot_mention = hook_module._detect_bot_mention
 _body_contains_token = hook_module._body_contains_token
-_CORRECTIVE_MESSAGE_CURSOR = hook_module._CORRECTIVE_MESSAGE_CURSOR
-_CORRECTIVE_MESSAGE_COPILOT = hook_module._CORRECTIVE_MESSAGE_COPILOT
-_CURSOR_MENTION_TOKEN = hook_module._CURSOR_MENTION_TOKEN
+
+from config.bot_mention_comment_blocker_constants import (
+    CORRECTIVE_MESSAGE_COPILOT,
+    CORRECTIVE_MESSAGE_CURSOR,
+    CURSOR_MENTION_TOKEN,
+)
 
 
 def test_passes_clean_body() -> None:
@@ -57,15 +60,15 @@ def test_blocks_copilot_mention() -> None:
 
 
 def test_returns_cursor_message_for_cursor() -> None:
-    assert _detect_bot_mention("@cursor run") == _CORRECTIVE_MESSAGE_CURSOR
+    assert _detect_bot_mention("@cursor run") == CORRECTIVE_MESSAGE_CURSOR
 
 
 def test_returns_copilot_message_for_copilot() -> None:
-    assert _detect_bot_mention("@copilot help") == _CORRECTIVE_MESSAGE_COPILOT
+    assert _detect_bot_mention("@copilot help") == CORRECTIVE_MESSAGE_COPILOT
 
 
 def test_copilot_wins_when_both_present() -> None:
-    assert _detect_bot_mention("@cursor and @copilot") == _CORRECTIVE_MESSAGE_COPILOT
+    assert _detect_bot_mention("@cursor and @copilot") == CORRECTIVE_MESSAGE_COPILOT
 
 
 def test_body_contains_token_case_insensitive() -> None:
@@ -74,4 +77,4 @@ def test_body_contains_token_case_insensitive() -> None:
 
 
 def test_body_contains_token_no_at_sign() -> None:
-    assert not _body_contains_token("cursor without at-sign", _CURSOR_MENTION_TOKEN)
+    assert not _body_contains_token("cursor without at-sign", CURSOR_MENTION_TOKEN)

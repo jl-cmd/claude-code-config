@@ -131,7 +131,7 @@
             "timeout": 15
           }
         ]
-      }
+      },
       {
         "matcher": "mcp__plugin_github_github__add_issue_comment",
         "hooks": [

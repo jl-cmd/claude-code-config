@@ -127,7 +127,7 @@ def _check_bugbot(*, owner: str, repo: str, sha: str) -> tuple[bool, str]:
     return False, "no bugbot check run found"
 
 
-def _check_bugbot_not_dirty(*, owner: str, repo: str, number: int) -> tuple[bool, str]:
+def _check_bugbot_not_dirty(*, owner: str, repo: str, number: int, head_sha: str) -> tuple[bool, str]:
     endpoint = GH_REVIEWS_PATH_TEMPLATE.format(owner=owner, repo=repo, number=number)
     returncode, stdout = _gh_api_paginated(f"{endpoint}?per_page={REVIEWS_PER_PAGE}")
     if returncode != 0:
@@ -151,6 +151,9 @@ def _check_bugbot_not_dirty(*, owner: str, repo: str, number: int) -> tuple[bool
             if not isinstance(login, str):
                 continue
             if CURSOR_LOGIN_FILTER_SUBSTRING not in login.lower():
+                continue
+            commit_id = each_review.get("commit_id", "")
+            if not isinstance(commit_id, str) or not commit_id.startswith(head_sha):
                 continue
             body = each_review.get("body", "")
             if isinstance(body, str) and dirty_pattern.search(body):
@@ -392,7 +395,7 @@ def check_all(*, owner: str, repo: str, number: int) -> int:
         conditions.append(
             (
                 "bugbot review body clean",
-                _check_bugbot_not_dirty(owner=owner, repo=repo, number=number),
+                _check_bugbot_not_dirty(owner=owner, repo=repo, number=number, head_sha=head_sha),
             )
         )
 

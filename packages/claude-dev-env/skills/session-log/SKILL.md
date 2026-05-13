@@ -1,6 +1,7 @@
 ---
 name: session-log
-description: Log a session report as a styled HTML file in the vault, track vault context usage, extract unrecorded decisions, tidy the project's session folder, publish via /doc-gist as a shareable webpage, and output a /rename command. Use when the user says /session-log, journal this session, log this work, session report, or any variation of "summarize/log/record this session". Also triggers on "save session", "capture session", or "document what we did".
+description: >-
+  Log a session report as a styled HTML file in the vault, track vault context usage, extract unrecorded decisions, tidy the project's session folder, publish via /doc-gist as a shareable webpage, and output a /rename command. Use when the user says /session-log, journal this session, log this work, session report, or any variation of "summarize/log/record this session". Also triggers on "save session", "capture session", or "document what we did".
 ---
 
 # Session Log
@@ -47,7 +48,7 @@ Determine which storage backend is available. Try in this order and use the firs
 - Highest N + 1. If directory does not exist, create it and start at 1
 
 **Output paths:**
-- headless: `$OBSIDIAN_VAULT_PATH/sessions/[Project]/[N]. [Title].html`
+- headless: `$OBSIDIAN_VAULT_PATH/sessions/[Project]/[N]. [Title].html` (falls back to `~/.claude/vault/` when the env var is unset)
 - local: `~/.claude/vault/sessions/[Project]/[N]. [Title].html`
 
 Announce the backend: "Using headless vault at [path]." or "Using local vault at ~/.claude/vault/. Run `/obsidian-check` for upgrade options."

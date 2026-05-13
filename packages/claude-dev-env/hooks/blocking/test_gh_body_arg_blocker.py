@@ -401,6 +401,12 @@ def test_has_backtick_bash_continuation_stripped() -> None:
     assert not _has_backtick(command)
 
 
+def test_has_backtick_powershell_continuation_stripped() -> None:
+    """PowerShell backtick line continuations are stripped before checking."""
+    command = 'gh pr create `\n  --title "T" `\n  --body "bugbot run"\n'
+    assert not _has_backtick(command)
+
+
 def test_has_backtick_content_backtick_at_line_end() -> None:
     """A backtick at end of line in body content must be detected (not mistaken for continuation)."""
     command = 'gh pr create --title "T" --body "Thanks `\n@user"'

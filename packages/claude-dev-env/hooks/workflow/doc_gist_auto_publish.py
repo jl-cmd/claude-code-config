@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """PostToolUse hook: auto-publish HTML files marked with the doc-gist sentinel.
 
 When Claude writes an .html file containing the marker
@@ -33,9 +34,10 @@ if _hooks_directory not in sys.path:
 
 from config.doc_gist_auto_publish_constants import (  # noqa: E402
     ALL_TARGET_TOOL_NAMES,
+    HOOK_SUBPROCESS_TIMEOUT_SECONDS,
     HTML_FILE_EXTENSION,
     PUBLISH_SENTINEL,
-    HOOK_SUBPROCESS_TIMEOUT_SECONDS,
+    SENTINEL_SCAN_LIMIT_BYTES,
 )
 
 
@@ -68,13 +70,14 @@ def _resolve_target_path(payload: dict[str, object]) -> Path | None:
 
 
 def _has_publish_sentinel(target_path: Path) -> bool:
-    """Read the HTML and check for the publish marker."""
+    """Check a bounded prefix of the HTML for the publish marker."""
     try:
-        contents = target_path.read_text(encoding="utf-8", errors="replace")
+        with open(target_path, encoding="utf-8", errors="replace") as file_handle:
+            prefix = file_handle.read(SENTINEL_SCAN_LIMIT_BYTES)
     except OSError:
         logging.warning("doc_gist_auto_publish: cannot read %s", target_path)
         return False
-    return PUBLISH_SENTINEL in contents
+    return PUBLISH_SENTINEL in prefix
 
 
 def _resolve_upload_script() -> Path:

@@ -37,7 +37,7 @@ from config.doc_gist_auto_publish_constants import (  # noqa: E402
     HOOK_SUBPROCESS_TIMEOUT_SECONDS,
     HTML_FILE_EXTENSION,
     PUBLISH_SENTINEL,
-    SENTINEL_SCAN_LIMIT_BYTES,
+    SENTINEL_SCAN_LIMIT_CHARS,
     UPLOAD_SCRIPT_RELATIVE_PATH,
 )
 
@@ -74,7 +74,7 @@ def _has_publish_sentinel(target_path: Path) -> bool:
     """Check a bounded prefix of the HTML for the publish marker."""
     try:
         with open(target_path, encoding="utf-8", errors="replace") as file_handle:
-            prefix = file_handle.read(SENTINEL_SCAN_LIMIT_BYTES)
+            prefix = file_handle.read(SENTINEL_SCAN_LIMIT_CHARS)
     except OSError:
         logging.warning("doc_gist_auto_publish: cannot read %s", target_path)
         return False

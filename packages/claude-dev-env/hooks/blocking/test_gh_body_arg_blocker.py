@@ -395,10 +395,16 @@ def test_has_backtick_with_empty_body() -> None:
     assert not _has_backtick('gh pr create --title "T" --body=""')
 
 
-def test_has_backtick_powershell_continuation_not_counted() -> None:
-    """PowerShell backtick line continuations are stripped before checking."""
-    command = 'gh pr create `\n  --title "T" `\n  --body "bugbot run"\n'
+def test_has_backtick_bash_continuation_stripped() -> None:
+    """Bash backslash line continuations are stripped before checking."""
+    command = 'gh pr create \\\n  --title "T" \\\n  --body "bugbot run"\n'
     assert not _has_backtick(command)
+
+
+def test_has_backtick_content_backtick_at_line_end() -> None:
+    """A backtick at end of line in body content must be detected (not mistaken for continuation)."""
+    command = 'gh pr create --title "T" --body "Thanks `\n@user"'
+    assert _has_backtick(command)
 
 
 def test_has_backtick_multi_line_body() -> None:

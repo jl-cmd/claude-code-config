@@ -25,7 +25,6 @@ import sys
 
 from _gh_body_arg_utils import (
     _is_bash_continuation,
-    _is_powershell_continuation,
     all_body_flags,
     all_body_flag_prefixes,
     get_logical_first_line,
@@ -72,20 +71,21 @@ def _logical_line_has_bare_body_token(logical_line: str) -> bool:
 
 
 def _has_backtick(command: str) -> bool:
-    """Return True if command contains a backtick that is not a continuation marker.
+    """Return True if command contains a backtick that is not a bash continuation.
 
-    Joins all bash `` \\ `` and PowerShell `` ` `` continuation lines (not just
-    the first logical line) so backticks in multi-line body values on later
-    non-continuation lines are not missed.
+    Joins all bash `` \\ `` continuation lines so backticks in multi-line body
+    values on later non-continuation lines are not missed. Only strips bash
+    continuations — this hook runs on the Bash tool, and PowerShell-style
+    backtick continuations are not continuation markers in bash.
     """
-    joined_lines: list[str] = []
+    all_joined_lines: list[str] = []
     for each_line in command.splitlines():
         stripped_line = each_line.rstrip()
-        if _is_bash_continuation(stripped_line) or _is_powershell_continuation(stripped_line):
-            joined_lines.append(stripped_line[:-1].rstrip() + " ")
+        if _is_bash_continuation(stripped_line):
+            all_joined_lines.append(stripped_line[:-1].rstrip() + " ")
             continue
-        joined_lines.append(each_line)
-    full_logical_command = "".join(joined_lines)
+        all_joined_lines.append(each_line)
+    full_logical_command = "".join(all_joined_lines)
     return "`" in full_logical_command
 
 

@@ -1590,9 +1590,11 @@ def check_docstring_format(content: str, file_path: str) -> list[str]:
     return issues[:MAX_DOCSTRING_FORMAT_ISSUES]
 
 
+_PASCAL_TO_SNAKE_WORD_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
 def _pascal_to_snake_case(pascal_name: str) -> str:
-    pascal_to_snake_word_boundary = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
-    return pascal_to_snake_word_boundary.sub("_", pascal_name).lower()
+    return _PASCAL_TO_SNAKE_WORD_BOUNDARY.sub("_", pascal_name).lower()
 
 
 def _class_inherits_from_typed_dict(class_node: ast.ClassDef) -> bool:
@@ -1673,6 +1675,15 @@ def _function_is_abstract(function_node: ast.FunctionDef | ast.AsyncFunctionDef)
         _function_decorator_is_abstractmethod(each_decorator)
         for each_decorator in function_node.decorator_list
     )
+
+
+def _function_is_overload(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    for each_decorator in function_node.decorator_list:
+        if isinstance(each_decorator, ast.Name) and each_decorator.id == "overload":
+            return True
+        if isinstance(each_decorator, ast.Attribute) and each_decorator.attr == "overload":
+            return True
+    return False
 
 
 def _class_is_protocol(class_node: ast.ClassDef) -> bool:
@@ -1773,7 +1784,7 @@ def check_stub_implementations(content: str, file_path: str) -> list[str]:
     for each_node in ast.walk(parsed_tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        if _function_is_abstract(each_node):
+        if _function_is_abstract(each_node) or _function_is_overload(each_node):
             continue
         if id(each_node) in abstract_class_function_ids:
             continue

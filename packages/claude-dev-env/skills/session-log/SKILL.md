@@ -43,7 +43,7 @@ Determine which storage backend is available. Try in this order and use the firs
 
 **Session number detection:**
 - List files in the project directory via Bash `ls`
-- Parse filenames matching `[N]. *.html`
+- Parse filenames matching `[N]. *.html` or `[N]. *.md` to preserve sequence across the format migration
 - Highest N + 1. If directory does not exist, create it and start at 1
 
 **Output paths:**
@@ -60,7 +60,7 @@ Announce the backend: "Using headless vault at [path]." or "Using local vault at
 
 2. Determine session metadata:
    - **Project name:** infer from conversation context
-   - **Session number:** list the project's vault folder via Bash `ls`, parse `[N]. *.html` filenames, take highest+1. If no prior sessions, start at 1.
+   - **Session number:** list the project's vault folder via Bash `ls`, parse `[N]. *.html` and `[N]. *.md` filenames, take highest+1. If no prior sessions, start at 1.
    - **Date:** today's date
    - **Title:** a 2-5 word summary of the session's primary outcome or focus area. Pick the single most important thing that happened. Examples: "Amazon Auth Migration", "Source Loading Fix", "Vault Reorganization". Avoid generic titles like "Bug Fixes" or "Various Updates".
 
@@ -247,7 +247,7 @@ This step runs automatically after Step 3 completes. Scope: the current project'
 
    If no issues are found, skip silently. Do not report "all clean."
 
-5. **Rollup check:** if the project has 5+ sessions and no `Summary.html`, mention it:
+5. **Rollup check:** if the project has 5+ sessions and no `Summary.html` or `Summary.md`, mention it:
    > "This project has [N] sessions and no summary. Run `/session-tidy` for a full rollup."
 
 ---

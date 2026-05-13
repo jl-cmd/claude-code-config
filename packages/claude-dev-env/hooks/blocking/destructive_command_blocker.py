@@ -497,8 +497,8 @@ def _git_reset_hard_allowed_for_command(command: str, current_working_directory:
 
 
 def _is_convergence_branch(branch: str) -> bool:
-    convergence_branch_prefixes = ALL_CONVERGENCE_BRANCH_PREFIXES
-    for each_prefix in convergence_branch_prefixes:
+    all_convergence_branch_prefixes = ALL_CONVERGENCE_BRANCH_PREFIXES
+    for each_prefix in all_convergence_branch_prefixes:
         if branch.startswith(each_prefix):
             return True
     return bool(re.match(CONVERGENCE_BRANCH_SUFFIX_PATTERN, branch))

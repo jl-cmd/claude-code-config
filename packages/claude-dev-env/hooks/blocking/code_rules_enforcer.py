@@ -838,28 +838,28 @@ def check_type_escape_hatches(content: str, file_path: str) -> list[str]:
     """Flag Any annotations, Any imports, cast() calls, and unjustified # type: ignore."""
     if is_test_file(file_path):
         return []
-    if _file_path_matches_any_exemption(file_path):
-        return []
 
     issues: list[str] = []
+    is_any_exempt = _file_path_matches_any_exemption(file_path)
 
-    for each_any_line in _find_any_annotation_lines(content):
-        issues.append(f"Line {each_any_line}: Any annotation - replace with explicit type")
+    if not is_any_exempt:
+        for each_any_line in _find_any_annotation_lines(content):
+            issues.append(f"Line {each_any_line}: Any annotation - replace with explicit type")
 
-    for each_import_line in _find_typing_any_imports(content):
-        issues.append(
-            f"Line {each_import_line}: 'from typing import Any' - remove the Any import and use explicit types"
-        )
+        for each_import_line in _find_typing_any_imports(content):
+            issues.append(
+                f"Line {each_import_line}: 'from typing import Any' - remove the Any import and use explicit types"
+            )
 
-    for each_wildcard_line in _find_typing_wildcard_imports(content):
-        issues.append(
-            f"Line {each_wildcard_line}: 'from typing import *' wildcard import - import explicit names instead"
-        )
+        for each_wildcard_line in _find_typing_wildcard_imports(content):
+            issues.append(
+                f"Line {each_wildcard_line}: 'from typing import *' wildcard import - import explicit names instead"
+            )
 
-    for each_cast_line in _find_cast_call_lines(content):
-        issues.append(
-            f"Line {each_cast_line}: cast() call - escape hatch around the type system; use explicit types or runtime validation"
-        )
+        for each_cast_line in _find_cast_call_lines(content):
+            issues.append(
+                f"Line {each_cast_line}: cast() call - escape hatch around the type system; use explicit types or runtime validation"
+            )
 
     for each_ignore_line in _find_unjustified_type_ignore_lines(content):
         issues.append(

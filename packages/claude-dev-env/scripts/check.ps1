@@ -40,6 +40,7 @@ $hooksRoot = Resolve-Path (Join-Path $PSScriptRoot '..' 'hooks')
 $blockingRoot = Join-Path $hooksRoot 'blocking'
 
 $failedTools = @()
+$firstNonZeroExitCode = 0
 
 function Invoke-Tool {
     param(
@@ -52,6 +53,9 @@ function Invoke-Tool {
     $exitCode = $LASTEXITCODE
     if ($exitCode -ne 0) {
         $script:failedTools += $Label
+        if ($script:firstNonZeroExitCode -eq 0) {
+            $script:firstNonZeroExitCode = $exitCode
+        }
         Write-Host "$Label FAILED (exit $exitCode)" -ForegroundColor Red
     } else {
         Write-Host "$Label OK" -ForegroundColor Green
@@ -98,5 +102,5 @@ if ($failedTools.Count -eq 0) {
 } else {
     $joined = ($failedTools -join ',')
     Write-Host "CHECK: FAILED tools=$joined" -ForegroundColor Red
-    exit 1
+    exit $firstNonZeroExitCode
 }

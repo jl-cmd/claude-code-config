@@ -812,7 +812,8 @@ def _is_typing_cast_call(call_node: ast.Call) -> bool:
     if isinstance(function_node, ast.Name) and function_node.id == "cast":
         return True
     if isinstance(function_node, ast.Attribute) and function_node.attr == "cast":
-        return True
+        if isinstance(function_node.value, ast.Name) and function_node.value.id == "typing":
+            return True
     return False
 
 
@@ -1603,9 +1604,9 @@ def _collect_typed_dict_class_names(parsed_tree: ast.AST) -> list[tuple[str, int
 
 def _collect_module_function_names(parsed_tree: ast.AST) -> set[str]:
     module_function_names: set[str] = set()
-    for each_node in ast.walk(parsed_tree):
-        if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            module_function_names.add(each_node.name)
+    for each_statement in parsed_tree.body:
+        if isinstance(each_statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            module_function_names.add(each_statement.name)
     return module_function_names
 
 
@@ -1743,7 +1744,7 @@ def check_stub_implementations(content: str, file_path: str) -> list[str]:
     for each_node in ast.walk(parsed_tree):
         if isinstance(each_node, ast.ClassDef) and _class_inherits_from_protocol_or_abc(each_node):
             for each_class_member in each_node.body:
-                if isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)) and _function_is_abstract(each_class_member):
                     abstract_class_function_ids.add(id(each_class_member))
 
     stub_function_nodes: list[ast.FunctionDef | ast.AsyncFunctionDef] = []

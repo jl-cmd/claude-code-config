@@ -21,7 +21,6 @@ import json
 import logging
 import subprocess
 import sys
-from io import TextIOBase
 from pathlib import Path
 from typing import IO
 
@@ -36,6 +35,7 @@ from config.doc_gist_auto_publish_constants import (  # noqa: E402
     ALL_TARGET_TOOL_NAMES,
     HTML_FILE_EXTENSION,
     PUBLISH_SENTINEL,
+    UPLOAD_TIMEOUT_SECONDS,
 )
 
 
@@ -92,8 +92,8 @@ def _resolve_upload_script() -> Path:
 def _invoke_upload(
     script_path: Path,
     target_path: Path,
-    out_stream: IO[str] | TextIOBase,
-    err_stream: IO[str] | TextIOBase,
+    out_stream: IO[str],
+    err_stream: IO[str],
 ) -> None:
     """Run gist_upload.py against target_path and surface its URLs to the harness."""
     completed = subprocess.run(
@@ -103,6 +103,7 @@ def _invoke_upload(
         text=True,
         encoding="utf-8",
         errors="replace",
+        timeout=UPLOAD_TIMEOUT_SECONDS,
     )
     if completed.stderr:
         err_stream.write(completed.stderr)

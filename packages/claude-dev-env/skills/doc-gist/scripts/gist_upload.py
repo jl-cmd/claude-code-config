@@ -24,6 +24,7 @@ import sys
 import tempfile
 import webbrowser
 from pathlib import Path
+from urllib.parse import quote
 
 _script_directory = str(Path(__file__).resolve().parent)
 if _script_directory not in sys.path:
@@ -34,6 +35,7 @@ from config.gist_upload_constants import (  # noqa: E402
     GIST_HOST_PREFIX,
     MINIMUM_GIST_URL_PARTS,
     PREVIEW_URL_TEMPLATE,
+    UPLOAD_TIMEOUT_SECONDS,
 )
 
 
@@ -67,7 +69,6 @@ def _write_to_temp(html_text: str, filename: str, parent_directory: Path) -> Pat
 
 def _create_secret_gist(html_path: Path, description: str) -> str:
     """Run `gh gist create` against html_path and return the gist URL."""
-    completed: subprocess.CompletedProcess[str] | None = None
     completed = subprocess.run(
         ["gh", "gist", "create", str(html_path), "--desc", description],
         check=False,
@@ -75,6 +76,7 @@ def _create_secret_gist(html_path: Path, description: str) -> str:
         text=True,
         encoding="utf-8",
         errors="replace",
+        timeout=UPLOAD_TIMEOUT_SECONDS,
     )
     if completed.returncode != 0:
         message_text = completed.stderr.strip() or completed.stdout.strip()
@@ -98,7 +100,7 @@ def _compose_preview_url(gist_url: str, filename: str) -> str:
     parts = path_after_host.split("/")
     if len(parts) < minimum_parts:
         raise SystemExit(f"Cannot parse gist URL: {gist_url!r}")
-    return preview_template.format(user=parts[0], gist_id=parts[1], filename=filename)
+    return preview_template.format(user=parts[0], gist_id=parts[1], filename=quote(filename, safe=""))
 
 
 def _open_in_browser(url: str) -> None:

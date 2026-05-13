@@ -211,20 +211,14 @@ resolve the thread. Count unresolved threads before advancing.
       - [ ] unresolved → Fix (spawn `clean-coder`) → reply → resolve → push → return to Step 4
 
       **(e) Mark ready**
-      - [ ] Verify ALL seven pre-conditions with explicit evidence:
-        1. `bugbot_clean_at == current_head` (verified at Step 4 exit)
-        2. `bugteam_clean_at == current_head` (verified at Step 5 exit)
-        3. `copilot_clean_at == current_head` (verified at Step 6a exit)
-        4. Zero unresolved bot threads (verified at Step 6d)
-        5. PR is mergeable (verified at Step 6b)
-        6. Copilot review is clean against current_head (verified at Step 6a)
-        7. No pending requested reviews (verified at Step 6c)
-      - [ ] Each condition must have explicit evidence — print the SHA,
-        thread count, mergeability status, and review state before marking
-        ready. Do not advance if any condition lacks evidence or is
-        assumed. A missing Copilot review is not implicit approval.
-      - [ ] `update_pull_request(draft=false)`
-      - [ ] Advance to Step 7
+      - [ ] Run automated convergence check:
+            ```
+            python ~/.claude/skills/pr-converge/scripts/check_convergence.py \
+              --owner <O> --repo <R> --pr-number <N>
+            ```
+      - [ ] Exit 0 (all pass) → `update_pull_request(draft=false)` → advance to Step 7
+      - [ ] Exit 1 (FAIL lines) → address each failure → return to Step 4
+      - [ ] Exit 2 (gh error) → retry once; persistent → stop
 
 - [ ] **Step 6a: COPILOT_WAIT — fetch Copilot, decide**
       See: [`reference/per-tick.md` § Step 2 COPILOT_WAIT](reference/per-tick.md)

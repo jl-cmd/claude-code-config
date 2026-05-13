@@ -490,22 +490,32 @@ _CONVERGENCE_BRANCH_PREFIXES = ("claude/", "worktree-")
 
 
 def _is_convergence_branch(branch: str) -> bool:
-    for prefix in _CONVERGENCE_BRANCH_PREFIXES:
-        if branch.startswith(prefix):
+    for each_prefix in _CONVERGENCE_BRANCH_PREFIXES:
+        if branch.startswith(each_prefix):
             return True
     return bool(re.match(r"pr-.*-converge$", branch))
+
+
+def _all_refspecs_are_convergence_branches(post_remote_text: str) -> bool:
+    for each_token in post_remote_text.split():
+        if each_token.startswith("-"):
+            continue
+        destination_branch = each_token.split(":")[-1]
+        if not _is_convergence_branch(destination_branch):
+            return False
+    return True
 
 
 def _force_push_targets_convergence_branch(command: str) -> bool:
     any_force_push_found = False
     for each_pattern in (
-        r"\bgit\s+push\s+(?:--force|-f)\s+\S+\s+(\S+)",
-        r"\bgit\s+push\s+\S+\s+(\S+)\s+(?:--force|-f)",
+        r"\bgit\s+push\s+(?:--force|-f)\s+\S+\s+(.*)",
+        r"\bgit\s+push\s+\S+\s+(.*)\s+(?:--force|-f)",
     ):
         for each_match in re.finditer(each_pattern, command):
             any_force_push_found = True
-            destination_branch = each_match.group(1).split(":")[-1]
-            if not _is_convergence_branch(destination_branch):
+            post_remote_text = each_match.group(1).strip()
+            if not _all_refspecs_are_convergence_branches(post_remote_text):
                 return False
     return any_force_push_found
 

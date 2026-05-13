@@ -77,12 +77,19 @@ def _has_backtick(command: str) -> bool:
     values on later non-continuation lines are not missed. Only strips bash
     continuations — this hook runs on the Bash tool, and PowerShell-style
     backtick continuations are not continuation markers in bash.
+
+    Scans the entire command string for backtick characters, not just --body
+    argument content. This is intentionally conservative — any command
+    containing backticks should use --body-file regardless of where they
+    appear. False positives (backticks in non-body flags) are safe
+    over-blocks.
     """
+    continuation_separator = " "
     all_joined_lines: list[str] = []
     for each_line in command.splitlines():
         stripped_line = each_line.rstrip()
         if _is_bash_continuation(stripped_line):
-            all_joined_lines.append(stripped_line[:-1].rstrip() + " ")
+            all_joined_lines.append(stripped_line[:-1].rstrip() + continuation_separator)
             continue
         all_joined_lines.append(each_line)
     full_logical_command = "".join(all_joined_lines)

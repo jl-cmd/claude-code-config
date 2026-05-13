@@ -3712,30 +3712,31 @@ def check_inline_tuple_string_magic(content: str, file_path: str) -> list[str]:
     for each_function_node in ast.walk(tree):
         if not isinstance(each_function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for each_descendant in ast.walk(each_function_node):
-            if not isinstance(each_descendant, ast.Tuple):
-                continue
-            if id(each_descendant) in seen_tuple_node_ids:
-                continue
-            seen_tuple_node_ids.add(id(each_descendant))
-            if len(each_descendant.elts) != EXPECTED_TUPLE_PAIR_LENGTH:
-                continue
-            first_element = each_descendant.elts[0]
-            if not isinstance(first_element, ast.Constant):
-                continue
-            if not isinstance(first_element.value, str):
-                continue
-            literal_text = first_element.value
-            if not snake_case_pattern.match(literal_text):
-                continue
-            if literal_text in ALL_SNAKE_CASE_KEYWORD_EXEMPTIONS:
-                continue
-            issues.append(
-                f"Line {first_element.lineno}: Column-name string magic "
-                f"{literal_text!r} - {INLINE_TUPLE_STRING_MAGIC_MESSAGE_SUFFIX}"
-            )
-            if len(issues) >= MAX_INLINE_TUPLE_STRING_MAGIC_ISSUES:
-                return issues
+        for each_body_statement in each_function_node.body:
+            for each_descendant in _walk_skipping_nested_function_defs(each_body_statement):
+                if not isinstance(each_descendant, ast.Tuple):
+                    continue
+                if id(each_descendant) in seen_tuple_node_ids:
+                    continue
+                seen_tuple_node_ids.add(id(each_descendant))
+                if len(each_descendant.elts) != EXPECTED_TUPLE_PAIR_LENGTH:
+                    continue
+                first_element = each_descendant.elts[0]
+                if not isinstance(first_element, ast.Constant):
+                    continue
+                if not isinstance(first_element.value, str):
+                    continue
+                literal_text = first_element.value
+                if not snake_case_pattern.match(literal_text):
+                    continue
+                if literal_text in ALL_SNAKE_CASE_KEYWORD_EXEMPTIONS:
+                    continue
+                issues.append(
+                    f"Line {first_element.lineno}: Column-name string magic "
+                    f"{literal_text!r} - {INLINE_TUPLE_STRING_MAGIC_MESSAGE_SUFFIX}"
+                )
+                if len(issues) >= MAX_INLINE_TUPLE_STRING_MAGIC_ISSUES:
+                    return issues
     return issues
 
 

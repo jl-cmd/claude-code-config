@@ -79,9 +79,9 @@ def _file_contains_sentinel(target_path: Path) -> bool:
 
 def _resolve_upload_script() -> Path:
     """Locate the gist_upload.py script bundled with the doc-gist skill."""
-    plugin_root_environment = sys.argv[1] if len(sys.argv) > 1 else None
-    if plugin_root_environment:
-        return Path(plugin_root_environment) / "skills" / "doc-gist" / "scripts" / "gist_upload.py"
+    plugin_root_argument = sys.argv[1] if len(sys.argv) > 1 else None
+    if plugin_root_argument:
+        return Path(plugin_root_argument) / "skills" / "doc-gist" / "scripts" / "gist_upload.py"
     plugin_root_directory = Path(__file__).resolve().parent.parent.parent
     return plugin_root_directory / "skills" / "doc-gist" / "scripts" / "gist_upload.py"
 

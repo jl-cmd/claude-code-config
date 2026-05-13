@@ -94,7 +94,7 @@ c. Decide (four branches; match first whose predicate holds):
      `state.json`, goes idle; Step 3 on new HEAD runs after via
      orchestrator-spawned follow-up agent (§Fix result → general-purpose).
      No `state.json` (single-PR): spawn Agent (subagent_type: clean-coder) to implement → push → reply inline on each thread
-     via `python scripts/post_fix_reply.py` → Step 3 in same tick (see
+     via `python ~/.claude/skills/pr-converge/scripts/post_fix_reply.py` → Step 3 in same tick (see
      [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
      full contract).
      Schedule next wakeup, return.
@@ -154,7 +154,7 @@ never falsely terminates:
      **omit loop pacing** per **Convergence** of active pacing workflow.
    - **Convergence BUT `bugbot_clean_at != current_head` (no push):**
      `phase = BUGBOT`, schedule next wakeup, return.
-   - **Findings without committed fixes:** spawn Agent (subagent_type: clean-coder) to implement fixes and push, then reply inline via `python scripts/post_fix_reply.py`, following [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
+   - **Findings without committed fixes:** spawn Agent (subagent_type: clean-coder) to implement fixes and push, then reply inline via `python ~/.claude/skills/pr-converge/scripts/post_fix_reply.py`, following [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow).
      `phase = BUGBOT`, schedule next wakeup, return.
 
 ### `phase == COPILOT_WAIT`
@@ -167,10 +167,10 @@ a. Fetch latest Copilot review at `current_head` plus unaddressed inline
    comments:
 
    ```
-python scripts/fetch_copilot_reviews.py --owner <O> --repo <R> --pr-number <N>
+python ~/.claude/skills/pr-converge/scripts/fetch_copilot_reviews.py --owner <O> --repo <R> --pr-number <N>
   → filter by `.commit_id == current_head`, sort by `.submitted_at` descending
 
-python scripts/fetch_copilot_inline_comments.py --owner <O> --repo <R> --pr-number <N> --commit <current_head>
+python ~/.claude/skills/pr-converge/scripts/fetch_copilot_inline_comments.py --owner <O> --repo <R> --pr-number <N> --commit <current_head>
   → unaddressed inline threads on the latest Copilot review at current_head
    ```
 
@@ -183,7 +183,7 @@ b. Decide (three branches; match first whose predicate holds):
    - **Copilot review dirty (CHANGES_REQUESTED or COMMENTED with findings)
      at `current_head`:** Apply **Fix protocol** — spawn Agent
      (subagent_type: clean-coder) to implement → push → reply inline on each
-     thread via `python scripts/post_fix_reply.py`. For body-only
+     thread via `python ~/.claude/skills/pr-converge/scripts/post_fix_reply.py`. For body-only
      findings (no inline threads), post top-level review reply citing new
      HEAD SHA. Reset
      `bugbot_clean_at = null` AND `copilot_clean_at = null`. **Set
@@ -203,11 +203,11 @@ BUGBOT.
 
 ## Step 3: Re-trigger bugbot
 
-- [ ] Run `python scripts/check_bugbot_ci.py --check-active --owner <O> --repo <R> --sha <current_head>`
+- [ ] Run `python ~/.claude/skills/pr-converge/scripts/check_bugbot_ci.py --check-active --owner <O> --repo <R> --sha <current_head>`
 - [ ] Exit 0 → bugbot already queued on this commit; skip posting, wait for completion
 - [ ] Exit 1 → post trigger via `add_issue_comment(owner="OWNER", repo="REPO", issueNumber=NUMBER, body="bugbot run")`
 - [ ] Wait 8s
-- [ ] Run `python scripts/check_bugbot_ci.py --owner <O> --repo <R> --sha <current_head>`
+- [ ] Run `python ~/.claude/skills/pr-converge/scripts/check_bugbot_ci.py --owner <O> --repo <R> --sha <current_head>`
 - [ ] Exit non-zero → bugbot is down; set `bugbot_down = true`, `phase = BUGTEAM`, continue BUGTEAM same tick
 - [ ] Exit 0 (check run present) → record `bugbot_acknowledged_at = <now ISO 8601>`, proceed to Step 4
 

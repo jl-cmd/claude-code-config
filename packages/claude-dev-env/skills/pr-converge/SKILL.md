@@ -37,7 +37,7 @@ post a fresh PR in a fresh branch based on origin main to the user.
   orchestrator bump increments.
 - **Bugbot trigger and detection** — CI check-run based. Full flow at
   [`per-tick.md` Step 3](reference/per-tick.md); see also
-  `scripts/check_bugbot_ci.py --help`.
+  `~/.claude/skills/pr-converge/scripts/check_bugbot_ci.py --help`.
 - **Bot login fields differ by endpoint** — `get_reviews` returns
   `.user.login` (object), but `get_review_comments` returns `.author`
   (string, not an object). Threads use `is_outdated` (not `commit_id`) to
@@ -60,7 +60,7 @@ exist on `current_head`.** After every fix, reply to each finding comment and
 resolve the thread. Count unresolved threads before advancing.
 
 - [ ] **Step 0: Grant project permissions**
-      `python ../../bugteam/scripts/grant_project_claude_permissions.py`
+      `python ~/.claude/skills/bugteam/scripts/grant_project_claude_permissions.py`
 
 - [ ] **Step 1: Resolve PR scope**
       Capture owner, repo, number, head SHA, branch.
@@ -86,7 +86,7 @@ resolve the thread. Count unresolved threads before advancing.
 
       - [ ] **dirty** (findings on `current_head`) →
             - [ ] Fix each finding (spawn `clean-coder`)
-            - [ ] Reply to each finding comment via `python scripts/post_fix_reply.py`
+            - [ ] Reply to each finding comment via `python ~/.claude/skills/pr-converge/scripts/post_fix_reply.py`
             - [ ] Resolve each addressed thread via `pull_request_review_write(method="resolve_thread")`
             - [ ] Push → return to Step 4
       - [ ] **clean** (no findings on `current_head`) →
@@ -94,10 +94,10 @@ resolve the thread. Count unresolved threads before advancing.
             - [ ] `bugbot_clean_at = current_head`
             - [ ] Advance to Step 5
       - [ ] **no review yet / commit_id mismatch** →
-            - [ ] Run `python scripts/check_bugbot_ci.py --owner <O> --repo <R> --check-active --sha <current_head>`
+            - [ ] Run `python ~/.claude/skills/pr-converge/scripts/check_bugbot_ci.py --owner <O> --repo <R> --check-active --sha <current_head>`
             - [ ] Exit 0 (already queued) → schedule 360s wakeup → return to Step 4 next tick
             - [ ] Exit 1 → post `bugbot run` via `add_issue_comment`, wait 8s
-            - [ ] Run `python scripts/check_bugbot_ci.py --owner <O> --repo <R> --sha <current_head>`
+            - [ ] Run `python ~/.claude/skills/pr-converge/scripts/check_bugbot_ci.py --owner <O> --repo <R> --sha <current_head>`
             - [ ] Exit non-zero → `bugbot_down = true` → advance to Step 5 (bypass)
             - [ ] Exit 0 → record `bugbot_acknowledged_at`, schedule 360s wakeup → return to Step 4
 - [ ] **Step 5: BUGTEAM — run, decide, fix, reply, resolve**
@@ -120,7 +120,7 @@ resolve the thread. Count unresolved threads before advancing.
             `phase = BUGBOT` → schedule 360s wakeup → return to Step 4
       - [ ] **findings without committed fixes** →
             - [ ] Fix each finding (spawn `clean-coder`)
-            - [ ] Reply to each finding comment via `python scripts/post_fix_reply.py`
+            - [ ] Reply to each finding comment via `python ~/.claude/skills/pr-converge/scripts/post_fix_reply.py`
             - [ ] Resolve each addressed thread via `pull_request_review_write(method="resolve_thread")`
             - [ ] Push → `phase = BUGBOT` → return to Step 4
 
@@ -139,7 +139,7 @@ resolve the thread. Count unresolved threads before advancing.
       - [ ] Any unresolved? → Fix (spawn `clean-coder`) → reply → resolve → push → return to Step 4
       - [ ] Fetch Copilot review on `current_head`:
             ```
-            python scripts/fetch_copilot_reviews.py --owner <O> --repo <R> --pr-number <N>
+            python ~/.claude/skills/pr-converge/scripts/fetch_copilot_reviews.py --owner <O> --repo <R> --pr-number <N>
             ```
             Then fetch inline comments via MCP:
             ```
@@ -161,7 +161,7 @@ resolve the thread. Count unresolved threads before advancing.
       **(c) Request Copilot review**
       - [ ] Check for pending Copilot review:
             ```
-            python scripts/check_pending_reviews.py --owner <O> --repo <R> --pr-number <N>
+            python ~/.claude/skills/pr-converge/scripts/check_pending_reviews.py --owner <O> --repo <R> --pr-number <N>
               → filter by copilot user
             ```
       - [ ] Pending review already exists → skip request → gate (d)
@@ -194,7 +194,7 @@ resolve the thread. Count unresolved threads before advancing.
             `copilot_clean_at = current_head` → return to Step 6 (re-validate gates b, d, e)
       - [ ] **dirty (findings present)** →
             - [ ] Fix each finding (spawn `clean-coder`)
-            - [ ] Reply to each finding comment via `python scripts/post_fix_reply.py`
+            - [ ] Reply to each finding comment via `python ~/.claude/skills/pr-converge/scripts/post_fix_reply.py`
             - [ ] Resolve each addressed thread via `pull_request_review_write(method="resolve_thread")`
             - [ ] Push → `phase = BUGBOT` → return to Step 4
       - [ ] **no review yet** →
@@ -208,7 +208,7 @@ resolve the thread. Count unresolved threads before advancing.
       See: [`bugteam/reference/teardown-publish-permissions.md` § Step 4.5](../../bugteam/reference/teardown-publish-permissions.md)
 
 - [ ] **Step 9: Revoke project permissions**
-      `python ../../bugteam/scripts/revoke_project_claude_permissions.py`
+      `python ~/.claude/skills/bugteam/scripts/revoke_project_claude_permissions.py`
 
 - [ ] **Step 10: Print final report**
       ```

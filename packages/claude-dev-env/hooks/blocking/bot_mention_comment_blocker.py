@@ -8,6 +8,17 @@ catches both mistakes and returns the correct procedure for each.
 
 import json
 import sys
+from pathlib import Path
+
+
+def _insert_hooks_tree_for_imports() -> None:
+    hooks_tree = Path(__file__).resolve().parent.parent
+    hooks_tree_string = str(hooks_tree)
+    if hooks_tree_string not in sys.path:
+        sys.path.insert(0, hooks_tree_string)
+
+
+_insert_hooks_tree_for_imports()
 
 from config.bot_mention_comment_blocker_constants import (
     COPILOT_MENTION_TOKEN,
@@ -24,14 +35,10 @@ def _body_contains_token(body: str, token: str) -> bool:
 
 def _detect_bot_mention(body: str) -> str | None:
     """Return corrective message if body contains a blocked mention, else None."""
-    copilot_mention_token = COPILOT_MENTION_TOKEN
-    corrective_message_copilot = CORRECTIVE_MESSAGE_COPILOT
-    cursor_mention_token = CURSOR_MENTION_TOKEN
-    corrective_message_cursor = CORRECTIVE_MESSAGE_CURSOR
-    if _body_contains_token(body, copilot_mention_token):
-        return corrective_message_copilot
-    if _body_contains_token(body, cursor_mention_token):
-        return corrective_message_cursor
+    if _body_contains_token(body, COPILOT_MENTION_TOKEN):
+        return CORRECTIVE_MESSAGE_COPILOT
+    if _body_contains_token(body, CURSOR_MENTION_TOKEN):
+        return CORRECTIVE_MESSAGE_CURSOR
     return None
 
 
@@ -41,8 +48,7 @@ def main() -> None:
     except json.JSONDecodeError:
         sys.exit(0)
 
-    tool_name_value = TOOL_NAME
-    if hook_input.get("tool_name", "") != tool_name_value:
+    if hook_input.get("tool_name", "") != TOOL_NAME:
         sys.exit(0)
 
     body = hook_input.get("tool_input", {}).get("body", "")

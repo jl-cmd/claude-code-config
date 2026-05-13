@@ -76,9 +76,11 @@ def run_mypy_check(files: list[Path]) -> MypyResult:
         return MypyResult(passed=True, output="No Python files", error_count=0)
 
     config_argument: list[str] = []
-    discovered_pyproject = find_pyproject_with_mypy_config(Path(py_files[0]))
-    if discovered_pyproject is not None:
-        config_argument = ["--config-file", str(discovered_pyproject)]
+    for each_py_file in py_files:
+        discovered_pyproject = find_pyproject_with_mypy_config(Path(each_py_file))
+        if discovered_pyproject is not None:
+            config_argument = ["--config-file", str(discovered_pyproject)]
+            break
 
     result = subprocess.run(
         ["mypy", *config_argument, "--ignore-missing-imports", "--no-error-summary"]

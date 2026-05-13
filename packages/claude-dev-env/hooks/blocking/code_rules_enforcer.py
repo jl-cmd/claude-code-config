@@ -1224,9 +1224,10 @@ def _bare_except_handler_label(handler_node: ast.ExceptHandler) -> str | None:
 def check_bare_except(content: str, file_path: str) -> list[str]:
     """Flag bare/over-broad exception handlers in production code.
 
-    `except:` swallows KeyboardInterrupt and SystemExit; `except Exception:`
-    and `except BaseException:` hide bugs by catching every error class.
-    Production code should name the specific exception(s) it intends to catch
+    ``except:`` and ``except BaseException:`` swallow KeyboardInterrupt and
+    SystemExit; ``except Exception:`` hides bugs by catching nearly every
+    error class. Production code should name the specific exception(s) it
+    intends to catch
     (a tuple form like `except (ValueError, KeyError):` is fine).
     """
     if is_test_file(file_path) or is_hook_infrastructure(file_path):
@@ -1245,8 +1246,8 @@ def check_bare_except(content: str, file_path: str) -> list[str]:
         if handler_label is None:
             continue
         issues.append(
-            f"Line {each_node.lineno}: {handler_label} catches every error including "
-            "KeyboardInterrupt/SystemExit — name the specific exception(s) you intend to handle"
+            f"Line {each_node.lineno}: {handler_label} is over-broad — name the "
+            "specific exception(s) you intend to handle"
         )
         if len(issues) >= MAX_BARE_EXCEPT_ISSUES:
             break

@@ -1471,9 +1471,18 @@ def _function_body_line_count(
 ) -> int:
     if not function_node.body:
         return 0
+    first_body_index = 0
+    if (
+        isinstance(function_node.body[0], ast.Expr)
+        and isinstance(function_node.body[0].value, ast.Constant)
+        and isinstance(function_node.body[0].value.value, str)
+    ):
+        if len(function_node.body) == 1:
+            return 0
+        first_body_index = 1
     last_statement = function_node.body[-1]
     end_line = getattr(last_statement, "end_lineno", last_statement.lineno)
-    first_line = function_node.body[0].lineno
+    first_line = function_node.body[first_body_index].lineno
     return max(0, end_line - first_line + 1)
 
 
@@ -1505,7 +1514,7 @@ def _annotation_is_explicit_none_return(annotation_node: ast.expr | None) -> boo
     return isinstance(annotation_node, ast.Name) and annotation_node.id == "None"
 
 
-def _walk_skipping_nested_functions(node: ast.AST):
+def _walk_skipping_nested_functions(node: ast.AST) -> "Iterator[ast.AST]":
     for each_child in ast.iter_child_nodes(node):
         if isinstance(each_child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             continue

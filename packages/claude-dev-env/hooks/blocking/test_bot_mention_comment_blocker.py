@@ -1,8 +1,8 @@
 """Unit tests for bot-mention-comment-blocker PreToolUse hook."""
 
 import importlib.util
-import json
 import io
+import json
 import pathlib
 import sys
 
@@ -78,3 +78,54 @@ def test_body_contains_token_case_insensitive() -> None:
 
 def test_body_contains_token_no_at_sign() -> None:
     assert not _body_contains_token("cursor without at-sign", CURSOR_MENTION_TOKEN)
+
+
+from unittest import mock
+
+
+def _run_main_with_io(input_text: str) -> str:
+    with mock.patch("sys.stdin", io.StringIO(input_text)):
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+            try:
+                hook_module.main()
+            except SystemExit:
+                pass
+            return mock_stdout.getvalue()
+
+
+def test_main_blocks_matching_cursor_comment() -> None:
+    hook_input = {
+        "tool_name": "mcp__plugin_github_github__add_issue_comment",
+        "tool_input": {"body": "@cursor bugbot run"},
+    }
+    output_text = _run_main_with_io(json.dumps(hook_input))
+    output = json.loads(output_text)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_main_passes_wrong_tool_name() -> None:
+    hook_input = {
+        "tool_name": "some_other_tool",
+        "tool_input": {"body": "@cursor bugbot run"},
+    }
+    assert _run_main_with_io(json.dumps(hook_input)) == ""
+
+
+def test_main_passes_empty_body() -> None:
+    hook_input = {
+        "tool_name": "mcp__plugin_github_github__add_issue_comment",
+        "tool_input": {"body": ""},
+    }
+    assert _run_main_with_io(json.dumps(hook_input)) == ""
+
+
+def test_main_passes_non_matching_body() -> None:
+    hook_input = {
+        "tool_name": "mcp__plugin_github_github__add_issue_comment",
+        "tool_input": {"body": "please review this PR"},
+    }
+    assert _run_main_with_io(json.dumps(hook_input)) == ""
+
+
+def test_main_passes_malformed_json() -> None:
+    assert _run_main_with_io("not valid json {{{") == ""

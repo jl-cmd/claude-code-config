@@ -84,6 +84,7 @@ from config.blocking_check_limits import (  # noqa: E402
     MAX_TEST_BRANCHING_ISSUES,
     MAX_THIN_WRAPPER_ISSUES,
     MAX_TYPED_DICT_PAIR_ISSUES,
+    MAX_TYPE_ESCAPE_HATCH_ISSUES,
 )
 
 PYTHON_EXTENSIONS = {".py"}
@@ -866,7 +867,7 @@ def check_type_escape_hatches(content: str, file_path: str) -> list[str]:
             f"Line {each_ignore_line}: Unjustified # type: ignore - add trailing '# reason' explaining why"
         )
 
-    return issues
+    return issues[:MAX_TYPE_ESCAPE_HATCH_ISSUES]
 
 
 def is_migration_file(file_path: str) -> bool:

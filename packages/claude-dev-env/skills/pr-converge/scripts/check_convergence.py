@@ -131,7 +131,10 @@ def _check_bugbot_not_dirty(*, owner: str, repo: str, number: int) -> tuple[bool
     returncode, stdout = _gh_api_paginated(f"{endpoint}?per_page={REVIEWS_PER_PAGE}")
     if returncode != 0:
         return True, "bugbot reviews unavailable (non-fatal)"
-    raw_output = json.loads(stdout)
+    try:
+        raw_output = json.loads(stdout)
+    except json.JSONDecodeError:
+        return True, "bugbot reviews not valid JSON (non-fatal)"
     if not isinstance(raw_output, list):
         return True, "no reviews"
     all_pages = [p for p in raw_output if isinstance(p, list)]
@@ -169,7 +172,10 @@ def _check_bot_review(
     returncode, stdout = _gh_api_paginated(f"{endpoint}?per_page={REVIEWS_PER_PAGE}")
     if returncode != 0:
         return False, f"gh api error: {stdout}"
-    raw_output = json.loads(stdout)
+    try:
+        raw_output = json.loads(stdout)
+    except json.JSONDecodeError:
+        return False, f"gh api response not valid JSON"
     if not isinstance(raw_output, list):
         return False, f"no {label} review found"
     all_pages = [p for p in raw_output if isinstance(p, list)]

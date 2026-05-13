@@ -7,12 +7,10 @@ per [ground-rules.md](ground-rules.md).
 
 **Multi-PR (`state.json`) teammate obligations** (plus TDD, commit, push):
 
-- For each addressed finding, posts a fix reply via
-  `add_reply_to_pull_request_comment(owner, repo, pullNumber, commentId, body)`
-  (what changed + commit identifier), then resolves the thread via
-  `pull_request_review_write(method="resolve_thread", threadId=<node_id>, owner=..., repo=..., pullNumber=...)`.
-  Capture each thread's `node_id` from the review comments fetch.
-  Posts all replies and resolutions **before** writing `state.json` and going idle.
+- Replies inline on each addressed finding via
+  `python scripts/post_fix_reply.py --owner <O> --repo <R> --pr-number <N> --in-reply-to <COMMENT_ID> --body <text>`
+  (what changed + commit identifier), matching §Audit result → fix worker step 4 — **before** writing
+  `state.json` and going idle.
 - Writes `last_action: "fix_pushed"`, `current_head: <new SHA>`,
   `bugbot_clean_at: null`, `bugbot_down: false`, `phase: "BUGBOT"`,
   `status: "awaiting_bugbot"`, `last_updated` (ISO-8601 UTC) to
@@ -43,22 +41,11 @@ git push origin <BRANCH>
   ```
 **Pre-push gate:** honor hooks; full-stop on bypass. Capture new HEAD
 only after both gates pass; set `current_head`, `bugbot_clean_at = null`.
-- For each addressed comment thread, post a fix reply then resolve the thread.
-  Capture each thread's `node_id` from the review comments fetch in Step 2.
+- Reply inline on each addressed comment thread using `python scripts/post_fix_reply.py`:
 
-  Reply inline:
   ```
-  add_reply_to_pull_request_comment(owner=OWNER, repo=REPO, pullNumber=NUMBER, commentId=COMMENT_ID, body="Fixed in <SHA> — <what changed>")
+  python scripts/post_fix_reply.py --owner <O> --repo <R> --pr-number <N> --in-reply-to <COMMENT_ID> --body "Fixed in <SHA> — <what changed>"
   ```
-
-  Then resolve the thread:
-  ```
-  pull_request_review_write(method="resolve_thread", threadId=<thread_node_id>, owner=OWNER, repo=REPO, pullNumber=NUMBER)
-  ```
-
-- Publish a fix summary via `/doc-gist`: concise HTML with commit SHA,
-  files changed, one-line per fix, and any findings left unaddressed.
-  Post the published URL as a comment via `add_issue_comment`.
 - **After pushing a fix, always run Step 3 (`bugbot run`) in the same
   tick** regardless of phase. New commit **resets full convergence cycle**:
   prior bugbot clean and prior bugteam clean on older SHA do **not**
@@ -66,16 +53,3 @@ only after both gates pass; set `current_head`, `bugbot_clean_at = null`.
   `current_head`, then bugteam CLEAN on same `HEAD` with no
   intervening push. Re-triggering in same tick saves a wakeup cycle vs
   deferring Step 3.
-
-**Self-audit checklist — verify every step before scheduling next wakeup:**
-
-- [ ] Read each referenced file:line
-- [ ] Wrote failing test (when behavior to test exists)
-- [ ] Spawned clean-coder to implement
-- [ ] Staged + committed (hook gate: passed; full-stop on bypass)
-- [ ] Pushed (pre-push gate: passed; full-stop on bypass)
-- [ ] Posted fix reply on each addressed comment thread
-- [ ] Resolved each addressed comment thread
-- [ ] Published fix summary via /doc-gist, posted URL as comment
-- [ ] `bugbot_clean_at = null` set; `current_head` captured
-- [ ] Step 3 (bugbot re-trigger) completed

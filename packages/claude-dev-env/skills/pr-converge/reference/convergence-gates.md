@@ -15,21 +15,14 @@ pacing. Do not mark ready with unverified gates.
 
 Fetch latest Copilot reviewer (`copilot-pull-request-reviewer[bot]`) review
 plus inline comments anchored to most recent Copilot review on
-`current_head`. **Same MCP-truncation gotcha as BUGBOT — use `gh api
---paginate --slurp`**:
+`current_head`:
 
-```bash
-# Newest Copilot review at HEAD
-gh api 'repos/<owner>/<repo>/pulls/<N>/reviews?per_page=100' --paginate --slurp \
-  | jq --arg sha '<current_head>' \
-      '[.[][] | select((.user.login | ascii_downcase) | contains("copilot"))
-              | select(.commit_id == $sha)]
-       | sort_by(.submitted_at) | reverse | .[0]'
+```
+python scripts/fetch_copilot_reviews.py --owner <O> --repo <R> --pr-number <N>
+  → filter by `.commit_id == current_head`, sort by `.submitted_at` descending
 
-# Copilot inline comments from newest review
-gh api 'repos/<owner>/<repo>/pulls/<N>/comments?per_page=100' --paginate --slurp \
-  | jq --arg review_id '<review_id>' \
-      '[.[][] | select(.pull_request_review_id == ($review_id | tonumber))]'
+python scripts/fetch_copilot_inline_comments.py --owner <O> --repo <R> --pr-number <N> --commit <current_head>
+  → unaddressed inline threads on the latest Copilot review at current_head
 ```
 
 Decide (four branches; match first whose predicate holds):
@@ -37,7 +30,7 @@ Decide (four branches; match first whose predicate holds):
 - **`classification == "dirty"` with non-empty inline comments matching
   `pull_request_review_id`:** Fix protocol input (same shape as bugbot
   dirty). Spawn Agent (subagent_type: clean-coder) to implement → push → reply inline on each thread via
-  `add_reply_to_pull_request_comment` MCP → Step 3 in same tick (see
+  `python scripts/post_fix_reply.py` → Step 3 in same tick (see
   [Single-PR fix workflow](fix-protocol.md#single-pr-fix-workflow) for
   full contract).
   Reset `bugbot_clean_at = null` AND `copilot_clean_at = null`, `phase =
@@ -47,7 +40,7 @@ Decide (four branches; match first whose predicate holds):
   `pull_request_review_id`:** Copilot posted findings only in review body
   (`CHANGES_REQUESTED` or `COMMENTED` with non-empty body, no inline
   threads). Parse body for actionable findings. Spawn Agent (subagent_type: clean-coder) to implement → push → post
-  top-level review reply using `pull_request_review_write(method="create", event="COMMENT", body)` citing new HEAD SHA → Step 3 in same tick.
+  top-level review reply via `python scripts/post_fix_reply.py` citing new HEAD SHA → Step 3 in same tick.
   Reset
   `bugbot_clean_at = null` AND
   `copilot_clean_at = null`, `phase = BUGBOT`, Step 3 on new HEAD,
@@ -62,21 +55,18 @@ Decide (four branches; match first whose predicate holds):
 ## (b) Claude reviewer gate
 
 Fetch latest Claude reviewer (`claude[bot]`) review plus inline comments
-anchored to most recent Claude review on `current_head`. **Same
-MCP-truncation gotcha — use `gh api --paginate --slurp`**:
+anchored to most recent Claude review on `current_head`:
 
-```bash
-# Newest Claude review at HEAD
-gh api 'repos/<owner>/<repo>/pulls/<N>/reviews?per_page=100' --paginate --slurp \
-  | jq --arg sha '<current_head>' \
-      '[.[][] | select((.user.login | ascii_downcase) | contains("claude"))
-              | select(.commit_id == $sha)]
-       | sort_by(.submitted_at) | reverse | .[0]'
+```
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_reviews")
+  → filter `.user.login` for claude (case-insensitive substring "claude")
+    AND `.commit_id == current_head`
+  → sort by `.submitted_at` descending
 
-# Claude inline comments from newest review
-gh api 'repos/<owner>/<repo>/pulls/<N>/comments?per_page=100' --paginate --slurp \
-  | jq --arg review_id '<review_id>' \
-      '[.[][] | select(.pull_request_review_id == ($review_id | tonumber))]'
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
+  → filter threads where `is_outdated == false` AND `is_resolved == false`
+    AND `pull_request_review_id` matches the newest Claude review on `current_head`
+    AND any comment has `.author` matching Claude (case-insensitive substring "claude")
 ```
 
 Decide (four branches; match first whose predicate holds):
@@ -90,7 +80,7 @@ Decide (four branches; match first whose predicate holds):
   `pull_request_review_id`:** Claude posted findings only in review body
   (`CHANGES_REQUESTED` or `COMMENTED` with non-empty body, no inline
   threads). Treat identically to gate (a) dirty+body path — spawn Agent
-  (subagent_type: clean-coder) to implement → push → post top-level review reply. Reset
+  (subagent_type: clean-coder) to implement → push → post top-level review reply via `python scripts/post_fix_reply.py`. Reset
   `bugbot_clean_at = null` AND `copilot_clean_at = null`, `phase = BUGBOT`,
   schedule next wakeup, return.
 - **`classification == "clean"` (state `APPROVED`):** Record evidence:
@@ -131,19 +121,21 @@ Persist `mergeable_state` into `merge_state_status`. Decide:
 
 Once gates (a), (b), and (c) all pass (Copilot clean at `current_head` *or* no
 Copilot review yet, AND Claude clean or absent at `current_head`, AND
-`mergeable_state == "clean"`), request Copilot review via the REST API:
+`mergeable_state == "clean"`), request Copilot review:
 
-```bash
-gh api --method POST 'repos/<owner>/<repo>/pulls/<N>/requested_reviewers' \
+```
+gh api --method POST repos/<O>/<R>/pulls/<N>/requested_reviewers \
   -f 'reviewers[]=copilot-pull-request-reviewer[bot]'
 ```
 
-A `201` response confirms Copilot is a requested reviewer.
+Check for an existing pending review first with
+`python scripts/check_pending_reviews.py --owner <O> --repo <R> --pr-number <N> --user copilot`.
 
 After request, set `phase = COPILOT_WAIT`, schedule next wakeup, and return.
 The COPILOT_WAIT phase prevents the agent from re-entering convergence gates
 while Copilot processes. Next tick with `phase == COPILOT_WAIT`:
-re-run the gate (a) `gh api --paginate --slurp` fetch for Copilot
+re-run the fetch from gate (a) — `python scripts/fetch_copilot_reviews.py`
+plus MCP `get_review_comments` filtered for Copilot inline threads —
 against `current_head`. Decide:
 
 - **Copilot review present at `current_head`:**
@@ -162,23 +154,20 @@ against `current_head`. Decide:
   successful Copilot review). After three consecutive empty waits
   (`copilot_wait_count >= 3`), escalate as hard blocker — report
   "Copilot did not surface a review on current_head after 3 wakeups"
-  and omit loop pacing. Otherwise schedule next wakeup (270s), return.
+  and omit loop pacing. Otherwise schedule next wakeup (360s), return.
 
 ## (e) Thread-resolution gate
 
 Before marking ready, count unresolved review threads from all bot
 reviewers (Bugbot, Copilot, Claude) anchored to `current_head`:
 
-```bash
-gh api 'repos/<owner>/<repo>/pulls/<N>/comments?per_page=100' --paginate --slurp \
-  | jq '[.[][] | select(.in_reply_to_id == null)
-              | select((.user.login | ascii_downcase) | test("copilot|cursor|bugbot|claude"))]
-         | sort_by(.created_at) | reverse'
 ```
-
-Then cross-check thread state (`is_outdated`, `is_resolved`) from
-`pull_request_read(method="get_review_comments")` — safe for thread
-state on PRs with fewer than ~25 unresolved threads.
+pull_request_read(owner=OWNER, repo=REPO, pullNumber=NUMBER, method="get_review_comments")
+  → filter threads where `is_outdated == false` AND `is_resolved == false`
+    AND any comment has `.author` matching a bot reviewer
+    (case-insensitive substring "copilot", "cursor", "bugbot", or "claude")
+  → count
+```
 
 Decide:
 

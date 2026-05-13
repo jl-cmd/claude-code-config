@@ -1,30 +1,14 @@
-# GitHub PR comments (Step 2.5)
+# GitHub PR comments
 
 Per-loop pull-request reviews: findings render as a tree under one parent
-review (similar to Cursor Bugbot). **The consolidator/validator subagent
-(`-validate`) owns all PR comment posting** for the audit phase — the eleven
-category auditors (`-a` through `-k`) only write per-letter outcome XML and
-never make a PR write. The bugfix subagent posts fix replies via the GitHub
-MCP after its commit lands. Comment, review, and reply writes belong to
-subagents. The lead's single PR write is the final description rewrite at
-Step 4.5 (`pr-description-writer`).
+review. The audit agent posts the review. The fix agent posts replies after
+its commit lands.
 
-- **Per-loop review** — One review per loop, posted by the consolidator/
-  validator after the eleven category auditors return. The review body is
-  the loop header (audit counts); the review's child comments are the
-  anchored findings. GitHub renders a single collapsible thread with each
-  finding as a child comment.
-
+- **Per-loop review** — One review per loop. The review body is the loop
+  header (audit counts); child comments are the anchored findings.
 - **Fix replies** — Reply to each child finding comment after the commit
   lands. Body: `Fixed in <commit_sha>` if addressed, or `Could not address
-  this loop: <one-line reason>` if not. Replies attach to any review
-  comment, including those created as part of a review.
-
-**Ordering:** the eleven category auditors return per-letter XML; the
-consolidator/validator reads them, validates and de-dups, buffers the final
-findings, validates anchors against the captured diff, then posts the
-review. The review body states the finding count authoritatively. All
-posting happens in the consolidator/validator's three-step MCP flow.
+  this loop: <one-line reason>` if not.
 
 ## MCP tool calls (no shell, no jq, no gh CLI)
 
@@ -147,23 +131,24 @@ mcp__plugin_github_github__add_issue_comment(
 `used_fallback="true"` and set `finding_comment_url` to the issue-comment
 URL.
 
-## Review body template (`<review_body>` argument)
+## Review body template
+
+The canonical review body formatter is
+[`format_review_body.py`](../../_shared/pr-loop/scripts/format_review_body.py):
 
 ```
-## /bugteam loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2
-
-<if any findings could not be anchored to a diff line, include this section:>
-### Findings without a diff anchor
-
-- **[severity] title** — <file>:<line> — <one-line description>
+python scripts/format_review_body.py --loop <N> --p0-count <N> --p1-count <N> --p2-count <N> [--unanchored-count <N>]
 ```
+
+Emits `## /bugteam loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2` to stdout,
+with an unanchored-findings section when `--unanchored-count > 0`.
 
 If the audit returns zero findings, still post **one** review with
 `event="COMMENT"`, no anchored child comments, and body
 `## /bugteam loop <N> audit: 0P0 / 0P1 / 0P2 → clean` so each loop's
 section is self-contained on the PR.
 
-## Anchor-validation fallback (consolidator/validator)
+## Anchor-validation fallback
 
 The MCP review-submit call rejects the entire submit if any of the
 already-added pending comments target a line not in the diff. Before

@@ -93,12 +93,14 @@ Agent(
   model="opus",
   run_in_background=true,
   description="Audit {owner}/{repo}#{N} loop {L}",
-  prompt="<audit XML; see PROMPTS.md>"
+  prompt="<output of build_audit_prompt.py; see ../../_shared/pr-loop/scripts/build_audit_prompt.py>"
 )
 ```
 
-Run the outcome pipeline script to handle diff capture, XML paths, and
-finding extraction. See `scripts/` for the invoked commands.
+The audit prompt XML is emitted by
+[`build_audit_prompt.py`](../../_shared/pr-loop/scripts/build_audit_prompt.py).
+Run it with `--owner --repo --pr-number --loop --head-ref --base-ref --worktree-path --run-temp-dir`
+to generate the complete `<spawn_prompt>` XML on stdout.
 
 `last_action = "audited"`. Append audit metadata to `audit_log`.
 
@@ -114,7 +116,7 @@ Agent(
   mode="bypassPermissions",
   run_in_background=true,
   description="Bugfix PR <N> loop <L>",
-  prompt="<fix XML; see PROMPTS.md>"
+  prompt="<output of build_fix_prompt.py; see ../../_shared/pr-loop/scripts/build_fix_prompt.py>"
 )
 ```
 

@@ -65,21 +65,33 @@ For multi-PR invocations, capture `all_prs = [{number, owner, repo, baseRef, hea
 
 For each PR in `all_prs`:
 
+Canonical path functions live in
+[`_shared/pr-loop/scripts/_path_resolver.py`](../../_shared/pr-loop/scripts/_path_resolver.py):
+`per_pr_workspace(run_temp_dir, owner, repo, pr_number)` returns dict with keys
+`worktree`, `diff_patch_template`, `outcome_xml_template`, `fix_outcome_xml_template`.
+
 1. Create `<run_temp_dir>/pr-<N>/`.
 2. Run `git worktree add "<run_temp_dir>/pr-<N>/worktree" origin/<headRef>`.
 3. Record the absolute worktree path alongside the PR's other fields.
 
-Background subagents for a PR operate inside that PR's worktree. Step 4 teardown runs `git worktree remove "<run_temp_dir>/pr-<N>/worktree"` for each PR before the shared `rmtree`.
+Background subagents for a PR operate inside that PR's worktree. Step 4 teardown
+runs [`teardown_worktrees.py`](../../_shared/pr-loop/scripts/teardown_worktrees.py)
+for each PR before the shared `rmtree`.
 
 ## Step 2 — Run name and temp directory (detail)
 
-### Run specification
+Canonical path resolution lives in
+[`_shared/pr-loop/scripts/_path_resolver.py`](../../_shared/pr-loop/scripts/_path_resolver.py).
+The functions below are its public API; the implementation is the single source of
+truth.
 
-- **Run name:** `bugteam-pr-<number>` for single-PR invocations, `bugteam-<sanitized-head-branch>` for multi-PR or no-PR invocations. The name is deterministic so `<run_temp_dir>` and the team task list are re-entrant across sessions.
-
-- **Branch-name sanitization (no-PR fallback only):** Before substituting `<head-branch>` into the `run_name` template, replace every character outside `[A-Za-z0-9._-]` with `-`. The whitelist keeps safe portable filename characters only; OS-reserved and shell-special characters (`/ \ : * ? < > | "` plus ASCII control characters `0x00`–`0x1F`) fall outside the whitelist and become `-`. Example: `feat/foo*bar` → `feat-foo-bar`; `run_name` becomes `bugteam-feat-foo-bar`. Apply sanitization when `run_name` is first assembled so every downstream use (temp dir, cleanup) sees the safe form.
-
-- **Per-run temp directory (resolved once, reused everywhere):** After `run_name` is captured, resolve a portable absolute path: `Path(tempfile.gettempdir()) / run_name` (requires `import tempfile`). `tempfile.gettempdir()` honors `TMPDIR`, `TEMP`, and `TMP` in platform-correct order and falls back to `C:\Users\<user>\AppData\Local\Temp` on Windows or `/tmp` on Unix. Capture the resolved absolute path as `<run_temp_dir>` and pass that literal path to every shell command that follows.
+- **Run name:** `build_run_name(pr_number, head_branch, *, is_multi_pr)` — returns
+  `bugteam-pr-<number>` for single-PR, `bugteam-<sanitized-head-branch>` for multi-PR.
+- **Branch-name sanitization:** `sanitize_branch_name(head_branch)` — maps every
+  character outside `[A-Za-z0-9._-]` to `-`.
+- **Per-run temp directory:** `resolve_run_temp_dir(run_name)` — returns
+  `Path(tempfile.gettempdir()) / run_name`. Capture the resolved absolute path as
+  `<run_temp_dir>` and pass that literal path to every shell command that follows.
 
 - **Subagent roles (spawned per loop, not at invocation start):**
   - `bugfind` — `code-quality-agent`, model opus (Opus 4.7 at default xhigh effort)
@@ -87,47 +99,35 @@ Background subagents for a PR operate inside that PR's worktree. Step 4 teardown
 
 ### Loop state block
 
-Loop state (lead; not a single script; per-PR): the variables below are tracked independently for each PR in `all_prs`. Each PR has its own cycle, state, and exit reason.
+Loop state (lead; not a single script; per-PR): the variables below are tracked
+independently for each PR in `all_prs`. Each PR has its own cycle, state, and
+exit reason.
 
-```bash
-loop_count=0
-last_action="fresh"
-last_findings='{"total": 0}'
-audit_log=""
-run_temp_dir="<absolute-path>/<run_name>"
-starting_sha="$(git -C "<run_temp_dir>/pr-<N>/worktree" rev-parse HEAD)"
-loop_comment_index=""
+Create the initial state file with
+[`init_loop_state.py`](../../_shared/pr-loop/scripts/init_loop_state.py):
+
+```
+python scripts/init_loop_state.py --pr-number <N> --head-ref <ref> --starting-sha <SHA> [--is-multi-pr]
 ```
 
-The block above mixes lead-internal variables and one shell command (`starting_sha`). Read it as instructions, not a single runnable script.
+Outputs the path to `<run_temp_dir>/pr-<N>/loop-state.json` with keys
+`loop_count`, `last_action`, `last_findings`, `starting_sha`, `loop_comment_index`.
 
 **`loop_comment_index` scope (per-loop, not cross-loop):** Reset at the start of every AUDIT action, populated as finding comments are posted during AUDIT, consumed by the matching FIX action when it posts fix replies, and discarded after FIX completes. It does not persist across loops; each loop starts with an empty index and its own fresh set of comment URLs.
 
 Each entry: `{loop, finding_id, finding_comment_id, finding_comment_url, used_fallback, fix_status}`. Populated by AUDIT, consumed by FIX.
 
-### Team creation (required)
-
-After `run_temp_dir` is resolved, create the audit team:
-
-```
-TeamCreate(team_name="bugteam",
-           description="Bugteam audit-fix orchestrator")
-```
-
-The team is the master container — all PRs, loops, and teammates run under it.
-Per-PR logical grouping uses task subject prefixes and teammate naming (see
-below). The team is cleaned up at teardown, only when the PR is fully converged.
-
 #### Multi-PR sub-team tracking
 
 When `/bugteam` runs against multiple PRs across repos, each PR operates as a
 logical sub-team within the master `bugteam` team. The PR identity token is
-`{owner}/{repo}#{N}` (e.g. `jl-cmd/claude-code-config#422`). In teammate
-names and filesystem paths, it is slugified to `{owner}-{repo}-pr-{N}`.
+`{owner}/{repo}#{N}` (e.g. `jl-cmd/claude-code-config#422`). The slugified form
+comes from `slugify_pr_identity(owner, repo, pr_number)` in
+[`_path_resolver.py`](../../_shared/pr-loop/scripts/_path_resolver.py).
 
 - **Teammate name:** `bugfind-{owner}-{repo}-pr{N}-loop{L}-{letter}`
 - **Task subject:** `{owner}/{repo}#{N} audit {letter}`
-- **Outcome XML:** `<run_temp_dir>/{owner}-{repo}-pr-{N}/loop-{L}-{letter}.outcomes.xml`
+- **Outcome XML:** `diff_patch_path(run_temp_dir, owner, repo, pr_number, loop_number)` from `_path_resolver.py`
 
 The lead filters by the slugified prefix to group tasks and teammates by PR.
 Self-claiming by task subject prefix keeps each teammate on its assigned PR.

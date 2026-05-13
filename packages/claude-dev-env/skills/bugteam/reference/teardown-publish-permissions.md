@@ -14,15 +14,19 @@ When the cycle exits (any reason), run these steps in order from **this** sessio
 
 1. **Delete the team:** `TeamDelete` removes `~/.claude/teams/bugteam/` and `~/.claude/tasks/bugteam/`. Only at convergence/cap/stuck — not between loops.
 
-2. For each PR in `all_prs`: `git worktree remove "<run_temp_dir>/pr-<N>/worktree"` (from Step 1) — tolerate already-removed worktrees.
-
-3. **Delete the per-run temp directory** by invoking [`../scripts/windows_safe_rmtree.py`](../scripts/windows_safe_rmtree.py) with the same literal `<run_temp_dir>` from Step 2:
+2. Run [`teardown_worktrees.py`](../../_shared/pr-loop/scripts/teardown_worktrees.py)
+   to remove each PR's worktree (`git worktree remove`) and the run temp
+   directory (Windows-safe `shutil.rmtree`):
 
    ```bash
-   python "${CLAUDE_SKILL_DIR}/scripts/windows_safe_rmtree.py" "<run_temp_dir>"
+   python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/teardown_worktrees.py" \
+     --run-temp-dir "<run_temp_dir>" \
+     --all-pr-jsons '<json array of {number, owner, repo}>'
    ```
 
-   The script uses an `onexc`/`onerror` handler that strips the Windows ReadOnly attribute and retries the failing syscall — the unsafe shutil ignore-errors flag silently swallows ReadOnly-attribute failures on Windows (see `~/.claude/rules/windows-filesystem-safe.md`). Exits 0 on success or when the path is already absent.
+   Tolerates already-removed worktrees and missing directories. Uses an
+   `onexc`/`onerror` handler for Windows ReadOnly attribute safety
+   (see `~/.claude/rules/windows-filesystem-safe.md`).
 
 ## Step 4.5 — Finalize the PR description (mandatory)
 

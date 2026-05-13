@@ -275,7 +275,7 @@ Quote both URLs back to the user as clickable links.
 
 **If gh is not authenticated**, gist_upload.py exits non-zero with the `gh auth login` prompt. Surface that message to the user, skip 5b, and continue with Step 6 — the vault HTML is the canonical artifact. The publish step is a hand-off, not a gate.
 
-**If publishing should be skipped** (dry-run mode), append `--no-open` to keep the local file only and skip 5b.
+**If the browser should not open automatically**, append `--no-open`. The gist still publishes; only the auto-open is suppressed.
 
 ### 5b. Inject the gist URL back into the session log
 

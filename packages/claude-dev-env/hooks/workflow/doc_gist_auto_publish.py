@@ -67,7 +67,7 @@ def _resolve_target_path(payload: dict[str, object]) -> Path | None:
     return candidate
 
 
-def _file_contains_sentinel(target_path: Path) -> bool:
+def _has_publish_sentinel(target_path: Path) -> bool:
     """Read the HTML and check for the publish marker."""
     try:
         contents = target_path.read_text(encoding="utf-8", errors="replace")
@@ -128,7 +128,7 @@ def main() -> None:
     target_path = _resolve_target_path(payload)
     if target_path is None:
         sys.exit(0)
-    if not _file_contains_sentinel(target_path):
+    if not _has_publish_sentinel(target_path):
         sys.exit(0)
     script_path = _resolve_upload_script()
     if not script_path.is_file():

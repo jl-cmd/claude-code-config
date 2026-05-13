@@ -524,7 +524,7 @@ def _force_push_targets_convergence_branch(command: str) -> bool:
     )
     is_force_push_found = False
     for each_match in re.finditer(
-        convergence_force_push_detection_pattern, command
+        convergence_force_push_detection_pattern, command, re.IGNORECASE
     ):
         is_force_push_found = True
         post_remote_text = each_match.group(1).strip()

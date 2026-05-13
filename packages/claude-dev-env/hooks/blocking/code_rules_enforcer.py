@@ -31,6 +31,14 @@ import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
+import logging
+
+logger = logging.getLogger("code_rules_enforcer")
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter("%(message)s"))
+logger.addHandler(_handler)
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
 
 _BLOCKING_DIR = str(Path(__file__).resolve().parent)
 _HOOKS_DIR = str(Path(__file__).resolve().parent.parent)
@@ -101,29 +109,29 @@ from config.code_rules_enforcer_constants import (  # noqa: E402
     ALL_CODE_EXTENSIONS,
     ALL_CAPS_WITH_UNDERSCORE_PATTERN,
     BARE_EACH_TOKEN,
-    BOOLEAN_NAME_PREFIXES,
-    BUILTIN_DICT_METHOD_NAMES,
-    CLI_FILE_PATH_MARKERS,
+    ALL_BOOLEAN_NAME_PREFIXES,
+    ALL_BUILTIN_DICT_METHOD_NAMES,
+    ALL_CLI_FILE_PATH_MARKERS,
     COLLECTION_BY_NAME_PATTERN,
-    COLLECTION_TYPE_NAMES,
+    ALL_COLLECTION_TYPE_NAMES,
     DOTTED_SEGMENT_PATTERN,
     EACH_PREFIX,
     FILE_GLOBAL_UPPER_SNAKE_PATTERN,
-    HOOK_INFRASTRUCTURE_PATTERNS,
-    IMPORT_STATEMENT_PREFIXES,
+    ALL_HOOK_INFRASTRUCTURE_PATTERNS,
+    ALL_IMPORT_STATEMENT_PREFIXES,
     INLINE_COLLECTION_MIN_LENGTH,
-    JAVASCRIPT_EXTENSIONS,
+    ALL_JAVASCRIPT_EXTENSIONS,
     LOGGING_FSTRING_PATTERN,
-    LOOP_INDEX_LETTER_EXEMPTIONS,
-    MIGRATION_PATH_PATTERNS,
+    ALL_LOOP_INDEX_LETTER_EXEMPTIONS,
+    ALL_MIGRATION_PATH_PATTERNS,
     NOT_INSIDE_TYPE_CHECKING_BLOCK,
-    PYTHON_EXTENSIONS,
-    SELF_AND_CLS_PARAMETER_NAMES,
-    TEST_PATH_PATTERNS,
+    ALL_PYTHON_EXTENSIONS,
+    ALL_SELF_AND_CLS_PARAMETER_NAMES,
+    ALL_TEST_PATH_PATTERNS,
     TYPE_CHECKING_BLOCK_PATTERN,
-    UNION_TYPING_NAMES,
+    ALL_UNION_TYPING_NAMES,
     UPPER_SNAKE_CONSTANT_PATTERN,
-    WORKFLOW_REGISTRY_PATTERNS,
+    ALL_WORKFLOW_REGISTRY_PATTERNS,
 )
 
 
@@ -138,7 +146,7 @@ def get_file_extension(file_path: str) -> str:
 def is_hook_infrastructure(file_path: str) -> bool:
     """Check if file is a Claude Code hook (standalone infrastructure, not project code)."""
     path_lower = file_path.lower().replace("\\", "/")
-    return any(pattern.replace("\\", "/") in path_lower for pattern in HOOK_INFRASTRUCTURE_PATTERNS)
+    return any(pattern.replace("\\", "/") in path_lower for pattern in ALL_HOOK_INFRASTRUCTURE_PATTERNS)
 
 
 def is_test_file(file_path: str) -> bool:
@@ -147,7 +155,7 @@ def is_test_file(file_path: str) -> bool:
     basename_lower = path_lower.replace("\\", "/").rsplit("/", 1)[-1]
     if basename_lower == "conftest.py":
         return True
-    return any(pattern in path_lower for pattern in TEST_PATH_PATTERNS)
+    return any(pattern in path_lower for pattern in ALL_TEST_PATH_PATTERNS)
 
 
 def is_workflow_registry_file(file_path: str) -> bool:
@@ -158,7 +166,7 @@ def is_workflow_registry_file(file_path: str) -> bool:
     These are module-level singletons, not misplaced literal constants.
     """
     path_lower = file_path.lower().replace("\\", "/")
-    return any(pattern.replace("\\", "/") in path_lower for pattern in WORKFLOW_REGISTRY_PATTERNS)
+    return any(pattern.replace("\\", "/") in path_lower for pattern in ALL_WORKFLOW_REGISTRY_PATTERNS)
 
 
 def is_spec_file(file_path: str) -> bool:
@@ -201,12 +209,12 @@ def check_comments_python(content: str) -> list[str]:
             if not before_comment.strip().startswith(("'", '"')):
                 is_in_string = False
                 quote_char = None
-                for i, char in enumerate(before_comment):
-                    if char in ("'", '"') and (i == 0 or before_comment[i - 1] != "\\"):
+                for i, each_char in enumerate(before_comment):
+                    if each_char in ("'", '"') and (i == 0 or before_comment[i - 1] != "\\"):
                         if not is_in_string:
                             is_in_string = True
-                            quote_char = char
-                        elif char == quote_char:
+                            quote_char = each_char
+                        elif each_char == quote_char:
                             is_in_string = False
 
                 if not is_in_string:
@@ -226,8 +234,8 @@ def check_comments_javascript(content: str) -> list[str]:
     lines = content.split("\n")
     is_in_multiline_comment = False
 
-    for line_number, line in enumerate(lines, 1):
-        stripped = line.strip()
+    for each_line_number, each_line in enumerate(lines, 1):
+        stripped = each_line.strip()
 
         if not stripped:
             continue
@@ -240,12 +248,12 @@ def check_comments_javascript(content: str) -> list[str]:
         if stripped.startswith("/*"):
             is_in_multiline_comment = "*/" not in stripped
             if not stripped.startswith("/**"):
-                issues.append(f"Line {line_number}: Block comment found - refactor to self-documenting code")
+                issues.append(f"Line {each_line_number}: Block comment found - refactor to self-documenting code")
             continue
 
         if stripped.startswith("//"):
             if not stripped.startswith(("// @ts-", "// eslint-", "// prettier-", "/// ", "// TODO", "// FIXME", "// HACK", "// XXX")):
-                issues.append(f"Line {line_number}: Comment found - refactor to self-documenting code")
+                issues.append(f"Line {each_line_number}: Comment found - refactor to self-documenting code")
 
         if len(issues) >= 3:
             break
@@ -269,7 +277,7 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
 
     lines = content.split("\n")
 
-    if extension in PYTHON_EXTENSIONS:
+    if extension in ALL_PYTHON_EXTENSIONS:
         for line in lines:
             stripped = line.strip()
             if not stripped:
@@ -296,7 +304,7 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
                         if comment_text and not comment_text.startswith(("type:", "noqa", "pylint:", "pragma:", "TODO", "FIXME", "HACK", "XXX")):
                             inline_comments.add(line[comment_index:].strip())
 
-    elif extension in JAVASCRIPT_EXTENSIONS:
+    elif extension in ALL_JAVASCRIPT_EXTENSIONS:
         is_in_multiline = False
         for line in lines:
             stripped = line.strip()
@@ -417,7 +425,7 @@ def check_imports_at_top(content: str) -> list[str]:
 
         is_inside_type_checking_block = type_checking_block_indent != NOT_INSIDE_TYPE_CHECKING_BLOCK
         if is_inside_function and not is_inside_type_checking_block:
-            if stripped.startswith(IMPORT_STATEMENT_PREFIXES):
+            if stripped.startswith(ALL_IMPORT_STATEMENT_PREFIXES):
                 issues.append(f"Line {line_number}: Import inside function - move to top of file")
 
     return issues
@@ -909,7 +917,7 @@ def check_type_escape_hatches(content: str, file_path: str) -> list[str]:
 def is_migration_file(file_path: str) -> bool:
     """Check if file is a Django migration (must be self-contained)."""
     path_lower = file_path.lower().replace("\\", "/")
-    return any(pattern.replace("\\", "/") in path_lower for pattern in MIGRATION_PATH_PATTERNS)
+    return any(pattern.replace("\\", "/") in path_lower for pattern in ALL_MIGRATION_PATH_PATTERNS)
 
 
 def check_constants_outside_config(content: str, file_path: str) -> list[str]:
@@ -2058,7 +2066,7 @@ def check_boolean_naming(content: str, file_path: str) -> list[str]:
             continue
         if is_in_upper_snake_scope and UPPER_SNAKE_CONSTANT_PATTERN.match(name):
             continue
-        if name.startswith(BOOLEAN_NAME_PREFIXES):
+        if name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
             continue
         issues.append(
             f"Line {line_number}: Boolean {name} - prefix with is_/has_/should_/can_"
@@ -2344,7 +2352,7 @@ def check_file_global_constants_use_count(content: str, file_path: str) -> list[
         return []
     if is_config_file(file_path):
         return []
-    if get_file_extension(file_path) not in PYTHON_EXTENSIONS:
+    if get_file_extension(file_path) not in ALL_PYTHON_EXTENSIONS:
         return []
     if file_path.replace("\\", "/").endswith("hooks/blocking/code_rules_enforcer.py"):
         return []
@@ -2648,7 +2656,7 @@ def _collect_mock_field_accesses_in_scope(
         if isinstance(each_node, ast.Attribute):
             if isinstance(each_node.value, ast.Name) and each_node.value.id == mock_name:
                 if isinstance(each_node.ctx, ast.Load):
-                    if each_node.attr in BUILTIN_DICT_METHOD_NAMES:
+                    if each_node.attr in ALL_BUILTIN_DICT_METHOD_NAMES:
                         continue
                     accesses.append((each_node.attr, each_node.lineno))
         elif isinstance(each_node, ast.Subscript):
@@ -2925,9 +2933,9 @@ def _annotation_names_collection(annotation_node: ast.expr | None) -> bool:
     if annotation_node is None:
         return False
     if isinstance(annotation_node, ast.Name):
-        return annotation_node.id in COLLECTION_TYPE_NAMES
+        return annotation_node.id in ALL_COLLECTION_TYPE_NAMES
     if isinstance(annotation_node, ast.Attribute):
-        return annotation_node.attr in COLLECTION_TYPE_NAMES
+        return annotation_node.attr in ALL_COLLECTION_TYPE_NAMES
     if isinstance(annotation_node, ast.BinOp) and isinstance(annotation_node.op, ast.BitOr):
         return (
             _annotation_names_collection(annotation_node.left)
@@ -2936,8 +2944,8 @@ def _annotation_names_collection(annotation_node: ast.expr | None) -> bool:
     if isinstance(annotation_node, ast.Subscript):
         outer_value = annotation_node.value
         is_optional_or_union_subscript = (
-            (isinstance(outer_value, ast.Name) and outer_value.id in UNION_TYPING_NAMES)
-            or (isinstance(outer_value, ast.Attribute) and outer_value.attr in UNION_TYPING_NAMES)
+            (isinstance(outer_value, ast.Name) and outer_value.id in ALL_UNION_TYPING_NAMES)
+            or (isinstance(outer_value, ast.Attribute) and outer_value.attr in ALL_UNION_TYPING_NAMES)
         )
         if is_optional_or_union_subscript:
             slice_node = annotation_node.slice
@@ -3627,7 +3635,7 @@ def check_unused_module_level_imports(
 
 def _is_cli_entry_point(file_path: str) -> bool:
     path_lower = file_path.lower().replace("\\", "/")
-    return any(marker.replace("\\", "/") in path_lower for marker in CLI_FILE_PATH_MARKERS)
+    return any(marker.replace("\\", "/") in path_lower for marker in ALL_CLI_FILE_PATH_MARKERS)
 
 
 def check_library_print(content: str, file_path: str) -> list[str]:
@@ -3635,7 +3643,7 @@ def check_library_print(content: str, file_path: str) -> list[str]:
         return []
     if _is_cli_entry_point(file_path):
         return []
-    if get_file_extension(file_path) not in PYTHON_EXTENSIONS:
+    if get_file_extension(file_path) not in ALL_PYTHON_EXTENSIONS:
         return []
     try:
         tree = ast.parse(content)
@@ -3862,7 +3870,7 @@ def check_loop_variable_naming(content: str, file_path: str) -> list[str]:
             continue
         for each_name_node in _collect_target_names(node.target):
             target_name = each_name_node.id
-            if target_name in LOOP_INDEX_LETTER_EXEMPTIONS:
+            if target_name in ALL_LOOP_INDEX_LETTER_EXEMPTIONS:
                 continue
             if target_name == BARE_EACH_TOKEN:
                 issues.append(
@@ -3892,7 +3900,7 @@ def check_parameter_annotations(content: str, file_path: str) -> list[str]:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for each_arg in _collect_annotated_arguments(node):
-            if each_arg.arg in SELF_AND_CLS_PARAMETER_NAMES:
+            if each_arg.arg in ALL_SELF_AND_CLS_PARAMETER_NAMES:
                 continue
             if each_arg.annotation is None:
                 issues.append(
@@ -3945,7 +3953,7 @@ def validate_content(
     all_issues = []
     effective_content = content if full_file_content is None else full_file_content
 
-    if extension in PYTHON_EXTENSIONS:
+    if extension in ALL_PYTHON_EXTENSIONS:
         if not is_test_file(file_path):
             all_issues.extend(check_comment_changes(old_content, content, file_path))
         all_issues.extend(check_imports_at_top(content))
@@ -3988,7 +3996,7 @@ def validate_content(
         check_incomplete_mocks(content, file_path)
         check_duplicated_format_patterns(content, file_path)
 
-    elif extension in JAVASCRIPT_EXTENSIONS:
+    elif extension in ALL_JAVASCRIPT_EXTENSIONS:
         if not is_test_file(file_path):
             all_issues.extend(check_comment_changes(old_content, content, file_path))
         all_issues.extend(check_e2e_test_naming(content, file_path))
@@ -4076,7 +4084,7 @@ def main() -> None:
                 "permissionDecisionReason": f"BLOCKED: [CODE_RULES] {len(issues)} violation(s): {issue_list}",
             }
         }
-        print(json.dumps(deny_payload))
+        logger.info(json.dumps(deny_payload))
         sys.stdout.flush()
 
     sys.exit(0)

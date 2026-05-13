@@ -39,6 +39,7 @@ def test_exits_zero_on_invalid_json():
         check=False,
     )
     assert result.returncode == 0
+    assert "invalid json" in result.stderr.lower()
 
 
 def test_exits_zero_on_non_dict_payload():
@@ -50,6 +51,7 @@ def test_exits_zero_on_non_dict_payload():
         check=False,
     )
     assert result.returncode == 0
+    assert result.stderr == ""
 
 
 def test_skips_non_html_files():
@@ -59,7 +61,8 @@ def test_skips_non_html_files():
             f.write("plain text")
 
         result = _run_hook("Write", {"file_path": txt_path, "content": "plain text"})
-        assert result.returncode == 0
+    assert result.returncode == 0
+    assert result.stderr == ""
 
 
 def test_skips_html_without_sentinel():
@@ -69,7 +72,8 @@ def test_skips_html_without_sentinel():
             f.write("<html><body>No marker</body></html>")
 
         result = _run_hook("Write", {"file_path": html_path, "content": "<html>"})
-        assert result.returncode == 0
+    assert result.returncode == 0
+    assert result.stderr == ""
 
 
 def test_exits_zero_when_html_has_sentinel():
@@ -79,7 +83,8 @@ def test_exits_zero_when_html_has_sentinel():
             f.write(f"<html>{SENTINEL}<body>Report</body></html>")
 
         result = _run_hook("Write", {"file_path": html_path, "content": "<html>"})
-        assert result.returncode == 0
+    assert result.returncode == 0
+    assert result.stderr != ""
 
 
 def test_skips_non_write_tool():
@@ -89,9 +94,11 @@ def test_skips_non_write_tool():
             f.write(f"<html>{SENTINEL}</html>")
 
         result = _run_hook("Read", {"file_path": html_path})
-        assert result.returncode == 0
+    assert result.returncode == 0
+    assert result.stderr == ""
 
 
 def test_exits_zero_when_file_missing():
     result = _run_hook("Write", {"file_path": "/nonexistent/path/page.html"})
     assert result.returncode == 0
+    assert result.stderr == ""

@@ -96,15 +96,19 @@ def _invoke_upload(
     err_stream: IO[str],
 ) -> None:
     """Run gist_upload.py against target_path and surface its URLs to the harness."""
-    completed = subprocess.run(
-        [sys.executable, str(script_path), "--input", str(target_path), "--no-open"],
-        check=False,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=UPLOAD_TIMEOUT_SECONDS,
-    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(script_path), "--input", str(target_path), "--no-open"],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=UPLOAD_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        logging.warning("doc_gist_auto_publish: gist_upload timed out after %ds", UPLOAD_TIMEOUT_SECONDS)
+        return
     if completed.stderr:
         err_stream.write(completed.stderr)
     if completed.returncode != 0:

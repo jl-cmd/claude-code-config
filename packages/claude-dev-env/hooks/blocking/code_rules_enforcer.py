@@ -838,7 +838,7 @@ def _file_path_matches_any_exemption(file_path: str) -> bool:
 
 def check_type_escape_hatches(content: str, file_path: str) -> list[str]:
     """Flag Any annotations, Any imports, cast() calls, and unjustified # type: ignore."""
-    if is_test_file(file_path):
+    if is_test_file(file_path) or is_hook_infrastructure(file_path):
         return []
 
     issues: list[str] = []

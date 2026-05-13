@@ -53,7 +53,6 @@ from config.hardcoded_user_path_constants import (  # noqa: E402
 )
 from config.inline_tuple_string_magic_constants import (  # noqa: E402
     ALL_SNAKE_CASE_KEYWORD_EXEMPTIONS,
-    CONFIG_PATH_SEGMENT as INLINE_TUPLE_CONFIG_PATH_SEGMENT,
     EXPECTED_TUPLE_PAIR_LENGTH,
     INLINE_TUPLE_STRING_MAGIC_MESSAGE_SUFFIX,
     MAX_INLINE_TUPLE_STRING_MAGIC_ISSUES,
@@ -1058,7 +1057,7 @@ def _collect_banned_names_from_import(
 ) -> list[ast.Name]:
     banned_alias_nodes: list[ast.Name] = []
     for each_alias in import_statement.names:
-        bound_identifier = each_alias.asname or each_alias.name
+        bound_identifier = each_alias.asname or each_alias.name.split(".")[0]
         if bound_identifier in ALL_BANNED_IDENTIFIERS:
             banned_alias_nodes.append(
                 _synthesize_alias_name_node(bound_identifier, each_alias)

@@ -19,6 +19,4 @@ ALL_SNAKE_CASE_KEYWORD_EXEMPTIONS: frozenset[str] = frozenset(
     {"true", "false", "none", "null"}
 )
 
-CONFIG_PATH_SEGMENT: str = "/config/"
-
 INLINE_TUPLE_STRING_MAGIC_MESSAGE_SUFFIX: str = "extract to config"

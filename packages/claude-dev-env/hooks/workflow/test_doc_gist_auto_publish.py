@@ -18,13 +18,14 @@ SENTINEL = "<!-- @publish-as-gist -->"
 class _RunHook:
     def __call__(self, tool_name: str, tool_input: dict) -> subprocess.CompletedProcess:
         payload = json.dumps({"tool_name": tool_name, "tool_input": tool_input})
-        return subprocess.run(
-            [sys.executable, HOOK_SCRIPT_PATH],
-            input=payload,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory() as isolation_root:
+            return subprocess.run(
+                [sys.executable, HOOK_SCRIPT_PATH, isolation_root],
+                input=payload,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
 
 
 _run_hook = _RunHook()

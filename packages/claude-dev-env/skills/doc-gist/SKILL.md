@@ -51,7 +51,7 @@ The user's prompt is the strongest signal. *"Make me a writeup of this PR"* → 
 For manual invocation when the marker route doesn't apply (an existing file you want to publish, HTML piped from another tool, a one-off):
 
 ```
-python skills/doc-gist/scripts/gist_upload.py --input <path-or-->
+python skills/doc-gist/scripts/gist_upload.py --input <path-or-stdin>
                               [--filename gist-file.html]
                               [--description "short label"]
                               [--no-open]

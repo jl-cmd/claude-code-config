@@ -1,4 +1,4 @@
-"""Upload an HTML file as a private GitHub gist and emit the htmlpreview URL.
+"""Upload an HTML file as a secret GitHub gist and emit the htmlpreview URL.
 
 Single-purpose transport. Takes HTML on stdin or via `--input <path>`, runs
 `gh gist create` (secret by default), parses the gist URL from gh's output,

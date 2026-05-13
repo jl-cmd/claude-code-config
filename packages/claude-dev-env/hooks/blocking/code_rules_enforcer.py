@@ -95,33 +95,36 @@ from config.blocking_check_limits import (  # noqa: E402
     MAX_THIN_WRAPPER_ISSUES,
 )
 
-PYTHON_EXTENSIONS = {".py"}
-JAVASCRIPT_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx"}
-ALL_CODE_EXTENSIONS = PYTHON_EXTENSIONS | JAVASCRIPT_EXTENSIONS
-
-TEST_PATH_PATTERNS = {"test_", "_test.", ".test.", ".spec.", "/tests/", "\\tests\\", "/tests.py", "\\tests.py"}
-HOOK_INFRASTRUCTURE_PATTERNS = {"/.claude/hooks/", "\\.claude\\hooks\\", "\\.claude/hooks/", "/packages/claude-dev-env/hooks/", "\\packages\\claude-dev-env\\hooks\\"}
-WORKFLOW_REGISTRY_PATTERNS = {"/workflow/", "\\workflow\\", "_tab.py", "/states.py", "\\states.py", "/modules.py", "\\modules.py"}
-MIGRATION_PATH_PATTERNS = {"/migrations/", "\\migrations\\"}
-
-ADVISORY_LINE_THRESHOLD_SOFT = 400
-ADVISORY_LINE_THRESHOLD_HARD = 1000
-
-BOOLEAN_NAME_PREFIXES: tuple[str, ...] = ("is_", "has_", "should_", "can_")
-UPPER_SNAKE_CONSTANT_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
-
-
-TYPE_CHECKING_BLOCK_PATTERN = re.compile(r"^(?P<indent>\s*)if\s+(typing\.)?TYPE_CHECKING\s*:\s*$")
-IMPORT_STATEMENT_PREFIXES: tuple[str, ...] = ("import ", "from ")
-NOT_INSIDE_TYPE_CHECKING_BLOCK = -1
-FILE_GLOBAL_UPPER_SNAKE_PATTERN = re.compile(r"^_?[A-Z][A-Z0-9_]*$")
-
-COLLECTION_TYPE_NAMES: frozenset[str] = frozenset({
-    "list", "tuple", "set", "frozenset", "dict",
-    "Iterable", "Sequence", "Mapping", "MutableMapping", "FrozenSet",
-})
-COLLECTION_BY_NAME_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9]*_by_[a-z][a-z0-9_]*$")
-CLI_FILE_PATH_MARKERS: tuple[str, ...] = ("/scripts/", "\\scripts\\", "_cli.py", "/cli.py", "\\cli.py")
+from config.code_rules_enforcer_constants import (  # noqa: E402
+    ADVISORY_LINE_THRESHOLD_HARD,
+    ADVISORY_LINE_THRESHOLD_SOFT,
+    ALL_CODE_EXTENSIONS,
+    ALL_CAPS_WITH_UNDERSCORE_PATTERN,
+    BARE_EACH_TOKEN,
+    BOOLEAN_NAME_PREFIXES,
+    BUILTIN_DICT_METHOD_NAMES,
+    CLI_FILE_PATH_MARKERS,
+    COLLECTION_BY_NAME_PATTERN,
+    COLLECTION_TYPE_NAMES,
+    DOTTED_SEGMENT_PATTERN,
+    EACH_PREFIX,
+    FILE_GLOBAL_UPPER_SNAKE_PATTERN,
+    HOOK_INFRASTRUCTURE_PATTERNS,
+    IMPORT_STATEMENT_PREFIXES,
+    INLINE_COLLECTION_MIN_LENGTH,
+    JAVASCRIPT_EXTENSIONS,
+    LOGGING_FSTRING_PATTERN,
+    LOOP_INDEX_LETTER_EXEMPTIONS,
+    MIGRATION_PATH_PATTERNS,
+    NOT_INSIDE_TYPE_CHECKING_BLOCK,
+    PYTHON_EXTENSIONS,
+    SELF_AND_CLS_PARAMETER_NAMES,
+    TEST_PATH_PATTERNS,
+    TYPE_CHECKING_BLOCK_PATTERN,
+    UNION_TYPING_NAMES,
+    UPPER_SNAKE_CONSTANT_PATTERN,
+    WORKFLOW_REGISTRY_PATTERNS,
+)
 
 
 def get_file_extension(file_path: str) -> str:
@@ -196,17 +199,17 @@ def check_comments_python(content: str) -> list[str]:
         if comment_index != -1:
             before_comment = line[:comment_index]
             if not before_comment.strip().startswith(("'", '"')):
-                in_string = False
+                is_in_string = False
                 quote_char = None
                 for i, char in enumerate(before_comment):
                     if char in ("'", '"') and (i == 0 or before_comment[i - 1] != "\\"):
-                        if not in_string:
-                            in_string = True
+                        if not is_in_string:
+                            is_in_string = True
                             quote_char = char
                         elif char == quote_char:
-                            in_string = False
+                            is_in_string = False
 
-                if not in_string:
+                if not is_in_string:
                     comment_text = line[comment_index + 1 :].strip()
                     if comment_text and not comment_text.startswith(("type:", "noqa", "pylint:", "pragma:", "TODO", "FIXME", "HACK", "XXX")):
                         issues.append(f"Line {line_number}: Comment found - refactor to self-documenting code")
@@ -221,7 +224,7 @@ def check_comments_javascript(content: str) -> list[str]:
     """Check for comments in JavaScript/TypeScript code."""
     issues = []
     lines = content.split("\n")
-    in_multiline_comment = False
+    is_is_in_multiline_comment = False
 
     for line_number, line in enumerate(lines, 1):
         stripped = line.strip()
@@ -229,13 +232,13 @@ def check_comments_javascript(content: str) -> list[str]:
         if not stripped:
             continue
 
-        if in_multiline_comment:
+        if is_is_in_multiline_comment:
             if "*/" in stripped:
-                in_multiline_comment = False
+                is_is_in_multiline_comment = False
             continue
 
         if stripped.startswith("/*"):
-            in_multiline_comment = "*/" not in stripped
+            is_is_in_multiline_comment = "*/" not in stripped
             if not stripped.startswith("/**"):
                 issues.append(f"Line {line_number}: Block comment found - refactor to self-documenting code")
             continue
@@ -279,32 +282,32 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
                 comment_index = line.find("#")
                 before_comment = line[:comment_index]
                 if not before_comment.strip().startswith(("'", '"')):
-                    in_string = False
+                    is_in_string = False
                     quote_char = None
                     for i, char in enumerate(before_comment):
                         if char in ("'", '"') and (i == 0 or before_comment[i - 1] != "\\"):
-                            if not in_string:
-                                in_string = True
+                            if not is_in_string:
+                                is_in_string = True
                                 quote_char = char
                             elif char == quote_char:
-                                in_string = False
-                    if not in_string:
+                                is_in_string = False
+                    if not is_in_string:
                         comment_text = line[comment_index + 1 :].strip()
                         if comment_text and not comment_text.startswith(("type:", "noqa", "pylint:", "pragma:", "TODO", "FIXME", "HACK", "XXX")):
                             inline_comments.add(line[comment_index:].strip())
 
     elif extension in JAVASCRIPT_EXTENSIONS:
-        in_multiline = False
+        is_in_multiline = False
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue
-            if in_multiline:
+            if is_in_multiline:
                 if "*/" in stripped:
-                    in_multiline = False
+                    is_in_multiline = False
                 continue
             if stripped.startswith("/*"):
-                in_multiline = "*/" not in stripped
+                is_in_multiline = "*/" not in stripped
                 if not stripped.startswith("/**"):
                     standalone_comments.add(stripped)
                 continue
@@ -381,7 +384,7 @@ def check_imports_at_top(content: str) -> list[str]:
     """
     issues: list[str] = []
     lines = content.split("\n")
-    inside_function = False
+    is_inside_function = False
     function_indent = 0
     type_checking_block_indent = NOT_INSIDE_TYPE_CHECKING_BLOCK
 
@@ -404,27 +407,20 @@ def check_imports_at_top(content: str) -> list[str]:
 
         function_match = re.match(r"^(\s*)(async\s+)?def\s+\w+", each_line)
         if function_match:
-            inside_function = True
+            is_inside_function = True
             function_indent = len(function_match.group(1)) if function_match.group(1) else 0
             continue
 
-        if inside_function:
+        if is_inside_function:
             if current_indent <= function_indent and stripped and not stripped.startswith(("#", "@", ")")):
-                inside_function = False
+                is_inside_function = False
 
         is_inside_type_checking_block = type_checking_block_indent != NOT_INSIDE_TYPE_CHECKING_BLOCK
-        if inside_function and not is_inside_type_checking_block:
+        if is_inside_function and not is_inside_type_checking_block:
             if stripped.startswith(IMPORT_STATEMENT_PREFIXES):
                 issues.append(f"Line {line_number}: Import inside function - move to top of file")
 
     return issues
-
-
-LOGGING_FSTRING_PATTERN = re.compile(
-    r'\b(?:log_(?:debug|info|warning|error|critical|exception)'
-    r'|(?:logger|logging|log)\.(?:debug|info|warning|error|critical|exception))'
-    r'\s*\(\s*(?:[rR][fF]|[fF][rR]?)["\']'
-)
 
 
 def check_logging_fstrings(content: str) -> list[str]:
@@ -514,7 +510,7 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
 
     issues = []
     lines = content.split("\n")
-    inside_function = False
+    is_inside_function = False
 
     number_pattern = re.compile(r"(?<![.\w])(\d+\.?\d*)(?![.\w])")
     allowed_numbers = {"0", "1", "-1", "0.0", "1.0"}
@@ -526,14 +522,14 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
             continue
 
         if re.match(r"^(async\s+)?def\s+\w+", stripped):
-            inside_function = True
+            is_inside_function = True
             continue
 
         if re.match(r"^class\s+\w+", stripped):
-            inside_function = False
+            is_inside_function = False
             continue
 
-        if inside_function:
+        if is_inside_function:
             if "=" in stripped and stripped.split("=")[0].strip().isupper():
                 continue
 
@@ -932,8 +928,8 @@ def check_constants_outside_config(content: str, file_path: str) -> list[str]:
 
     issues = []
     lines = content.split("\n")
-    inside_function = False
-    inside_class = False
+    is_inside_function = False
+    is_inside_class = False
 
     constant_pattern = re.compile(r"^([A-Z][A-Z0-9_]{2,})(?:\s*:\s*[^=]+)?\s*=\s*[^=]")
 
@@ -944,20 +940,20 @@ def check_constants_outside_config(content: str, file_path: str) -> list[str]:
             continue
 
         if re.match(r"^(async\s+)?def\s+\w+", stripped):
-            inside_function = True
+            is_inside_function = True
             continue
 
         if re.match(r"^class\s+\w+", stripped):
-            inside_class = True
-            inside_function = False
+            is_inside_class = True
+            is_inside_function = False
             continue
 
         indent = len(line) - len(line.lstrip())
         if indent == 0 and stripped and not stripped.startswith(("#", "@", ")")):
-            inside_function = False
-            inside_class = False
+            is_inside_function = False
+            is_inside_class = False
 
-        if not inside_function and not inside_class:
+        if not is_inside_function and not is_inside_class:
             match = constant_pattern.match(stripped)
             if match:
                 constant_name = match.group(1)
@@ -2408,9 +2404,9 @@ def _collect_optional_param_defaults(
 _NON_LITERAL_DEFAULT_SENTINEL = object()
 
 
-def _is_non_literal_default(value: object) -> bool:
+def _is_non_literal_default(each_default_value: object) -> bool:
     """Return True when a value is the sentinel for a non-literal default."""
-    return value is _NON_LITERAL_DEFAULT_SENTINEL
+    return each_default_value is _NON_LITERAL_DEFAULT_SENTINEL
 
 
 def _ast_constant_value(node: ast.expr) -> object:
@@ -2497,12 +2493,6 @@ def _function_name_from_call(call_node: ast.Call) -> str | None:
     if isinstance(call_node.func, ast.Name):
         return call_node.func.id
     return None
-
-
-BUILTIN_DICT_METHOD_NAMES: frozenset[str] = frozenset({
-    "get", "items", "keys", "values", "update", "pop",
-    "setdefault", "copy", "clear",
-})
 
 
 def _collect_mock_dict_keys(assign_value: ast.expr) -> set[str] | None:
@@ -2929,7 +2919,6 @@ def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
     return issues
 
 
-UNION_TYPING_NAMES: frozenset[str] = frozenset({"Optional", "Union"})
 
 
 def _annotation_names_collection(annotation_node: ast.expr | None) -> bool:
@@ -3671,13 +3660,6 @@ def check_library_print(content: str, file_path: str) -> list[str]:
     return issues
 
 
-SELF_AND_CLS_PARAMETER_NAMES: frozenset[str] = frozenset({"self", "cls"})
-LOOP_INDEX_LETTER_EXEMPTIONS: frozenset[str] = frozenset({"i", "j", "k", "_"})
-EACH_PREFIX = "each_"
-BARE_EACH_TOKEN = "each"
-INLINE_COLLECTION_MIN_LENGTH = 3
-ALL_CAPS_WITH_UNDERSCORE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
-DOTTED_SEGMENT_PATTERN = re.compile(r"^\.[a-z][a-z0-9_]*$")
 
 
 def _is_magic_string_literal(string_value: str) -> bool:
@@ -4087,14 +4069,14 @@ def main() -> None:
 
     if issues:
         issue_list = "; ".join(issues[:10])
-        result = {
+        deny_payload = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
                 "permissionDecisionReason": f"BLOCKED: [CODE_RULES] {len(issues)} violation(s): {issue_list}",
             }
         }
-        print(json.dumps(result))
+        print(json.dumps(deny_payload))
         sys.stdout.flush()
 
     sys.exit(0)

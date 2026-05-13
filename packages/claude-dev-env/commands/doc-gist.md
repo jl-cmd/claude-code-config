@@ -1,5 +1,5 @@
 ---
-description: Upload an HTML file as a private gist and open the htmlpreview URL. Manual escape hatch when the auto-publish hook's marker route doesn't apply.
+description: Upload an HTML file as a secret gist and open the htmlpreview URL. Manual escape hatch when the auto-publish hook's marker route doesn't apply.
 allowed-tools: Bash
 ---
 

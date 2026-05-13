@@ -1,6 +1,6 @@
 ---
 name: doc-gist
-description: >
+description: >-
   Use when the user asks to share, publish, preview, or open as a webpage any
   HTML doc, writeup, report, plan, decision record, runbook, explainer, status
   update, or interactive artifact. Triggers on `/doc-gist`, "publish this",
@@ -13,7 +13,7 @@ description: >
 
 # doc-gist
 
-Design fresh HTML for the artifact at hand, mark it for publishing, write it. The rest is automatic — a hook spots the marker, uploads to a private gist, and prints the htmlpreview URL into your output for the user to click.
+Design fresh HTML for the artifact at hand, mark it for publishing, write it. The rest is automatic — a hook spots the marker, uploads to a secret gist, and prints the htmlpreview URL into your output for the user to click.
 
 ## Principle (and what this skill deliberately does not ship)
 

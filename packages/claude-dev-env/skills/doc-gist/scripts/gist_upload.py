@@ -47,14 +47,17 @@ def _read_html(input_argument: str) -> str:
     """
     if input_argument == "-":
         return sys.stdin.read()
-    return Path(input_argument).expanduser().resolve().read_text(encoding="utf-8")
+    try:
+        return Path(input_argument).expanduser().resolve().read_text(encoding="utf-8")
+    except OSError as error:
+        raise SystemExit(f"Cannot read {input_argument}: {error}")
 
 
 def _resolve_filename(input_argument: str, override: str | None) -> str:
     """Pick the filename gh will use for the gist file."""
     default_filename = GIST_DEFAULT_FILENAME
     if override:
-        return override
+        return Path(override).name
     if input_argument != "-":
         return Path(input_argument).name
     return default_filename
@@ -127,7 +130,7 @@ def main() -> int:
         Process exit code (0 on success).
     """
     parser = argparse.ArgumentParser(
-        description="Upload HTML as a private gist; print gist + htmlpreview URLs."
+        description="Upload HTML as a secret gist; print gist + htmlpreview URLs."
     )
     parser.add_argument(
         "--input",

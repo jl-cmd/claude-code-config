@@ -127,7 +127,7 @@ def _check_bugbot(*, owner: str, repo: str, sha: str) -> tuple[bool, str]:
     return False, "no bugbot check run found"
 
 
-def _check_bugbot_not_dirty(*, owner: str, repo: str, number: int) -> tuple[bool, str]:
+def _check_bugbot_not_dirty(*, owner: str, repo: str, number: int, head_sha: str) -> tuple[bool, str]:
     endpoint = GH_REVIEWS_PATH_TEMPLATE.format(owner=owner, repo=repo, number=number)
     returncode, stdout = _gh_api_paginated(f"{endpoint}?per_page={REVIEWS_PER_PAGE}")
     if returncode != 0:
@@ -139,23 +139,34 @@ def _check_bugbot_not_dirty(*, owner: str, repo: str, number: int) -> tuple[bool
     if not isinstance(raw_output, list):
         return True, "no reviews"
     all_pages = [p for p in raw_output if isinstance(p, list)]
+    all_flat: list[dict[str, object]] = [
+        each_entry
+        for page in all_pages
+        for each_entry in page
+        if isinstance(each_entry, dict)
+    ]
+    all_flat.sort(
+        key=lambda each_review: str(each_review.get("submitted_at", "")),
+        reverse=True,
+    )
     dirty_pattern = re.compile(BUGBOT_DIRTY_BODY_REGEX, re.IGNORECASE)
-    for each_page in all_pages:
-        for each_review in each_page:
-            if not isinstance(each_review, dict):
-                continue
-            user_obj = each_review.get("user")
-            if not isinstance(user_obj, dict):
-                continue
-            login = user_obj.get("login", "")
-            if not isinstance(login, str):
-                continue
-            if CURSOR_LOGIN_FILTER_SUBSTRING not in login.lower():
-                continue
-            body = each_review.get("body", "")
-            if isinstance(body, str) and dirty_pattern.search(body):
-                return False, "bugbot review body reports findings"
-    return True, "clean"
+    for each_review in all_flat:
+        user_obj = each_review.get("user")
+        if not isinstance(user_obj, dict):
+            continue
+        login = user_obj.get("login", "")
+        if not isinstance(login, str):
+            continue
+        if CURSOR_LOGIN_FILTER_SUBSTRING not in login.lower():
+            continue
+        commit_id = each_review.get("commit_id", "")
+        if not isinstance(commit_id, str) or not commit_id.startswith(head_sha):
+            continue
+        body = each_review.get("body", "")
+        if isinstance(body, str) and dirty_pattern.search(body):
+            return False, "bugbot review body reports findings"
+        return True, "clean"
+    return True, "no bugbot review at HEAD"
 
 
 def _check_bot_review(
@@ -392,7 +403,7 @@ def check_all(*, owner: str, repo: str, number: int) -> int:
         conditions.append(
             (
                 "bugbot review body clean",
-                _check_bugbot_not_dirty(owner=owner, repo=repo, number=number),
+                _check_bugbot_not_dirty(owner=owner, repo=repo, number=number, head_sha=head_sha),
             )
         )
 

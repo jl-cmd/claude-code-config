@@ -66,6 +66,9 @@ def main() -> None:
         Path.home() / ".claude/skills/pr-converge/scripts/check_convergence.py"
     )
 
+    if not Path(check_convergence_script).is_file():
+        sys.exit(0)
+
     try:
         hook_input = json.load(sys.stdin)
     except json.JSONDecodeError:

@@ -28,6 +28,7 @@ from config.constants import (
     BUGBOT_CHECK_RUN_COMPLETE_CONCLUSION,
     BUGBOT_CHECK_RUN_NAME_SUBSTRING,
     BUGBOT_DIRTY_BODY_REGEX,
+    CHECK_RUNS_PER_PAGE,
     CLAUDE_CLEAN_REVIEW_STATE,
     CLAUDE_LOGIN_FILTER_SUBSTRING,
     COPILOT_CLEAN_REVIEW_STATE,
@@ -98,7 +99,7 @@ def _get_mergeable(*, owner: str, repo: str, number: int) -> tuple[bool, str]:
 
 def _check_bugbot(*, owner: str, repo: str, sha: str) -> tuple[bool, str]:
     endpoint = GH_CHECK_RUNS_PATH_TEMPLATE.format(owner=owner, repo=repo, sha=sha)
-    returncode, stdout = _gh_api(f"{endpoint}?per_page=30")
+    returncode, stdout = _gh_api(f"{endpoint}?per_page={CHECK_RUNS_PER_PAGE}")
     if returncode != 0:
         return False, f"gh api error: {stdout}"
     try:
@@ -175,7 +176,7 @@ def _check_bot_review(
     try:
         raw_output = json.loads(stdout)
     except json.JSONDecodeError:
-        return False, f"gh api response not valid JSON"
+        return False, "gh api response not valid JSON"
     if not isinstance(raw_output, list):
         return False, f"no {label} review found"
     all_pages = [p for p in raw_output if isinstance(p, list)]

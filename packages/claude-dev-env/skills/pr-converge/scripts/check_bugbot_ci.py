@@ -117,8 +117,6 @@ def is_bugbot_run_active(*, owner: str, repo: str, sha: str) -> bool:
             isinstance(each_status, str)
             and each_status in ALL_BUGBOT_CHECK_RUN_ACTIVE_STATUSES
         ):
-            json.dump(check_entry, sys.stdout)
-            sys.stdout.write("\n")
             return True
     return False
 

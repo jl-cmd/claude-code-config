@@ -41,7 +41,8 @@ from config.post_audit_thread_constants import (
     ALL_SUPPORTED_SEVERITY_TAGS,
     ALL_SUPPORTED_SKILLS,
     ALL_SUPPORTED_STATES,
-    AUDIT_BODY_SECTION_HEADER_MARKDOWN,
+    AUDIT_BODY_SKELETON_CLOSE_MARKER,
+    AUDIT_BODY_SKELETON_OPEN_MARKER,
     CLI_FLAG_COMMIT,
     CLI_FLAG_FINDINGS_JSON,
     CLI_FLAG_OWNER,
@@ -52,6 +53,7 @@ from config.post_audit_thread_constants import (
     DETAILS_BLOCK_BULLET_TEMPLATE,
     DETAILS_BLOCK_FOOTER,
     DETAILS_BLOCK_HEADER,
+    ERROR_RESPONSE_PREVIEW_CHARS,
     EXIT_CODE_RETRY_EXHAUSTED,
     EXIT_CODE_USER_ERROR,
     ALL_GH_AUTH_TOKEN_COMMAND_PARTS,
@@ -64,6 +66,8 @@ from config.post_audit_thread_constants import (
     GITHUB_REVIEW_EVENT_REQUEST_CHANGES,
     HEADING_FOR_CLEAN,
     HEADING_FOR_DIRTY,
+    HTTP_REQUEST_CONTENT_TYPE,
+    HTTP_REQUEST_TIMEOUT_SECONDS,
     HTTP_STATUS_SUCCESS_RANGE_HIGH,
     HTTP_STATUS_SUCCESS_RANGE_LOW,
     INLINE_COMMENT_BODY_TEMPLATE,
@@ -261,7 +265,12 @@ def parse_findings_json_file(findings_json_path: Path) -> list[AuditFinding]:
             f"findings-json path not found or not a file: {findings_json_path}"
         )
     findings_text = findings_json_path.read_text(encoding="utf-8")
-    parsed_value: object = json.loads(findings_text)
+    try:
+        parsed_value: object = json.loads(findings_text)
+    except json.JSONDecodeError as decode_error:
+        raise UserInputError(
+            f"findings-json file is not parseable as JSON: {decode_error}"
+        ) from decode_error
     if not isinstance(parsed_value, list):
         raise UserInputError(
             f"findings JSON root must be a list; got {type(parsed_value).__name__}"
@@ -307,11 +316,15 @@ def parse_findings_json_file(findings_json_path: Path) -> list[AuditFinding]:
 def extract_audit_body_skeleton(template_markdown_text: str) -> str:
     """Pull the audit review body skeleton out of the Phase 1 template markdown.
 
-    Locates the section header stored in
-    ``AUDIT_BODY_SECTION_HEADER_MARKDOWN`` then captures the contents of
-    the next fenced block (delimited by the token in
-    ``TEMPLATE_FENCE_TOKEN``). The captured text contains the placeholders
-    the rest of this script substitutes.
+    Locates the explicit HTML comment markers
+    ``AUDIT_BODY_SKELETON_OPEN_MARKER`` and
+    ``AUDIT_BODY_SKELETON_CLOSE_MARKER`` in the template, then captures
+    the fenced block (delimited by the token in ``TEMPLATE_FENCE_TOKEN``)
+    sitting between them. The captured text contains the placeholders the
+    rest of this script substitutes. Anchoring on explicit markers — not on
+    heading text or "the next fence after a heading" — keeps the contract
+    stable across template edits that rename headings, insert new fences,
+    or change fence syntax.
 
     Args:
         template_markdown_text: Full text of ``audit-reply-template.md``.
@@ -321,26 +334,37 @@ def extract_audit_body_skeleton(template_markdown_text: str) -> str:
         newlines stripped.
 
     Raises:
-        RuntimeError: section header missing, or the section is not
-            followed by a paired fence block.
+        RuntimeError: open or close marker missing, markers out of order,
+            or the marker-bounded region is not a paired fence block.
     """
-    section_start_index = template_markdown_text.find(
-        AUDIT_BODY_SECTION_HEADER_MARKDOWN
-    )
-    if section_start_index < 0:
+    open_marker_index = template_markdown_text.find(AUDIT_BODY_SKELETON_OPEN_MARKER)
+    if open_marker_index < 0:
         raise RuntimeError(
-            f"audit body section header not found in template: "
-            f"{AUDIT_BODY_SECTION_HEADER_MARKDOWN!r}"
+            f"audit body skeleton open marker not found in template: "
+            f"{AUDIT_BODY_SKELETON_OPEN_MARKER!r}"
         )
-    section_text = template_markdown_text[section_start_index:]
-    fence_open_index = section_text.find(TEMPLATE_FENCE_TOKEN)
+    region_start = open_marker_index + len(AUDIT_BODY_SKELETON_OPEN_MARKER)
+    close_marker_index = template_markdown_text.find(
+        AUDIT_BODY_SKELETON_CLOSE_MARKER, region_start
+    )
+    if close_marker_index < 0:
+        raise RuntimeError(
+            f"audit body skeleton close marker not found after open marker: "
+            f"{AUDIT_BODY_SKELETON_CLOSE_MARKER!r}"
+        )
+    region_text = template_markdown_text[region_start:close_marker_index]
+    fence_open_index = region_text.find(TEMPLATE_FENCE_TOKEN)
     if fence_open_index < 0:
-        raise RuntimeError("audit body section has no opening fence")
+        raise RuntimeError(
+            "audit body skeleton marker region has no opening fence"
+        )
     skeleton_start = fence_open_index + len(TEMPLATE_FENCE_TOKEN)
-    fence_close_index = section_text.find(TEMPLATE_FENCE_TOKEN, skeleton_start)
+    fence_close_index = region_text.find(TEMPLATE_FENCE_TOKEN, skeleton_start)
     if fence_close_index < 0:
-        raise RuntimeError("audit body section has no closing fence")
-    return section_text[skeleton_start:fence_close_index].strip("\n")
+        raise RuntimeError(
+            "audit body skeleton marker region has no closing fence"
+        )
+    return region_text[skeleton_start:fence_close_index].strip("\n")
 
 
 def load_audit_body_skeleton() -> str:
@@ -589,14 +613,20 @@ def resolve_github_token() -> str:
         env_token_value = os.environ.get(each_env_var_name, "").strip()
         if env_token_value:
             return env_token_value
-    completion = subprocess.run(
-        list(ALL_GH_AUTH_TOKEN_COMMAND_PARTS),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completion = subprocess.run(
+            list(ALL_GH_AUTH_TOKEN_COMMAND_PARTS),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError as missing_gh_error:
+        raise UserInputError(
+            "`gh` CLI not installed or not on PATH; cannot resolve a GitHub "
+            "token"
+        ) from missing_gh_error
     if completion.returncode != 0:
         raise UserInputError(
             f"`gh auth token` failed (exit {completion.returncode}): "
@@ -640,7 +670,7 @@ def _build_authenticated_request(
     )
     request_object.add_header("Authorization", f"Bearer {token}")
     request_object.add_header("Accept", GITHUB_API_ACCEPT_HEADER)
-    request_object.add_header("Content-Type", GITHUB_API_ACCEPT_HEADER)
+    request_object.add_header("Content-Type", HTTP_REQUEST_CONTENT_TYPE)
     request_object.add_header("X-GitHub-Api-Version", GITHUB_API_VERSION_HEADER)
     request_object.add_header("User-Agent", GITHUB_API_USER_AGENT)
     return request_object
@@ -669,7 +699,9 @@ def execute_review_post_attempt(
     """
     request_object = _build_authenticated_request(endpoint_url, token, all_request_fields)
     try:
-        with urllib.request.urlopen(request_object) as response_object:
+        with urllib.request.urlopen(
+            request_object, timeout=HTTP_REQUEST_TIMEOUT_SECONDS
+        ) as response_object:
             response_body = response_object.read().decode("utf-8", errors="replace")
             return response_object.status, response_body
     except urllib.error.HTTPError as http_error:
@@ -733,7 +765,7 @@ def post_review_with_retries(
     raise RetryExhaustedError(
         f"reviews POST failed after {total_attempts} attempts; "
         f"last status={last_status_code}; "
-        f"last body={last_response_text[:HTTP_STATUS_SUCCESS_RANGE_LOW]!r}"
+        f"last body={last_response_text[:ERROR_RESPONSE_PREVIEW_CHARS]!r}"
     )
 
 
@@ -750,7 +782,12 @@ def extract_html_url_field(response_text: str) -> str:
         RuntimeError: response is not JSON, root is not an object, or
             ``html_url`` is missing or not a string.
     """
-    parsed_value: object = json.loads(response_text)
+    try:
+        parsed_value: object = json.loads(response_text)
+    except json.JSONDecodeError as decode_error:
+        raise RuntimeError(
+            f"review response is not parseable as JSON: {decode_error}"
+        ) from decode_error
     if not isinstance(parsed_value, dict):
         raise RuntimeError(
             f"review response root is not an object; got {type(parsed_value).__name__}"
@@ -774,11 +811,23 @@ def post_audit_review(parsed_arguments: argparse.Namespace) -> PostedReview:
         :class:`PostedReview` containing the new review's ``html_url``.
 
     Raises:
-        UserInputError: bad CLI argument, malformed findings JSON, or
-            ``gh auth token`` failure.
+        UserInputError: bad CLI argument, malformed findings JSON, state
+            inconsistent with findings list (CLEAN+non-empty or
+            DIRTY+empty), missing ``gh`` CLI, or ``gh auth token`` failure.
         RetryExhaustedError: every retry failed against the reviews API.
     """
     all_findings = parse_findings_json_file(parsed_arguments.findings_json)
+    is_clean_state = parsed_arguments.state == STATE_CLEAN
+    if is_clean_state and all_findings:
+        raise UserInputError(
+            f"state {STATE_CLEAN} requires an empty findings list; got "
+            f"{len(all_findings)} finding(s)"
+        )
+    if not is_clean_state and not all_findings:
+        raise UserInputError(
+            f"state {STATE_DIRTY} requires at least one finding; got an "
+            f"empty findings list"
+        )
     skeleton_text = load_audit_body_skeleton()
     review_body_text = fill_audit_body_skeleton(
         skeleton_text=skeleton_text,

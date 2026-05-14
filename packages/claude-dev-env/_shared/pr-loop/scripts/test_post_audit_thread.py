@@ -63,6 +63,8 @@ from config.post_audit_thread_constants import (  # noqa: E402
     SEVERITY_TAG_P0,
     SEVERITY_TAG_P1,
     SEVERITY_TAG_P2,
+    SINGLE_REVIEW_API_PATH_TEMPLATE,
+    SINGLE_REVIEW_COMMENTS_API_PATH_TEMPLATE,
     SKILL_BUGTEAM,
     STATE_CLEAN,
     STATE_DIRTY,
@@ -76,13 +78,6 @@ GH_EVENT_CHANGES_REQUESTED = "CHANGES_REQUESTED"
 
 UUID_SUFFIX_LENGTH = 8
 
-REVIEWS_API_PATH_FMT = "repos/{owner}/{repo}/pulls/{number}/reviews"
-SINGLE_REVIEW_API_PATH_FMT = (
-    "repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}"
-)
-SINGLE_REVIEW_COMMENTS_API_PATH_FMT = (
-    "repos/{owner}/{repo}/pulls/{number}/reviews/{review_id}/comments"
-)
 REVIEW_URL_ID_DELIMITER = "#pullrequestreview-"
 
 
@@ -444,10 +439,10 @@ class LivePostAuditThreadTests(unittest.TestCase):
         self, html_url: str, expected_state: str
     ) -> dict[str, Any]:
         review_id = review_id_from_html_url(html_url)
-        single_review_api_path = SINGLE_REVIEW_API_PATH_FMT.format(
+        single_review_api_path = SINGLE_REVIEW_API_PATH_TEMPLATE.format(
             owner=LIVE_TEST_OWNER,
             repo=LIVE_TEST_REPO,
-            number=self.pr_number,
+            pr_number=self.pr_number,
             review_id=review_id,
         )
         single_review = gh_api_object_json(single_review_api_path)
@@ -460,10 +455,10 @@ class LivePostAuditThreadTests(unittest.TestCase):
 
     def _fetch_comments_for_review(self, html_url: str) -> list[dict[str, Any]]:
         review_id = review_id_from_html_url(html_url)
-        review_comments_api_path = SINGLE_REVIEW_COMMENTS_API_PATH_FMT.format(
+        review_comments_api_path = SINGLE_REVIEW_COMMENTS_API_PATH_TEMPLATE.format(
             owner=LIVE_TEST_OWNER,
             repo=LIVE_TEST_REPO,
-            number=self.pr_number,
+            pr_number=self.pr_number,
             review_id=review_id,
         )
         return gh_api_paginated_json(review_comments_api_path)

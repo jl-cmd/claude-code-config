@@ -49,6 +49,10 @@ GITHUB_REVIEW_EVENT_REQUEST_CHANGES: str = "REQUEST_CHANGES"
 HTTP_STATUS_SUCCESS_RANGE_LOW: int = 200
 HTTP_STATUS_SUCCESS_RANGE_HIGH: int = 300
 
+HTTP_REQUEST_CONTENT_TYPE: str = "application/json"
+HTTP_REQUEST_TIMEOUT_SECONDS: int = 30
+ERROR_RESPONSE_PREVIEW_CHARS: int = 200
+
 MAX_RETRY_ATTEMPTS: int = 3
 ALL_RETRY_BACKOFF_SECONDS: tuple[int, ...] = (1, 4, 16)
 
@@ -166,6 +170,15 @@ CLI_FLAG_STATE: str = "--state"
 CLI_FLAG_FINDINGS_JSON: str = "--findings-json"
 
 REVIEWS_API_PATH_TEMPLATE: str = "/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
+SINGLE_REVIEW_API_PATH_TEMPLATE: str = (
+    "/repos/{owner}/{repo}/pulls/{pr_number}/reviews/{review_id}"
+)
+SINGLE_REVIEW_COMMENTS_API_PATH_TEMPLATE: str = (
+    "/repos/{owner}/{repo}/pulls/{pr_number}/reviews/{review_id}/comments"
+)
+
+AUDIT_BODY_SKELETON_OPEN_MARKER: str = "<!-- audit-body-skeleton:start -->"
+AUDIT_BODY_SKELETON_CLOSE_MARKER: str = "<!-- audit-body-skeleton:end -->"
 
 
 def script_directory() -> Path:

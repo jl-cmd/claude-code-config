@@ -347,6 +347,21 @@ def remove_local_worktree(
     force_remove_directory(worktree_directory)
 
 
+def delete_remote_branch(branch_name: str) -> None:
+    subprocess.run(
+        [
+            "git",
+            "push",
+            "origin",
+            "--delete",
+            branch_name,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def write_findings_json(findings_payload: list[dict[str, Any]]) -> Path:
     handle, findings_path_str = tempfile.mkstemp(
         suffix=".json", prefix="post-audit-findings-"
@@ -422,6 +437,7 @@ class LivePostAuditThreadTests(unittest.TestCase):
                 self.branch_name,
             )
         except Exception:
+            self._cleanup_remote_branch()
             self._cleanup_local_state()
             raise
 
@@ -434,6 +450,9 @@ class LivePostAuditThreadTests(unittest.TestCase):
 
     def _cleanup_local_state(self) -> None:
         remove_local_worktree(self.main_repository_root, self.local_worktree_directory)
+
+    def _cleanup_remote_branch(self) -> None:
+        delete_remote_branch(self.branch_name)
 
     def _assert_review_state_for_url(
         self, html_url: str, expected_state: str

@@ -14,7 +14,8 @@ single source of truth for the review-body shape.
 Exit codes per spec:
 - ``0`` on success (POSTs the new review's ``html_url`` to stdout)
 - ``1`` on user error (bad CLI arguments, malformed findings JSON)
-- ``2`` on retry exhaustion (three non-2xx responses) — hard blocker
+- ``2`` on retry exhaustion (four non-2xx responses — one initial attempt
+  plus three retries) — hard blocker
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import NoReturn
 
 sys.modules.pop("config", None)
 if str(Path(__file__).resolve().parent) not in sys.path:
@@ -120,9 +122,10 @@ class UserInputError(ValueError):
 
 
 class RetryExhaustedError(RuntimeError):
-    """Raised after three non-2xx responses from the reviews endpoint.
+    """Raised after four non-2xx responses from the reviews endpoint.
 
-    Surfaces as exit code ``EXIT_CODE_RETRY_EXHAUSTED`` at the entry point.
+    Four attempts = one initial attempt plus three retries. Surfaces as
+    exit code ``EXIT_CODE_RETRY_EXHAUSTED`` at the entry point.
     """
 
 
@@ -156,6 +159,19 @@ class PostedReview:
     status_code: int
 
 
+class _UserInputArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that raises :class:`UserInputError` on parse errors.
+
+    The stock ``argparse.ArgumentParser.error`` raises ``SystemExit(2)``,
+    which collides with ``EXIT_CODE_RETRY_EXHAUSTED``. Routing parse
+    failures through :class:`UserInputError` lets the entry point map
+    them to ``EXIT_CODE_USER_ERROR`` (exit 1) instead.
+    """
+
+    def error(self, message: str) -> NoReturn:
+        raise UserInputError(f"argument parsing failed: {message}")
+
+
 def parse_command_line_arguments(all_arguments: list[str]) -> argparse.Namespace:
     """Parse and validate the script's CLI surface.
 
@@ -167,10 +183,10 @@ def parse_command_line_arguments(all_arguments: list[str]) -> argparse.Namespace
         ``pr_number``, ``commit``, ``state``, ``findings_json``.
 
     Raises:
-        SystemExit: argparse aborts on unrecognized or missing arguments
-            (handled by argparse itself, not raised by this function).
+        UserInputError: unrecognized argument, missing required argument,
+            or value outside a declared ``choices`` set.
     """
-    parser = argparse.ArgumentParser(
+    parser = _UserInputArgumentParser(
         description=(
             "Post an audit review to a draft PR. CLEAN state approves; "
             "DIRTY state requests changes with one inline comment per finding."
@@ -730,8 +746,11 @@ def post_review_with_retries(
         body, and status code.
 
     Raises:
-        RetryExhaustedError: every attempt returned a non-2xx response or
-            raised a transport-level :class:`urllib.error.URLError`.
+        RetryExhaustedError: every attempt across the four-attempt loop
+            (one initial attempt plus three retries) returned a non-2xx
+            response, raised a transport-level
+            :class:`urllib.error.URLError`, or produced a 2xx response
+            whose body could not be parsed for ``html_url``.
     """
     last_status_code: int = 0
     last_response_text: str = ""
@@ -752,7 +771,14 @@ def post_review_with_retries(
             < HTTP_STATUS_SUCCESS_RANGE_HIGH
         )
         if is_success:
-            html_url_value = extract_html_url_field(response_text)
+            try:
+                html_url_value = extract_html_url_field(response_text)
+            except RuntimeError as malformed_body_error:
+                raise RetryExhaustedError(
+                    f"reviews POST returned {status_code} but the response body "
+                    f"was unusable: {malformed_body_error}; "
+                    f"body={response_text[:ERROR_RESPONSE_PREVIEW_CHARS]!r}"
+                ) from malformed_body_error
             return PostedReview(
                 html_url=html_url_value,
                 raw_response_text=response_text,
@@ -813,7 +839,9 @@ def post_audit_review(parsed_arguments: argparse.Namespace) -> PostedReview:
     Raises:
         UserInputError: bad CLI argument, malformed findings JSON, state
             inconsistent with findings list (CLEAN+non-empty or
-            DIRTY+empty), missing ``gh`` CLI, or ``gh auth token`` failure.
+            DIRTY+empty), missing ``gh`` CLI, ``gh auth token`` failure,
+            or ``audit-reply-template.md`` misconfigured (translated from
+            :class:`RuntimeError` at the boundary).
         RetryExhaustedError: every retry failed against the reviews API.
     """
     all_findings = parse_findings_json_file(parsed_arguments.findings_json)
@@ -828,7 +856,12 @@ def post_audit_review(parsed_arguments: argparse.Namespace) -> PostedReview:
             f"state {STATE_DIRTY} requires at least one finding; got an "
             f"empty findings list"
         )
-    skeleton_text = load_audit_body_skeleton()
+    try:
+        skeleton_text = load_audit_body_skeleton()
+    except RuntimeError as template_error:
+        raise UserInputError(
+            f"audit-reply-template.md misconfigured: {template_error}"
+        ) from template_error
     review_body_text = fill_audit_body_skeleton(
         skeleton_text=skeleton_text,
         skill_argument=parsed_arguments.skill,
@@ -867,8 +900,8 @@ def main(all_arguments: list[str]) -> int:
         ``EXIT_CODE_USER_ERROR`` on user input failure,
         ``EXIT_CODE_RETRY_EXHAUSTED`` on retry exhaustion.
     """
-    parsed_arguments = parse_command_line_arguments(all_arguments)
     try:
+        parsed_arguments = parse_command_line_arguments(all_arguments)
         posted_review = post_audit_review(parsed_arguments)
     except UserInputError as user_error:
         print(f"post_audit_thread: {user_error}", file=sys.stderr)

@@ -100,7 +100,6 @@ INLINE_COMMENT_FIELD_SIDE: str = "side"
 INLINE_COMMENT_FIELD_BODY: str = "body"
 
 AUDIT_REPLY_TEMPLATE_FILENAME: str = "audit-reply-template.md"
-AUDIT_BODY_SECTION_HEADER_MARKDOWN: str = "## Relationship to the audit review body"
 TEMPLATE_FENCE_TOKEN: str = "```"
 
 PLACEHOLDER_SKILL: str = "<Skill>"

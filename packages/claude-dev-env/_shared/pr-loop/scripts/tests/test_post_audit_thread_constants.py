@@ -26,6 +26,20 @@ def test_http_request_content_type_is_application_json() -> None:
     assert constants_module.HTTP_REQUEST_CONTENT_TYPE == "application/json"
 
 
+def test_http_method_post_constant_is_post() -> None:
+    assert constants_module.HTTP_METHOD_POST == "POST"
+
+
+def test_http_header_authorization_constant_is_authorization() -> None:
+    assert constants_module.HTTP_HEADER_AUTHORIZATION == "Authorization"
+
+
+def test_http_authorization_bearer_prefix_is_bearer_with_trailing_space() -> None:
+    prefix = constants_module.HTTP_AUTHORIZATION_BEARER_PREFIX
+    assert prefix == "Bearer "
+    assert prefix.endswith(" ")
+
+
 def test_http_request_timeout_seconds_is_positive_int() -> None:
     timeout_seconds = constants_module.HTTP_REQUEST_TIMEOUT_SECONDS
     assert isinstance(timeout_seconds, int)

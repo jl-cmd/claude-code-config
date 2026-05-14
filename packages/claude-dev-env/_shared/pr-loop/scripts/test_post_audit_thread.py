@@ -456,6 +456,7 @@ class LivePostAuditThreadTests(unittest.TestCase):
                 close_throwaway_pr(self.pr_number)
         finally:
             self._cleanup_local_state()
+            self._cleanup_remote_branch()
 
     def _cleanup_local_state(self) -> None:
         remove_local_worktree(self.main_repository_root, self.local_worktree_directory)

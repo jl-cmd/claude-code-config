@@ -61,3 +61,16 @@ def test_audit_body_skeleton_marker_tokens_present() -> None:
     assert open_marker.startswith("<!--") and open_marker.endswith("-->")
     assert close_marker.startswith("<!--") and close_marker.endswith("-->")
     assert open_marker != close_marker
+
+
+def test_template_path_resolves_to_existing_markdown_file() -> None:
+    resolved_path = constants_module.template_path()
+    assert resolved_path.is_file(), f"missing: {resolved_path}"
+    assert resolved_path.suffix == ".md"
+
+
+def test_template_contains_skeleton_markers() -> None:
+    resolved_path = constants_module.template_path()
+    template_text = resolved_path.read_text(encoding="utf-8")
+    assert constants_module.AUDIT_BODY_SKELETON_OPEN_MARKER in template_text
+    assert constants_module.AUDIT_BODY_SKELETON_CLOSE_MARKER in template_text

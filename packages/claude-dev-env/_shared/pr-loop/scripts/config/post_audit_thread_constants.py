@@ -70,8 +70,6 @@ ALL_GH_TOKEN_ENV_VAR_NAMES: tuple[str, ...] = (
     GITHUB_TOKEN_ENV_VAR_NAME,
 )
 
-LIVE_TEST_AUDIT_ACCOUNT_NAME: str = "jl-cmd"
-
 JSON_FIELD_PATH: str = "path"
 JSON_FIELD_LINE: str = "line"
 JSON_FIELD_SIDE: str = "side"

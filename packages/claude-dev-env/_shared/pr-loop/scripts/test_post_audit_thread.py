@@ -34,7 +34,6 @@ if str(THIS_FILE_DIRECTORY) not in sys.path:
 from config.post_audit_thread_constants import (  # noqa: E402
     ALL_GH_AUTH_TOKEN_COMMAND_PARTS,
     GH_TOKEN_ENV_VAR_NAME,
-    LIVE_TEST_AUDIT_ACCOUNT_NAME,
     CLI_FLAG_COMMIT,
     CLI_FLAG_FINDINGS_JSON,
     CLI_FLAG_OWNER,
@@ -72,6 +71,8 @@ from config.post_audit_thread_constants import (  # noqa: E402
 
 SCRIPT_PATH = THIS_FILE_DIRECTORY / "post_audit_thread.py"
 REPO_FULL_NAME = f"{LIVE_TEST_OWNER}/{LIVE_TEST_REPO}"
+
+LIVE_TEST_AUDIT_ACCOUNT_NAME = "jl-cmd"
 
 GH_EVENT_APPROVED = "APPROVED"
 GH_EVENT_CHANGES_REQUESTED = "CHANGES_REQUESTED"

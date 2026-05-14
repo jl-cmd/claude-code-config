@@ -10,7 +10,7 @@ if str(_HOOK_DIR) not in sys.path:
 
 import re
 
-_GH_PR_READY_PATTERN = re.compile(r"\bgh\s+pr\s+ready\b(?!.*--undo)")
+_GH_PR_READY_PATTERN = re.compile(r"\bgh\s+pr\s+ready\b(?![^&|;\n]*--undo)")
 
 hook_spec = importlib.util.spec_from_file_location(
     "convergence_gate_blocker",

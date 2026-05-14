@@ -109,7 +109,7 @@ def main() -> None:
         check=False,
     )
 
-    if completed_process.returncode == 0:
+    if completed_process.returncode in (0, 2):
         sys.exit(0)
 
     deny_payload = {

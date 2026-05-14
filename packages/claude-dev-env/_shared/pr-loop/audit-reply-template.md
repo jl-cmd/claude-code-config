@@ -8,8 +8,6 @@ Read this doc before authoring any code that posts a reply. The template is the 
 
 The template mirrors Anthropic's `claude[bot]` reply structure observed on `anthropics/claude-code`. Reference example: PR `anthropics/claude-code#10826`, inline comment `2483980211`. Reading that thread shows the structural anchors this template captures: a status header line, a horizontal-rule separator, an `<action_heading> ✅` section, a plain-language explanation, anchored `**`<file>:<line>`:**` bullets, and a closing paragraph.
 
-The mirror is intentional. Reviewers and PR observers already recognize the `claude[bot]` shape as a reply they can scan in seconds; matching it removes one cognitive switch when a reader moves between `claude[bot]` threads and orchestrator-driven threads.
-
 ## When the template applies
 
 Every reply path uses the same skeleton. Two paths exist; both produce a reply with the structure below.
@@ -18,8 +16,6 @@ Every reply path uses the same skeleton. Two paths exist; both produce a reply w
 |---|---|---|
 | Fix | Thread classified `still_applies`. Code change addresses the finding. | `clean-coder` commits the fix, pushes, then replies. |
 | No-longer-applies | Thread classified `no_longer_applies`. Concern is moot under the current code (file removed, intent satisfied differently, refactor obviated the concern). | No code change. Orchestrator posts the reply directly. |
-
-Spec source for the path classifications: unresolved-thread spec lines 70–80 (verdict enum), lines 104–109 (route_to_fix_thread dispatch).
 
 ## Template skeleton
 
@@ -37,8 +33,6 @@ Spec source for the path classifications: unresolved-thread spec lines 70–80 (
 
 <closing paragraph>
 ```
-
-Source: unresolved-thread spec lines 113–126.
 
 ### Placeholder reference
 
@@ -60,8 +54,6 @@ The separator between the header and `<action_heading>` is a Markdown horizontal
 | Fix | `Fixed in <SHA>` (short SHA, 7 characters) | Finding-specific action verb. Example: `Replaced Any with concrete type`, `Renamed handle_request to dispatch_webhook`, `Added missing Raises: section`. |
 | No longer applies | `This concern no longer applies` | Reason-specific. Example: `File removed in commit <SHA>`, `Intent satisfied via refactor in commit <SHA>`, `Concern superseded by upstream change`. |
 
-Source: unresolved-thread spec lines 128–133.
-
 ## Structural identity rule
 
 The skeleton is identical across both paths. The only per-path differences are `<status_line>` and `<action_heading>`. Every other element is present in both paths:
@@ -73,7 +65,7 @@ The skeleton is identical across both paths. The only per-path differences are `
 - The `**`<file>:<line>`:**` bullet blocks are present in both paths. On the fix path, bullets describe what changed. On the no-longer-applies path, bullets describe why the concern is moot at that anchor.
 - The closing paragraph is present in both paths.
 
-A reply that omits any of these elements does not satisfy the template. Source: unresolved-thread spec line 135.
+A reply that omits any of these elements does not satisfy the template.
 
 ## Worked example — fix path
 
@@ -142,22 +134,10 @@ The audit review body posted by `post_audit_thread.py` (consumers: `bugteam`, `f
 <optional collapsed details section per finding>
 ```
 
-Source: unresolved-thread spec lines 179–192.
-
 The audit review body announces a complete audit pass; the reply template addresses one specific thread. They use the same `**Title** —— <status>` header convention so a reader scanning a PR sees consistent visual anchoring across both surfaces.
 
 ## Cross-references
 
 - [`audit-contract.md`](audit-contract.md) — finding schema (Shape A / Shape B), adversarial second pass, post-fix self-audit, persistence layout. The fields in a Shape A finding (`file`, `line`, `failure_mode`) feed the placeholders in this template. Replies cite the same `<file>:<line>` anchors that the originating audit recorded.
 - [`fix-protocol.md`](fix-protocol.md) — step 12 of the fix protocol describes the reply step. Step 12 currently shows only a terse `Fixed in <short_sha>` reply shape. A Phase-2 follow-on edit replaces step 12's terse shape with this template's full structure. That edit is out of scope for this PR.
-- The unresolved-thread spec — authoritative source for the template (lines 113–126), per-path variation (lines 128–133), structural identity rule (line 135), and clean-coder's emit responsibility (lines 229–235). The spec lands in `packages/claude-dev-env/skills/pr-converge/reference/spec.md` in a later PR.
 - [`gh-payloads.md`](gh-payloads.md) — MCP and REST endpoints used to post replies (`add_reply_to_pull_request_comment` and `post_fix_reply.py`). The transport is independent of the template; both transports accept the body string this template defines.
-
-## Wiring status
-
-The script and agent wiring that emits this template lives in two follow-on PRs:
-
-- **Phase 2 (script-side wiring)** — replaces `post_fix_reply.py`'s body construction so callers pass structured fields (`reviewer`, `status_line`, `action_heading`, `anchors[]`, `closing`) rather than a pre-built `--body` string. Updates `fix-protocol.md` step 12 to point at this template instead of the terse `Fixed in <short_sha>` shape.
-- **Phase 3 (clean-coder wiring)** — extends the `clean-coder` agent to emit this template for every thread it addresses, per spec lines 229–235. Phase 3 is blocked on open PR #424.
-
-This doc is the contract Phase 2 and Phase 3 will read. Edits to the template land here and propagate outward to the wiring; the wiring does not redefine the shape.

@@ -527,7 +527,16 @@ def _force_push_targets_convergence_branch(command: str) -> bool:
         convergence_force_push_detection_pattern, command, re.IGNORECASE
     ):
         is_force_push_found = True
-        post_remote_text = each_match.group(1).strip()
+        post_push_text = each_match.group(1).strip()
+        all_tokens = post_push_text.split()
+        remote_index = 1 if all_tokens and all_tokens[0] in ("--force", "-f") else 0
+        all_refspec_tokens = [
+            token for token in all_tokens[remote_index + 1 :]
+            if token not in ("--force", "-f")
+        ]
+        post_remote_text = " ".join(all_refspec_tokens)
+        if not post_remote_text:
+            return False
         if not _all_refspecs_are_convergence_branches(post_remote_text):
             return False
     return is_force_push_found

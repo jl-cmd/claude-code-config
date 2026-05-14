@@ -79,7 +79,7 @@ def main() -> None:
         sys.exit(0)
 
     command = hook_input.get("tool_input", {}).get("command", "")
-    gh_pr_ready_pattern = re.compile(r"\bgh\s+pr\s+ready\b(?!.*--undo)")
+    gh_pr_ready_pattern = re.compile(r"\bgh\s+pr\s+ready\b(?![^&|;\n]*--undo)")
     if not gh_pr_ready_pattern.search(command):
         sys.exit(0)
 

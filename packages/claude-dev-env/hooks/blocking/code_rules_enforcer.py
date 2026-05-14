@@ -4077,6 +4077,7 @@ def main() -> None:
             }
         }
         print(json.dumps(deny_payload))
+        sys.stdout.flush()
 
     sys.exit(0)
 

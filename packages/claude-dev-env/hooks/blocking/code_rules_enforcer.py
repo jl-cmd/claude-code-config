@@ -4076,8 +4076,7 @@ def main() -> None:
                 "permissionDecisionReason": f"BLOCKED: [CODE_RULES] {len(issues)} violation(s): {issue_list}",
             }
         }
-        sys.stdout.write(json.dumps(deny_payload) + "\n")
-        sys.stdout.flush()
+        print(json.dumps(deny_payload))
 
     sys.exit(0)
 

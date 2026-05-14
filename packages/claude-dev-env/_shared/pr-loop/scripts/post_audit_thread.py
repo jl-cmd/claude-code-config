@@ -37,6 +37,8 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from config.post_audit_thread_constants import (
+    ALL_GH_AUTH_TOKEN_COMMAND_PARTS,
+    ALL_GH_TOKEN_ENV_VAR_NAMES,
     ALL_REQUIRED_FINDING_FIELDS,
     ALL_RETRY_BACKOFF_SECONDS,
     ALL_SUPPORTED_INLINE_COMMENT_SIDES,
@@ -58,8 +60,6 @@ from config.post_audit_thread_constants import (
     ERROR_RESPONSE_PREVIEW_CHARS,
     EXIT_CODE_RETRY_EXHAUSTED,
     EXIT_CODE_USER_ERROR,
-    ALL_GH_AUTH_TOKEN_COMMAND_PARTS,
-    ALL_GH_TOKEN_ENV_VAR_NAMES,
     GITHUB_API_ACCEPT_HEADER,
     GITHUB_API_BASE_URL,
     GITHUB_API_USER_AGENT,
@@ -248,6 +248,17 @@ def _require_string_field(
     return field_value
 
 
+def _require_nonempty_string_field(
+    all_finding_fields: dict[str, object], field_name: str
+) -> str:
+    field_value = _require_string_field(all_finding_fields, field_name)
+    if not field_value:
+        raise UserInputError(
+            f"finding field {field_name!r} must be a non-empty string; got ''"
+        )
+    return field_value
+
+
 def _require_int_field(
     all_finding_fields: dict[str, object], field_name: str
 ) -> int:
@@ -274,7 +285,9 @@ def parse_findings_json_file(findings_json_path: Path) -> list[AuditFinding]:
 
     Raises:
         UserInputError: file missing, not parseable, JSON root not a list,
-            entries not dicts, or required fields missing or mistyped.
+            entries not dicts, required fields missing or mistyped, path
+            empty, or line value below ``1`` (the GitHub reviews API
+            rejects ``line=0`` as unprocessable).
     """
     if not findings_json_path.is_file():
         raise UserInputError(
@@ -316,10 +329,18 @@ def parse_findings_json_file(findings_json_path: Path) -> list[AuditFinding]:
                 f"finding side {side_value!r} not in supported set "
                 f"{list(ALL_SUPPORTED_INLINE_COMMENT_SIDES)!r}"
             )
+        path_value = _require_nonempty_string_field(all_entry_fields, JSON_FIELD_PATH)
+        line_value = _require_int_field(all_entry_fields, JSON_FIELD_LINE)
+        if line_value < 1:
+            raise UserInputError(
+                f"finding field {JSON_FIELD_LINE!r} must be >= 1 (GitHub "
+                f"reviews API rejects line=0); got {line_value} for path "
+                f"{path_value!r}"
+            )
         parsed_findings.append(
             AuditFinding(
-                path=_require_string_field(all_entry_fields, JSON_FIELD_PATH),
-                line=_require_int_field(all_entry_fields, JSON_FIELD_LINE),
+                path=path_value,
+                line=line_value,
                 side=side_value,
                 severity=severity_value,
                 description=_require_string_field(all_entry_fields, JSON_FIELD_DESCRIPTION),

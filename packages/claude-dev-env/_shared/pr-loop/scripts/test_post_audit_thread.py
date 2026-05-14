@@ -48,17 +48,6 @@ from config.post_audit_thread_constants import (  # noqa: E402
     JSON_FIELD_PATH,
     JSON_FIELD_SEVERITY,
     JSON_FIELD_SIDE,
-    LIVE_TEST_BASE_BRANCH,
-    LIVE_TEST_BRANCH_PREFIX,
-    LIVE_TEST_FIXTURE_CONTENT,
-    LIVE_TEST_FIXTURE_FILENAME,
-    LIVE_TEST_FIXTURE_LINE_FOR_FINDING_ONE,
-    LIVE_TEST_FIXTURE_LINE_FOR_FINDING_THREE,
-    LIVE_TEST_FIXTURE_LINE_FOR_FINDING_TWO,
-    LIVE_TEST_OWNER,
-    LIVE_TEST_PR_BODY,
-    LIVE_TEST_PR_TITLE,
-    LIVE_TEST_REPO,
     SEVERITY_TAG_P0,
     SEVERITY_TAG_P1,
     SEVERITY_TAG_P2,
@@ -68,6 +57,25 @@ from config.post_audit_thread_constants import (  # noqa: E402
     STATE_CLEAN,
     STATE_DIRTY,
 )
+
+LIVE_TEST_OWNER = "jl-cmd"
+LIVE_TEST_REPO = "claude-code-config"
+LIVE_TEST_BRANCH_PREFIX = "pr-loop-test"
+LIVE_TEST_PR_TITLE = "TEST: post_audit_thread smoke test (auto-closed)"
+LIVE_TEST_PR_BODY = (
+    "Throwaway PR for post_audit_thread.py live smoke tests. "
+    "Auto-created by `test_post_audit_thread.py`; closed in `tearDown`."
+)
+LIVE_TEST_BASE_BRANCH = "main"
+LIVE_TEST_FIXTURE_FILENAME = "post-audit-thread-fixture.md"
+LIVE_TEST_FIXTURE_CONTENT = (
+    "# Throwaway test fixture\n\n"
+    "Created by `test_post_audit_thread.py` to satisfy GitHub's "
+    "non-empty PR-diff requirement. Deleted when the PR closes.\n"
+)
+LIVE_TEST_FIXTURE_LINE_FOR_FINDING_ONE = 1
+LIVE_TEST_FIXTURE_LINE_FOR_FINDING_TWO = 2
+LIVE_TEST_FIXTURE_LINE_FOR_FINDING_THREE = 3
 
 SCRIPT_PATH = THIS_FILE_DIRECTORY / "post_audit_thread.py"
 REPO_FULL_NAME = f"{LIVE_TEST_OWNER}/{LIVE_TEST_REPO}"

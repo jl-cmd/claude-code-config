@@ -74,3 +74,24 @@ def test_template_contains_skeleton_markers() -> None:
     template_text = resolved_path.read_text(encoding="utf-8")
     assert constants_module.AUDIT_BODY_SKELETON_OPEN_MARKER in template_text
     assert constants_module.AUDIT_BODY_SKELETON_CLOSE_MARKER in template_text
+
+
+def test_live_test_fixture_names_are_not_exposed_from_production_config_module() -> None:
+    forbidden_attribute_names = [
+        "LIVE_TEST_OWNER",
+        "LIVE_TEST_REPO",
+        "LIVE_TEST_BRANCH_PREFIX",
+        "LIVE_TEST_PR_TITLE",
+        "LIVE_TEST_PR_BODY",
+        "LIVE_TEST_BASE_BRANCH",
+        "LIVE_TEST_FIXTURE_FILENAME",
+        "LIVE_TEST_FIXTURE_CONTENT",
+        "LIVE_TEST_FIXTURE_LINE_FOR_FINDING_ONE",
+        "LIVE_TEST_FIXTURE_LINE_FOR_FINDING_TWO",
+        "LIVE_TEST_FIXTURE_LINE_FOR_FINDING_THREE",
+    ]
+    for each_attribute_name in forbidden_attribute_names:
+        assert not hasattr(constants_module, each_attribute_name), (
+            f"production config module exposes test-only fixture "
+            f"{each_attribute_name!r}; move it to test_post_audit_thread.py"
+        )

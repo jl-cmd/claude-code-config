@@ -139,25 +139,6 @@ INLINE_COMMENT_BODY_TEMPLATE: str = (
     "**Suggested fix:** {fix_summary}"
 )
 
-LIVE_TEST_OWNER: str = "jl-cmd"
-LIVE_TEST_REPO: str = "claude-code-config"
-LIVE_TEST_BRANCH_PREFIX: str = "pr-loop-test"
-LIVE_TEST_PR_TITLE: str = "TEST: post_audit_thread smoke test (auto-closed)"
-LIVE_TEST_PR_BODY: str = (
-    "Throwaway PR for post_audit_thread.py live smoke tests. "
-    "Auto-created by `test_post_audit_thread.py`; closed in `tearDown`."
-)
-LIVE_TEST_BASE_BRANCH: str = "main"
-LIVE_TEST_FIXTURE_FILENAME: str = "post-audit-thread-fixture.md"
-LIVE_TEST_FIXTURE_CONTENT: str = (
-    "# Throwaway test fixture\n\n"
-    "Created by `test_post_audit_thread.py` to satisfy GitHub's "
-    "non-empty PR-diff requirement. Deleted when the PR closes.\n"
-)
-LIVE_TEST_FIXTURE_LINE_FOR_FINDING_ONE: int = 1
-LIVE_TEST_FIXTURE_LINE_FOR_FINDING_TWO: int = 2
-LIVE_TEST_FIXTURE_LINE_FOR_FINDING_THREE: int = 3
-
 CLI_FLAG_SKILL: str = "--skill"
 CLI_FLAG_OWNER: str = "--owner"
 CLI_FLAG_REPO: str = "--repo"

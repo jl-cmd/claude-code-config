@@ -9,11 +9,11 @@ Seven different objects share the top-level name ``config``:
   script constants).
 - ``packages/claude-dev-env/skills/_shared/pr-loop/scripts/config/`` (skill-side
   PR-loop script constants). ``init_loop_state.py``, ``write_audit_outcomes.py``,
-  ``write_fix_outcomes.py``, and the ``build_*_prompt.py`` scripts each insert
-  their own directory on ``sys.path`` at module-load time so they can
-  ``from config.X import Y`` when installed under
-  ``~/.claude/skills/_shared/pr-loop/scripts/``; under pytest that insert leaks
-  across collection boundaries unless this conftest evicts it.
+  ``write_fix_outcomes.py``, ``teardown_worktrees.py``, and the
+  ``build_*_prompt.py`` scripts each insert their own directory on ``sys.path``
+  at module-load time so they can ``from config.X import Y`` when installed
+  under ``~/.claude/skills/_shared/pr-loop/scripts/``; under pytest that insert
+  leaks across collection boundaries unless this conftest evicts it.
 - ``packages/claude-dev-env/skills/pr-converge/scripts/config/`` (pr-converge
   skill script constants). The shared scripts insert their own directory on
   ``sys.path`` at module-load time so they can ``from config.X import Y`` when

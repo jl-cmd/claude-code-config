@@ -123,10 +123,10 @@ the only side effect.
 **Self-PR precondition.** GitHub rejects both `APPROVE` and
 `REQUEST_CHANGES` reviews when the authenticated identity matches the
 PR author with HTTP 422; `post_audit_thread.py` retries and then exits 2.
-For findbugs to post a clean review on a self-authored PR, run under an
-alternate reviewer identity, or accept exit 2 and post the review via the
-MCP `pull_request_review_write` fallback with `event="COMMENT"`. The
-script does not auto-downgrade on the self-PR case.
+To run findbugs on a PR you authored, switch `gh auth` to an alternate
+reviewer identity (a separate GitHub account) BEFORE invoking the skill.
+Without this switch, exit 2 is a hard halt — there is no automated
+fallback path. The script does not auto-downgrade on the self-PR case.
 
 After the agent (and Haiku secondary) return and the merge is complete,
 serialize the merged findings to a JSON file and call

@@ -225,11 +225,11 @@ The subagent receives this prompt and loops internally — the lead does not re-
        **Self-PR precondition.** GitHub rejects both `APPROVE` and
        `REQUEST_CHANGES` reviews when the authenticated identity matches
        the PR author with HTTP 422; `post_audit_thread.py` retries and
-       then exits 2. For qbug to post a clean review on a self-authored
-       PR, run under an alternate reviewer identity, or accept exit 2
-       and post the audit review via the MCP
-       `pull_request_review_write` fallback with `event="COMMENT"`. The
-       script does not auto-downgrade on the self-PR case.
+       then exits 2. To run qbug on a PR you authored, switch `gh auth`
+       to an alternate reviewer identity (a separate GitHub account)
+       BEFORE invoking the skill. Without this switch, exit 2 is a hard
+       halt — there is no automated fallback path. The script does not
+       auto-downgrade on the self-PR case.
 
        ```
        python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \

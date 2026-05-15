@@ -55,12 +55,11 @@ whether bugteam runs inside `/pr-converge` or standalone.
 token in scope) matches the PR author with HTTP 422 ("Cannot
 approve/request changes on your own pull request"). `post_audit_thread.py`
 will retry on transient errors and then exit 2 (retry exhaustion); the
-script does not detect the self-PR case and downgrade to `COMMENT`. For
-bugteam to post a clean APPROVED audit review on a PR you authored, run
-under an alternate reviewer identity (a separate GitHub account whose
-token is in `gh auth`); on truly self-authored PRs, expect exit 2 from
-the script and post the audit review via the MCP `pull_request_review_write`
-fallback with `event="COMMENT"`.
+script does not detect the self-PR case and downgrade to `COMMENT`. To
+run bugteam on a PR you authored, switch `gh auth` to an alternate
+reviewer identity (a separate GitHub account) BEFORE invoking the skill.
+Without this switch, exit 2 is a hard halt — there is no automated
+fallback path. The script does not auto-downgrade on the self-PR case.
 
 ```
 python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \

@@ -104,7 +104,7 @@ end-to-end mental model before starting Step 0.
 | AUDIT action and code-rules pre-audit gate, pre-cycle walk, cycle decision tree | [reference/audit-and-teammates.md](reference/audit-and-teammates.md) |
 | FIX action and verify-push semantics | [reference/audit-and-teammates.md](reference/audit-and-teammates.md) |
 | Posting the end-of-pass audit review via `post_audit_thread.py` (APPROVE on CLEAN — the request event; GitHub stores it as `state=APPROVED` — REQUEST_CHANGES with inline anchored comments on DIRTY) | [§ Audit posting](#audit-posting) |
-| Posting per-loop reviews, fix replies, fallback PR comments via GitHub MCP | [reference/github-pr-reviews.md](reference/github-pr-reviews.md) |
+| Posting per-finding fix replies via GitHub MCP `add_reply_to_pull_request_comment` (rendered with the unified template at [`_shared/pr-loop/audit-reply-template.md`](../../_shared/pr-loop/audit-reply-template.md)) | [reference/github-pr-reviews.md](reference/github-pr-reviews.md) |
 | Teardown, PR description rewrite via `pr-description-writer`, permission revoke, final report | [reference/teardown-publish-permissions.md](reference/teardown-publish-permissions.md) |
 | Spawn-prompt XML, A–K category bindings, outcome XML schemas | [PROMPTS.md](PROMPTS.md) |
 | Per-category audit content (sub-buckets, decision criteria, ready-to-send Variant C templates) | `$HOME/.claude/audit-rubrics/{category_rubrics,prompts}/` |

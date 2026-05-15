@@ -161,8 +161,10 @@ cd into `<worktree_path>` before any git or file operation.
      and `thread_node_id` (e.g. `PRRT_kwDOxxx`, used by
      `resolve_thread`) so the FIX teammate can reply and resolve.
 
-  Body text and findings JSON are passed as files or string arguments to
-  the script — no temp files for body content, no jq, no shell pipes.
+  The findings JSON is serialized to a temp file and passed by path; the
+  review-body content is read from `audit-reply-template.md` at runtime by
+  `post_audit_thread.py`, not passed in by the caller. No body-content
+  temp files, no jq, no shell pipes.
 </comment_posting>
 
 <output_format>

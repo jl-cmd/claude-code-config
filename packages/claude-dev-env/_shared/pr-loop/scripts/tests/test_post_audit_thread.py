@@ -687,7 +687,10 @@ class LivePostAuditThreadTests(unittest.TestCase):
             if cls.pr_number > 0:
                 close_throwaway_pr(cls.pr_number)
         finally:
-            remove_local_clone(cls.local_clone_directory)
+            try:
+                remove_local_clone(cls.local_clone_directory)
+            finally:
+                best_effort_delete_remote_branch(cls.branch_name)
 
     def _assert_review_state_for_url(
         self, html_url: str, expected_state: str

@@ -1,8 +1,8 @@
 # Audit reply template
 
-Canonical reply shape for every orchestrator-to-thread reply posted by the PR-loop suite (`pr-converge`, `bugteam`, `findbugs`, `qbug`, `fixbugs`, and the `clean-coder` agent). Every reply Claude posts to an unresolved review thread on a draft PR uses this template.
+Canonical reply shape for every orchestrator-to-thread reply posted by the PR-loop suite (`pr-converge`, `bugteam`, `qbug`, and the `clean-coder` agent). Every reply Claude posts to an unresolved review thread on a draft PR uses this template.
 
-Read this doc before authoring any code that posts a reply. The template is the contract emitted by every `clean-coder` reply path; the audit-skill wiring (`bugteam`, `findbugs`, `qbug`, `fixbugs`, `pr-converge`) reads it before authoring a reply.
+Read this doc before authoring any code that posts a reply. The template is the contract emitted by every `clean-coder` reply path; the audit-skill wiring (`bugteam`, `qbug`, `pr-converge`) reads it before authoring a reply.
 
 ## Provenance
 

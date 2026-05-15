@@ -97,13 +97,21 @@ cd into `<worktree_path>` before any git or file operation.
      every finding's (file, line) against the captured diff. Split findings into two
      buckets: anchored (line is in the diff) and unanchored (line is not in the diff
      — surfaced in the calling skill's user-facing output rather than as inline
-     anchored comments). Format each finding body as:
+     anchored comments).
 
-       **[severity] one-line title**
-       Category: <letter> (<category name>)
-       <2-3 sentence description with concrete trace>
-
-       _From /bugteam audit loop <L>._
+     Each anchored finding contributes one entry to the JSON payload built
+     in step 4. The payload schema is
+     `{path, line, side, severity, description, fix_summary}`; the audit
+     teammate populates `description` (the failure narrative) and
+     `fix_summary` (the `Fix:` / `Validation:` text) from the
+     finding's `failure_mode` per the mapping in step 4. The audit
+     teammate does NOT author the inline-comment body directly:
+     `post_audit_thread.py` renders every body from
+     `INLINE_COMMENT_BODY_TEMPLATE` (defined in
+     [`_shared/pr-loop/scripts/config/post_audit_thread_constants.py`](../../_shared/pr-loop/scripts/config/post_audit_thread_constants.py))
+     — the template prepends `**[<severity>] <Skill> audit finding**`
+     and renders the suggested-fix block, so a teammate who hand-formats
+     a title or footer wastes the work.
 
   4. **Before posting, read the full review once as if you were the PR
      author.** Ask: would I understand what to fix and why? Do any two
@@ -117,11 +125,17 @@ cd into `<worktree_path>` before any git or file operation.
      Post ONE review per loop via `post_audit_thread.py` per
      [SKILL.md § Audit posting](SKILL.md#audit-posting). Serialize the
      anchored findings to a JSON file shaped as a list of
-     `{path, line, side, severity, description, fix_summary}` entries
-     (finding `file` → `path`, `failure_mode` → `description`,
-     `fix_direction` → `fix_summary`, `side="RIGHT"`). Zero anchored
-     findings → `--state CLEAN` with the findings file holding an empty
-     array (`[]`); one or more → `--state DIRTY` with the full list.
+     `{path, line, side, severity, description, fix_summary}` entries.
+     Map each finding's `file` → `path`; split each finding's
+     `failure_mode` at the literal `Fix:` heading so the failure
+     narrative becomes `description` and the suffix beginning at `Fix:`
+     (including the trailing `Validation:` clause) becomes
+     `fix_summary`. When the agent omits the `Fix:` heading on a given
+     finding, write the full `failure_mode` text to BOTH `description`
+     and `fix_summary`. Set `side="RIGHT"` for every entry. Zero
+     anchored findings → `--state CLEAN` with the findings file holding
+     an empty array (`[]`); one or more → `--state DIRTY` with the full
+     list.
 
      ```
      python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \

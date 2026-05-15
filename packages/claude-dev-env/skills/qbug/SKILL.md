@@ -203,10 +203,18 @@ The subagent receives this prompt and loops internally — the lead does not re-
        `<qbug_temp_dir>/loop-<loop_count>-findings.json` as a list of
        objects shaped
        `{path, line, side, severity, description, fix_summary}`. Map
-       each finding's `file` → `path`, `failure_mode` → `description`,
-       `fix_direction` → `fix_summary`, with `side="RIGHT"` for every
-       entry. Zero findings → write `[]` and pass `--state CLEAN`; one
-       or more findings → pass `--state DIRTY` with the full list.
+       each finding's `file` → `path`; split each finding's
+       `failure_mode` at the literal `Fix:` heading so the failure
+       narrative becomes `description` and the suffix beginning at
+       `Fix:` (including the trailing `Validation:` clause) becomes
+       `fix_summary` (the `failure_mode` field carries the full
+       audit-to-fix handoff per
+       [`agents/code-quality-agent.md`](../../agents/code-quality-agent.md)).
+       When a finding's `failure_mode` omits the `Fix:` heading, write
+       the full text to BOTH `description` and `fix_summary`. Set
+       `side="RIGHT"` for every entry. Zero findings → write `[]` and
+       pass `--state CLEAN`; one or more findings → pass `--state
+       DIRTY` with the full list.
 
        ```
        python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \
@@ -226,11 +234,18 @@ The subagent receives this prompt and loops internally — the lead does not re-
        finding; each becomes its own resolvable thread on the PR). It
        handles retries internally (1s / 4s / 16s backoff across four
        attempts). Exit 0 emits the new review's `html_url` to stdout;
-       harvest that URL plus child-comment URLs via
-       `pull_request_read(method="get_review_comments", owner=<owner>,
-       repo=<repo>, pullNumber=<pr_number>)` filtered to the just-posted
-       review id, then store them in
-       `loop_comment_index[finding_id]`.
+       harvest that URL plus child-comment URLs **and PR review thread
+       node ids** via `pull_request_read(method="get_review_comments",
+       owner=<owner>, repo=<repo>, pullNumber=<pr_number>)` filtered to
+       the just-posted review id. The same response carries each
+       comment's PR review thread node id (e.g. `PRRT_kwDOxxx`) — match
+       children to findings in the order they appear in the findings
+       JSON. Each `loop_comment_index[finding_id]` entry must carry
+       `finding_comment_id` (numeric, used by
+       `add_reply_to_pull_request_comment`), `finding_comment_url`, and
+       `thread_node_id` (`PRRT_kwDOxxx`, used by `resolve_thread`) so
+       the FIX step can reply against the comment and resolve the
+       thread.
 
        Exit 2 means retry exhaustion — exit
        `error: post_audit_thread retry exhausted` without retrying and

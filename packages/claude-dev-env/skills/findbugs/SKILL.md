@@ -137,14 +137,21 @@ python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" 
 
 The findings JSON root is a list of objects shaped
 `{path, line, side, severity, description, fix_summary}`. Map every
-Shape A finding's `file` → `path`, `failure_mode` → `description`,
-`fix_direction` → `fix_summary`, with `side="RIGHT"` for every entry.
-Zero merged findings → `--state CLEAN` with the findings file holding
-an empty array (`[]`); one or more findings → `--state DIRTY` with the
-full list. CLEAN posts an APPROVE review (the request event; GitHub
-stores it as `state=APPROVED`) with a "no findings" summary; DIRTY
-posts a REQUEST_CHANGES review with one inline anchored comment per
-finding (each becomes its own resolvable thread on the PR).
+Shape A finding's `file` → `path`; split each finding's `failure_mode`
+at the literal `Fix:` heading so the failure narrative becomes
+`description` and the suffix beginning at `Fix:` (including the
+trailing `Validation:` clause) becomes `fix_summary` (the `failure_mode`
+field carries the full audit-to-fix handoff per
+[`agents/code-quality-agent.md`](../../agents/code-quality-agent.md)).
+When a finding's `failure_mode` omits the `Fix:` heading, write the
+full text to BOTH `description` and `fix_summary`. Set `side="RIGHT"`
+for every entry. Zero merged findings → `--state CLEAN` with the
+findings file holding an empty array (`[]`); one or more findings →
+`--state DIRTY` with the full list. CLEAN posts an APPROVE review (the
+request event; GitHub stores it as `state=APPROVED`) with a "no
+findings" summary; DIRTY posts a REQUEST_CHANGES review with one inline
+anchored comment per finding (each becomes its own resolvable thread on
+the PR).
 
 Capture `<head_sha>` once at the start of Step 4 via `git rev-parse
 HEAD` in the worktree the diff was scoped against.

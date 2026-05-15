@@ -63,11 +63,22 @@ python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" 
 
 `--findings-json` points to a JSON file whose root is a list of objects
 shaped `{path, line, side, severity, description, fix_summary}`. The
-audit agent's persisted finding output maps directly: finding `file` →
-`path`, `failure_mode` → `description`, `fix_direction` → `fix_summary`,
-with `side="RIGHT"` for every entry. On CLEAN, pass an empty array
-(`[]`) so the script posts an APPROVE review (GitHub stores it as
-`state=APPROVED`) with a "no findings" summary and zero inline comments.
+audit agent's persisted finding output maps as follows: finding `file`
+→ `path`, and the agent's `failure_mode` field carries both the failure
+narrative AND the `Fix:` / `Validation:` text per
+[`agents/code-quality-agent.md`](../../agents/code-quality-agent.md)
+("The `failure_mode` field is the audit-to-fix handoff"). Split
+`failure_mode` at the literal `Fix:` heading: the prefix (the failure
+narrative) becomes `description`, and the suffix starting at `Fix:`
+(including the trailing `Validation:` clause) becomes `fix_summary`.
+When the agent omits the `Fix:` heading on a given finding, write the
+full `failure_mode` text to BOTH `description` and `fix_summary` so the
+script's body template (`INLINE_COMMENT_BODY_TEMPLATE` in
+[`_shared/pr-loop/scripts/config/post_audit_thread_constants.py`](../../_shared/pr-loop/scripts/config/post_audit_thread_constants.py))
+still renders coherently. Set `side="RIGHT"` for every entry. On CLEAN,
+pass an empty array (`[]`) so the script posts an APPROVE review
+(GitHub stores it as `state=APPROVED`) with a "no findings" summary and
+zero inline comments.
 
 Exit codes: `0` on success (emits the new review's `html_url` to
 stdout); `1` on user input error; `2` on retry exhaustion (1s / 4s /

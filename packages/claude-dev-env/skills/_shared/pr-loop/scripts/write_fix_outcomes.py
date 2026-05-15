@@ -102,7 +102,7 @@ def build_fix_xml(
         "commit_sha": commit_sha,
     })
 
-    fix_outcome_body_element_keys = ALL_FIX_OUTCOME_BODY_ELEMENT_KEYS
+    all_fix_outcome_body_element_keys = ALL_FIX_OUTCOME_BODY_ELEMENT_KEYS
     outcomes_elem = SubElement(root, "outcomes")
     for each_outcome in outcomes_data:
         outcome_elem = SubElement(outcomes_elem, "outcome")
@@ -110,7 +110,7 @@ def build_fix_xml(
             field_text = (
                 str(each_field_detail) if each_field_detail is not None else ""
             )
-            if each_key in fix_outcome_body_element_keys:
+            if each_key in all_fix_outcome_body_element_keys:
                 child = SubElement(outcome_elem, each_key)
                 child.text = field_text
             else:

@@ -80,14 +80,14 @@ def _populate_findings(parent: Element, findings_data: list[dict[str, object]]) 
         findings_data: Validated list of finding dicts (caller must have
             confirmed each entry is a dict via the build_audit_xml gate).
     """
-    finding_body_element_keys = ALL_FINDING_BODY_ELEMENT_KEYS
+    all_finding_body_element_keys = ALL_FINDING_BODY_ELEMENT_KEYS
     for each_finding in findings_data:
         finding_elem = SubElement(parent, "finding")
         for each_key, each_field_detail in each_finding.items():
             field_text = (
                 str(each_field_detail) if each_field_detail is not None else ""
             )
-            if each_key in finding_body_element_keys:
+            if each_key in all_finding_body_element_keys:
                 child = SubElement(finding_elem, each_key)
                 child.text = field_text
             else:

@@ -213,6 +213,7 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         _remove_path_if_present(_HOOKS_ROOT_DIRECTORY_PATH)
         _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_DOC_GIST_SCRIPTS_DIRECTORY_PATH)
         return
 
     _ensure_hooks_root_on_sys_path()

@@ -4,6 +4,8 @@ Canonical reply shape for every orchestrator-to-thread reply posted by the PR-lo
 
 Read this doc before authoring any code that posts a reply. The template is the contract emitted by every `clean-coder` reply path; the audit-skill wiring (`bugteam`, `qbug`, `pr-converge`) reads it before authoring a reply.
 
+This doc has two surfaces, called out separately so consumers do not conflate them: the **reply template** (this section and below) shapes the body Claude posts back to a single review thread; the **audit body skeleton** in [Relationship to the audit review body](#relationship-to-the-audit-review-body) shapes the parent review `post_audit_thread.py` posts at audit time. The reply-template consumers are the four skills/agents listed above (read-only `findbugs` is excluded — it posts an audit review via `post_audit_thread.py` but never authors thread replies). The audit-body-skeleton consumers include `findbugs` alongside `bugteam` and `qbug` because all three skills post audit reviews via the same script.
+
 ## Provenance
 
 The template mirrors Anthropic's `claude[bot]` reply structure observed on `anthropics/claude-code`. Reference example: PR `anthropics/claude-code#10826`, inline comment `2483980211`. Reading that thread shows the structural anchors this template captures: a status header line, a horizontal-rule separator, an `<action_heading> ✅` section, a plain-language explanation, anchored `**`<file>:<line>`:**` bullets, and a closing paragraph.

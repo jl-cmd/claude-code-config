@@ -82,6 +82,13 @@ def build_fix_xml(
     if not isinstance(outcomes_data, list):
         print("outcomes-json must contain a JSON array", file=sys.stderr)
         raise SystemExit(1)
+    for each_index, each_entry in enumerate(outcomes_data):
+        if not isinstance(each_entry, dict):
+            print(
+                f"outcomes-json[{each_index}]: each entry must be a JSON object",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
     errors = validate_fix_statuses(outcomes_data)
     if errors:
         for each_error in errors:

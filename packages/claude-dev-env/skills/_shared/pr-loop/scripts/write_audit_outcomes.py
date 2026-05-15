@@ -39,8 +39,21 @@ def build_audit_xml(
 
     Returns:
         Root <bugteam_audit> element.
+
+    Raises:
+        SystemExit: When findings-json is not a JSON array of objects.
     """
     findings_data = json.loads(findings_json_path.read_text(encoding="utf-8"))
+    if not isinstance(findings_data, list):
+        print("findings-json must contain a JSON array", file=sys.stderr)
+        raise SystemExit(1)
+    for each_index, each_item in enumerate(findings_data):
+        if not isinstance(each_item, dict):
+            print(
+                f"findings-json[{each_index}]: each entry must be a JSON object",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
     root = Element("bugteam_audit", {
         "pr": str(pr_number),
         "loop": str(loop),
@@ -52,8 +65,8 @@ def build_audit_xml(
     return root
 
 
-def _populate_findings(parent: Element, findings_data: object) -> None:
-    """Populate <finding> elements from a list of finding dicts.
+def _populate_findings(parent: Element, findings_data: list[dict[str, object]]) -> None:
+    """Populate <finding> elements from a validated list of finding dicts.
 
     Scalar finding fields become XML attributes on `<finding>`; the
     body fields named in `ALL_FINDING_BODY_ELEMENT_KEYS` (defined in
@@ -64,17 +77,11 @@ def _populate_findings(parent: Element, findings_data: object) -> None:
 
     Args:
         parent: Parent XML element (typically `<findings>`).
-        findings_data: Findings data (list of dicts).
+        findings_data: Validated list of finding dicts (caller must have
+            confirmed each entry is a dict via the build_audit_xml gate).
     """
     finding_body_element_keys = ALL_FINDING_BODY_ELEMENT_KEYS
-    if not isinstance(findings_data, list):
-        parent.text = str(findings_data) if findings_data is not None else ""
-        return
     for each_item in findings_data:
-        if not isinstance(each_item, dict):
-            item_elem = SubElement(parent, "item")
-            item_elem.text = str(each_item) if each_item is not None else ""
-            continue
         finding_elem = SubElement(parent, "finding")
         for each_key, each_field_detail in each_item.items():
             field_text = (

@@ -198,23 +198,29 @@ The subagent receives this prompt and loops internally — the lead does not re-
        <qbug_temp_dir>/loop-<loop_count>-audit.json per the contract's
        persistence schema.
 
-       Post ONE review per loop via `post_audit_thread.py`. Write the
-       merged findings to
-       `<qbug_temp_dir>/loop-<loop_count>-findings.json` as a list of
-       objects shaped
-       `{path, line, side, severity, description, fix_summary}`. Map
-       each finding's `file` → `path`; split each finding's
-       `failure_mode` at the literal `Fix:` heading so the failure
-       narrative becomes `description` and the suffix beginning at
-       `Fix:` (including the trailing `Validation:` clause) becomes
+       Post ONE review per loop via `post_audit_thread.py`. Before
+       serializing, partition the merged findings into anchored (line
+       appears in the captured diff) and unanchored (line is not in the
+       diff) buckets. Only anchored findings are written to
+       `<qbug_temp_dir>/loop-<loop_count>-findings.json` — the GitHub
+       reviews API rejects the entire POST if any inline comment in
+       `comments[]` targets a line not in the diff at `--commit`, so a
+       single unanchored entry breaks the whole review. Unanchored
+       findings surface in the loop's user-facing summary rather than
+       as inline anchored comments. The JSON root is a list of objects
+       shaped `{path, line, side, severity, description, fix_summary}`.
+       For each anchored finding, map `file` → `path`; split the
+       finding's `failure_mode` at the literal `Fix:` heading so the
+       failure narrative becomes `description` and the suffix beginning
+       at `Fix:` (including the trailing `Validation:` clause) becomes
        `fix_summary` (the `failure_mode` field carries the full
        audit-to-fix handoff per
        [`agents/code-quality-agent.md`](../../agents/code-quality-agent.md)).
        When a finding's `failure_mode` omits the `Fix:` heading, write
        the full text to BOTH `description` and `fix_summary`. Set
-       `side="RIGHT"` for every entry. Zero findings → write `[]` and
-       pass `--state CLEAN`; one or more findings → pass `--state
-       DIRTY` with the full list.
+       `side="RIGHT"` for every entry. Zero anchored findings → write
+       `[]` and pass `--state CLEAN`; one or more anchored findings →
+       pass `--state DIRTY` with the full list.
 
        ```
        python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \

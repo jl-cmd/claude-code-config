@@ -50,6 +50,18 @@ Every internal audit pass (CLEAN or DIRTY) ends with one call to
 finding; each becomes its own resolvable thread). The mandate applies
 whether bugteam runs inside `/pr-converge` or standalone.
 
+**Self-PR precondition.** GitHub rejects both `APPROVE` and
+`REQUEST_CHANGES` reviews when the authenticated identity (the `gh auth`
+token in scope) matches the PR author with HTTP 422 ("Cannot
+approve/request changes on your own pull request"). `post_audit_thread.py`
+will retry on transient errors and then exit 2 (retry exhaustion); the
+script does not detect the self-PR case and downgrade to `COMMENT`. For
+bugteam to post a clean APPROVED audit review on a PR you authored, run
+under an alternate reviewer identity (a separate GitHub account whose
+token is in `gh auth`); on truly self-authored PRs, expect exit 2 from
+the script and post the audit review via the MCP `pull_request_review_write`
+fallback with `event="COMMENT"`.
+
 ```
 python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \
   --skill bugteam \

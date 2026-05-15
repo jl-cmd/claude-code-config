@@ -120,6 +120,14 @@ returns findings without posting them as inline comments is invisible
 to the gate. Findbugs remains read-only on code — the review post is
 the only side effect.
 
+**Self-PR precondition.** GitHub rejects both `APPROVE` and
+`REQUEST_CHANGES` reviews when the authenticated identity matches the
+PR author with HTTP 422; `post_audit_thread.py` retries and then exits 2.
+For findbugs to post a clean review on a self-authored PR, run under an
+alternate reviewer identity, or accept exit 2 and post the review via the
+MCP `pull_request_review_write` fallback with `event="COMMENT"`. The
+script does not auto-downgrade on the self-PR case.
+
 After the agent (and Haiku secondary) return and the merge is complete,
 serialize the merged findings to a JSON file and call
 `post_audit_thread.py`:

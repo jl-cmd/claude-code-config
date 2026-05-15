@@ -52,7 +52,7 @@ def create_loop_state(
 
     state = {
         "loop_count": 0,
-        "last_action": "init",
+        "last_action": "fresh",
         "last_findings": None,
         "starting_sha": starting_sha,
         "loop_comment_index": {},

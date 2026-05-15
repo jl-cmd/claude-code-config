@@ -596,7 +596,7 @@ def invoke_post_audit_thread_with_url_override(
     local stub server without modifying production source.
 
     Args:
-        pr_number: Throwaway PR number created by ``setUp``.
+        pr_number: Throwaway PR number created by ``setUpClass``.
         head_sha: HEAD SHA the script attaches the review to.
         state_argument: ``CLEAN`` or ``DIRTY``.
         findings_json_path: Path to the (empty-list) findings JSON.

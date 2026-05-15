@@ -345,14 +345,16 @@ The subagent receives this prompt and loops internally — the lead does not re-
 </cycle>
 
 <example_finding_body>
-**[P1] race condition on shared cache write**
-Category: I (concurrency hazards)
-Two writers can both pass the existence check at line 88 before either
-commits the write at line 91 — whichever writes second overwrites the
-first under contention. Either hold the cache lock across the check
-and the write, or use a compare-and-swap primitive.
+Populate these two fields on each finding entry of the JSON payload
+consumed by `post_audit_thread.py` (the script renders the inline
+comment body via `INLINE_COMMENT_BODY_TEMPLATE`):
 
-_From /qbug audit loop 2._
+```json
+{
+  "description": "Two writers can both pass the existence check at line 88 before either commits the write at line 91 — whichever writes second overwrites the first under contention.",
+  "fix_summary": "Hold the cache lock across the check and the write, or use a compare-and-swap primitive. Validation: pytest -k cache_concurrent with the threaded-writer fixture."
+}
+```
 </example_finding_body>
 
 <constraints>

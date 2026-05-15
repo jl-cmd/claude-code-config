@@ -44,8 +44,9 @@ def create_loop_state(
         populated by AUDIT)
       - `starting_sha: <str>` (the SHA passed in)
       - `loop_comment_index: {}` (dict keyed by finding_id; AUDIT
-        populates with `{finding_comment_id, finding_comment_url,
-        thread_node_id, fix_status}` per entry)
+        populates `finding_comment_id`, `finding_comment_url`, and
+        `thread_node_id` per entry when it posts the per-loop review,
+        and FIX sets `fix_status` when its commit lands)
 
     Args:
         pr_number: Pull request number.

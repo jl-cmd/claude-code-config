@@ -76,7 +76,7 @@ LIVE_TEST_BRANCH_PREFIX = "pr-loop-test"
 LIVE_TEST_PR_TITLE = "TEST: post_audit_thread smoke test (auto-closed)"
 LIVE_TEST_PR_BODY = (
     "Throwaway PR for post_audit_thread.py live smoke tests. "
-    "Auto-created by `test_post_audit_thread.py`; closed in `tearDown`."
+    "Auto-created by `test_post_audit_thread.py`; closed in `tearDownClass`."
 )
 LIVE_TEST_BASE_BRANCH = "main"
 LIVE_TEST_FIXTURE_FILENAME = "post-audit-thread-fixture.md"
@@ -474,7 +474,6 @@ EXPECTED_RETRY_EXHAUSTION_ELAPSED_UPPER_BOUND_SECONDS = (
 )
 
 EXIT_CODE_SUCCESS = 0
-EXIT_CODE_RETRY_EXHAUSTED_EXPECTED = EXIT_CODE_RETRY_EXHAUSTED
 
 LAUNCHER_SOURCE_CODE = textwrap.dedent(
     """
@@ -677,8 +676,10 @@ class LivePostAuditThreadTests(unittest.TestCase):
                 cls.branch_name,
             )
         except Exception:
-            best_effort_delete_remote_branch(cls.branch_name)
-            remove_local_clone(cls.local_clone_directory)
+            try:
+                remove_local_clone(cls.local_clone_directory)
+            finally:
+                best_effort_delete_remote_branch(cls.branch_name)
             raise
 
     @classmethod
@@ -814,23 +815,25 @@ class LivePostAuditThreadTests(unittest.TestCase):
         failure_count: int,
     ) -> tuple[subprocess.CompletedProcess[str], _StubReviewsServer, float]:
         findings_path = write_findings_json([])
-        stub_server, stub_thread = spawn_stub_reviews_server(
-            failure_count=failure_count
-        )
-        overridden_base_url = stub_reviews_server_base_url(stub_server)
         try:
-            start_time = time.perf_counter()
-            completion = invoke_post_audit_thread_with_url_override(
-                pr_number=self.pr_number,
-                head_sha=self.head_sha,
-                state_argument=STATE_CLEAN,
-                findings_json_path=findings_path,
-                audit_token=self.audit_account_token,
-                overridden_base_url=overridden_base_url,
+            stub_server, stub_thread = spawn_stub_reviews_server(
+                failure_count=failure_count
             )
-            elapsed_seconds = time.perf_counter() - start_time
+            try:
+                overridden_base_url = stub_reviews_server_base_url(stub_server)
+                start_time = time.perf_counter()
+                completion = invoke_post_audit_thread_with_url_override(
+                    pr_number=self.pr_number,
+                    head_sha=self.head_sha,
+                    state_argument=STATE_CLEAN,
+                    findings_json_path=findings_path,
+                    audit_token=self.audit_account_token,
+                    overridden_base_url=overridden_base_url,
+                )
+                elapsed_seconds = time.perf_counter() - start_time
+            finally:
+                shutdown_stub_reviews_server(stub_server, stub_thread)
         finally:
-            shutdown_stub_reviews_server(stub_server, stub_thread)
             try:
                 findings_path.unlink()
             except OSError:
@@ -880,9 +883,9 @@ class LivePostAuditThreadTests(unittest.TestCase):
         )
         self.assertEqual(
             completion.returncode,
-            EXIT_CODE_RETRY_EXHAUSTED_EXPECTED,
+            EXIT_CODE_RETRY_EXHAUSTED,
             f"retry-exhaustion: expected exit "
-            f"{EXIT_CODE_RETRY_EXHAUSTED_EXPECTED}; got "
+            f"{EXIT_CODE_RETRY_EXHAUSTED}; got "
             f"{completion.returncode}; stdout={completion.stdout!r} "
             f"stderr={completion.stderr!r}",
         )

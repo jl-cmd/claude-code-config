@@ -21,7 +21,10 @@ if str(_self_dir) not in sys.path:
 from _cli_utils import require_file
 from _path_resolver import fix_outcome_xml_path
 from _xml_utils import emit_pretty_xml
-from config.path_resolver_constants import ALL_VALID_FIX_STATUSES
+from config.path_resolver_constants import (
+    ALL_FIX_OUTCOME_BODY_ELEMENT_KEYS,
+    ALL_VALID_FIX_STATUSES,
+)
 
 
 def validate_fix_statuses(all_outcomes: list[dict[str, object]]) -> list[str]:
@@ -85,7 +88,7 @@ def build_fix_xml(
         "commit_sha": commit_sha,
     })
 
-    fix_outcome_body_element_keys: tuple[str, ...] = ("reason", "hook_output")
+    fix_outcome_body_element_keys = ALL_FIX_OUTCOME_BODY_ELEMENT_KEYS
     outcomes_elem = SubElement(root, "outcomes")
     for each_outcome in outcomes_data:
         outcome_elem = SubElement(outcomes_elem, "outcome")

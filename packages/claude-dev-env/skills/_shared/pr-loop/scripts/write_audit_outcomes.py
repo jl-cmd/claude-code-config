@@ -19,6 +19,7 @@ if str(_self_dir) not in sys.path:
 from _cli_utils import require_file
 from _path_resolver import outcome_xml_path
 from _xml_utils import emit_pretty_xml
+from config.path_resolver_constants import ALL_FINDING_BODY_ELEMENT_KEYS
 
 
 def build_audit_xml(
@@ -55,7 +56,7 @@ def _populate_findings(parent: Element, findings_data: object) -> None:
     """Populate <finding> elements from a list of finding dicts.
 
     Scalar finding fields become XML attributes on `<finding>`; the
-    body fields named in `FINDING_BODY_ELEMENT_KEYS` become child
+    body fields named in `ALL_FINDING_BODY_ELEMENT_KEYS` become child
     elements. Nested dicts or lists in scalar slots are flattened to
     string form so attribute serialization stays well-defined.
 
@@ -63,7 +64,7 @@ def _populate_findings(parent: Element, findings_data: object) -> None:
         parent: Parent XML element (typically `<findings>`).
         findings_data: Findings data (list of dicts).
     """
-    finding_body_element_keys: tuple[str, ...] = ("title", "excerpt", "description")
+    finding_body_element_keys = ALL_FINDING_BODY_ELEMENT_KEYS
     if not isinstance(findings_data, list):
         parent.text = str(findings_data) if findings_data is not None else ""
         return

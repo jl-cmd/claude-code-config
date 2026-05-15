@@ -112,7 +112,50 @@ The XML prompt skeleton:
 </output_format>
 ```
 
-### Step 4: Surface findings, then clean up
+### Step 4: Post the audit review
+
+Every `/findbugs` invocation posts one audit review back to the PR. The
+unresolved-thread gate counts review threads, so a findbugs pass that
+returns findings without posting them as inline comments is invisible
+to the gate. Findbugs remains read-only on code — the review post is
+the only side effect.
+
+After the agent (and Haiku secondary) return and the merge is complete,
+serialize the merged findings to a JSON file and call
+`post_audit_thread.py`:
+
+```
+python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \
+  --skill findbugs \
+  --owner <owner> \
+  --repo <repo> \
+  --pr-number <N> \
+  --commit <head_sha> \
+  --state <CLEAN|DIRTY> \
+  --findings-json <path>
+```
+
+The findings JSON root is a list of objects shaped
+`{path, line, side, severity, description, fix_summary}`. Map every
+Shape A finding's `file` → `path`, `failure_mode` → `description`,
+`fix_direction` → `fix_summary`, with `side="RIGHT"` for every entry.
+Zero merged findings → `--state CLEAN` with the findings file holding
+an empty array (`[]`); one or more findings → `--state DIRTY` with the
+full list. CLEAN posts an APPROVED review with a "no findings" summary;
+DIRTY posts a REQUEST_CHANGES review with one inline anchored comment
+per finding (each becomes its own resolvable thread on the PR).
+
+Capture `<head_sha>` once at the start of Step 4 via `git rev-parse
+HEAD` in the worktree the diff was scoped against.
+
+Exit codes: `0` on success (emits the new review's `html_url` to
+stdout, surface alongside the totals in Step 5); `1` on user input
+error; `2` on retry exhaustion (1s / 4s / 16s backoff across four
+attempts). On exit 2, tell the user the review post failed and that
+the unresolved-thread gate will not see this audit pass; do not retry
+silently.
+
+### Step 5: Surface findings, then clean up
 
 When the agent returns, report concisely:
 
@@ -148,7 +191,7 @@ Want me to run /fixbugs for the P0/P1 findings?
 
 ## Constraints
 
-- **Read-only.** The skill never edits code, never pushes, never commits.
+- **Read-only on code.** The skill never edits files, never pushes, never commits. One audit review per invocation gets posted back to the PR (Step 4) — that is the only side effect, and it is required so the unresolved-thread gate sees the audit pass.
 - **Foreground spawn.** The user is waiting for the result on this turn.
 - **PR-scoped, not session-scoped.** The audit covers the entire PR diff regardless of which files were edited in this conversation.
 - **Clean-room prompt.** The agent's prompt is self-contained — no references to chat history, no anchoring hints, no expected outcomes.

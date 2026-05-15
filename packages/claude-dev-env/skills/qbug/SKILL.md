@@ -198,17 +198,44 @@ The subagent receives this prompt and loops internally — the lead does not re-
        <qbug_temp_dir>/loop-<loop_count>-audit.json per the contract's
        persistence schema.
 
-       Post ONE review per loop. Use the payload shape from
-       <categories_file>'s sibling SKILL.md § "PR comments" — pass
-       the review body as a direct string parameter (not jq/piped files) to
-       `pull_request_review_write(method="create", event="COMMENT", body=<body>, owner=<owner>, repo=<repo>, pullNumber=<pr_number>, commitID=<head_sha>)`.
-       Review body first line: `## /qbug loop <N> audit: <P0>P0 / <P1>P1 / <P2>P2`.
-       If the review POST fails, fall back to one issue comment on
-       `add_issue_comment(owner=<owner>, repo=<repo>, issueNumber=<pr_number>, body=<body>)` carrying the full body; mark every
-       finding `used_fallback=true`.
+       Post ONE review per loop via `post_audit_thread.py`. Write the
+       merged findings to
+       `<qbug_temp_dir>/loop-<loop_count>-findings.json` as a list of
+       objects shaped
+       `{path, line, side, severity, description, fix_summary}`. Map
+       each finding's `file` → `path`, `failure_mode` → `description`,
+       `fix_direction` → `fix_summary`, with `side="RIGHT"` for every
+       entry. Zero findings → write `[]` and pass `--state CLEAN`; one
+       or more findings → pass `--state DIRTY` with the full list.
 
-       Harvest `html_url` for the parent review and each child comment
-       into loop_comment_index[finding_id].
+       ```
+       python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \
+         --skill qbug \
+         --owner <owner> \
+         --repo <repo> \
+         --pr-number <pr_number> \
+         --commit <head_sha> \
+         --state <CLEAN|DIRTY> \
+         --findings-json <qbug_temp_dir>/loop-<loop_count>-findings.json
+       ```
+
+       The script POSTs a single review with `event=APPROVED` on CLEAN
+       (empty `comments[]`, body documents "no findings") or
+       `event=REQUEST_CHANGES` on DIRTY (one inline anchored comment per
+       finding; each becomes its own resolvable thread on the PR). It
+       handles retries internally (1s / 4s / 16s backoff across four
+       attempts). Exit 0 emits the new review's `html_url` to stdout;
+       harvest that URL plus child-comment URLs via
+       `pull_request_read(method="get_review_comments", owner=<owner>,
+       repo=<repo>, pullNumber=<pr_number>)` filtered to the just-posted
+       review id, then store them in
+       `loop_comment_index[finding_id]`.
+
+       Exit 2 means retry exhaustion — exit
+       `error: post_audit_thread retry exhausted` without retrying and
+       without falling back to a flat issue comment. A hard blocker on
+       the audit-posting path is a halt condition, not a fallback
+       opportunity.
 
        Update state: last_action="audited", last_findings=counts.
        Append `<N> audit: <P0>P0 / <P1>P1 / <P2>P2` to audit_log.

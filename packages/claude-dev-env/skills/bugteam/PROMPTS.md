@@ -237,9 +237,8 @@ cd into `<worktree_path>` before any git or file operation.
     [ ] Post-fix violation count ≤ previous loop total (skip on L=1)
     [ ] git add + commit
     [ ] git push
+    [ ] Per finding: atomically post the unified-template reply, then call resolve_thread (no yield between them)
     [ ] Publish fix summary via /doc-gist, capture URL
-    [ ] Post fix reply on each finding thread
-    [ ] Resolve each thread via resolve_thread
     [ ] Append fix summary URL to parent review via add_reply_to_pull_request_comment
     [ ] Write fix outcomes XML
   </self_audit_checklist>
@@ -255,28 +254,60 @@ cd into `<worktree_path>` before any git or file operation.
        (the commit was atomic; if it failed, no finding was applied), populate hook_output
        on each outcome, and return WITHOUT retrying. The lead will treat this loop as no-progress.
   7. git push with a plain fast-forward push (the default, no flag overrides).
-  8. For each bug, post a fix reply to its finding_comment_id via
-     `add_reply_to_pull_request_comment(commentId=<id>, body=<reply_text>,
-     owner=<O>, repo=<R>, pullNumber=<N>)`:
-     - "Fixed in <commit_sha>" if the bug was addressed by your commit
-     - "Could not address this loop: <one-line reason>" if you skipped or failed it
-     - "Hook blocked the fix commit: <one-line summary>" if the commit was hook-blocked
-     Body text is passed directly as string parameters -- no temp files, no jq, no shell pipes.
+  8. For each finding, atomically (a) post the fix reply and
+     (b) call `resolve_thread`. The two calls form one logical action
+     per thread — do not yield to the lead between them, and do not
+     batch all replies before any resolves.
+
+     (a) Reply via
+     `add_reply_to_pull_request_comment(commentId=<finding_comment_id>,
+     body=<reply_body>, owner=<O>, repo=<R>, pullNumber=<N>)`. The
+     reply body uses the unified template at
+     [`../../_shared/pr-loop/audit-reply-template.md`](../../_shared/pr-loop/audit-reply-template.md).
+     Skeleton (identical across all paths):
+
+     ```
+     **Claude finished @<reviewer>'s task** —— <status_line>
+
+     ---
+     ### <action_heading> ✅
+
+     <1–2 paragraph plain-language explanation>
+
+     **`<file>:<line>`:**
+     - <bullet describing change or rationale>
+     - <bullet describing change or rationale>
+
+     <closing paragraph>
+     ```
+
+     Per-path `<status_line>` / `<action_heading>`:
+     - `status=fixed`: `Fixed in <short_sha>` (first 7 chars) /
+       finding-specific action verb (e.g.,
+       `Replaced Any with concrete type`).
+     - `status=could_not_address`: `Could not address this loop` /
+       one-line reason text.
+     - `status=hook_blocked`: `Hook blocked the fix commit` /
+       one-line hook summary.
+
+     Body text is passed directly as string parameters — no temp files,
+     no jq, no shell pipes.
+
+     (b) Immediately call
+     `pull_request_review_write(method="resolve_thread",
+     threadId=<finding_comment_id>, owner=<O>, repo=<R>, pullNumber=<N>)`
+     for the same thread.
+
   9. Publish the fix summary gist via `/doc-gist`. Pass the fix report
      (what was fixed, what was skipped, what was left unaddressed) as the
      gist body. Capture the returned gist URL.
 
-  10. For each resolved finding, call
-      `pull_request_review_write(method="resolve_thread", owner=<O>,
-      repo=<R>, pullNumber=<N>,
-      threadId=<finding_comment_id>)`.
-
-  11. Append the fix summary gist URL (from step 9) to the parent review
+  10. Append the fix summary gist URL (from step 9) to the parent review
       via `add_reply_to_pull_request_comment(commentId=<id>, body=...,
       owner=<O>, repo=<R>, pullNumber=<N>)`. The body carries the
       gist URL plus a one-line summary of fixes applied this loop.
 
-  12. Write `.bugteam-pr<N>-loop<L>.fix-outcomes.xml` inside
+  11. Write `.bugteam-pr<N>-loop<L>.fix-outcomes.xml` inside
       `<worktree_path>` (schema below) and return its path.
 </execution>
 

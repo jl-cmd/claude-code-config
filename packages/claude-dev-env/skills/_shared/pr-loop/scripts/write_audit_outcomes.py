@@ -47,8 +47,8 @@ def build_audit_xml(
     if not isinstance(findings_data, list):
         print("findings-json must contain a JSON array", file=sys.stderr)
         raise SystemExit(1)
-    for each_index, each_item in enumerate(findings_data):
-        if not isinstance(each_item, dict):
+    for each_index, each_finding in enumerate(findings_data):
+        if not isinstance(each_finding, dict):
             print(
                 f"findings-json[{each_index}]: each entry must be a JSON object",
                 file=sys.stderr,
@@ -81,9 +81,9 @@ def _populate_findings(parent: Element, findings_data: list[dict[str, object]]) 
             confirmed each entry is a dict via the build_audit_xml gate).
     """
     finding_body_element_keys = ALL_FINDING_BODY_ELEMENT_KEYS
-    for each_item in findings_data:
+    for each_finding in findings_data:
         finding_elem = SubElement(parent, "finding")
-        for each_key, each_field_detail in each_item.items():
+        for each_key, each_field_detail in each_finding.items():
             field_text = (
                 str(each_field_detail) if each_field_detail is not None else ""
             )

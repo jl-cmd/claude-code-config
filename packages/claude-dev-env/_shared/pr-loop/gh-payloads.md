@@ -50,8 +50,8 @@ The `body` follows the unified reply skeleton documented in
 Lines not in the PR diff cannot anchor an inline comment. The AUDIT teammate
 keeps such findings out of the findings JSON handed to
 `post_audit_thread.py`, lists them in the audit outcome XML under `<finding>`
-with an empty `finding_comment_id`, and surfaces them in the review-body
-prose so the reader still sees every finding the audit raised.
+with an empty `finding_comment_id`, and surfaces them in the calling skill's
+user-facing output (chat reply to the user) rather than in the PR review body.
 
 ## Review POST failure
 

@@ -402,7 +402,7 @@ Delete the resolved `<qbug_temp_dir>` tree and any `.qbug-*.md` temp files in th
 - **Code rules gate before every AUDIT.** Same `validate_content` logic as /bugteam.
 - **One commit per FIX action.** Linear branch, fast-forward push only.
 - **Categories A–J.** Same rubric as [`bugteam/PROMPTS.md`](../bugteam/PROMPTS.md).
-- **One review per loop.** Anchored findings as `comments[]`; unanchored listed under "Findings without a diff anchor" in the review body.
+- **One review per loop.** Anchored findings as `comments[]`; unanchored findings surface in the calling skill's user-facing output (chat reply to the user) rather than in the PR review body.
 - **PR description rewrite on every exit**, same as /bugteam Step 4.5.
 - **Temp file cleanup on every exit path.**
 - **No per-loop clean-room.** The single subagent's context accumulates across loops — that is the explicit trade vs /bugteam. For convergence-critical audits where bias isolation matters, use /bugteam.

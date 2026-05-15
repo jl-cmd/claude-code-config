@@ -76,7 +76,8 @@ def build_fix_xml(
         Root <bugteam_fix> element.
 
     Raises:
-        SystemExit: When status validation fails.
+        SystemExit: When outcomes-json is not a JSON array of objects, or
+            when status validation fails.
     """
     outcomes_data = json.loads(outcomes_json_path.read_text(encoding="utf-8"))
     if not isinstance(outcomes_data, list):

@@ -169,6 +169,8 @@ def main(all_arguments: list[str]) -> int:
             findings_json_path=findings_path,
             worktree_path=getattr(arguments, "worktree_path"),
         )
+    except SystemExit:
+        return 1
     except (json.JSONDecodeError, OSError) as exc:
         print(f"write_audit_xml failed: {exc}", file=sys.stderr)
         return 1

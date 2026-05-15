@@ -234,10 +234,13 @@ The subagent receives this prompt and loops internally — the lead does not re-
        finding; each becomes its own resolvable thread on the PR). It
        handles retries internally (1s / 4s / 16s backoff across four
        attempts). Exit 0 emits the new review's `html_url` to stdout;
-       harvest that URL plus child-comment URLs **and PR review thread
-       node ids** via `pull_request_read(method="get_review_comments",
+       extract the numeric review id from the URL's
+       `#pullrequestreview-<id>` suffix (the trailing path fragment of
+       `html_url`). Then harvest child-comment URLs **and PR review
+       thread node ids** via
+       `pull_request_read(method="get_review_comments",
        owner=<owner>, repo=<repo>, pullNumber=<pr_number>)` filtered to
-       the just-posted review id. The same response carries each
+       that review id. The same response carries each
        comment's PR review thread node id (e.g. `PRRT_kwDOxxx`) — match
        children to findings in the order they appear in the findings
        JSON. Each `loop_comment_index[finding_id]` entry must carry

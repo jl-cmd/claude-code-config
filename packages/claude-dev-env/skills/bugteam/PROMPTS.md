@@ -166,9 +166,12 @@ cd into `<worktree_path>` before any git or file operation.
        fallback path — a hard blocker on the audit-posting path is a
        halt condition.
 
-     Harvest child-comment URLs **and PR review thread node ids** via
+     Exit 0 emits the new review's `html_url` on stdout. Extract the
+     numeric review id from that URL's `#pullrequestreview-<id>` suffix
+     (the trailing path fragment). Then harvest child-comment URLs
+     **and PR review thread node ids** via
      `pull_request_read(method="get_review_comments", owner=<O>,
-     repo=<R>, pullNumber=<N>)` filtered to the just-posted review id.
+     repo=<R>, pullNumber=<N>)` filtered to that review id.
      Match children to findings in the order they appear in the findings
      JSON. Each `loop_comment_index[finding_id]` entry must carry both
      `finding_comment_id` (numeric, used by `add_reply_to_pull_request_comment`)

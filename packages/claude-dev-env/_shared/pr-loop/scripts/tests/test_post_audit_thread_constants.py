@@ -34,6 +34,22 @@ def test_http_header_authorization_constant_is_authorization() -> None:
     assert constants_module.HTTP_HEADER_AUTHORIZATION == "Authorization"
 
 
+def test_http_header_accept_constant_is_accept() -> None:
+    assert constants_module.HTTP_HEADER_ACCEPT == "Accept"
+
+
+def test_http_header_content_type_constant_is_content_type() -> None:
+    assert constants_module.HTTP_HEADER_CONTENT_TYPE == "Content-Type"
+
+
+def test_http_header_github_api_version_constant_is_x_github_api_version() -> None:
+    assert constants_module.HTTP_HEADER_GITHUB_API_VERSION == "X-GitHub-Api-Version"
+
+
+def test_http_header_user_agent_constant_is_user_agent() -> None:
+    assert constants_module.HTTP_HEADER_USER_AGENT == "User-Agent"
+
+
 def test_http_authorization_bearer_prefix_is_bearer_with_trailing_space() -> None:
     prefix = constants_module.HTTP_AUTHORIZATION_BEARER_PREFIX
     assert prefix == "Bearer "

@@ -69,7 +69,11 @@ from config.post_audit_thread_constants import (
     HEADING_FOR_CLEAN,
     HEADING_FOR_DIRTY,
     HTTP_AUTHORIZATION_BEARER_PREFIX,
+    HTTP_HEADER_ACCEPT,
     HTTP_HEADER_AUTHORIZATION,
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_GITHUB_API_VERSION,
+    HTTP_HEADER_USER_AGENT,
     HTTP_METHOD_POST,
     HTTP_REQUEST_CONTENT_TYPE,
     HTTP_REQUEST_TIMEOUT_SECONDS,
@@ -711,10 +715,10 @@ def _build_authenticated_request(
     request_object.add_header(
         HTTP_HEADER_AUTHORIZATION, f"{HTTP_AUTHORIZATION_BEARER_PREFIX}{token}"
     )
-    request_object.add_header("Accept", GITHUB_API_ACCEPT_HEADER)
-    request_object.add_header("Content-Type", HTTP_REQUEST_CONTENT_TYPE)
-    request_object.add_header("X-GitHub-Api-Version", GITHUB_API_VERSION_HEADER)
-    request_object.add_header("User-Agent", GITHUB_API_USER_AGENT)
+    request_object.add_header(HTTP_HEADER_ACCEPT, GITHUB_API_ACCEPT_HEADER)
+    request_object.add_header(HTTP_HEADER_CONTENT_TYPE, HTTP_REQUEST_CONTENT_TYPE)
+    request_object.add_header(HTTP_HEADER_GITHUB_API_VERSION, GITHUB_API_VERSION_HEADER)
+    request_object.add_header(HTTP_HEADER_USER_AGENT, GITHUB_API_USER_AGENT)
     return request_object
 
 

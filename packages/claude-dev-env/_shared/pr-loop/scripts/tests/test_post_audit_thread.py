@@ -26,10 +26,11 @@ from pathlib import Path
 from typing import Any
 
 THIS_FILE_DIRECTORY = Path(__file__).resolve().parent
+SCRIPT_DIRECTORY = THIS_FILE_DIRECTORY.parent
 
 sys.modules.pop("config", None)
-if str(THIS_FILE_DIRECTORY) not in sys.path:
-    sys.path.insert(0, str(THIS_FILE_DIRECTORY))
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
 from config.post_audit_thread_constants import (  # noqa: E402
     ALL_GH_AUTH_TOKEN_COMMAND_PARTS,
@@ -77,7 +78,7 @@ LIVE_TEST_FIXTURE_LINE_FOR_FINDING_ONE = 1
 LIVE_TEST_FIXTURE_LINE_FOR_FINDING_TWO = 2
 LIVE_TEST_FIXTURE_LINE_FOR_FINDING_THREE = 3
 
-SCRIPT_PATH = THIS_FILE_DIRECTORY / "post_audit_thread.py"
+SCRIPT_PATH = SCRIPT_DIRECTORY / "post_audit_thread.py"
 REPO_FULL_NAME = f"{LIVE_TEST_OWNER}/{LIVE_TEST_REPO}"
 
 LIVE_TEST_AUDIT_ACCOUNT_NAME = "jl-cmd"

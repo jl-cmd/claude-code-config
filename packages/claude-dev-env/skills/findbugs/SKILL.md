@@ -141,9 +141,10 @@ Shape A finding's `file` → `path`, `failure_mode` → `description`,
 `fix_direction` → `fix_summary`, with `side="RIGHT"` for every entry.
 Zero merged findings → `--state CLEAN` with the findings file holding
 an empty array (`[]`); one or more findings → `--state DIRTY` with the
-full list. CLEAN posts an APPROVED review with a "no findings" summary;
-DIRTY posts a REQUEST_CHANGES review with one inline anchored comment
-per finding (each becomes its own resolvable thread on the PR).
+full list. CLEAN posts an APPROVE review (the request event; GitHub
+stores it as `state=APPROVED`) with a "no findings" summary; DIRTY
+posts a REQUEST_CHANGES review with one inline anchored comment per
+finding (each becomes its own resolvable thread on the PR).
 
 Capture `<head_sha>` once at the start of Step 4 via `git rev-parse
 HEAD` in the worktree the diff was scoped against.

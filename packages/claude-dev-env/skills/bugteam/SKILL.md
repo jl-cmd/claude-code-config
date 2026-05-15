@@ -43,8 +43,9 @@ First match wins; respond with the quoted line exactly and stop:
 
 Every internal audit pass (CLEAN or DIRTY) ends with one call to
 `post_audit_thread.py`. The script POSTs a single review to
-`/repos/{owner}/{repo}/pulls/{N}/reviews` with `event=APPROVED` on CLEAN
-(empty `comments[]`, body documents "no findings") or
+`/repos/{owner}/{repo}/pulls/{N}/reviews` with `event=APPROVE` on CLEAN
+(the request event; GitHub stores it as `state=APPROVED`; empty
+`comments[]`, body documents "no findings") or
 `event=REQUEST_CHANGES` on DIRTY (one inline anchored comment per
 finding; each becomes its own resolvable thread). The mandate applies
 whether bugteam runs inside `/pr-converge` or standalone.
@@ -65,8 +66,8 @@ shaped `{path, line, side, severity, description, fix_summary}`. The
 audit agent's persisted finding output maps directly: finding `file` →
 `path`, `failure_mode` → `description`, `fix_direction` → `fix_summary`,
 with `side="RIGHT"` for every entry. On CLEAN, pass an empty array
-(`[]`) so the script posts an APPROVED review with a "no findings"
-summary and zero inline comments.
+(`[]`) so the script posts an APPROVE review (GitHub stores it as
+`state=APPROVED`) with a "no findings" summary and zero inline comments.
 
 Exit codes: `0` on success (emits the new review's `html_url` to
 stdout); `1` on user input error; `2` on retry exhaustion (1s / 4s /
@@ -102,7 +103,7 @@ end-to-end mental model before starting Step 0.
 | `--bugbot-retrigger` flag behavior | [reference/team-setup.md](reference/team-setup.md) |
 | AUDIT action and code-rules pre-audit gate, pre-cycle walk, cycle decision tree | [reference/audit-and-teammates.md](reference/audit-and-teammates.md) |
 | FIX action and verify-push semantics | [reference/audit-and-teammates.md](reference/audit-and-teammates.md) |
-| Posting the end-of-pass audit review via `post_audit_thread.py` (APPROVED on CLEAN, REQUEST_CHANGES with inline anchored comments on DIRTY) | [§ Audit posting](#audit-posting) |
+| Posting the end-of-pass audit review via `post_audit_thread.py` (APPROVE on CLEAN — the request event; GitHub stores it as `state=APPROVED` — REQUEST_CHANGES with inline anchored comments on DIRTY) | [§ Audit posting](#audit-posting) |
 | Posting per-loop reviews, fix replies, fallback PR comments via GitHub MCP | [reference/github-pr-reviews.md](reference/github-pr-reviews.md) |
 | Teardown, PR description rewrite via `pr-description-writer`, permission revoke, final report | [reference/teardown-publish-permissions.md](reference/teardown-publish-permissions.md) |
 | Spawn-prompt XML, A–K category bindings, outcome XML schemas | [PROMPTS.md](PROMPTS.md) |

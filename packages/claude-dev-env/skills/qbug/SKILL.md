@@ -23,7 +23,7 @@ Shared artifacts with /bugteam are referenced below by path, using the `${CLAUDE
 - Code-rules gate script: `${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/code_rules_gate.py`
 - Bug category rubric A–J: [`bugteam/PROMPTS.md`](../bugteam/PROMPTS.md#audit-spawn-prompt-xml-bugfind-teammate)
 - **Audit contract** (finding schema, proof-of-absence, adversarial pass, Haiku secondary, post-fix self-audit, diagnostics JSON): [`bugteam/reference/audit-contract.md`](../bugteam/reference/audit-contract.md)
-- PR comment lifecycle shape: [`bugteam/SKILL.md`](../bugteam/SKILL.md#step-25-pr-comments-one-review-per-loop)
+- PR comment lifecycle shape: [`bugteam/SKILL.md`](../bugteam/SKILL.md#audit-posting)
 
 ## When this skill applies
 
@@ -219,8 +219,9 @@ The subagent receives this prompt and loops internally — the lead does not re-
          --findings-json <qbug_temp_dir>/loop-<loop_count>-findings.json
        ```
 
-       The script POSTs a single review with `event=APPROVED` on CLEAN
-       (empty `comments[]`, body documents "no findings") or
+       The script POSTs a single review with `event=APPROVE` on CLEAN
+       (the request event; GitHub stores it as `state=APPROVED`; empty
+       `comments[]`, body documents "no findings") or
        `event=REQUEST_CHANGES` on DIRTY (one inline anchored comment per
        finding; each becomes its own resolvable thread on the PR). It
        handles retries internally (1s / 4s / 16s backoff across four
@@ -272,12 +273,54 @@ The subagent receives this prompt and loops internally — the lead does not re-
        Write <qbug_temp_dir>/loop-<loop_count>-diagnostics.json per the
        contract's diagnostics schema (all eight keys required).
 
-       Reply to each finding at loop_comment_index[finding_id].finding_comment_id
-       using `add_reply_to_pull_request_comment(commentId=<id>, body=<body>, owner=<owner>, repo=<repo>, pullNumber=<pr_number>)`.
-       Reply body is one of:
-         - `Fixed in <short_sha>`
-         - `Could not address this loop: <one-line reason>`
-         - `Hook blocked the fix commit: <one-line summary>`
+       For each finding, atomically (a) post the fix reply and
+       (b) call `resolve_thread`. The two calls form one logical action
+       per thread — do not yield to the lead between them, and do not
+       batch all replies before any resolves.
+
+       (a) Reply via
+       `add_reply_to_pull_request_comment(commentId=<loop_comment_index[finding_id].finding_comment_id>,
+       body=<reply_body>, owner=<owner>, repo=<repo>,
+       pullNumber=<pr_number>)`. The reply body uses the unified template
+       at [`../../_shared/pr-loop/audit-reply-template.md`](../../_shared/pr-loop/audit-reply-template.md).
+       Skeleton (identical across all paths):
+
+       ```
+       **Claude finished @<reviewer>'s task** —— <status_line>
+
+       ---
+       ### <action_heading> ✅
+
+       <1–2 paragraph plain-language explanation>
+
+       **`<file>:<line>`:**
+       - <bullet describing change or rationale>
+       - <bullet describing change or rationale>
+
+       <closing paragraph>
+       ```
+
+       Per-path `<status_line>` / `<action_heading>`:
+       - `status=fixed`: `Fixed in <short_sha>` (first 7 chars) /
+         finding-specific action verb (e.g.,
+         `Replaced Any with concrete type`).
+       - `status=could_not_address`: `Could not address this loop` /
+         one-line reason text.
+       - `status=hook_blocked`: `Hook blocked the fix commit` /
+         one-line hook summary.
+
+       Body text is passed directly as string parameters — no temp
+       files, no jq, no shell pipes.
+
+       (b) Immediately call
+       `pull_request_review_write(method="resolve_thread",
+       threadId=<loop_comment_index[finding_id].thread_node_id>,
+       owner=<owner>, repo=<repo>, pullNumber=<pr_number>)` for the
+       same thread (this is the PR review thread node ID —
+       `PRRT_kwDOxxx` — distinct from the numeric comment ID; the
+       AUDIT step captures it at audit time when calling
+       `get_review_comments` and stores it on each
+       `loop_comment_index` entry alongside `finding_comment_id`).
 
        Update state: last_action="fixed". Append
        `<N> fix: <short_sha> — <fixed>/<could_not_address>/<hook_blocked>`

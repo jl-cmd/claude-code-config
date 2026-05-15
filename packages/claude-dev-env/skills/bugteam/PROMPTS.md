@@ -83,9 +83,8 @@ cd into `<worktree_path>` before any git or file operation.
     [ ] Walk all 11 categories (A–K), each with Shape A or Shape B
     [ ] Assign finding IDs (loop<L>-<K>)
     [ ] Capture excerpts, validate anchors, format finding bodies
-    [ ] Publish audit summary via /doc-gist, capture URL
-    [ ] Build review body with summary URL, post review (or fallback)
-    [ ] Handle fallback if review POST failed
+    [ ] Build findings JSON, invoke post_audit_thread.py, capture html_url
+    [ ] Harvest child-comment ids/urls AND thread_node_ids; populate loop_comment_index
     [ ] Write outcome XML
   </self_audit_checklist>
 
@@ -97,18 +96,14 @@ cd into `<worktree_path>` before any git or file operation.
      line. Populate the `<excerpt>` element in the outcome XML with it. Validate
      every finding's (file, line) against the captured diff. Split findings into two
      buckets: anchored (line is in the diff) and unanchored (line is not in the diff
-     — goes into the review body's "Findings without a diff anchor" section per
-     Step 2.5). Format each finding body as:
+     — surfaced in the calling skill's user-facing output rather than as inline
+     anchored comments). Format each finding body as:
 
        **[severity] one-line title**
        Category: <letter> (<category name>)
        <2-3 sentence description with concrete trace>
 
        _From /bugteam audit loop <L>._
-
-  3.5. Publish the audit summary via `/doc-gist`. Pass the full findings
-       list as the gist body. Capture the returned gist URL for inclusion
-       in the review body at step 4.
 
   4. **Before posting, read the full review once as if you were the PR
      author.** Ask: would I understand what to fix and why? Do any two
@@ -117,51 +112,57 @@ cd into `<worktree_path>` before any git or file operation.
      coherent as a whole? The review's job is to make the PR author want to
      fix these bugs, not to demonstrate that the rubric ran. Rearrange,
      merge, or rephrase anything that would confuse the author. Then
-     proceed with the mechanical three-step flow below.
+     proceed with the mechanical script invocation below.
 
-     Post ONE review per loop using the GitHub MCP three-step pending-review
-     flow (the `pull_request_review_write` tool does NOT accept a `comments[]`
-     array — pending review + per-comment add + submit is the only correct
-     shape). Bodies are passed as plain strings; the MCP tool does the JSON
-     encoding internally:
+     Post ONE review per loop via `post_audit_thread.py` per
+     [SKILL.md § Audit posting](SKILL.md#audit-posting). Serialize the
+     anchored findings to a JSON file shaped as a list of
+     `{path, line, side, severity, description, fix_summary}` entries
+     (finding `file` → `path`, `failure_mode` → `description`,
+     `fix_direction` → `fix_summary`, `side="RIGHT"`). Zero anchored
+     findings → `--state CLEAN` with the findings file holding an empty
+     array (`[]`); one or more → `--state DIRTY` with the full list.
 
-     a. Create the pending review:
-        `pull_request_review_write(method="create", owner=<O>, repo=<R>,
-        pullNumber=<N>)` — omit `event` so the review stays pending.
-     b. For each anchored finding, in index order, call
-        `add_comment_to_pending_review(owner=<O>, repo=<R>, pullNumber=<N>,
-        path=<file>, line=<line>, side="RIGHT", subjectType="LINE",
-        body=<finding markdown>)`. For multi-line anchors also pass
-        `startLine=<start>` and `startSide="RIGHT"`.
-     c. Submit the pending review with the loop-header body and
-        `event="COMMENT"`:
-        `pull_request_review_write(method="submit_pending", owner=<O>,
-        repo=<R>, pullNumber=<N>, event="COMMENT", body=<review_body>)`.
+     ```
+     python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \
+       --skill bugteam \
+       --owner <O> \
+       --repo <R> \
+       --pr-number <N> \
+       --commit <head_sha> \
+       --state <CLEAN|DIRTY> \
+       --findings-json <path>
+     ```
 
-     Harvest the parent review `html_url` from the submit_pending response
-     and the child comment `id` / `html_url` entries the same response carries.
-     If the response shape does not surface child comments to the caller,
-     follow up with `pull_request_read(method="get_review_comments", owner=<O>,
-     repo=<R>, pullNumber=<N>)` filtered to the just-submitted review id.
-     Match child comments to anchored findings in the order they were added
-     in step 4b.
-  5. Bail out to the issue-comment fallback below when steps 4a–4c fail,
-     when step 4c fails twice in a row, when the pending review is in an
-     unrecoverable state mid-flow (orphaned pending, partial-add failures
-     with no clean recovery, MCP responses that do not parse), or when
-     your judgment says the pending-review path is broken for this loop.
-     Two retries is plenty. Do not mechanically loop on a stuck flow —
-     post the findings as a PR-level comment instead.
+     The script POSTs a single review with `event=APPROVE` on CLEAN
+     (the request event; GitHub stores it as `state=APPROVED`; empty
+     `comments[]`, body documents "no findings") or
+     `event=REQUEST_CHANGES` on DIRTY (one inline anchored comment per
+     finding; each becomes its own resolvable thread on the PR). It
+     handles retries internally (1s / 4s / 16s backoff across four
+     attempts). Exit codes:
 
-     Clean up with
-     `pull_request_review_write(method="delete_pending", owner=<O>, repo=<R>,
-     pullNumber=<N>)` then post one fallback PR-level comment carrying the
-     review body plus every finding inline:
-     `add_issue_comment(owner=<O>, repo=<R>, issue_number=<N>,
-     body=<full_text>)`. Mark every finding `used_fallback="true"` with the
-     issue-comment URL as `finding_comment_url`.
-  Body text is passed directly as string parameters to the MCP tool calls —
-  no temp files, no jq, no shell pipes.
+     - `0` — review posted; the new review's `html_url` is on stdout.
+       Capture this URL as the parent review URL.
+     - `1` — user input error (bad arguments, malformed findings JSON,
+       missing template).
+     - `2` — retry exhaustion. Hard blocker; halt and exit
+       `error: post_audit_thread retry exhausted` without retrying and
+       without falling back to a flat issue comment. There is no
+       fallback path — a hard blocker on the audit-posting path is a
+       halt condition.
+
+     Harvest child-comment URLs **and PR review thread node ids** via
+     `pull_request_read(method="get_review_comments", owner=<O>,
+     repo=<R>, pullNumber=<N>)` filtered to the just-posted review id.
+     Match children to findings in the order they appear in the findings
+     JSON. Each `loop_comment_index[finding_id]` entry must carry both
+     `finding_comment_id` (numeric, used by `add_reply_to_pull_request_comment`)
+     and `thread_node_id` (e.g. `PRRT_kwDOxxx`, used by
+     `resolve_thread`) so the FIX teammate can reply and resolve.
+
+  Body text and findings JSON are passed as files or string arguments to
+  the script — no temp files for body content, no jq, no shell pipes.
 </comment_posting>
 
 <output_format>
@@ -180,9 +181,9 @@ cd into `<worktree_path>` before any git or file operation.
     category="<letter>"
     file="<path>"
     line="<int>"
-    finding_comment_id="<gh child comment id, or empty if unanchored/review-fallback>"
-    finding_comment_url="<url of child comment, OR review_url if unanchored, OR fallback issue comment URL>"
-    used_fallback="true|false"
+    finding_comment_id="<gh child comment id, or empty if unanchored>"
+    finding_comment_url="<url of child comment, OR review_url if unanchored>"
+    thread_node_id="<PR review thread node id (PRRT_kwDOxxx), or empty if unanchored>"
   >
     <title>one-line title</title>
     <excerpt>verbatim source line or snippet from the file at the cited line</excerpt>
@@ -217,8 +218,9 @@ cd into `<worktree_path>` before any git or file operation.
     file="<path>"
     line="<int>"
     category="<letter>"
-    finding_comment_id="<id>"
+    finding_comment_id="<numeric comment id>"
     finding_comment_url="<url>"
+    thread_node_id="<PR review thread node id (PRRT_kwDOxxx)>"
   >
     <description>...</description>
   </bug>
@@ -295,8 +297,13 @@ cd into `<worktree_path>` before any git or file operation.
 
      (b) Immediately call
      `pull_request_review_write(method="resolve_thread",
-     threadId=<finding_comment_id>, owner=<O>, repo=<R>, pullNumber=<N>)`
-     for the same thread.
+     threadId=<thread_node_id>, owner=<O>, repo=<R>, pullNumber=<N>)`
+     for the same thread (this is the PR review thread node ID —
+     `PRRT_kwDOxxx` — distinct from the numeric comment ID; the AUDIT
+     teammate captures it at audit time when calling
+     `get_review_comments` and stores it on each
+     `loop_comment_index` entry alongside `finding_comment_id`, see
+     [reference/obstacles/fix-resolve-thread.md](reference/obstacles/fix-resolve-thread.md)).
 
   9. Publish the fix summary gist via `/doc-gist`. Pass the fix report
      (what was fixed, what was skipped, what was left unaddressed) as the

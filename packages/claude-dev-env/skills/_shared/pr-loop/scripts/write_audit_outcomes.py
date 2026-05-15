@@ -43,9 +43,8 @@ def build_audit_xml(
     root = Element("bugteam_audit", {
         "pr": str(pr_number),
         "loop": str(loop),
+        "review_url": review_url,
     })
-    review_elem = SubElement(root, "review_url")
-    review_elem.text = review_url
 
     findings_elem = SubElement(root, "findings")
     _populate_findings(findings_elem, findings_data)
@@ -53,40 +52,36 @@ def build_audit_xml(
 
 
 def _populate_findings(parent: Element, findings_data: object) -> None:
-    """Recursively populate findings from JSON into XML elements.
+    """Populate <finding> elements from a list of finding dicts.
+
+    Scalar finding fields become XML attributes on `<finding>`; the
+    body fields named in `FINDING_BODY_ELEMENT_KEYS` become child
+    elements. Nested dicts or lists in scalar slots are flattened to
+    string form so attribute serialization stays well-defined.
 
     Args:
-        parent: Parent XML element.
-        findings_data: Findings data (list of dicts or dict).
+        parent: Parent XML element (typically `<findings>`).
+        findings_data: Findings data (list of dicts).
     """
-    if isinstance(findings_data, list):
-        for each_item in findings_data:
-            if isinstance(each_item, dict):
-                finding_elem = SubElement(parent, "finding")
-                for each_key, each_field_detail in each_item.items():
-                    child = SubElement(finding_elem, each_key)
-                    if isinstance(each_field_detail, (list, dict)):
-                        _populate_findings(child, each_field_detail)
-                    else:
-                        child.text = (
-                            str(each_field_detail)
-                            if each_field_detail is not None
-                            else ""
-                        )
-            else:
-                item_elem = SubElement(parent, "item")
-                item_elem.text = str(each_item) if each_item is not None else ""
-    elif isinstance(findings_data, dict):
-        for each_key, each_field_detail in findings_data.items():
-            child = SubElement(parent, each_key)
-            if isinstance(each_field_detail, (list, dict)):
-                _populate_findings(child, each_field_detail)
-            else:
-                child.text = (
-                    str(each_field_detail) if each_field_detail is not None else ""
-                )
-    else:
+    finding_body_element_keys: tuple[str, ...] = ("title", "excerpt", "description")
+    if not isinstance(findings_data, list):
         parent.text = str(findings_data) if findings_data is not None else ""
+        return
+    for each_item in findings_data:
+        if not isinstance(each_item, dict):
+            item_elem = SubElement(parent, "item")
+            item_elem.text = str(each_item) if each_item is not None else ""
+            continue
+        finding_elem = SubElement(parent, "finding")
+        for each_key, each_field_detail in each_item.items():
+            field_text = (
+                str(each_field_detail) if each_field_detail is not None else ""
+            )
+            if each_key in finding_body_element_keys:
+                child = SubElement(finding_elem, each_key)
+                child.text = field_text
+            else:
+                finding_elem.set(each_key, field_text)
 
 
 def write_audit_xml(

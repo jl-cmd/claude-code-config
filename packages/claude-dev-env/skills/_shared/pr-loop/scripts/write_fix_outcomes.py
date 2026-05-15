@@ -82,16 +82,22 @@ def build_fix_xml(
     root = Element("bugteam_fix", {
         "pr": str(pr_number),
         "loop": str(loop),
+        "commit_sha": commit_sha,
     })
-    commit_elem = SubElement(root, "commit")
-    commit_elem.text = commit_sha
 
+    fix_outcome_body_element_keys: tuple[str, ...] = ("reason", "hook_output")
     outcomes_elem = SubElement(root, "outcomes")
     for each_outcome in outcomes_data:
         outcome_elem = SubElement(outcomes_elem, "outcome")
         for each_key, each_field_detail in each_outcome.items():
-            child = SubElement(outcome_elem, each_key)
-            child.text = str(each_field_detail) if each_field_detail is not None else ""
+            field_text = (
+                str(each_field_detail) if each_field_detail is not None else ""
+            )
+            if each_key in fix_outcome_body_element_keys:
+                child = SubElement(outcome_elem, each_key)
+                child.text = field_text
+            else:
+                outcome_elem.set(each_key, field_text)
     return root
 
 

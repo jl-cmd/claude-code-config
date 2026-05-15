@@ -55,7 +55,7 @@ def create_loop_state(
         "last_action": "init",
         "last_findings": None,
         "starting_sha": starting_sha,
-        "loop_comment_index": 0,
+        "loop_comment_index": {},
     }
 
     state_path.write_text(

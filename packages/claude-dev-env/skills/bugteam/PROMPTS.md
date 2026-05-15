@@ -192,27 +192,36 @@ cd into `<worktree_path>` before any git or file operation.
 
 ## AUDIT outcome XML schema
 
+`write_audit_outcomes.py` reads the findings JSON (list of finding dicts) and
+emits this shape. Scalar finding fields become XML attributes on
+`<finding>`; the body fields `title`, `excerpt`, and `description` become
+child elements. The root carries `pr`, `loop`, and `review_url` as
+attributes.
+
 ```xml
-<bugteam_audit loop="<L>" review_url="<url>">
-  <finding
-    finding_id="loop<L>-<K>"
-    severity="P0|P1|P2"
-    category="<letter>"
-    file="<path>"
-    line="<int>"
-    finding_comment_id="<gh child comment id, or empty if unanchored>"
-    finding_comment_url="<url of child comment, OR review_url if unanchored>"
-    thread_node_id="<PR review thread node id (PRRT_kwDOxxx), or empty if unanchored>"
-  >
-    <title>one-line title</title>
-    <excerpt>verbatim source line or snippet from the file at the cited line</excerpt>
-    <description>2-3 sentence description with concrete trace</description>
-  </finding>
-  <verified_clean>
-    <category letter="<letter>" name="<name>" evidence="brief evidence + cleared conclusion"/>
-  </verified_clean>
+<bugteam_audit pr="<N>" loop="<L>" review_url="<url>">
+  <findings>
+    <finding
+      finding_id="loop<L>-<K>"
+      severity="P0|P1|P2"
+      category="<letter>"
+      file="<path>"
+      line="<int>"
+      finding_comment_id="<gh child comment id, or empty if unanchored>"
+      finding_comment_url="<url of child comment, OR review_url if unanchored>"
+      thread_node_id="<PR review thread node id (PRRT_kwDOxxx), or empty if unanchored>"
+    >
+      <title>one-line title</title>
+      <excerpt>verbatim source line or snippet from the file at the cited line</excerpt>
+      <description>2-3 sentence description with concrete trace</description>
+    </finding>
+  </findings>
 </bugteam_audit>
 ```
+
+Verified-clean evidence per A–K category is surfaced in the agent's text-mode
+final report, not in this outcome XML (the writer accepts a flat findings list
+only).
 
 ## FIX spawn-prompt XML (bugfix teammate)
 
@@ -338,17 +347,19 @@ cd into `<worktree_path>` before any git or file operation.
 </execution>
 
 <outcome_xml_schema>
-  <bugteam_fix loop="<L>" commit_sha="<sha or empty if no commit>">
-    <outcome
-      finding_id="loop<L>-<K>"
-      status="fixed|could_not_address|hook_blocked|unverified_fixed"
-      commit_sha="<sha if fixed, empty otherwise>"
-      reply_comment_id="<id of the reply posted>"
-      reply_comment_url="<url of the reply posted>"
-    >
-      <reason>only present when status=could_not_address; one-line reason text</reason>
-      <hook_output>only present when status=hook_blocked; verbatim stderr from the blocked hook</hook_output>
-    </outcome>
+  <bugteam_fix pr="<N>" loop="<L>" commit_sha="<sha or empty if no commit>">
+    <outcomes>
+      <outcome
+        finding_id="loop<L>-<K>"
+        status="fixed|could_not_address|hook_blocked|unverified_fixed"
+        commit_sha="<sha if fixed, empty otherwise>"
+        reply_comment_id="<id of the reply posted>"
+        reply_comment_url="<url of the reply posted>"
+      >
+        <reason>only present when status=could_not_address; one-line reason text</reason>
+        <hook_output>only present when status=hook_blocked; verbatim stderr from the blocked hook</hook_output>
+      </outcome>
+    </outcomes>
   </bugteam_fix>
 </outcome_xml_schema>
 

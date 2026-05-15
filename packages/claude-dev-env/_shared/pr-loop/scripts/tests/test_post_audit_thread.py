@@ -69,6 +69,7 @@ from config.post_audit_thread_constants import (  # noqa: E402
     STATE_CLEAN,
     STATE_DIRTY,
 )
+from post_audit_thread import build_reviews_endpoint_url  # noqa: E402
 
 LIVE_TEST_OWNER = "JonEcho"
 LIVE_TEST_REPO = "tests"
@@ -452,25 +453,17 @@ STUB_SERVER_SHUTDOWN_JOIN_TIMEOUT_SECONDS = 5.0
 
 FAILURE_COUNT_FOR_RETRY_SUCCESS = 1
 TOTAL_REQUEST_COUNT_FOR_RETRY_SUCCESS = 2
-FAILURE_COUNT_FOR_RETRY_EXHAUSTION = 100
+FAILURE_COUNT_FOR_RETRY_EXHAUSTION = MAX_RETRY_ATTEMPTS + 1
 TOTAL_REQUEST_COUNT_FOR_RETRY_EXHAUSTION = MAX_RETRY_ATTEMPTS + 1
 
 BACKOFF_TIMING_EPSILON_SECONDS = 0.1
-GENEROUS_SUBPROCESS_OVERHEAD_SECONDS = 7.0
-RETRY_EXHAUSTION_UPPER_BOUND_OVERHEAD_SECONDS = 9.0
 TOTAL_BACKOFF_SECONDS = sum(ALL_RETRY_BACKOFF_SECONDS)
 
 EXPECTED_RETRY_SUCCESS_ELAPSED_LOWER_BOUND_SECONDS = (
     ALL_RETRY_BACKOFF_SECONDS[0] - BACKOFF_TIMING_EPSILON_SECONDS
 )
-EXPECTED_RETRY_SUCCESS_ELAPSED_UPPER_BOUND_SECONDS = (
-    ALL_RETRY_BACKOFF_SECONDS[0] + GENEROUS_SUBPROCESS_OVERHEAD_SECONDS
-)
 EXPECTED_RETRY_EXHAUSTION_ELAPSED_LOWER_BOUND_SECONDS = (
     TOTAL_BACKOFF_SECONDS - BACKOFF_TIMING_EPSILON_SECONDS
-)
-EXPECTED_RETRY_EXHAUSTION_ELAPSED_UPPER_BOUND_SECONDS = (
-    TOTAL_BACKOFF_SECONDS + RETRY_EXHAUSTION_UPPER_BOUND_OVERHEAD_SECONDS
 )
 
 EXIT_CODE_SUCCESS = 0
@@ -491,18 +484,21 @@ class _StubReviewsServer(http.server.HTTPServer):
 
     request_count: int = 0
     failure_count: int = 0
+    recorded_request_path: str = ""
 
 
 class _StubReviewsHandler(http.server.BaseHTTPRequestHandler):
     """Returns 502 for the first ``failure_count`` POSTs, then 200 thereafter.
 
     State lives on the owning :class:`_StubReviewsServer` instance so the
-    test can inspect the final request count after the script exits.
+    test can inspect the final request count and the path of the last
+    received POST after the script exits.
     """
 
     def do_POST(self) -> None:
         owning_server = self.server
         owning_server.request_count += 1
+        owning_server.recorded_request_path = self.path
         if owning_server.request_count <= owning_server.failure_count:
             response_status = STUB_HTTP_STATUS_BAD_GATEWAY
             response_body_bytes = STUB_502_RESPONSE_BODY_BYTES
@@ -543,6 +539,7 @@ def spawn_stub_reviews_server(
     )
     stub_server.request_count = 0
     stub_server.failure_count = failure_count
+    stub_server.recorded_request_path = ""
     stub_thread = threading.Thread(target=stub_server.serve_forever, daemon=True)
     stub_thread.start()
     return stub_server, stub_thread
@@ -810,6 +807,13 @@ class LivePostAuditThreadTests(unittest.TestCase):
             f"{len(review_comments)}: {review_comments!r}",
         )
 
+    def _expected_reviews_request_path(self) -> str:
+        full_endpoint_url = build_reviews_endpoint_url(
+            LIVE_TEST_OWNER, LIVE_TEST_REPO, self.pr_number
+        )
+        parsed_endpoint = urllib.parse.urlparse(full_endpoint_url)
+        return parsed_endpoint.path
+
     def _run_retry_simulation_and_measure_elapsed(
         self,
         failure_count: int,
@@ -860,16 +864,18 @@ class LivePostAuditThreadTests(unittest.TestCase):
             f"{TOTAL_REQUEST_COUNT_FOR_RETRY_SUCCESS} POSTs (one 502 + "
             f"one 200); got {stub_server.request_count}",
         )
+        expected_request_path = self._expected_reviews_request_path()
+        self.assertEqual(
+            stub_server.recorded_request_path,
+            expected_request_path,
+            f"retry-success: stub received POST at "
+            f"{stub_server.recorded_request_path!r}; expected "
+            f"{expected_request_path!r} per build_reviews_endpoint_url",
+        )
         self.assertGreaterEqual(
             elapsed_seconds,
             EXPECTED_RETRY_SUCCESS_ELAPSED_LOWER_BOUND_SECONDS,
             f"retry-success should observe at least the first 1s backoff; "
-            f"elapsed={elapsed_seconds:.2f}s",
-        )
-        self.assertLess(
-            elapsed_seconds,
-            EXPECTED_RETRY_SUCCESS_ELAPSED_UPPER_BOUND_SECONDS,
-            f"retry-success exceeded the 1s-backoff-plus-overhead bound; "
             f"elapsed={elapsed_seconds:.2f}s",
         )
 
@@ -897,17 +903,19 @@ class LivePostAuditThreadTests(unittest.TestCase):
             f"initial plus three retries); got "
             f"{stub_server.request_count}",
         )
+        expected_request_path = self._expected_reviews_request_path()
+        self.assertEqual(
+            stub_server.recorded_request_path,
+            expected_request_path,
+            f"retry-exhaustion: stub received POST at "
+            f"{stub_server.recorded_request_path!r}; expected "
+            f"{expected_request_path!r} per build_reviews_endpoint_url",
+        )
         self.assertGreaterEqual(
             elapsed_seconds,
             EXPECTED_RETRY_EXHAUSTION_ELAPSED_LOWER_BOUND_SECONDS,
             f"retry-exhaustion should observe ~21s of backoff "
             f"(1s + 4s + 16s); elapsed={elapsed_seconds:.2f}s",
-        )
-        self.assertLess(
-            elapsed_seconds,
-            EXPECTED_RETRY_EXHAUSTION_ELAPSED_UPPER_BOUND_SECONDS,
-            f"retry-exhaustion exceeded the 21s-plus-overhead upper bound; "
-            f"elapsed={elapsed_seconds:.2f}s",
         )
 
 

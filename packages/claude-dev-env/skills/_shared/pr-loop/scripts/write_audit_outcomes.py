@@ -56,9 +56,11 @@ def _populate_findings(parent: Element, findings_data: object) -> None:
     """Populate <finding> elements from a list of finding dicts.
 
     Scalar finding fields become XML attributes on `<finding>`; the
-    body fields named in `ALL_FINDING_BODY_ELEMENT_KEYS` become child
-    elements. Nested dicts or lists in scalar slots are flattened to
-    string form so attribute serialization stays well-defined.
+    body fields named in `ALL_FINDING_BODY_ELEMENT_KEYS` (defined in
+    `config/path_resolver_constants.py` and currently
+    `("title", "excerpt", "description")`) become child elements.
+    Nested dicts or lists in scalar slots are flattened to string form
+    so attribute serialization stays well-defined.
 
     Args:
         parent: Parent XML element (typically `<findings>`).

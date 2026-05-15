@@ -1,6 +1,12 @@
 """Validate status enum values and write <bugteam_fix> XML at the canonical path.
 
-Status enum: fixed | could_not_address | hook_blocked | unverified_fixed
+Status enum (canonical source: `ALL_VALID_FIX_STATUSES` in
+`config/path_resolver_constants.py`): fixed | could_not_address |
+hook_blocked | unverified_fixed.
+
+Each outcome's scalar fields become XML attributes on `<outcome>`; the
+body fields named in `ALL_FIX_OUTCOME_BODY_ELEMENT_KEYS` (currently
+`("reason", "hook_output")`) become child elements.
 
 Usage:
   python scripts/write_fix_outcomes.py --pr-number 422 --loop 3 --commit-sha abc1234 --outcomes-json <PATH> --worktree-path <PATH>

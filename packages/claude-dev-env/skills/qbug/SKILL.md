@@ -222,6 +222,15 @@ The subagent receives this prompt and loops internally — the lead does not re-
        `[]` and pass `--state CLEAN`; one or more anchored findings →
        pass `--state DIRTY` with the full list.
 
+       **Self-PR precondition.** GitHub rejects both `APPROVE` and
+       `REQUEST_CHANGES` reviews when the authenticated identity matches
+       the PR author with HTTP 422; `post_audit_thread.py` retries and
+       then exits 2. For qbug to post a clean review on a self-authored
+       PR, run under an alternate reviewer identity, or accept exit 2
+       and post the audit review via the MCP
+       `pull_request_review_write` fallback with `event="COMMENT"`. The
+       script does not auto-downgrade on the self-PR case.
+
        ```
        python "${CLAUDE_SKILL_DIR}/../../_shared/pr-loop/scripts/post_audit_thread.py" \
          --skill qbug \

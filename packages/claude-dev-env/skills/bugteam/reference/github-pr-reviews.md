@@ -2,8 +2,8 @@
 
 Per-loop pull-request reviews and post-fix replies use two distinct transports:
 
-- **Per-loop audit review** — posted via [`post_audit_thread.py`](../../_shared/pr-loop/scripts/post_audit_thread.py). One review per audit pass. `APPROVE` on CLEAN (the request event; GitHub stores it as `state=APPROVED`; body documents "no findings", zero inline comments). `REQUEST_CHANGES` on DIRTY (one inline anchored comment per finding; each becomes its own resolvable thread).
-- **Fix replies** — posted via the GitHub MCP `add_reply_to_pull_request_comment` after the fix commit lands. The reply body uses the unified template at [`../../_shared/pr-loop/audit-reply-template.md`](../../_shared/pr-loop/audit-reply-template.md); reply and `resolve_thread` are atomic per thread.
+- **Per-loop audit review** — posted via [`post_audit_thread.py`](../../../_shared/pr-loop/scripts/post_audit_thread.py). One review per audit pass. `APPROVE` on CLEAN (the request event; GitHub stores it as `state=APPROVED`; body documents "no findings", zero inline comments). `REQUEST_CHANGES` on DIRTY (one inline anchored comment per finding; each becomes its own resolvable thread).
+- **Fix replies** — posted via the GitHub MCP `add_reply_to_pull_request_comment` after the fix commit lands. The reply body uses the unified template at [`../../../_shared/pr-loop/audit-reply-template.md`](../../../_shared/pr-loop/audit-reply-template.md); reply and `resolve_thread` are atomic per thread.
 
 ## Per-loop audit review (post_audit_thread.py)
 
@@ -32,7 +32,7 @@ The script handles retries internally — 1s / 4s / 16s backoff across four atte
 
 Harvest the parent review URL from stdout, then fetch child-comment URLs via `pull_request_read(method="get_review_comments", owner=<owner>, repo=<repo>, pullNumber=<N>)` filtered to the just-posted review id. That same response carries each comment's PR review thread node id (e.g. `PRRT_kwDOxxx`) — capture it alongside the numeric comment id. Match children to findings in the order they appear in the findings JSON, and store the mapping as `loop_comment_index[finding_id]` carrying both `finding_comment_id` (numeric) and `thread_node_id` (`PRRT_kwDOxxx`) for the FIX step to reply against and resolve.
 
-The script reads its body skeleton from [`../../_shared/pr-loop/audit-reply-template.md`](../../_shared/pr-loop/audit-reply-template.md) at runtime, so the template doc remains the single source of truth for the body shape — edits there propagate without restarting the caller.
+The script reads its body skeleton from [`../../../_shared/pr-loop/audit-reply-template.md`](../../../_shared/pr-loop/audit-reply-template.md) at runtime, so the template doc remains the single source of truth for the body shape — edits there propagate without restarting the caller.
 
 ## Fix reply (MCP)
 
@@ -48,7 +48,7 @@ mcp__plugin_github_github__add_reply_to_pull_request_comment(
 )
 ```
 
-The reply body uses the unified template from [`../../_shared/pr-loop/audit-reply-template.md`](../../_shared/pr-loop/audit-reply-template.md). Per-status `<status_line>` / `<action_heading>` values live in [`../PROMPTS.md`](../PROMPTS.md) § FIX execution step 8.
+The reply body uses the unified template from [`../../../_shared/pr-loop/audit-reply-template.md`](../../../_shared/pr-loop/audit-reply-template.md). Per-status `<status_line>` / `<action_heading>` values live in [`../PROMPTS.md`](../PROMPTS.md) § FIX execution step 8.
 
 Immediately after the reply call returns, resolve the same thread:
 

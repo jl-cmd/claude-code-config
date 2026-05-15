@@ -168,7 +168,7 @@ cd into `<worktree_path>` before any git or file operation.
 
      Exit 0 emits the new review's `html_url` on stdout. Extract the
      numeric review id from that URL's `#pullrequestreview-<id>` suffix
-     (the trailing path fragment). Then harvest child-comment URLs
+     (the trailing URL fragment, the part after `#`). Then harvest child-comment URLs
      **and PR review thread node ids** via
      `pull_request_read(method="get_review_comments", owner=<O>,
      repo=<R>, pullNumber=<N>)` filtered to that review id.

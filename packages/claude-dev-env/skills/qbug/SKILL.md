@@ -250,8 +250,8 @@ The subagent receives this prompt and loops internally — the lead does not re-
        handles retries internally (1s / 4s / 16s backoff across four
        attempts). Exit 0 emits the new review's `html_url` to stdout;
        extract the numeric review id from the URL's
-       `#pullrequestreview-<id>` suffix (the trailing path fragment of
-       `html_url`). Then harvest child-comment URLs **and PR review
+       `#pullrequestreview-<id>` suffix (the trailing URL fragment of
+       `html_url`, the part after `#`). Then harvest child-comment URLs **and PR review
        thread node ids** via
        `pull_request_read(method="get_review_comments",
        owner=<owner>, repo=<repo>, pullNumber=<pr_number>)` filtered to

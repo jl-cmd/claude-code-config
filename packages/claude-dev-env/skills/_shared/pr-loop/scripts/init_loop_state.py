@@ -32,8 +32,11 @@ def create_loop_state(
 ) -> Path:
     """Create the loop-state.json file and return its path.
 
-    The written state dict carries the keys documented in
-    `_shared/pr-loop/state-schema.md` common-fields table:
+    The written state dict carries the subset of the keys documented
+    in `_shared/pr-loop/state-schema.md` common-fields table that are
+    initialized at loop creation. Fields populated only during the loop
+    (e.g. `audit_log`) are added by later steps and are not written
+    here:
 
       - `loop_count: 0` (int counter, bumps on each AUDIT or tick)
       - `last_action: "fresh"` (enum: fresh | audited | fixed)

@@ -1,12 +1,19 @@
 """Root pytest configuration: evicts conflicting ``config`` imports during collection.
 
-Six different objects share the top-level name ``config``:
+Seven different objects share the top-level name ``config``:
 
 - Repository package ``config/`` (for example ``config.sync_ai_rules_paths``).
 - ``packages/claude-dev-env/hooks/config/`` (hook messages and shared hook tests).
 - ``packages/claude-dev-env/hooks/git-hooks/config.py`` (flat constants for shims).
 - ``packages/claude-dev-env/_shared/pr-loop/scripts/config/`` (shared PR-loop
   script constants).
+- ``packages/claude-dev-env/skills/_shared/pr-loop/scripts/config/`` (skill-side
+  PR-loop script constants). ``init_loop_state.py``, ``write_audit_outcomes.py``,
+  ``write_fix_outcomes.py``, and the ``build_*_prompt.py`` scripts each insert
+  their own directory on ``sys.path`` at module-load time so they can
+  ``from config.X import Y`` when installed under
+  ``~/.claude/skills/_shared/pr-loop/scripts/``; under pytest that insert leaks
+  across collection boundaries unless this conftest evicts it.
 - ``packages/claude-dev-env/skills/pr-converge/scripts/config/`` (pr-converge
   skill script constants). The shared scripts insert their own directory on
   ``sys.path`` at module-load time so they can ``from config.X import Y`` when
@@ -89,6 +96,15 @@ _DOC_GIST_SCRIPTS_DIRECTORY_PATH = (
     / "doc-gist"
     / "scripts"
 )
+_SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH = (
+    _REPOSITORY_ROOT_PATH
+    / "packages"
+    / "claude-dev-env"
+    / "skills"
+    / "_shared"
+    / "pr-loop"
+    / "scripts"
+)
 
 
 class _PendingSysPathRestore(NamedTuple):
@@ -159,6 +175,12 @@ def _cached_config_resolves_inside_doc_gist_scripts() -> bool:
     return _cached_config_module_resolves_inside(_DOC_GIST_SCRIPTS_DIRECTORY_PATH)
 
 
+def _cached_config_resolves_inside_skills_shared_pr_loop_scripts() -> bool:
+    return _cached_config_module_resolves_inside(
+        _SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH
+    )
+
+
 def _config_module_is_currently_cached() -> bool:
     return "config" in sys.modules
 
@@ -214,6 +236,7 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_DOC_GIST_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         return
 
     _ensure_hooks_root_on_sys_path()
@@ -237,6 +260,7 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_DOC_GIST_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         return
 
     is_inside_shared_pr_loop_scripts = _path_is_inside_directory(
@@ -251,6 +275,7 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
             _evict_config_module()
         _remove_path_if_present(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_DOC_GIST_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         return
 
     resolved_pr_converge_scripts_path = _PR_CONVERGE_SCRIPTS_DIRECTORY_PATH.resolve()
@@ -266,6 +291,7 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
             _evict_config_module()
         _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_DOC_GIST_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         return
 
     resolved_dev_env_scripts_path = _DEV_ENV_SCRIPTS_DIRECTORY_PATH.resolve()
@@ -280,6 +306,7 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_DOC_GIST_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         sys.path.insert(0, str(resolved_dev_env_scripts_path))
         return
 
@@ -295,7 +322,26 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
         _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
         _remove_path_if_present(_DEV_ENV_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
         sys.path.insert(0, str(resolved_doc_gist_scripts_path))
+        return
+
+    resolved_skills_shared_pr_loop_scripts_path = (
+        _SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH.resolve()
+    )
+    is_inside_skills_shared_pr_loop_scripts = _path_is_inside_directory(
+        resolved_collected_path, resolved_skills_shared_pr_loop_scripts_path
+    )
+    if is_inside_skills_shared_pr_loop_scripts:
+        _record_pending_sys_path_restore(collector.nodeid)
+        _evict_config_module()
+        _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
+        _remove_path_if_present(_HOOKS_ROOT_DIRECTORY_PATH)
+        _remove_path_if_present(_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_PR_CONVERGE_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_DEV_ENV_SCRIPTS_DIRECTORY_PATH)
+        _remove_path_if_present(_DOC_GIST_SCRIPTS_DIRECTORY_PATH)
+        sys.path.insert(0, str(resolved_skills_shared_pr_loop_scripts_path))
         return
 
     any_git_hooks_entry_was_removed = _remove_path_if_present(_GIT_HOOKS_DIRECTORY_PATH)
@@ -311,17 +357,22 @@ def pytest_collectstart(collector: pytest.Collector) -> None:
     any_doc_gist_scripts_entry_was_removed = _remove_path_if_present(
         _DOC_GIST_SCRIPTS_DIRECTORY_PATH
     )
+    any_skills_shared_scripts_entry_was_removed = _remove_path_if_present(
+        _SKILLS_SHARED_PR_LOOP_SCRIPTS_DIRECTORY_PATH
+    )
     if (
         any_git_hooks_entry_was_removed
         or any_shared_scripts_entry_was_removed
         or any_pr_converge_scripts_entry_was_removed
         or any_dev_env_scripts_entry_was_removed
         or any_doc_gist_scripts_entry_was_removed
+        or any_skills_shared_scripts_entry_was_removed
         or _cached_config_is_flat_git_hooks_module()
         or _cached_config_resolves_inside_shared_pr_loop_scripts()
         or _cached_config_resolves_inside_pr_converge_scripts()
         or _cached_config_resolves_inside_dev_env_scripts()
         or _cached_config_resolves_inside_doc_gist_scripts()
+        or _cached_config_resolves_inside_skills_shared_pr_loop_scripts()
     ):
         _evict_config_module()
 

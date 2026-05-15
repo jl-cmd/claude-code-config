@@ -42,6 +42,7 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
 
 from config.post_audit_thread_constants import (  # noqa: E402
     ALL_GH_AUTH_TOKEN_COMMAND_PARTS,
+    ALL_RETRY_BACKOFF_SECONDS,
     GH_TOKEN_ENV_VAR_NAME,
     CLI_FLAG_COMMIT,
     CLI_FLAG_FINDINGS_JSON,
@@ -50,6 +51,7 @@ from config.post_audit_thread_constants import (  # noqa: E402
     CLI_FLAG_REPO,
     CLI_FLAG_SKILL,
     CLI_FLAG_STATE,
+    EXIT_CODE_RETRY_EXHAUSTED,
     INLINE_COMMENT_SIDE_RIGHT,
     JSON_FIELD_DESCRIPTION,
     JSON_FIELD_FIX_SUMMARY,
@@ -57,6 +59,7 @@ from config.post_audit_thread_constants import (  # noqa: E402
     JSON_FIELD_PATH,
     JSON_FIELD_SEVERITY,
     JSON_FIELD_SIDE,
+    MAX_RETRY_ATTEMPTS,
     SEVERITY_TAG_P0,
     SEVERITY_TAG_P1,
     SEVERITY_TAG_P2,
@@ -361,6 +364,27 @@ def remove_local_clone(clone_directory: Path) -> None:
     force_remove_directory(clone_directory)
 
 
+def best_effort_delete_remote_branch(branch_name: str) -> None:
+    try:
+        subprocess.run(
+            [
+                "gh",
+                "api",
+                "--method",
+                "DELETE",
+                f"repos/{LIVE_TEST_OWNER}/{LIVE_TEST_REPO}/git/refs/heads/{branch_name}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as deletion_error:
+        sys.stderr.write(
+            f"best_effort_delete_remote_branch: could not delete "
+            f"{branch_name}: {deletion_error}\n"
+        )
+
+
 def write_findings_json(findings_payload: list[dict[str, Any]]) -> Path:
     handle, findings_path_str = tempfile.mkstemp(
         suffix=".json", prefix="post-audit-findings-"
@@ -429,15 +453,28 @@ STUB_SERVER_SHUTDOWN_JOIN_TIMEOUT_SECONDS = 5.0
 FAILURE_COUNT_FOR_RETRY_SUCCESS = 1
 TOTAL_REQUEST_COUNT_FOR_RETRY_SUCCESS = 2
 FAILURE_COUNT_FOR_RETRY_EXHAUSTION = 100
-TOTAL_REQUEST_COUNT_FOR_RETRY_EXHAUSTION = 4
+TOTAL_REQUEST_COUNT_FOR_RETRY_EXHAUSTION = MAX_RETRY_ATTEMPTS + 1
 
-EXPECTED_RETRY_SUCCESS_ELAPSED_LOWER_BOUND_SECONDS = 0.9
-EXPECTED_RETRY_SUCCESS_ELAPSED_UPPER_BOUND_SECONDS = 4.0
-EXPECTED_RETRY_EXHAUSTION_ELAPSED_LOWER_BOUND_SECONDS = 20.9
-EXPECTED_RETRY_EXHAUSTION_ELAPSED_UPPER_BOUND_SECONDS = 30.0
+BACKOFF_TIMING_EPSILON_SECONDS = 0.1
+GENEROUS_SUBPROCESS_OVERHEAD_SECONDS = 7.0
+RETRY_EXHAUSTION_UPPER_BOUND_OVERHEAD_SECONDS = 9.0
+TOTAL_BACKOFF_SECONDS = sum(ALL_RETRY_BACKOFF_SECONDS)
+
+EXPECTED_RETRY_SUCCESS_ELAPSED_LOWER_BOUND_SECONDS = (
+    ALL_RETRY_BACKOFF_SECONDS[0] - BACKOFF_TIMING_EPSILON_SECONDS
+)
+EXPECTED_RETRY_SUCCESS_ELAPSED_UPPER_BOUND_SECONDS = (
+    ALL_RETRY_BACKOFF_SECONDS[0] + GENEROUS_SUBPROCESS_OVERHEAD_SECONDS
+)
+EXPECTED_RETRY_EXHAUSTION_ELAPSED_LOWER_BOUND_SECONDS = (
+    TOTAL_BACKOFF_SECONDS - BACKOFF_TIMING_EPSILON_SECONDS
+)
+EXPECTED_RETRY_EXHAUSTION_ELAPSED_UPPER_BOUND_SECONDS = (
+    TOTAL_BACKOFF_SECONDS + RETRY_EXHAUSTION_UPPER_BOUND_OVERHEAD_SECONDS
+)
 
 EXIT_CODE_SUCCESS = 0
-EXIT_CODE_RETRY_EXHAUSTED_EXPECTED = 2
+EXIT_CODE_RETRY_EXHAUSTED_EXPECTED = EXIT_CODE_RETRY_EXHAUSTED
 
 LAUNCHER_SOURCE_CODE = textwrap.dedent(
     """
@@ -640,6 +677,7 @@ class LivePostAuditThreadTests(unittest.TestCase):
                 cls.branch_name,
             )
         except Exception:
+            best_effort_delete_remote_branch(cls.branch_name)
             remove_local_clone(cls.local_clone_directory)
             raise
 

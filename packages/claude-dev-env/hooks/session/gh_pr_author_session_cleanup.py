@@ -80,8 +80,8 @@ def _restore_stale_state_file(state_file: Path) -> None:
     if original_account is None:
         _delete_state_file(state_file)
         return
-    switch_succeeded = _switch_gh_account(original_account)
-    if switch_succeeded:
+    has_switched_account = _switch_gh_account(original_account)
+    if has_switched_account:
         _delete_state_file(state_file)
 
 

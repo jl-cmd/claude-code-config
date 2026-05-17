@@ -555,11 +555,11 @@ def test_write_swap_state_uses_owner_only_permissions(
     if sys.platform.startswith("win"):
         return
     state_file = hook_module._state_file_path("perm-test-session")
-    state_write_succeeded = hook_module._write_swap_state(
+    has_written_state = hook_module._write_swap_state(
         state_file,
         original_account="jl-cmd",
         primary_account="JonEcho",
     )
-    assert state_write_succeeded is True
+    assert has_written_state is True
     file_mode_bits = stat.S_IMODE(os.stat(state_file).st_mode)
     assert file_mode_bits == 0o600

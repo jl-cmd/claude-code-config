@@ -68,8 +68,8 @@ def main() -> None:
             _delete_state_file(state_file)
         sys.exit(0)
 
-    restore_succeeded = _switch_gh_account(original_account)
-    if restore_succeeded:
+    has_restored_account = _switch_gh_account(original_account)
+    if has_restored_account:
         _delete_state_file(state_file)
     sys.exit(0)
 

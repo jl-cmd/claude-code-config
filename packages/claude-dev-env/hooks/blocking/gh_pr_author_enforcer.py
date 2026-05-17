@@ -270,8 +270,8 @@ def main() -> None:
     if current_account == required_account:
         sys.exit(0)
 
-    switch_succeeded = _switch_gh_account(required_account)
-    if not switch_succeeded:
+    has_switched_account = _switch_gh_account(required_account)
+    if not has_switched_account:
         _emit_deny_payload(
             _build_switch_failure_message(required_account, current_account)
         )
@@ -279,12 +279,12 @@ def main() -> None:
 
     session_id = str(hook_input.get("session_id") or "")
     state_file = _state_file_path(session_id)
-    state_write_succeeded = _write_swap_state(
+    has_written_state = _write_swap_state(
         state_file,
         original_account=current_account,
         primary_account=required_account,
     )
-    if not state_write_succeeded:
+    if not has_written_state:
         _switch_gh_account(current_account)
         _emit_deny_payload(
             _build_state_write_failure_message(

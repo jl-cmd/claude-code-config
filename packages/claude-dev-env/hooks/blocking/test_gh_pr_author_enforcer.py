@@ -5,7 +5,9 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import pathlib
+import stat
 import sys
 from typing import Iterator
 from unittest import mock
@@ -475,3 +477,89 @@ def test_main_emits_deny_even_when_reverse_switch_also_fails(
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     deny_reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert "state file" in deny_reason.lower()
+
+
+def test_strip_quoted_regions_preserves_offsets_for_double_quotes() -> None:
+    original_command = "gh pr create --body \"some text\" --title T"
+    stripped_command = hook_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "some text" not in stripped_command
+    assert "gh pr create" in stripped_command
+    assert "--title T" in stripped_command
+
+
+def test_strip_quoted_regions_preserves_offsets_for_single_quotes() -> None:
+    original_command = "gh pr create --body 'single quoted body' --title T"
+    stripped_command = hook_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "single quoted body" not in stripped_command
+
+
+def test_strip_quoted_regions_preserves_offsets_for_backticks() -> None:
+    original_command = "echo `inner cmd` && gh pr create --title T"
+    stripped_command = hook_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "inner cmd" not in stripped_command
+    assert "gh pr create" in stripped_command
+
+
+def test_strip_quoted_regions_handles_escaped_quote_inside_double_quotes() -> None:
+    original_command = "gh pr create --body \"escaped \\\" quote\" --title T"
+    stripped_command = hook_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "escaped" not in stripped_command
+    assert "--title T" in stripped_command
+
+
+def test_command_invokes_gh_pr_create_ignores_literal_inside_quotes() -> None:
+    assert not hook_module._command_invokes_gh_pr_create(
+        "echo \"gh pr create docs\""
+    )
+
+
+def test_command_invokes_gh_pr_create_ignores_literal_inside_single_quotes() -> None:
+    assert not hook_module._command_invokes_gh_pr_create(
+        "echo 'gh pr create docs'"
+    )
+
+
+def test_command_invokes_gh_pr_create_still_matches_unquoted_invocation() -> None:
+    assert hook_module._command_invokes_gh_pr_create(
+        "gh pr create --body \"see docs about gh pr create\""
+    )
+
+
+def test_command_uses_web_flag_ignores_dash_w_inside_body_string() -> None:
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T --body \"see -w for web\""
+    )
+
+
+def test_command_uses_web_flag_handles_separator_inside_quoted_body() -> None:
+    assert hook_module._command_uses_web_flag(
+        "gh pr create --title \"T | foo\" --web"
+    )
+
+
+def test_command_uses_web_flag_ignores_long_web_inside_quoted_body() -> None:
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T --body \"docs --web link\""
+    )
+
+
+def test_write_swap_state_uses_owner_only_permissions(
+    required_account_jonecho: str,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """On POSIX the state file is chmod'd to 0o600 after write."""
+    if sys.platform.startswith("win"):
+        return
+    state_file = hook_module._state_file_path("perm-test-session")
+    state_write_succeeded = hook_module._write_swap_state(
+        state_file,
+        original_account="jl-cmd",
+        primary_account="JonEcho",
+    )
+    assert state_write_succeeded is True
+    file_mode_bits = stat.S_IMODE(os.stat(state_file).st_mode)
+    assert file_mode_bits == 0o600

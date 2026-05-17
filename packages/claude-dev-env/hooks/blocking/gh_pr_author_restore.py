@@ -6,8 +6,13 @@ silently swaps the active gh account to ``GITHUB_DEFAULT_ACCOUNT`` and
 records the original account in a per-session state file, this hook
 reads that state file after the matching Bash invocation finishes and
 runs ``gh auth switch --user <original>`` to put the prior account back
-in place. The state file is deleted whether the switch succeeds or fails
-so a later ``gh pr create`` does not pick up stale state.
+in place.
+
+The state file is deleted only when the restore switch succeeds. If
+``gh auth switch`` fails the state file is left in place so the
+SessionStart cleanup hook (``gh_pr_author_session_cleanup.py``) can
+retry on the next session start instead of stranding the user on the
+canonical author account.
 
 Behavior:
 - No-op when tool_name is not Bash.
@@ -16,8 +21,8 @@ Behavior:
 - No-op when no per-session state file exists — means the enforcer
   never swapped on this command.
 - Otherwise reads the state file, runs ``gh auth switch --user <original>``,
-  and deletes the state file. Failures are logged to stderr; this hook
-  never blocks the workflow.
+  and deletes the state file only when the switch succeeded. Failures
+  are logged to stderr; this hook never blocks the workflow.
 """
 
 from __future__ import annotations
@@ -201,8 +206,9 @@ def main() -> None:
             _delete_state_file(state_file)
         sys.exit(0)
 
-    _switch_gh_account(original_account)
-    _delete_state_file(state_file)
+    restore_succeeded = _switch_gh_account(original_account)
+    if restore_succeeded:
+        _delete_state_file(state_file)
     sys.exit(0)
 
 

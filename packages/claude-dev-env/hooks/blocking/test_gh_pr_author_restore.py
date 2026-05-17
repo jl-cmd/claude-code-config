@@ -173,7 +173,7 @@ def test_main_switches_back_and_deletes_state_file(
     assert not state_file.exists()
 
 
-def test_main_deletes_state_file_even_when_switch_fails(
+def test_main_preserves_state_file_when_switch_fails(
     monkeypatch: pytest.MonkeyPatch,
     isolated_state_directory: pathlib.Path,
 ) -> None:
@@ -188,7 +188,7 @@ def test_main_deletes_state_file_even_when_switch_fails(
     assert exit_code == 0
     assert stdout_text == ""
     assert switch_invocations == ["jl-cmd"]
-    assert not state_file.exists()
+    assert state_file.exists()
 
 
 def test_main_no_op_on_invalid_stdin_json(

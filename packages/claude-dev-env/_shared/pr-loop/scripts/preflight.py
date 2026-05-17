@@ -42,10 +42,6 @@ from config.preflight_constants import (
     ALL_PRE_COMMIT_RUN_ALL_FILES_COMMAND,
     BUGTEAM_PREFLIGHT_SKIP_ENABLED_VALUE,
     BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME,
-    CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN,
-    CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME,
-    CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR,
-    EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV,
     GIT_DIRECTORY_NAME,
     PRE_COMMIT_CONFIG_YAML_FILENAME,
     PYPROJECT_TOML_FILENAME,
@@ -60,6 +56,12 @@ from config.preflight_constants import (
     PYTEST_TOML_TABLE_PREFIX,
     PYTHON_FILE_SUFFIX,
     TESTS_DIRECTORY_NAME,
+)
+from reviews_disabled import (
+    CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN,
+    CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME,
+    EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV,
+    is_bugteam_disabled_via_env,
 )
 
 
@@ -463,22 +465,6 @@ def parse_arguments(all_arguments: list[str]) -> argparse.Namespace:
     return parser.parse_args(all_arguments)
 
 
-def _is_bugteam_disabled_via_env() -> bool:
-    """Check whether CLAUDE_REVIEWS_DISABLED opts the bug-audit family out of running.
-
-    Returns:
-        True when the env var contains the literal ``bugteam`` token
-        (comma-separated, case-insensitive, whitespace-tolerant).
-    """
-    raw_value = os.environ.get(CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME, "")
-    all_disabled_tokens = frozenset(
-        each_raw_token.strip().lower()
-        for each_raw_token in raw_value.split(CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR)
-        if each_raw_token.strip()
-    )
-    return CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN in all_disabled_tokens
-
-
 def main(all_arguments: list[str]) -> int:
     """Run the preflight checks (git-hooks path, pytest, optional pre-commit).
 
@@ -499,7 +485,7 @@ def main(all_arguments: list[str]) -> int:
             file=sys.stderr,
         )
         return 0
-    if _is_bugteam_disabled_via_env():
+    if is_bugteam_disabled_via_env():
         print(
             f"bugteam_preflight: halted "
             f"({CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME} contains "

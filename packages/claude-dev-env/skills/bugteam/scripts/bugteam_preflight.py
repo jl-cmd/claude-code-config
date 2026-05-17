@@ -12,8 +12,11 @@ for each_cached_module_name in [
     if each_module_key == "config" or each_module_key.startswith("config.")
 ]:
     sys.modules.pop(each_cached_module_name, None)
-if str(Path(__file__).resolve().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+_bugteam_scripts_directory = str(Path(__file__).resolve().parent)
+while _bugteam_scripts_directory in sys.path:
+    sys.path.remove(_bugteam_scripts_directory)
+if _bugteam_scripts_directory not in sys.path:
+    sys.path.insert(0, _bugteam_scripts_directory)
 
 from config.bugteam_preflight_constants import (
     ALL_DISCOVERY_IGNORE_DIRECTORIES,
@@ -21,11 +24,7 @@ from config.bugteam_preflight_constants import (
     ALL_PRE_COMMIT_ARGUMENTS,
     BUGTEAM_PREFLIGHT_PREFIX,
     BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME,
-    CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN,
-    CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME,
-    CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR,
     ENFORCEMENT_ABSENT_MESSAGE,
-    EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV,
     EXIT_CODE_HOOKS_PATH_CHECK_FAILED,
     EXPECTED_HOOKS_PATH_SUFFIX,
     GIT_DIRECTORY_NAME,
@@ -34,6 +33,26 @@ from config.bugteam_preflight_constants import (
     PYPROJECT_PYTEST_SECTION_PREFIX,
     PYTEST_EXIT_CODE_NO_TESTS_COLLECTED,
     PYTEST_INI_FILENAME,
+)
+
+for each_cached_module_name in [
+    each_module_key
+    for each_module_key in list(sys.modules)
+    if each_module_key == "config" or each_module_key.startswith("config.")
+]:
+    sys.modules.pop(each_cached_module_name, None)
+_shared_pr_loop_scripts_directory = (
+    Path(__file__).resolve().parent
+    / ".." / ".." / ".." / "_shared" / "pr-loop" / "scripts"
+).resolve()
+if str(_shared_pr_loop_scripts_directory) not in sys.path:
+    sys.path.insert(0, str(_shared_pr_loop_scripts_directory))
+
+from reviews_disabled import (
+    CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN,
+    CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME,
+    EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV,
+    is_bugteam_disabled_via_env,
 )
 
 
@@ -250,22 +269,6 @@ def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(all_argv)
 
 
-def _is_bugteam_disabled_via_env() -> bool:
-    """Check whether CLAUDE_REVIEWS_DISABLED opts bugteam out of running.
-
-    Returns:
-        True when the env var contains the literal `bugteam` token
-        (comma-separated, case-insensitive, whitespace-tolerant).
-    """
-    raw_value = os.environ.get(CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME, "")
-    all_disabled_tokens = frozenset(
-        each_raw_token.strip().lower()
-        for each_raw_token in raw_value.split(CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR)
-        if each_raw_token.strip()
-    )
-    return CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN in all_disabled_tokens
-
-
 def main(all_argv: list[str] | None = None) -> int:
     """Run the bugteam preflight checks (pytest, optional pre-commit).
 
@@ -279,7 +282,7 @@ def main(all_argv: list[str] | None = None) -> int:
     if os.environ.get(BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME, "").strip() == "1":
         print(f"{BUGTEAM_PREFLIGHT_PREFIX}skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
         return 0
-    if _is_bugteam_disabled_via_env():
+    if is_bugteam_disabled_via_env():
         print(
             f"{BUGTEAM_PREFLIGHT_PREFIX}halted "
             f"({CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME} contains "

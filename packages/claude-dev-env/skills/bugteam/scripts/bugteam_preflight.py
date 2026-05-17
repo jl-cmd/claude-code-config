@@ -12,7 +12,7 @@ for each_cached_module_name in [
     if each_module_key == "config" or each_module_key.startswith("config.")
 ]:
     sys.modules.pop(each_cached_module_name, None)
-_bugteam_scripts_directory = str(Path(__file__).resolve().parent)
+_bugteam_scripts_directory = str(Path(__file__).absolute().parent)
 while _bugteam_scripts_directory in sys.path:
     sys.path.remove(_bugteam_scripts_directory)
 if _bugteam_scripts_directory not in sys.path:

@@ -19,25 +19,25 @@ from _gh_body_arg_utils import (
     get_logical_first_line,
     iter_significant_tokens,
 )
+from config.pr_description_enforcer_constants import (
+    BLOCKQUOTE_MARKER_PATTERN,
+    BOLD_PAIR_PATTERN,
+    BULLET_MARKER_PATTERN,
+    FENCED_CODE_BLOCK_PATTERN,
+    HEADING_LINE_PATTERN,
+    INLINE_CODE_PATTERN,
+    LINK_TEXT_PATTERN,
+    MINIMUM_SUBSTANTIVE_PROSE_CHARS,
+    WHITESPACE_RUN_PATTERN,
+)
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 PR_GUIDE_PATH = os.path.join(PLUGIN_ROOT, "docs", "PR_DESCRIPTION_GUIDE.md")
-
-MINIMUM_SUBSTANTIVE_PROSE_CHARS = 40
 
 VAGUE_LANGUAGE_PATTERN = re.compile(
     r'\b(fix(?:ed)? (?:bug|issue|it)|update(?:d)? code|minor changes|various (?:fixes|updates|improvements))\b',
     re.IGNORECASE,
 )
-
-_FENCED_CODE_BLOCK_PATTERN = re.compile(r'```.*?```', re.DOTALL)
-_INLINE_CODE_PATTERN = re.compile(r'`[^`]*`')
-_HEADING_LINE_PATTERN = re.compile(r'^#+\s.*$', re.MULTILINE)
-_BOLD_PAIR_PATTERN = re.compile(r'\*\*([^*]+?)\*\*')
-_BULLET_MARKER_PATTERN = re.compile(r'^\s*[-*+]\s+', re.MULTILINE)
-_BLOCKQUOTE_MARKER_PATTERN = re.compile(r'^\s*>\s+', re.MULTILINE)
-_LINK_TEXT_PATTERN = re.compile(r'\[([^\]]+)\]\([^)]+\)')
-_WHITESPACE_RUN_PATTERN = re.compile(r'\s+')
 
 
 shell_variable_sigil: str = "$"
@@ -280,19 +280,27 @@ def _count_substantive_prose_chars(body: str) -> int:
     Collapses internal whitespace so a body of only headers and bullets --
     no real WHY paragraph -- registers as effectively empty.
     """
-    body_without_fences = _FENCED_CODE_BLOCK_PATTERN.sub('', body)
-    body_without_inline_code = _INLINE_CODE_PATTERN.sub('', body_without_fences)
-    body_without_headings = _HEADING_LINE_PATTERN.sub('', body_without_inline_code)
-    body_without_blockquotes = _BLOCKQUOTE_MARKER_PATTERN.sub('', body_without_headings)
-    body_without_bullets = _BULLET_MARKER_PATTERN.sub('', body_without_blockquotes)
-    body_without_bold = _BOLD_PAIR_PATTERN.sub(r'\1', body_without_bullets)
+    body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub('', body)
+    body_without_inline_code = INLINE_CODE_PATTERN.sub('', body_without_fences)
+    body_without_headings = HEADING_LINE_PATTERN.sub('', body_without_inline_code)
+    body_without_blockquotes = BLOCKQUOTE_MARKER_PATTERN.sub('', body_without_headings)
+    body_without_bullets = BULLET_MARKER_PATTERN.sub('', body_without_blockquotes)
+    body_without_bold = BOLD_PAIR_PATTERN.sub(r'\1', body_without_bullets)
     body_without_emphasis = body_without_bold.replace('*', '')
-    body_without_links = _LINK_TEXT_PATTERN.sub(r'\1', body_without_emphasis)
-    body_collapsed = _WHITESPACE_RUN_PATTERN.sub(' ', body_without_links).strip()
+    body_without_links = LINK_TEXT_PATTERN.sub(r'\1', body_without_emphasis)
+    body_collapsed = WHITESPACE_RUN_PATTERN.sub(' ', body_without_links).strip()
     return len(body_collapsed)
 
 
 def validate_pr_body(body: str) -> list[str]:
+    """Audit a PR body for substantive-prose and vague-language violations.
+
+    Args:
+        body: The PR body markdown text to audit.
+
+    Returns:
+        A list of human-readable violation messages. Empty when the body passes.
+    """
     violations = []
 
     substantive_chars = _count_substantive_prose_chars(body)

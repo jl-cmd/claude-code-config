@@ -2,10 +2,22 @@
 
 Usage:
   python scripts/check_bugbot_ci.py --owner <O> --repo <R> --sha <SHA>
+  python scripts/check_bugbot_ci.py --owner <O> --repo <R> --sha <SHA> --check-active
+  python scripts/check_bugbot_ci.py --owner <O> --repo <R> --sha <SHA> --check-clean
 
-Exit codes:
+Default mode (no flag):
   0 — bugbot check run found (printed to stdout as JSON)
   1 — no bugbot check run found
+  EXIT_CODE_GH_ERROR — gh CLI error
+
+``--check-active`` mode:
+  0 — bugbot check run is queued or in_progress
+  1 — bugbot check run is absent or no longer active
+
+``--check-clean`` mode (silent-pass detection):
+  0 — bugbot check run is completed with success/neutral conclusion
+  1 — bugbot check run is absent, still active, or completed with a
+      non-clean conclusion (failure, action_required, etc.)
   EXIT_CODE_GH_ERROR — gh CLI error
 """
 
@@ -23,6 +35,8 @@ if str(_pr_converge_dir) not in sys.path:
 
 from config.constants import (
     ALL_BUGBOT_CHECK_RUN_ACTIVE_STATUSES,
+    ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS,
+    BUGBOT_CHECK_RUN_COMPLETED_STATUS,
     BUGBOT_CHECK_RUN_NAME_SUBSTRING,
     CHECK_RUNS_PER_PAGE,
     EXIT_CODE_GH_ERROR,
@@ -121,6 +135,55 @@ def is_bugbot_run_active(*, owner: str, repo: str, sha: str) -> bool:
     return False
 
 
+def is_bugbot_run_clean(*, owner: str, repo: str, sha: str) -> bool:
+    """Check whether bugbot has a completed check run with a clean conclusion.
+
+    A "silent pass" is bugbot's signal that it found no issues: the CI
+    check run completes with a ``success`` or ``neutral`` conclusion and
+    no review comment is posted. This function detects that signal so
+    callers can treat it as equivalent to an explicit clean review.
+
+    Args:
+        owner: GitHub repository owner.
+        repo: GitHub repository name.
+        sha: Commit SHA to check.
+
+    Returns:
+        True when a bugbot check run is completed with a conclusion in
+        ``ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS``. False when the
+        check run is absent, still active, completed with a non-clean
+        conclusion, or when the gh CLI returns an error.
+    """
+    completed_process = _run_check_runs_api(owner=owner, repo=repo, sha=sha)
+    if completed_process.returncode != 0:
+        return False
+    for each_line in completed_process.stdout.splitlines():
+        stripped_line = each_line.strip()
+        if not stripped_line:
+            continue
+        try:
+            check_entry: dict[str, object] = json.loads(stripped_line)
+        except json.JSONDecodeError:
+            continue
+        each_name: object = check_entry.get("name")
+        if not isinstance(each_name, str):
+            continue
+        if BUGBOT_CHECK_RUN_NAME_SUBSTRING.lower() not in each_name.lower():
+            continue
+        each_status: object = check_entry.get("status")
+        if not isinstance(each_status, str):
+            continue
+        if each_status != BUGBOT_CHECK_RUN_COMPLETED_STATUS:
+            continue
+        each_conclusion: object = check_entry.get("conclusion")
+        if (
+            isinstance(each_conclusion, str)
+            and each_conclusion in ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS
+        ):
+            return True
+    return False
+
+
 def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
     """Parse command-line arguments.
 
@@ -128,17 +191,27 @@ def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
         all_argv: Command-line argument list.
 
     Returns:
-        Parsed namespace with owner, repo, and sha.
+        Parsed namespace with owner, repo, sha, and mode flags.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--owner", required=True, help="GitHub repository owner")
     parser.add_argument("--repo", required=True, help="GitHub repository name")
     parser.add_argument("--sha", required=True, help="Commit SHA to check")
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--check-active",
         action="store_true",
         default=False,
         help="Check for active (queued/in-progress) check runs only",
+    )
+    mode_group.add_argument(
+        "--check-clean",
+        action="store_true",
+        default=False,
+        help=(
+            "Check for a completed bugbot check run with a "
+            "success/neutral conclusion (silent-pass detection)"
+        ),
     )
     return parser.parse_args(all_argv)
 
@@ -150,19 +223,28 @@ def main(all_arguments: list[str]) -> int:
         all_arguments: Command-line arguments.
 
     Returns:
-        0 when a bugbot check run is found, 1 when absent,
-        EXIT_CODE_GH_ERROR on error.
+        Exit code per the mode-specific contract documented in the
+        module docstring.
     """
     arguments = parse_arguments(all_arguments)
-    if arguments.check_active:
-        found = is_bugbot_run_active(
+    if arguments.check_clean:
+        is_clean = is_bugbot_run_clean(
             owner=arguments.owner,
             repo=arguments.repo,
             sha=arguments.sha,
         )
-        if not found:
+        if not is_clean:
+            print("bugbot: not clean")
+        return 0 if is_clean else 1
+    if arguments.check_active:
+        is_active = is_bugbot_run_active(
+            owner=arguments.owner,
+            repo=arguments.repo,
+            sha=arguments.sha,
+        )
+        if not is_active:
             print("bugbot: not found")
-        return 0 if found else 1
+        return 0 if is_active else 1
     return check_bugbot_ci(
         owner=arguments.owner,
         repo=arguments.repo,

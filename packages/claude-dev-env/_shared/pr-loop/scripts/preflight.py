@@ -485,14 +485,17 @@ def main(all_arguments: list[str]) -> int:
             file=sys.stderr,
         )
         return 0
+    reviews_disabled_env_var_name = CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME
+    reviews_disabled_bugteam_token = CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN
+    disabled_via_env_exit_code = EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
     if is_bugteam_disabled_via_env():
         print(
             f"bugteam_preflight: halted "
-            f"({CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME} contains "
-            f"'{CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN}').",
+            f"({reviews_disabled_env_var_name} contains "
+            f"'{reviews_disabled_bugteam_token}').",
             file=sys.stderr,
         )
-        return EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
+        return disabled_via_env_exit_code
     start = Path.cwd()
     repository_root = (
         arguments.repo_root.resolve()

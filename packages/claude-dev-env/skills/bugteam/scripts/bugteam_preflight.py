@@ -282,14 +282,17 @@ def main(all_argv: list[str] | None = None) -> int:
     if os.environ.get(BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME, "").strip() == "1":
         print(f"{BUGTEAM_PREFLIGHT_PREFIX}skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
         return 0
+    reviews_disabled_env_var_name = CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME
+    reviews_disabled_bugteam_token = CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN
+    disabled_via_env_exit_code = EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
     if is_bugteam_disabled_via_env():
         print(
             f"{BUGTEAM_PREFLIGHT_PREFIX}halted "
-            f"({CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME} contains "
-            f"'{CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN}').",
+            f"({reviews_disabled_env_var_name} contains "
+            f"'{reviews_disabled_bugteam_token}').",
             file=sys.stderr,
         )
-        return EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
+        return disabled_via_env_exit_code
     start = Path.cwd()
     resolved_repository_root: Path = (
         arguments.repo_root.resolve()

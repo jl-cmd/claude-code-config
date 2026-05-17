@@ -934,9 +934,10 @@ def resolve_reviewer_token(owner: str, repo: str, pr_number: int) -> str:
                 f"Self-PR detected and "
                 f"{BUGTEAM_REVIEWER_ACCOUNT_ENV_VAR_NAME}="
                 f"{pinned_reviewer_account!r} is set, but that account is "
-                f"not in the authenticated set "
-                f"{all_authenticated_logins!r}. Run `gh auth login` for "
-                f"{pinned_reviewer_account!r} or unset the env var to "
+                f"not in the alternate-reviewer set "
+                f"{all_alternate_logins!r} (PR author "
+                f"{pr_author_login!r} is excluded). Run `gh auth login` "
+                f"for {pinned_reviewer_account!r} or unset the env var to "
                 f"fall back to the first alternate account."
             )
         return fetch_gh_token_for_account(matching_pinned_account)

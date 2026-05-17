@@ -563,3 +563,22 @@ def test_write_swap_state_uses_owner_only_permissions(
     assert has_written_state is True
     file_mode_bits = stat.S_IMODE(os.stat(state_file).st_mode)
     assert file_mode_bits == 0o600
+
+
+def test_write_swap_state_unlinks_file_when_chmod_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """A chmod failure after write unlinks the file so it cannot leak."""
+    def _fake_chmod(*_args: object, **_kwargs: object) -> None:
+        raise OSError("chmod failed")
+
+    monkeypatch.setattr(hook_module.os, "chmod", _fake_chmod)
+    state_file = hook_module._state_file_path("chmod-fail-session")
+    has_written_state = hook_module._write_swap_state(
+        state_file,
+        original_account="jl-cmd",
+        primary_account="JonEcho",
+    )
+    assert has_written_state is False
+    assert not state_file.exists()

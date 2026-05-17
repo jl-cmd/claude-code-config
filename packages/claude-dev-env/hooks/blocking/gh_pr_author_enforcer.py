@@ -36,6 +36,7 @@ from pathlib import Path
 
 from _gh_pr_author_swap_utils import (
     _command_invokes_gh_pr_create,
+    _delete_state_file,
     _state_file_path,
     _strip_quoted_regions,
     _switch_gh_account,
@@ -93,6 +94,12 @@ def _write_swap_state(
     target platform's ``tempfile.gettempdir()`` is already per-user
     (``%LOCALAPPDATA%\\Temp``).
 
+    A chmod failure after a successful write unlinks the partially-written
+    file via ``_delete_state_file`` before returning False so the caller
+    does not leave a world-readable state file behind for the
+    SessionStart cleanup hook to later pick up and trigger an unexpected
+    ``gh auth switch``.
+
     Args:
         state_file: Destination path returned by ``_state_file_path``.
         original_account: Login that was active before the swap.
@@ -115,6 +122,7 @@ def _write_swap_state(
     try:
         os.chmod(state_file, STATE_FILE_PERMISSION_MODE)
     except OSError:
+        _delete_state_file(state_file)
         return False
     return True
 

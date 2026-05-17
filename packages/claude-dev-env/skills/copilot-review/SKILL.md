@@ -33,7 +33,7 @@ the Copilot reviewer API, do not run any other step of this skill.
 PowerShell probe (Windows):
 
 ```pwsh
-$disabled = ($env:CLAUDE_REVIEWS_DISABLED -split ',' | ForEach-Object { $_.Trim().ToLower() })
+$disabled = ($env:CLAUDE_REVIEWS_DISABLED -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() })
 if ($disabled -contains 'copilot') { '/copilot-review is disabled via CLAUDE_REVIEWS_DISABLED.' }
 ```
 

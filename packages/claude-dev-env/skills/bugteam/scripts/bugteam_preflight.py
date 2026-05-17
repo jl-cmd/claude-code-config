@@ -258,12 +258,12 @@ def _is_bugteam_disabled_via_env() -> bool:
         (comma-separated, case-insensitive, whitespace-tolerant).
     """
     raw_value = os.environ.get(CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME, "")
-    disabled_tokens = frozenset(
+    all_disabled_tokens = frozenset(
         each_raw_token.strip().lower()
         for each_raw_token in raw_value.split(CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR)
         if each_raw_token.strip()
     )
-    return CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN in disabled_tokens
+    return CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN in all_disabled_tokens
 
 
 def main(all_argv: list[str] | None = None) -> int:

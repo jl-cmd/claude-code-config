@@ -272,12 +272,11 @@ def test_main_should_halt_when_env_var_lists_bugteam(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """CLAUDE_REVIEWS_DISABLED=bugteam must halt preflight with exit code 2."""
+    """CLAUDE_REVIEWS_DISABLED=bugteam must halt preflight with the dedicated exit code."""
     monkeypatch.setenv("CLAUDE_REVIEWS_DISABLED", "bugteam")
     monkeypatch.delenv("BUGTEAM_PREFLIGHT_SKIP", raising=False)
     exit_code = bugteam_preflight.main(["--no-pytest"])
     assert exit_code == bugteam_preflight.EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
-    assert exit_code == 2
     captured = capsys.readouterr()
     assert "CLAUDE_REVIEWS_DISABLED" in captured.err
     assert "bugteam" in captured.err
@@ -298,7 +297,6 @@ def test_main_should_continue_when_env_var_omits_bugteam(
         )
         exit_code = bugteam_preflight.main(["--no-pytest"])
     assert exit_code != bugteam_preflight.EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
-    assert exit_code != 2
 
 
 def test_main_should_halt_when_env_var_contains_uppercase_or_whitespace_bugteam_token(
@@ -308,4 +306,4 @@ def test_main_should_halt_when_env_var_contains_uppercase_or_whitespace_bugteam_
     monkeypatch.setenv("CLAUDE_REVIEWS_DISABLED", " BugTeam , copilot ")
     monkeypatch.delenv("BUGTEAM_PREFLIGHT_SKIP", raising=False)
     exit_code = bugteam_preflight.main(["--no-pytest"])
-    assert exit_code == 2
+    assert exit_code == bugteam_preflight.EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV

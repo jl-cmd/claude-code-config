@@ -35,7 +35,7 @@ First match wins; respond with the quoted line exactly and stop:
 - **Disabled via environment.** When `CLAUDE_REVIEWS_DISABLED` contains the
   token `bugteam` (comma-separated, case-insensitive, whitespace-tolerant):
   `/bugteam is disabled via CLAUDE_REVIEWS_DISABLED.` The pre-flight script
-  also exits 2 in this case so any caller invoking it directly halts on the
+  also exits 7 in this case so any caller invoking it directly halts on the
   same signal.
 - **No PR or upstream diff.** `No PR or upstream diff. /bugteam needs a target.`
 - **Dirty tree.** `Uncommitted changes detected. Stash, commit, or revert before

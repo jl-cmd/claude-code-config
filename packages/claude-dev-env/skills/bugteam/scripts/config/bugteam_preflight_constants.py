@@ -12,7 +12,7 @@ ENFORCEMENT_ABSENT_MESSAGE: str = (
 )
 PYTEST_EXIT_CODE_NO_TESTS_COLLECTED: int = 5
 EXIT_CODE_HOOKS_PATH_CHECK_FAILED: int = 1
-EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV: int = 2
+EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV: int = 7
 ALL_DISCOVERY_IGNORE_DIRECTORIES: frozenset[str] = frozenset(
     {"site-packages", ".venv", "venv", "node_modules"}
 )

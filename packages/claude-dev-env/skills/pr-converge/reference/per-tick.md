@@ -214,7 +214,7 @@ BUGBOT.
   `bugbot_down` exactly the way it does when bugbot CI is unavailable.
 - [ ] **Silent-pass pre-check.** Run `python ~/.claude/skills/pr-converge/scripts/check_bugbot_ci.py --check-clean --owner <O> --repo <R> --sha <current_head>`
 - [ ] Exit 0 → bugbot CI completed clean with no review (silent pass); set `bugbot_clean_at = current_head`, `phase = BUGTEAM`, continue BUGTEAM same tick
-- [ ] Exit 1 → continue with the trigger flow below
+- [ ] Exit 1 (not a silent pass) or Exit 2 (gh CLI error — silent pass not confirmable) → continue with the trigger flow below
 - [ ] Run `python ~/.claude/skills/pr-converge/scripts/check_bugbot_ci.py --check-active --owner <O> --repo <R> --sha <current_head>`
 - [ ] Exit 0 → bugbot already queued on this commit; skip posting, wait for completion
 - [ ] Exit 1 → post trigger via `add_issue_comment(owner="OWNER", repo="REPO", issueNumber=NUMBER, body="bugbot run")`

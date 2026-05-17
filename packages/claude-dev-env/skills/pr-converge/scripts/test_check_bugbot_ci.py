@@ -3,7 +3,9 @@
 Covers:
 - is_bugbot_run_clean returns True for completed success / completed neutral
 - is_bugbot_run_clean returns False for completed failure, in_progress, missing
-- main(--check-clean) returns 0 on clean and 1 on not-clean
+- is_bugbot_run_clean returns None when the gh CLI fails
+- main(--check-clean) returns 0 on clean, 1 on not-clean, and
+  EXIT_CODE_GH_ERROR on gh CLI failure (with stderr diagnostics)
 """
 
 from __future__ import annotations
@@ -125,7 +127,7 @@ def test_should_return_false_when_no_bugbot_check_run_present() -> None:
     assert is_clean is False
 
 
-def test_should_return_false_when_gh_cli_fails() -> None:
+def test_should_return_none_when_gh_cli_fails() -> None:
     failing_process = MagicMock(spec=subprocess.CompletedProcess)
     failing_process.stdout = ""
     failing_process.stderr = "boom"
@@ -138,7 +140,27 @@ def test_should_return_false_when_gh_cli_fails() -> None:
         is_clean = check_bugbot_ci_module.is_bugbot_run_clean(
             owner="acme", repo="repo", sha="abc"
         )
-    assert is_clean is False
+    assert is_clean is None
+
+
+def test_main_check_clean_should_return_gh_error_code_when_gh_cli_fails(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    failing_process = MagicMock(spec=subprocess.CompletedProcess)
+    failing_process.stdout = ""
+    failing_process.stderr = "boom"
+    failing_process.returncode = 1
+    with patch.object(
+        check_bugbot_ci_module,
+        "_run_check_runs_api",
+        return_value=failing_process,
+    ):
+        exit_code = check_bugbot_ci_module.main(
+            ["--check-clean", "--owner", "acme", "--repo", "repo", "--sha", "abc"]
+        )
+    assert exit_code == check_bugbot_ci_module.EXIT_CODE_GH_ERROR
+    captured = capsys.readouterr()
+    assert "gh api error: boom" in captured.err
 
 
 def test_main_check_clean_should_return_zero_when_bugbot_clean(

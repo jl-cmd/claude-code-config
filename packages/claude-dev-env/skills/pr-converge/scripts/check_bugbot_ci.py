@@ -135,28 +135,25 @@ def is_bugbot_run_active(*, owner: str, repo: str, sha: str) -> bool:
     return False
 
 
-def is_bugbot_run_clean(*, owner: str, repo: str, sha: str) -> bool:
-    """Check whether bugbot has a completed check run with a clean conclusion.
-
-    A "silent pass" is bugbot's signal that it found no issues: the CI
-    check run completes with a ``success`` or ``neutral`` conclusion and
-    no review comment is posted. This function detects that signal so
-    callers can treat it as equivalent to an explicit clean review.
+def _classify_bugbot_check_run(
+    completed_process: subprocess.CompletedProcess[str],
+) -> bool | None:
+    """Classify the bugbot check run state from a gh API process result.
 
     Args:
-        owner: GitHub repository owner.
-        repo: GitHub repository name.
-        sha: Commit SHA to check.
+        completed_process: Result of calling ``_run_check_runs_api``.
 
     Returns:
-        True when a bugbot check run is completed with a conclusion in
-        ``ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS``. False when the
-        check run is absent, still active, completed with a non-clean
-        conclusion, or when the gh CLI returns an error.
+        True when the captured stdout contains a bugbot check run with a
+        ``completed`` status and a conclusion in
+        ``ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS``. False when no such
+        check run is present (absent, still active, or completed with a
+        non-clean conclusion). None when ``completed_process.returncode``
+        is non-zero, signalling a gh CLI failure that the caller must
+        surface separately from "not clean".
     """
-    completed_process = _run_check_runs_api(owner=owner, repo=repo, sha=sha)
     if completed_process.returncode != 0:
-        return False
+        return None
     for each_line in completed_process.stdout.splitlines():
         stripped_line = each_line.strip()
         if not stripped_line:
@@ -182,6 +179,31 @@ def is_bugbot_run_clean(*, owner: str, repo: str, sha: str) -> bool:
         ):
             return True
     return False
+
+
+def is_bugbot_run_clean(*, owner: str, repo: str, sha: str) -> bool | None:
+    """Check whether bugbot has a completed check run with a clean conclusion.
+
+    A "silent pass" is bugbot's signal that it found no issues: the CI
+    check run completes with a ``success`` or ``neutral`` conclusion and
+    no review comment is posted. This function detects that signal so
+    callers can treat it as equivalent to an explicit clean review.
+
+    Args:
+        owner: GitHub repository owner.
+        repo: GitHub repository name.
+        sha: Commit SHA to check.
+
+    Returns:
+        True when a bugbot check run is completed with a conclusion in
+        ``ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS``. False when the
+        check run is absent, still active, or completed with a non-clean
+        conclusion. None when the gh CLI returns an error so the caller
+        can distinguish a transient API failure from a "not clean"
+        result.
+    """
+    completed_process = _run_check_runs_api(owner=owner, repo=repo, sha=sha)
+    return _classify_bugbot_check_run(completed_process)
 
 
 def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
@@ -228,14 +250,18 @@ def main(all_arguments: list[str]) -> int:
     """
     arguments = parse_arguments(all_arguments)
     if arguments.check_clean:
-        is_clean = is_bugbot_run_clean(
+        completed_process = _run_check_runs_api(
             owner=arguments.owner,
             repo=arguments.repo,
             sha=arguments.sha,
         )
-        if not is_clean:
+        if completed_process.returncode != 0:
+            print(f"gh api error: {completed_process.stderr}", file=sys.stderr)
+            return EXIT_CODE_GH_ERROR
+        is_clean = _classify_bugbot_check_run(completed_process)
+        if is_clean is not True:
             print("bugbot: not clean")
-        return 0 if is_clean else 1
+        return 0 if is_clean is True else 1
     if arguments.check_active:
         is_active = is_bugbot_run_active(
             owner=arguments.owner,

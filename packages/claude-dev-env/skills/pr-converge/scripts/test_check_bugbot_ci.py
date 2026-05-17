@@ -23,19 +23,34 @@ import pytest
 _SCRIPTS_DIRECTORY = Path(__file__).resolve().parent
 
 
-def _load_module() -> ModuleType:
-    if str(_SCRIPTS_DIRECTORY) not in sys.path:
-        sys.path.insert(0, str(_SCRIPTS_DIRECTORY))
+@pytest.fixture(scope="session")
+def check_bugbot_ci_module() -> ModuleType:
+    """Load check_bugbot_ci as an isolated module without polluting sys.path.
+
+    The production script performs its own membership-guarded
+    sys.path.insert during exec_module so its config dependency
+    resolves. Any previously cached ``config`` package from a sibling
+    test is evicted from sys.modules so the production script's
+    sys.path.insert can take effect for its own config package. The
+    eviction is scoped to this fixture: cached entries are restored
+    after exec_module returns so sibling tests are unaffected.
+    """
     module_path = _SCRIPTS_DIRECTORY / "check_bugbot_ci.py"
     spec = importlib.util.spec_from_file_location("check_bugbot_ci", module_path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    evicted_config_modules = {
+        each_module_name: sys.modules.pop(each_module_name)
+        for each_module_name in list(sys.modules)
+        if each_module_name == "config" or each_module_name.startswith("config.")
+    }
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        for each_module_name, each_module_value in evicted_config_modules.items():
+            sys.modules.setdefault(each_module_name, each_module_value)
     return module
-
-
-check_bugbot_ci_module = _load_module()
 
 
 def _make_completed_process(
@@ -52,7 +67,9 @@ def _build_stdout(*all_check_entries: dict[str, object]) -> str:
     return "\n".join(json.dumps(each_entry) for each_entry in all_check_entries) + "\n"
 
 
-def test_should_return_true_when_bugbot_completed_with_success_conclusion() -> None:
+def test_should_return_true_when_bugbot_completed_with_success_conclusion(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
     stdout = _build_stdout(
         {"name": "Cursor Bugbot", "status": "completed", "conclusion": "success"}
     )
@@ -67,7 +84,9 @@ def test_should_return_true_when_bugbot_completed_with_success_conclusion() -> N
     assert is_clean is True
 
 
-def test_should_return_true_when_bugbot_completed_with_neutral_conclusion() -> None:
+def test_should_return_true_when_bugbot_completed_with_neutral_conclusion(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
     stdout = _build_stdout(
         {"name": "bugbot", "status": "completed", "conclusion": "neutral"}
     )
@@ -82,7 +101,9 @@ def test_should_return_true_when_bugbot_completed_with_neutral_conclusion() -> N
     assert is_clean is True
 
 
-def test_should_return_false_when_bugbot_completed_with_failure_conclusion() -> None:
+def test_should_return_false_when_bugbot_completed_with_failure_conclusion(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
     stdout = _build_stdout(
         {"name": "Cursor Bugbot", "status": "completed", "conclusion": "failure"}
     )
@@ -97,7 +118,9 @@ def test_should_return_false_when_bugbot_completed_with_failure_conclusion() -> 
     assert is_clean is False
 
 
-def test_should_return_false_when_bugbot_still_in_progress() -> None:
+def test_should_return_false_when_bugbot_still_in_progress(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
     stdout = _build_stdout(
         {"name": "Cursor Bugbot", "status": "in_progress", "conclusion": None}
     )
@@ -112,7 +135,9 @@ def test_should_return_false_when_bugbot_still_in_progress() -> None:
     assert is_clean is False
 
 
-def test_should_return_false_when_no_bugbot_check_run_present() -> None:
+def test_should_return_false_when_no_bugbot_check_run_present(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
     stdout = _build_stdout(
         {"name": "ci-other", "status": "completed", "conclusion": "success"}
     )
@@ -127,7 +152,9 @@ def test_should_return_false_when_no_bugbot_check_run_present() -> None:
     assert is_clean is False
 
 
-def test_should_return_none_when_gh_cli_fails() -> None:
+def test_should_return_none_when_gh_cli_fails(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
     failing_process = MagicMock(spec=subprocess.CompletedProcess)
     failing_process.stdout = ""
     failing_process.stderr = "boom"
@@ -144,6 +171,7 @@ def test_should_return_none_when_gh_cli_fails() -> None:
 
 
 def test_main_check_clean_should_return_gh_error_code_when_gh_cli_fails(
+    check_bugbot_ci_module: ModuleType,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     failing_process = MagicMock(spec=subprocess.CompletedProcess)
@@ -164,6 +192,7 @@ def test_main_check_clean_should_return_gh_error_code_when_gh_cli_fails(
 
 
 def test_main_check_clean_should_return_zero_when_bugbot_clean(
+    check_bugbot_ci_module: ModuleType,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     stdout = _build_stdout(
@@ -183,6 +212,7 @@ def test_main_check_clean_should_return_zero_when_bugbot_clean(
 
 
 def test_main_check_clean_should_return_one_when_bugbot_not_clean(
+    check_bugbot_ci_module: ModuleType,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     stdout = _build_stdout(
@@ -201,7 +231,9 @@ def test_main_check_clean_should_return_one_when_bugbot_not_clean(
     assert "not clean" in captured.out
 
 
-def test_main_check_active_should_return_zero_when_bugbot_in_progress() -> None:
+def test_main_check_active_should_return_zero_when_bugbot_in_progress(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
     stdout = _build_stdout(
         {"name": "Cursor Bugbot", "status": "in_progress", "conclusion": None}
     )
@@ -217,6 +249,7 @@ def test_main_check_active_should_return_zero_when_bugbot_in_progress() -> None:
 
 
 def test_main_should_reject_check_clean_and_check_active_together(
+    check_bugbot_ci_module: ModuleType,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     with pytest.raises(SystemExit):

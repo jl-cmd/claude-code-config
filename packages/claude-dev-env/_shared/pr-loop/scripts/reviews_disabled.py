@@ -39,10 +39,13 @@ def is_bugteam_disabled_via_env() -> bool:
         True when the env var contains the literal ``bugteam`` token
         (comma-separated, case-insensitive, whitespace-tolerant).
     """
-    raw_value = os.environ.get(CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME, "")
+    reviews_disabled_env_var_name = CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME
+    reviews_disabled_token_separator = CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR
+    reviews_disabled_bugteam_token = CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN
+    raw_value = os.environ.get(reviews_disabled_env_var_name, "")
     all_disabled_tokens = frozenset(
         each_raw_token.strip().lower()
-        for each_raw_token in raw_value.split(CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR)
+        for each_raw_token in raw_value.split(reviews_disabled_token_separator)
         if each_raw_token.strip()
     )
-    return CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN in all_disabled_tokens
+    return reviews_disabled_bugteam_token in all_disabled_tokens

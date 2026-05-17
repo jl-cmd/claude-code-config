@@ -153,6 +153,20 @@ def test_validate_blocks_skeleton_body_with_only_headers_and_bullets() -> None:
     assert any("substantive prose" in each_violation.lower() for each_violation in violations)
 
 
+def test_validate_passes_prose_after_bare_hashes_with_no_space() -> None:
+    """Bug regression: `##\\n` followed by prose must not have its prose eaten by the heading regex.
+
+    The previous pattern `^#+\\s.*$` matched `\\s` against the newline, then `.*$` greedily
+    consumed the next line. The fix restricts the whitespace class to `[ \\t]` so only true
+    headings (`## text`) match, leaving prose-after-bare-hashes intact for substantive-prose counting.
+    """
+    body = (
+        "##\nThis is real prose that should not be eaten by the heading regex, "
+        "it should pass the 40-character minimum."
+    )
+    assert validate_pr_body(body) == []
+
+
 def test_validate_blocks_vague_language() -> None:
     body = VALID_BODY + "\nFixed bug in the auth module.\n"
     violations = validate_pr_body(body)

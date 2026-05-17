@@ -77,6 +77,7 @@ GH_USER_LOGIN_FIELD: str = "login"
 GH_PR_USER_FIELD: str = "user"
 GH_API_PR_PATH_TEMPLATE: str = "repos/{owner}/{repo}/pulls/{pr_number}"
 GH_AUTH_STATUS_ACCOUNT_LINE_MARKER: str = "Logged in to github.com account"
+GH_AUTH_STATUS_ACCOUNT_LINE_TOKEN_SEPARATOR: str = " "
 
 GH_TOKEN_ENV_VAR_NAME: str = "GH_TOKEN"
 GITHUB_TOKEN_ENV_VAR_NAME: str = "GITHUB_TOKEN"

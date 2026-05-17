@@ -66,6 +66,7 @@ from config.post_audit_thread_constants import (
     EXIT_CODE_USER_ERROR,
     GH_API_PR_PATH_TEMPLATE,
     GH_AUTH_STATUS_ACCOUNT_LINE_MARKER,
+    GH_AUTH_STATUS_ACCOUNT_LINE_TOKEN_SEPARATOR,
     GH_AUTH_TOKEN_USER_FLAG,
     GH_PR_USER_FIELD,
     GH_USER_LOGIN_FIELD,
@@ -705,14 +706,20 @@ def query_active_gh_user_login() -> str:
         UserInputError: ``gh`` not on PATH, the ``gh api /user`` call fails,
             or the response is missing a string ``login`` field.
     """
-    completion = subprocess.run(
-        list(ALL_GH_API_USER_COMMAND_PARTS),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completion = subprocess.run(
+            list(ALL_GH_API_USER_COMMAND_PARTS),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError as missing_gh_error:
+        raise UserInputError(
+            "`gh` CLI not installed or not on PATH; cannot query the active "
+            "github.com account login"
+        ) from missing_gh_error
     if completion.returncode != 0:
         raise UserInputError(
             f"`gh api /user` failed (exit {completion.returncode}): "
@@ -759,14 +766,20 @@ def query_pull_request_author_login(owner: str, repo: str, pr_number: int) -> st
     pull_request_api_path = GH_API_PR_PATH_TEMPLATE.format(
         owner=owner, repo=repo, pr_number=pr_number,
     )
-    completion = subprocess.run(
-        list(ALL_GH_API_COMMAND_PARTS) + [pull_request_api_path],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completion = subprocess.run(
+            list(ALL_GH_API_COMMAND_PARTS) + [pull_request_api_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError as missing_gh_error:
+        raise UserInputError(
+            "`gh` CLI not installed or not on PATH; cannot query the PR "
+            "author login"
+        ) from missing_gh_error
     if completion.returncode != 0:
         raise UserInputError(
             f"`gh api {pull_request_api_path}` failed (exit "
@@ -809,15 +822,24 @@ def list_authenticated_gh_account_logins() -> list[str]:
     Returns:
         List of login strings in the order ``gh auth status`` reports them.
         Empty list when no accounts are logged in.
+
+    Raises:
+        UserInputError: ``gh`` not on PATH.
     """
-    completion = subprocess.run(
-        list(ALL_GH_AUTH_STATUS_COMMAND_PARTS),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completion = subprocess.run(
+            list(ALL_GH_AUTH_STATUS_COMMAND_PARTS),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError as missing_gh_error:
+        raise UserInputError(
+            "`gh` CLI not installed or not on PATH; cannot list "
+            "authenticated github.com accounts"
+        ) from missing_gh_error
     output_text = (completion.stdout or "") + (completion.stderr or "")
     parsed_logins: list[str] = []
     for each_line in output_text.splitlines():
@@ -825,7 +847,7 @@ def list_authenticated_gh_account_logins() -> list[str]:
         if marker_index < 0:
             continue
         remainder = each_line[marker_index + len(GH_AUTH_STATUS_ACCOUNT_LINE_MARKER):].strip()
-        space_index = remainder.find(" ")
+        space_index = remainder.find(GH_AUTH_STATUS_ACCOUNT_LINE_TOKEN_SEPARATOR)
         login_candidate = remainder[:space_index] if space_index >= 0 else remainder
         if login_candidate and login_candidate not in parsed_logins:
             parsed_logins.append(login_candidate)
@@ -845,16 +867,23 @@ def fetch_gh_token_for_account(account_login: str) -> str:
         Cached gh token string, stripped of trailing whitespace.
 
     Raises:
-        UserInputError: gh call fails or returns empty output.
+        UserInputError: ``gh`` not on PATH, the call fails, or it returns
+            empty output.
     """
-    completion = subprocess.run(
-        list(ALL_GH_AUTH_TOKEN_COMMAND_PARTS) + [GH_AUTH_TOKEN_USER_FLAG, account_login],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
+    try:
+        completion = subprocess.run(
+            list(ALL_GH_AUTH_TOKEN_COMMAND_PARTS) + [GH_AUTH_TOKEN_USER_FLAG, account_login],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except FileNotFoundError as missing_gh_error:
+        raise UserInputError(
+            f"`gh` CLI not installed or not on PATH; cannot fetch token "
+            f"for account {account_login!r}"
+        ) from missing_gh_error
     if completion.returncode != 0:
         raise UserInputError(
             f"`gh auth token --user {account_login}` failed (exit "

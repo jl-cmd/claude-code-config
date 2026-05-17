@@ -42,9 +42,9 @@ for each_cached_module_name in [
 ]:
     sys.modules.pop(each_cached_module_name, None)
 _shared_pr_loop_scripts_directory = (
-    Path(__file__).resolve().parent
+    Path(__file__).absolute().parent
     / ".." / ".." / ".." / "_shared" / "pr-loop" / "scripts"
-).resolve()
+).absolute()
 if str(_shared_pr_loop_scripts_directory) not in sys.path:
     sys.path.insert(0, str(_shared_pr_loop_scripts_directory))
 

@@ -1044,15 +1044,30 @@ class LivePostAuditThreadTests(unittest.TestCase):
     def test_resolve_reviewer_token_honors_bugteam_reviewer_account_pin(self) -> None:
         previous_env_state = self._isolate_auth_env_vars()
         try:
-            os.environ[BUGTEAM_REVIEWER_ACCOUNT_ENV_VAR_NAME] = (
-                LIVE_TEST_AUDIT_ACCOUNT_NAME
+            pr_author_login = query_pull_request_author_login(
+                owner=LIVE_TEST_OWNER,
+                repo=LIVE_TEST_REPO,
+                pr_number=self.pr_number,
             )
+            all_alternates_excluding_pr_author = [
+                each_login
+                for each_login in list_authenticated_gh_account_logins()
+                if each_login.lower() != pr_author_login.lower()
+            ]
+            self.assertTrue(
+                all_alternates_excluding_pr_author,
+                "test setup requires at least one authenticated account that "
+                "is not the PR author so the pin has a valid target",
+            )
+            chosen_pin_login = all_alternates_excluding_pr_author[0]
+            os.environ[BUGTEAM_REVIEWER_ACCOUNT_ENV_VAR_NAME] = chosen_pin_login
             returned_token = resolve_reviewer_token(
                 owner=LIVE_TEST_OWNER,
                 repo=LIVE_TEST_REPO,
                 pr_number=self.pr_number,
             )
-            self.assertEqual(returned_token, self.audit_account_token)
+            expected_pinned_token = fetch_gh_token_for_account(chosen_pin_login)
+            self.assertEqual(returned_token, expected_pinned_token)
         finally:
             self._restore_auth_env_vars(previous_env_state)
 

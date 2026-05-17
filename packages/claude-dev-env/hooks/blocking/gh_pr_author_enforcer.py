@@ -31,47 +31,28 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
+import tempfile  # noqa: F401
 from pathlib import Path
-from typing import TextIO
 
+from _gh_pr_author_swap_utils import (
+    _command_invokes_gh_pr_create,
+    _state_file_path,
+    _strip_quoted_regions,
+    _switch_gh_account,
+    _write_line,
+)
 from config.gh_pr_author_swap_constants import (
     ALL_GH_API_USER_COMMAND,
-    ALL_GH_AUTH_SWITCH_COMMAND_HEAD,
-    ALL_SHELL_QUOTE_CHARACTERS,
     BASH_TOOL_NAME,
     COMMAND_SEPARATOR_PATTERN,
     GH_API_USER_TIMEOUT_SECONDS,
-    GH_AUTH_SWITCH_TIMEOUT_SECONDS,
     GH_PR_CREATE_PATTERN,
     REQUIRED_ACCOUNT_ENV_VAR,
-    SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH,
-    SHELL_QUOTE_REPLACEMENT_CHARACTER,
-    STATE_FILE_DEFAULT_SESSION_ID,
     STATE_FILE_ORIGINAL_ACCOUNT_KEY,
     STATE_FILE_PERMISSION_MODE,
-    STATE_FILE_PREFIX,
     STATE_FILE_PRIMARY_ACCOUNT_KEY,
-    STATE_FILE_SUFFIX,
     WEB_FLAG_PATTERN,
 )
-
-
-def _write_line(message: str, output_stream: TextIO) -> None:
-    """Write a single line to the caller-provided text stream.
-
-    Wrapping ``stream.write`` in a function that accepts an explicit
-    ``output_stream`` parameter satisfies the project's logging rule
-    (route through logger or accept an explicit stream parameter) without
-    pulling the logging module into a self-contained hook script.
-
-    Args:
-        message: Single line of output. A trailing newline is appended.
-        output_stream: Destination stream (typically ``sys.stdout`` for
-            the JSON deny payload or ``sys.stderr`` for diagnostics).
-    """
-    output_stream.write(message + "\n")
-    output_stream.flush()
 
 
 def _active_gh_account() -> str | None:
@@ -96,45 +77,6 @@ def _active_gh_account() -> str | None:
         return None
     stripped_login = completed_process.stdout.strip()
     return stripped_login or None
-
-
-def _switch_gh_account(to_account: str) -> bool:
-    """Run ``gh auth switch --user <to_account>`` and report success.
-
-    Args:
-        to_account: Login to switch the active gh CLI account to.
-
-    Returns:
-        True when the switch command exits zero. False when gh is missing,
-        the switch command exits non-zero, times out, or otherwise fails.
-    """
-    switch_command = list(ALL_GH_AUTH_SWITCH_COMMAND_HEAD) + [to_account]
-    try:
-        completed_process = subprocess.run(
-            switch_command,
-            capture_output=True,
-            text=True,
-            timeout=GH_AUTH_SWITCH_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.SubprocessError):
-        return False
-    return completed_process.returncode == 0
-
-
-def _state_file_path(session_id: str) -> Path:
-    """Return the per-session state-file path used to hand off to the restore hook.
-
-    Args:
-        session_id: ``session_id`` from the Claude Code hook input JSON.
-            Empty string falls back to ``STATE_FILE_DEFAULT_SESSION_ID``.
-
-    Returns:
-        Absolute path to the state file in the system temp directory.
-    """
-    effective_session_id = session_id or STATE_FILE_DEFAULT_SESSION_ID
-    filename = f"{STATE_FILE_PREFIX}{effective_session_id}{STATE_FILE_SUFFIX}"
-    return Path(tempfile.gettempdir()) / filename
 
 
 def _write_swap_state(
@@ -242,83 +184,6 @@ def _build_state_write_failure_message(
         f"  gh auth switch --user {current_account}\n\n"
         f"Then re-run `gh pr create` so the enforcer can retry the swap."
     )
-
-
-def _strip_quoted_regions(command: str) -> str:
-    """Replace double-quoted, single-quoted, and backtick-quoted regions with spaces.
-
-    The enforcer's matchers (``GH_PR_CREATE_PATTERN``,
-    ``WEB_FLAG_PATTERN``, ``COMMAND_SEPARATOR_PATTERN``) operate on the
-    raw command string. Without quote-stripping, a literal ``gh pr create``
-    or a ``-w`` token sitting inside a ``--body "..."`` argument would
-    false-positive into the matchers. Replacing each quoted region with
-    spaces of equal length preserves every offset so callers can keep
-    indexing the original command's match positions, while making the
-    quoted text inert to the regex search.
-
-    Backslash-escaped quotes inside a quoted region (``\\"`` inside a
-    double-quoted segment, ``\\'`` inside a single-quoted segment) do not
-    terminate the region. An unterminated quote consumes the rest of the
-    string; this matches how an interactive shell would parse the same
-    input and keeps the matchers from seeing tokens past a syntactically
-    broken command.
-
-    Args:
-        command: Raw bash command string from PreToolUse hook input.
-
-    Returns:
-        A string of identical length to ``command`` with every quoted
-        region's interior replaced by spaces. The quote characters
-        themselves are also replaced with spaces so a stray ``--body
-        "gh pr create"`` does not look like an invocation.
-    """
-    scanned_characters = list(command)
-    cursor_index = 0
-    command_length = len(command)
-    while cursor_index < command_length:
-        current_character = scanned_characters[cursor_index]
-        if current_character not in ALL_SHELL_QUOTE_CHARACTERS:
-            cursor_index += 1
-            continue
-        quote_character = current_character
-        scanned_characters[cursor_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
-        interior_index = cursor_index + 1
-        while interior_index < command_length:
-            interior_character = scanned_characters[interior_index]
-            if (
-                quote_character == "\""
-                and interior_character == "\\"
-                and interior_index + 1 < command_length
-            ):
-                scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
-                scanned_characters[interior_index + 1] = SHELL_QUOTE_REPLACEMENT_CHARACTER
-                interior_index += SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH
-                continue
-            if interior_character == quote_character:
-                scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
-                interior_index += 1
-                break
-            scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
-            interior_index += 1
-        cursor_index = interior_index
-    return "".join(scanned_characters)
-
-
-def _command_invokes_gh_pr_create(command: str) -> bool:
-    """Return True when the command string contains a ``gh pr create`` invocation.
-
-    Args:
-        command: Raw bash command string from PreToolUse hook input.
-
-    Returns:
-        True when ``gh pr create`` appears as a whole-word match outside
-        any quoted region. Matches regardless of whether ``gh`` is at the
-        start of the command or embedded in a chained pipeline. A literal
-        ``gh pr create`` inside ``echo "..."`` or any other quoted
-        argument is intentionally ignored.
-    """
-    quote_stripped_command = _strip_quoted_regions(command)
-    return bool(GH_PR_CREATE_PATTERN.search(quote_stripped_command))
 
 
 def _command_uses_web_flag(command: str) -> bool:

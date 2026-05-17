@@ -14,6 +14,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
@@ -24,33 +25,39 @@ _SCRIPTS_DIRECTORY = Path(__file__).resolve().parent
 
 
 @pytest.fixture(scope="session")
-def check_bugbot_ci_module() -> ModuleType:
-    """Load check_bugbot_ci as an isolated module without polluting sys.path.
+def check_bugbot_ci_module() -> Iterator[ModuleType]:
+    """Load check_bugbot_ci with full sys.path and sys.modules isolation.
 
-    The production script performs its own membership-guarded
-    sys.path.insert during exec_module so its config dependency
-    resolves. Any previously cached ``config`` package from a sibling
-    test is evicted from sys.modules so the production script's
-    sys.path.insert can take effect for its own config package. The
-    eviction is scoped to this fixture: cached entries are restored
-    after exec_module returns so sibling tests are unaffected.
+    Snapshots sys.path and sys.modules at session start; restores both
+    unconditionally at session teardown so sibling tests inherit a clean
+    loading environment. The production script performs its own
+    membership-guarded sys.path.insert during exec_module so its config
+    dependency resolves; that insert and any config.* modules it loads
+    are reverted on teardown.
     """
     module_path = _SCRIPTS_DIRECTORY / "check_bugbot_ci.py"
     spec = importlib.util.spec_from_file_location("check_bugbot_ci", module_path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys_path_snapshot = list(sys.path)
+    sys_modules_snapshot = dict(sys.modules)
     evicted_config_modules = {
         each_module_name: sys.modules.pop(each_module_name)
         for each_module_name in list(sys.modules)
         if each_module_name == "config" or each_module_name.startswith("config.")
     }
+    sys_modules_snapshot.update(evicted_config_modules)
+    spec.loader.exec_module(module)
     try:
-        spec.loader.exec_module(module)
+        yield module
     finally:
-        for each_module_name, each_module_value in evicted_config_modules.items():
-            sys.modules.setdefault(each_module_name, each_module_value)
-    return module
+        sys.path[:] = sys_path_snapshot
+        for each_new_module_name in list(sys.modules):
+            if each_new_module_name not in sys_modules_snapshot:
+                del sys.modules[each_new_module_name]
+        for each_module_name, each_module_value in sys_modules_snapshot.items():
+            sys.modules[each_module_name] = each_module_value
 
 
 def _make_completed_process(

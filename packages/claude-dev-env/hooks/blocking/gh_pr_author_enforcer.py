@@ -39,6 +39,7 @@ from config.gh_pr_author_swap_constants import (
     ALL_GH_API_USER_COMMAND,
     ALL_GH_AUTH_SWITCH_COMMAND_HEAD,
     BASH_TOOL_NAME,
+    COMMAND_SEPARATOR_PATTERN,
     GH_API_USER_TIMEOUT_SECONDS,
     GH_AUTH_SWITCH_TIMEOUT_SECONDS,
     GH_PR_CREATE_PATTERN,
@@ -185,6 +186,46 @@ def _build_switch_failure_message(required_account: str, current_account: str) -
     )
 
 
+def _build_state_write_failure_message(
+    required_account: str,
+    current_account: str,
+    state_file: Path,
+) -> str:
+    """Build the deny reason emitted when state-file persistence fails after a successful swap.
+
+    Args:
+        required_account: Value of GITHUB_DEFAULT_ACCOUNT (the swap target).
+        current_account: Login that was active before the swap (the
+            restore target the failed state file should have recorded).
+        state_file: Path the enforcer tried and failed to write.
+
+    Returns:
+        A multi-line corrective message explaining that the swap was
+        attempted and reversed, so the PR command is being denied to
+        prevent leaving the user on the wrong account. The reverse-switch
+        may itself have failed; the message tells the user to verify the
+        active account manually and gives the exact ``gh auth switch``
+        command needed to recover.
+    """
+    return (
+        f"BLOCKED [gh-pr-author]: swapped the active gh CLI account "
+        f"from `{current_account}` to `{required_account}` so "
+        f"`gh pr create` would author from the canonical account, but "
+        f"writing the per-session state file used to restore the prior "
+        f"account afterward failed. The swap was reversed to put "
+        f"`{current_account}` back in place, and `gh pr create` is being "
+        f"denied to prevent leaving the workflow in an inconsistent state.\n\n"
+        f"  Current (intended):   {current_account}\n"
+        f"  Required:             {required_account}  (from ${REQUIRED_ACCOUNT_ENV_VAR})\n"
+        f"  State file (failed):  {state_file}\n\n"
+        f"Verify the active account and recover manually if the reverse-switch "
+        f"also failed:\n"
+        f"  gh auth status\n"
+        f"  gh auth switch --user {current_account}\n\n"
+        f"Then re-run `gh pr create` so the enforcer can retry the swap."
+    )
+
+
 def _command_invokes_gh_pr_create(command: str) -> bool:
     """Return True when the command string contains a ``gh pr create`` invocation.
 
@@ -200,16 +241,33 @@ def _command_invokes_gh_pr_create(command: str) -> bool:
 
 
 def _command_uses_web_flag(command: str) -> bool:
-    """Return True when the command string contains a standalone --web or -w flag.
+    """Return True when ``--web`` / ``-w`` appears inside the ``gh pr create`` segment.
+
+    The flag is only relevant when it modifies the ``gh pr create``
+    invocation itself. A ``-w`` token belonging to an unrelated command
+    (for example ``curl -w '%{http_code}'``) before ``gh pr create``, or
+    a flag attached to a chained command after a separator like ``&&`` /
+    ``||`` / ``;`` / ``|``, must not flip the enforcer into the
+    browser-flow no-op path.
 
     Args:
         command: Raw bash command string from PreToolUse hook input.
 
     Returns:
-        True when ``--web`` or ``-w`` appears as a whole token. Substrings
-        like ``--webhook`` are not matched.
+        True when ``--web`` or ``-w`` appears as a whole token between
+        the ``gh pr create`` match and the next shell command separator
+        (or end of string). Substrings like ``--webhook`` are not
+        matched. False when ``gh pr create`` is absent or the flag falls
+        outside its segment.
     """
-    return bool(WEB_FLAG_PATTERN.search(command))
+    gh_pr_create_match = GH_PR_CREATE_PATTERN.search(command)
+    if gh_pr_create_match is None:
+        return False
+    segment_start = gh_pr_create_match.end()
+    separator_match = COMMAND_SEPARATOR_PATTERN.search(command, segment_start)
+    segment_end = separator_match.start() if separator_match else len(command)
+    gh_pr_create_segment = command[segment_start:segment_end]
+    return bool(WEB_FLAG_PATTERN.search(gh_pr_create_segment))
 
 
 def _emit_deny_payload(reason_text: str) -> None:
@@ -271,11 +329,21 @@ def main() -> None:
         sys.exit(0)
 
     session_id = str(hook_input.get("session_id") or "")
-    _write_swap_state(
-        _state_file_path(session_id),
+    state_file = _state_file_path(session_id)
+    state_write_succeeded = _write_swap_state(
+        state_file,
         original_account=current_account,
         primary_account=required_account,
     )
+    if not state_write_succeeded:
+        _switch_gh_account(current_account)
+        _emit_deny_payload(
+            _build_state_write_failure_message(
+                required_account,
+                current_account,
+                state_file,
+            )
+        )
     sys.exit(0)
 
 

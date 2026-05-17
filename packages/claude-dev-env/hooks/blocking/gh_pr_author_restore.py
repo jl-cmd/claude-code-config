@@ -197,6 +197,8 @@ def main() -> None:
     state_file = _state_file_path(session_id)
     original_account = _read_original_account(state_file)
     if original_account is None:
+        if state_file.exists():
+            _delete_state_file(state_file)
         sys.exit(0)
 
     _switch_gh_account(original_account)

@@ -220,6 +220,7 @@ def test_main_no_op_on_malformed_state_file(
     assert exit_code == 0
     assert stdout_text == ""
     assert switch_invocations == []
+    assert not state_file.exists()
 
 
 def test_main_no_op_when_state_file_missing_original_account(
@@ -240,6 +241,67 @@ def test_main_no_op_when_state_file_missing_original_account(
     assert exit_code == 0
     assert stdout_text == ""
     assert switch_invocations == []
+    assert not state_file.exists()
+
+
+def test_main_deletes_state_file_when_original_account_wrong_type(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    state_file = hook_module._state_file_path("test-session-001")
+    state_file.write_text(
+        json.dumps({"original_account": 42, "primary_account": "JonEcho"}),
+        encoding="utf-8",
+    )
+
+    exit_code, stdout_text, switch_invocations = _run_hook_with(
+        _make_stdin_payload("gh pr create --title T"),
+        monkeypatch=monkeypatch,
+        switch_succeeds=True,
+    )
+    assert exit_code == 0
+    assert stdout_text == ""
+    assert switch_invocations == []
+    assert not state_file.exists()
+
+
+def test_main_deletes_state_file_when_original_account_blank(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    state_file = hook_module._state_file_path("test-session-001")
+    state_file.write_text(
+        json.dumps({"original_account": "   ", "primary_account": "JonEcho"}),
+        encoding="utf-8",
+    )
+
+    exit_code, stdout_text, switch_invocations = _run_hook_with(
+        _make_stdin_payload("gh pr create --title T"),
+        monkeypatch=monkeypatch,
+        switch_succeeds=True,
+    )
+    assert exit_code == 0
+    assert stdout_text == ""
+    assert switch_invocations == []
+    assert not state_file.exists()
+
+
+def test_main_no_op_does_not_create_state_file_when_absent(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    state_file = hook_module._state_file_path("test-session-001")
+    assert not state_file.exists()
+
+    exit_code, stdout_text, switch_invocations = _run_hook_with(
+        _make_stdin_payload("gh pr create --title T"),
+        monkeypatch=monkeypatch,
+        switch_succeeds=True,
+    )
+    assert exit_code == 0
+    assert stdout_text == ""
+    assert switch_invocations == []
+    assert not state_file.exists()
 
 
 def test_main_per_session_key_isolation(

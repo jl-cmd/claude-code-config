@@ -102,6 +102,54 @@ def test_command_uses_web_flag_rejects_webhook_substring() -> None:
     assert not hook_module._command_uses_web_flag("gh pr create --webhook=foo")
 
 
+def test_command_uses_web_flag_ignores_curl_w_flag_before_gh() -> None:
+    assert not hook_module._command_uses_web_flag(
+        "curl -w '%{http_code}' url && gh pr create --title T"
+    )
+
+
+def test_command_uses_web_flag_ignores_w_after_separator() -> None:
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T && other-cmd -w"
+    )
+
+
+def test_command_uses_web_flag_detects_web_inside_gh_pr_create() -> None:
+    assert hook_module._command_uses_web_flag("gh pr create --web --title T")
+
+
+def test_command_uses_web_flag_detects_short_w_inside_gh_pr_create() -> None:
+    assert hook_module._command_uses_web_flag("gh pr create -w --title T")
+
+
+def test_command_uses_web_flag_handles_gh_pr_create_without_web() -> None:
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T --body-file B"
+    )
+
+
+def test_command_uses_web_flag_returns_false_when_gh_pr_create_absent() -> None:
+    assert not hook_module._command_uses_web_flag("curl -w '%{http_code}' url")
+
+
+def test_command_uses_web_flag_ignores_w_after_pipe_separator() -> None:
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T | tee -w log"
+    )
+
+
+def test_command_uses_web_flag_ignores_w_after_semicolon_separator() -> None:
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T ; other-cmd -w"
+    )
+
+
+def test_command_uses_web_flag_ignores_w_after_or_separator() -> None:
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T || fallback -w"
+    )
+
+
 def test_main_auto_switches_when_active_account_mismatches(
     monkeypatch: pytest.MonkeyPatch,
     required_account_jonecho: str,
@@ -366,3 +414,64 @@ def test_switch_gh_account_returns_false_on_timeout() -> None:
         side_effect=hook_module.subprocess.TimeoutExpired(cmd="gh", timeout=10),
     ):
         assert hook_module._switch_gh_account("JonEcho") is False
+
+
+def test_main_denies_and_reverses_switch_when_state_write_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    required_account_jonecho: str,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    monkeypatch.setattr(
+        hook_module,
+        "_write_swap_state",
+        lambda state_file, original_account, primary_account: False,
+    )
+    exit_code, stdout_text, switch_invocations = _run_hook_with(
+        _make_stdin_payload("gh pr create --title T --body-file B"),
+        active_account_or_none="jl-cmd",
+        monkeypatch=monkeypatch,
+        switch_succeeds=True,
+    )
+    assert exit_code == 0
+    assert switch_invocations == ["JonEcho", "jl-cmd"]
+    payload = json.loads(stdout_text)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    deny_reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "state file" in deny_reason.lower()
+    assert "JonEcho" in deny_reason
+    assert "jl-cmd" in deny_reason
+
+
+def test_main_emits_deny_even_when_reverse_switch_also_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    required_account_jonecho: str,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(_make_stdin_payload("gh pr create --title T")))
+    captured_stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_stdout)
+    monkeypatch.setattr(hook_module, "_active_gh_account", lambda: "jl-cmd")
+    monkeypatch.setattr(
+        hook_module,
+        "_write_swap_state",
+        lambda state_file, original_account, primary_account: False,
+    )
+
+    switch_invocations: list[str] = []
+
+    def _fake_switch_first_succeeds_second_fails(to_account: str) -> bool:
+        switch_invocations.append(to_account)
+        return len(switch_invocations) == 1
+
+    monkeypatch.setattr(hook_module, "_switch_gh_account", _fake_switch_first_succeeds_second_fails)
+
+    with pytest.raises(SystemExit) as exit_info:
+        hook_module.main()
+    exit_code = exit_info.value.code if isinstance(exit_info.value.code, int) else 0
+
+    assert exit_code == 0
+    assert switch_invocations == ["JonEcho", "jl-cmd"]
+    payload = json.loads(captured_stdout.getvalue())
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    deny_reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "state file" in deny_reason.lower()

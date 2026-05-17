@@ -21,7 +21,11 @@ from config.bugteam_preflight_constants import (
     ALL_PRE_COMMIT_ARGUMENTS,
     BUGTEAM_PREFLIGHT_PREFIX,
     BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME,
+    CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN,
+    CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME,
+    CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR,
     ENFORCEMENT_ABSENT_MESSAGE,
+    EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV,
     EXIT_CODE_HOOKS_PATH_CHECK_FAILED,
     EXPECTED_HOOKS_PATH_SUFFIX,
     GIT_DIRECTORY_NAME,
@@ -246,6 +250,22 @@ def parse_arguments(all_argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(all_argv)
 
 
+def _is_bugteam_disabled_via_env() -> bool:
+    """Check whether CLAUDE_REVIEWS_DISABLED opts bugteam out of running.
+
+    Returns:
+        True when the env var contains the literal `bugteam` token
+        (comma-separated, case-insensitive, whitespace-tolerant).
+    """
+    raw_value = os.environ.get(CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME, "")
+    disabled_tokens = frozenset(
+        each_raw_token.strip().lower()
+        for each_raw_token in raw_value.split(CLAUDE_REVIEWS_DISABLED_TOKEN_SEPARATOR)
+        if each_raw_token.strip()
+    )
+    return CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN in disabled_tokens
+
+
 def main(all_argv: list[str] | None = None) -> int:
     """Run the bugteam preflight checks (pytest, optional pre-commit).
 
@@ -259,6 +279,14 @@ def main(all_argv: list[str] | None = None) -> int:
     if os.environ.get(BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME, "").strip() == "1":
         print(f"{BUGTEAM_PREFLIGHT_PREFIX}skipped (BUGTEAM_PREFLIGHT_SKIP=1).", file=sys.stderr)
         return 0
+    if _is_bugteam_disabled_via_env():
+        print(
+            f"{BUGTEAM_PREFLIGHT_PREFIX}halted "
+            f"({CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME} contains "
+            f"'{CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN}').",
+            file=sys.stderr,
+        )
+        return EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
     start = Path.cwd()
     resolved_repository_root: Path = (
         arguments.repo_root.resolve()

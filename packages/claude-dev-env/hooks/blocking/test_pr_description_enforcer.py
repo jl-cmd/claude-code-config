@@ -153,6 +153,20 @@ def test_validate_blocks_skeleton_body_with_only_headers_and_bullets() -> None:
     assert any("substantive prose" in each_violation.lower() for each_violation in violations)
 
 
+def test_validate_blocks_blockquoted_headings_with_no_real_prose() -> None:
+    """Regression: blockquote markers must strip BEFORE heading stripping.
+
+    A line like `> ## Summary` starts with `>`, so `^#+[ \\t].*$` cannot match it
+    in heading position. If blockquote markers are stripped after, the bare
+    `## Summary` text survives into the prose stream and inflates the count.
+    Correct order strips `> ` first, then the line becomes a real heading and
+    drops out, leaving an effectively empty body below the 40-character minimum.
+    """
+    body = "> ## Summary\n> ## Why\n> ## How"
+    violations = validate_pr_body(body)
+    assert any("substantive prose" in each_violation.lower() for each_violation in violations)
+
+
 def test_validate_passes_prose_after_bare_hashes_with_no_space() -> None:
     """Bug regression: `##\\n` followed by prose must not have its prose eaten by the heading regex.
 

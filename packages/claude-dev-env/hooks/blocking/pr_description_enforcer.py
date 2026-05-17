@@ -293,9 +293,9 @@ def _count_substantive_prose_chars(body: str) -> int:
     """
     body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub('', body)
     body_without_inline_code = INLINE_CODE_PATTERN.sub('', body_without_fences)
-    body_without_headings = HEADING_LINE_PATTERN.sub('', body_without_inline_code)
-    body_without_blockquotes = BLOCKQUOTE_MARKER_PATTERN.sub('', body_without_headings)
-    body_without_bullets = BULLET_MARKER_PATTERN.sub('', body_without_blockquotes)
+    body_without_blockquotes = BLOCKQUOTE_MARKER_PATTERN.sub('', body_without_inline_code)
+    body_without_headings = HEADING_LINE_PATTERN.sub('', body_without_blockquotes)
+    body_without_bullets = BULLET_MARKER_PATTERN.sub('', body_without_headings)
     body_without_bold = BOLD_PAIR_PATTERN.sub(r'\1', body_without_bullets)
     body_without_emphasis = body_without_bold.replace('*', '')
     body_without_links = LINK_TEXT_PATTERN.sub(r'\1', body_without_emphasis)

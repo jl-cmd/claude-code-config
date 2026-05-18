@@ -502,11 +502,30 @@ def test_strip_quoted_regions_preserves_offsets_for_single_quotes() -> None:
     assert "single quoted body" not in stripped_command
 
 
-def test_strip_quoted_regions_preserves_offsets_for_backticks() -> None:
+def test_strip_quoted_regions_preserves_backtick_substitution_body() -> None:
+    """Backticks delimit command substitution, which executes — the body must remain scannable."""
     original_command = "echo `inner cmd` && gh pr create --title T"
     stripped_command = hook_module._strip_quoted_regions(original_command)
     assert len(stripped_command) == len(original_command)
-    assert "inner cmd" not in stripped_command
+    assert "inner cmd" in stripped_command
+    assert "gh pr create" in stripped_command
+
+
+def test_strip_quoted_regions_preserves_dollar_paren_substitution_body() -> None:
+    """``$(...)`` substitution body must remain scannable for the same reason as backticks."""
+    original_command = "echo $(inner cmd) && gh pr create --title T"
+    stripped_command = hook_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "inner cmd" in stripped_command
+    assert "gh pr create" in stripped_command
+
+
+def test_strip_quoted_regions_preserves_dollar_paren_inside_double_quotes() -> None:
+    """``"$(...)"`` substitution body remains scannable even when wrapped in double quotes."""
+    original_command = 'echo "$(inner cmd)" && gh pr create --title T'
+    stripped_command = hook_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "inner cmd" in stripped_command
     assert "gh pr create" in stripped_command
 
 
@@ -589,3 +608,133 @@ def test_write_swap_state_unlinks_file_when_chmod_fails(
     )
     assert has_written_state is False
     assert not state_file.exists()
+
+
+def test_module_imports_and_main_runs_under_production_sys_path_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Module imports cleanly AND main() executes a no-op path when only blocking/ is on sys.path.
+
+    pytest's ``pythonpath = packages/claude-dev-env/hooks`` lets the
+    in-test import work even without the sys.path shim. The Claude Code
+    hook runner does NOT set that path — it invokes
+    ``python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/gh_pr_author_enforcer.py``,
+    so only ``blocking/`` lands on sys.path. This test reproduces that
+    layout, imports the module via its own sys.path shim, then exercises
+    ``main()`` against a non-Bash tool_name so the no-op path runs end to
+    end — proving the module not only imports without
+    ``ModuleNotFoundError`` but also executes correctly under the
+    production layout.
+    """
+    blocking_dir = pathlib.Path(__file__).resolve().parent
+    monkeypatch.setattr(sys, "path", [str(blocking_dir)])
+    spec = importlib.util.spec_from_file_location(
+        "gh_pr_author_enforcer_production_path_check",
+        blocking_dir / "gh_pr_author_enforcer.py",
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    fresh_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fresh_module)
+    non_bash_hook_payload = json.dumps({"tool_name": "Read", "tool_input": {}})
+    monkeypatch.setattr(sys, "stdin", io.StringIO(non_bash_hook_payload))
+    captured_stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_stdout)
+    with pytest.raises(SystemExit) as exit_info:
+        fresh_module.main()
+    assert exit_info.value.code == 0
+    assert captured_stdout.getvalue() == ""
+
+
+def test_command_uses_web_flag_false_when_one_of_two_gh_pr_create_lacks_web() -> None:
+    """Chained ``gh pr create --web && gh pr create --title T`` must trigger the enforcer.
+
+    The first segment's ``--web`` does not exempt the second segment.
+    A short-circuiting ``all()`` over every segment returns False when
+    any segment lacks the flag, so ``_command_uses_web_flag`` returns
+    False here and the enforcer proceeds to its swap path.
+    """
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --web && gh pr create --title T"
+    )
+
+
+def test_command_uses_web_flag_true_when_both_gh_pr_create_have_web() -> None:
+    """Two chained ``gh pr create`` invocations both carrying ``--web`` are still browser-flow."""
+    assert hook_module._command_uses_web_flag(
+        "gh pr create --web && gh pr create --web --title T"
+    )
+
+
+def test_command_uses_web_flag_ignores_w_after_newline_separator() -> None:
+    """Newline counts as a command separator; ``-w`` on the next line does not bind to gh pr create."""
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T\ncurl -w '%{http_code}'"
+    )
+
+
+def test_command_substitution_with_gh_pr_create_inside_is_still_detected() -> None:
+    """``$(...)`` substitution body executes, so an inner ``gh pr create`` is real."""
+    assert hook_module._command_invokes_gh_pr_create(
+        'echo "$(gh pr create --title T)"'
+    )
+
+
+def test_backtick_substitution_with_gh_pr_create_inside_is_still_detected() -> None:
+    """Backtick substitution body executes, so an inner ``gh pr create`` is real."""
+    assert hook_module._command_invokes_gh_pr_create(
+        "echo `gh pr create --title T`"
+    )
+
+
+def test_write_swap_state_does_not_overwrite_symlink_target(
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """A symlink at the predictable state path must never let the enforcer overwrite the target.
+
+    On POSIX ``O_NOFOLLOW`` causes the atomic ``os.open`` to fail
+    immediately, so ``_write_swap_state`` returns False and the
+    attacker's target file is untouched. On Windows ``O_NOFOLLOW`` is
+    not exposed, but ``O_EXCL`` still rejects the create against the
+    existing symlink — the retry then unlinks the symlink (not the
+    target) and writes a fresh state file at the predictable path,
+    again leaving the attacker's target untouched.
+
+    The security guarantee being tested is "the attacker file is not
+    written to," which holds on both platforms.
+    """
+    if not hasattr(os, "symlink"):
+        return
+    state_file = hook_module._state_file_path("symlink-attack-session")
+    attacker_target_file = isolated_state_directory / "attacker_target.txt"
+    untouched_marker_text = "untouched-by-attack"
+    attacker_target_file.write_text(untouched_marker_text, encoding="utf-8")
+    try:
+        os.symlink(attacker_target_file, state_file)
+    except (OSError, NotImplementedError):
+        return
+    hook_module._write_swap_state(
+        state_file,
+        original_account="jl-cmd",
+        primary_account="JonEcho",
+    )
+    assert attacker_target_file.read_text(encoding="utf-8") == untouched_marker_text
+
+
+def test_write_swap_state_recovers_after_stale_file_collision(
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """A stale file at the predictable path is unlinked and the create retried once."""
+    state_file = hook_module._state_file_path("stale-collision-session")
+    state_file.write_text("stale-prior-session-contents", encoding="utf-8")
+    has_written_state = hook_module._write_swap_state(
+        state_file,
+        original_account="jl-cmd",
+        primary_account="JonEcho",
+    )
+    assert has_written_state is True
+    persisted_state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert persisted_state == {
+        "original_account": "jl-cmd",
+        "primary_account": "JonEcho",
+    }

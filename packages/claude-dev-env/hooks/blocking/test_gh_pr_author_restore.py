@@ -415,3 +415,39 @@ def test_main_logs_high_level_failure_when_restore_switch_fails(
     assert "[gh-pr-author-restore] failed to restore" in captured_streams.err
     assert "'jl-cmd'" in captured_streams.err
     assert str(state_file) in captured_streams.err
+
+
+def test_module_imports_and_main_runs_under_production_sys_path_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Module imports cleanly AND main() executes a no-op path when only blocking/ is on sys.path.
+
+    pytest's ``pythonpath = packages/claude-dev-env/hooks`` lets the
+    in-test import work even without the sys.path shim. The Claude Code
+    hook runner does NOT set that path — it invokes
+    ``python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/gh_pr_author_restore.py``,
+    so only ``blocking/`` lands on sys.path. This test reproduces that
+    layout, imports the module via its own sys.path shim, then exercises
+    ``main()`` against a non-Bash tool_name so the no-op path runs end to
+    end — proving the module not only imports without
+    ``ModuleNotFoundError`` but also executes correctly under the
+    production layout.
+    """
+    blocking_dir = pathlib.Path(__file__).resolve().parent
+    monkeypatch.setattr(sys, "path", [str(blocking_dir)])
+    spec = importlib.util.spec_from_file_location(
+        "gh_pr_author_restore_production_path_check",
+        blocking_dir / "gh_pr_author_restore.py",
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    fresh_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fresh_module)
+    non_bash_hook_payload = json.dumps({"tool_name": "Read", "tool_input": {}})
+    monkeypatch.setattr(sys, "stdin", io.StringIO(non_bash_hook_payload))
+    captured_stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_stdout)
+    with pytest.raises(SystemExit) as exit_info:
+        fresh_module.main()
+    assert exit_info.value.code == 0
+    assert captured_stdout.getvalue() == ""

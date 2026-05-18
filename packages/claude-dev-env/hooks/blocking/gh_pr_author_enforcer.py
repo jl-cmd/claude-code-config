@@ -34,7 +34,12 @@ import sys
 import tempfile  # noqa: F401
 from pathlib import Path
 
-from _gh_pr_author_swap_utils import (
+_hooks_tree_path = str(Path(__file__).resolve().parent.parent)
+if _hooks_tree_path not in sys.path:
+    sys.path.insert(0, _hooks_tree_path)
+
+from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must run first
+    _all_gh_pr_create_segments,
     _command_invokes_gh_pr_create,
     _delete_state_file,
     _state_file_path,
@@ -42,12 +47,11 @@ from _gh_pr_author_swap_utils import (
     _switch_gh_account,
     _write_line,
 )
-from config.gh_pr_author_swap_constants import (
+from config.gh_pr_author_swap_constants import (  # noqa: E402  # sys.path shim above must run first
     ALL_GH_API_USER_COMMAND,
     BASH_TOOL_NAME,
-    COMMAND_SEPARATOR_PATTERN,
     GH_API_USER_TIMEOUT_SECONDS,
-    GH_PR_CREATE_PATTERN,
+    OS_O_NOFOLLOW_ATTRIBUTE_NAME,
     REQUIRED_ACCOUNT_ENV_VAR,
     STATE_FILE_ORIGINAL_ACCOUNT_KEY,
     STATE_FILE_PERMISSION_MODE,
@@ -87,14 +91,23 @@ def _write_swap_state(
 ) -> bool:
     """Persist the swap-back state for the PostToolUse restore hook.
 
-    The state file is chmod'd to ``STATE_FILE_PERMISSION_MODE`` (``0o600``)
-    immediately after the write so other accounts on a shared POSIX
-    workstation cannot read which gh CLI account is in use. Windows
-    ignores POSIX mode bits, so this is a no-op there — the primary
-    target platform's ``tempfile.gettempdir()`` is already per-user
-    (``%LOCALAPPDATA%\\Temp``).
+    The state file is created atomically with ``os.open`` using
+    ``O_WRONLY | O_CREAT | O_EXCL`` (plus ``O_NOFOLLOW`` on platforms
+    that expose it) so an attacker on a shared POSIX workstation cannot
+    pre-create the predictable path as a symlink pointing at an
+    arbitrary writable file. The mode bits are set at create time so
+    the file is never momentarily world-readable between ``open`` and
+    ``chmod``. A defense-in-depth ``chmod`` call follows the write in
+    case the platform's umask honored the ``mode`` argument differently
+    than expected.
 
-    A chmod failure after a successful write unlinks the partially-written
+    A stale file left by a crashed prior session can collide with the
+    ``O_EXCL`` guard. The function unlinks such a file and retries the
+    create exactly once; a second collision is treated as a write
+    failure so the caller does not silently overwrite something it did
+    not create.
+
+    A failure after a successful write unlinks the partially-written
     file via ``_delete_state_file`` before returning False so the caller
     does not leave a world-readable state file behind for the
     SessionStart cleanup hook to later pick up and trigger an unexpected
@@ -106,25 +119,70 @@ def _write_swap_state(
         primary_account: Login swapped to (always ``GITHUB_DEFAULT_ACCOUNT``).
 
     Returns:
-        True when both the write and the permission chmod succeed. False
-        on any filesystem failure. A chmod failure on a platform that
-        honors POSIX modes is treated the same as a write failure so the
-        caller does not leave a world-readable state file behind.
+        True when the atomic create, write, and chmod all succeed.
+        False on any filesystem failure. A failure at any stage unlinks
+        any partially-written file so the caller does not leave a
+        world-readable state file behind.
     """
     swap_state = {
         STATE_FILE_ORIGINAL_ACCOUNT_KEY: original_account,
         STATE_FILE_PRIMARY_ACCOUNT_KEY: primary_account,
     }
-    try:
-        state_file.write_text(json.dumps(swap_state), encoding="utf-8")
-    except OSError:
+    serialized_payload = json.dumps(swap_state).encode("utf-8")
+    open_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, OS_O_NOFOLLOW_ATTRIBUTE_NAME):
+        open_flags |= os.O_NOFOLLOW
+    file_descriptor = _open_state_file_with_retry(state_file, open_flags)
+    if file_descriptor is None:
         return False
+    try:
+        os.write(file_descriptor, serialized_payload)
+    except OSError:
+        os.close(file_descriptor)
+        _delete_state_file(state_file)
+        return False
+    os.close(file_descriptor)
     try:
         os.chmod(state_file, STATE_FILE_PERMISSION_MODE)
     except OSError:
         _delete_state_file(state_file)
         return False
     return True
+
+
+def _open_state_file_with_retry(state_file: Path, open_flags: int) -> int | None:
+    """Open the state file atomically, unlinking a stale collision once.
+
+    The enforcer can race against a state file left behind by a prior
+    crashed session at the same predictable path. The first ``O_EXCL``
+    open raises ``FileExistsError`` in that case; the function unlinks
+    the stale file and retries exactly once. A second ``FileExistsError``
+    is treated as a genuine race against a concurrent process and
+    surfaces as ``None`` so the caller can fall back to its deny path.
+
+    Args:
+        state_file: Destination path returned by ``_state_file_path``.
+        open_flags: Bitmask passed to ``os.open`` — must include
+            ``O_EXCL`` so this retry logic can distinguish "stale file
+            collision" from "wrote a fresh file".
+
+    Returns:
+        A file descriptor on success. ``None`` when both the initial
+        open and the post-unlink retry fail.
+    """
+    try:
+        return os.open(state_file, open_flags, STATE_FILE_PERMISSION_MODE)
+    except FileExistsError:
+        try:
+            state_file.unlink()
+        except OSError:
+            return None
+    except OSError:
+        return None
+    try:
+        return os.open(state_file, open_flags, STATE_FILE_PERMISSION_MODE)
+    except OSError:
+        return None
 
 
 def _build_switch_failure_message(required_account: str, current_account: str) -> str:
@@ -195,36 +253,41 @@ def _build_state_write_failure_message(
 
 
 def _command_uses_web_flag(command: str) -> bool:
-    """Return True when ``--web`` / ``-w`` appears inside the ``gh pr create`` segment.
+    """Return True when EVERY ``gh pr create`` segment uses ``--web`` / ``-w``.
 
     The flag is only relevant when it modifies the ``gh pr create``
     invocation itself. A ``-w`` token belonging to an unrelated command
     (for example ``curl -w '%{http_code}'``) before ``gh pr create``, or
     a flag attached to a chained command after a separator like ``&&`` /
-    ``||`` / ``;`` / ``|``, must not flip the enforcer into the
-    browser-flow no-op path. A ``-w`` sitting inside a quoted argument
-    (for example ``--body "see -w docs"``) likewise must not match.
+    ``||`` / ``;`` / ``|`` / newline, must not flip the enforcer into
+    the browser-flow no-op path. A ``-w`` sitting inside a quoted
+    argument (for example ``--body "see -w docs"``) likewise must not
+    match.
+
+    When the command chains multiple ``gh pr create`` invocations
+    (``gh pr create --web && gh pr create --title T``), the enforcer
+    must trigger as long as ANY of them omits the web flag — otherwise
+    the second invocation would slip through under the active account.
+    A short-circuiting ``all()`` over every segment gives that
+    "browser-flow only when EVERY segment opts in" semantics.
 
     Args:
         command: Raw bash command string from PreToolUse hook input.
 
     Returns:
-        True when ``--web`` or ``-w`` appears as a whole token between
-        the ``gh pr create`` match and the next shell command separator
-        (or end of string), with quoted regions stripped before the
-        scan. Substrings like ``--webhook`` are not matched. False when
-        ``gh pr create`` is absent or the flag falls outside its
-        segment.
+        True when every ``gh pr create`` segment in ``command`` carries
+        ``--web`` or ``-w`` as a whole token (with quoted regions
+        stripped before the scan). False when ``gh pr create`` is
+        absent, or when any segment lacks the flag.
     """
     quote_stripped_command = _strip_quoted_regions(command)
-    gh_pr_create_match = GH_PR_CREATE_PATTERN.search(quote_stripped_command)
-    if gh_pr_create_match is None:
+    all_gh_pr_create_segments = _all_gh_pr_create_segments(quote_stripped_command)
+    if not all_gh_pr_create_segments:
         return False
-    segment_start = gh_pr_create_match.end()
-    separator_match = COMMAND_SEPARATOR_PATTERN.search(quote_stripped_command, segment_start)
-    segment_end = separator_match.start() if separator_match else len(quote_stripped_command)
-    gh_pr_create_segment = quote_stripped_command[segment_start:segment_end]
-    return bool(WEB_FLAG_PATTERN.search(gh_pr_create_segment))
+    return all(
+        bool(WEB_FLAG_PATTERN.search(each_segment))
+        for each_segment in all_gh_pr_create_segments
+    )
 
 
 def _emit_deny_payload(reason_text: str) -> None:

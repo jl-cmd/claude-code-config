@@ -52,11 +52,30 @@ def test_strip_quoted_regions_preserves_offsets_for_single_quotes() -> None:
     assert "single quoted body" not in stripped_command
 
 
-def test_strip_quoted_regions_preserves_offsets_for_backticks() -> None:
+def test_strip_quoted_regions_preserves_backtick_substitution_body() -> None:
+    """Backticks delimit command substitution, which executes — the body must remain scannable."""
     original_command = "echo `inner cmd` && gh pr create --title T"
     stripped_command = utils_module._strip_quoted_regions(original_command)
     assert len(stripped_command) == len(original_command)
-    assert "inner cmd" not in stripped_command
+    assert "inner cmd" in stripped_command
+    assert "gh pr create" in stripped_command
+
+
+def test_strip_quoted_regions_preserves_dollar_paren_substitution_body() -> None:
+    """``$(...)`` substitution body must remain scannable for the same reason as backticks."""
+    original_command = "echo $(inner cmd) && gh pr create --title T"
+    stripped_command = utils_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "inner cmd" in stripped_command
+    assert "gh pr create" in stripped_command
+
+
+def test_strip_quoted_regions_preserves_dollar_paren_inside_double_quotes() -> None:
+    """``"$(...)"`` substitution body remains scannable even when wrapped in double quotes."""
+    original_command = 'echo "$(inner cmd)" && gh pr create --title T'
+    stripped_command = utils_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "inner cmd" in stripped_command
     assert "gh pr create" in stripped_command
 
 
@@ -108,8 +127,14 @@ def test_command_invokes_gh_pr_create_ignores_literal_inside_single_quotes() -> 
     assert not utils_module._command_invokes_gh_pr_create("echo 'gh pr create docs'")
 
 
-def test_command_invokes_gh_pr_create_ignores_literal_inside_backticks() -> None:
-    assert not utils_module._command_invokes_gh_pr_create("echo `gh pr create docs`")
+def test_command_invokes_gh_pr_create_detects_backtick_substitution_body() -> None:
+    """Backtick substitution body executes, so an inner ``gh pr create`` is real."""
+    assert utils_module._command_invokes_gh_pr_create("echo `gh pr create docs`")
+
+
+def test_command_invokes_gh_pr_create_detects_dollar_paren_substitution_body() -> None:
+    """``$(...)`` substitution body executes, so an inner ``gh pr create`` is real."""
+    assert utils_module._command_invokes_gh_pr_create('echo "$(gh pr create docs)"')
 
 
 def test_command_invokes_gh_pr_create_still_matches_unquoted_invocation() -> None:
@@ -249,3 +274,38 @@ def test_write_line_writes_multiple_lines_in_call_order() -> None:
     utils_module._write_line("first", captured_stream)
     utils_module._write_line("second", captured_stream)
     assert captured_stream.getvalue() == "first\nsecond\n"
+
+
+def test_all_gh_pr_create_segments_returns_empty_when_command_absent() -> None:
+    """No ``gh pr create`` invocation → empty list."""
+    assert utils_module._all_gh_pr_create_segments("git status && echo done") == []
+
+
+def test_all_gh_pr_create_segments_returns_one_segment_for_single_invocation() -> None:
+    """One invocation → one segment from end-of-match to end-of-string."""
+    segments_for_single_invocation = utils_module._all_gh_pr_create_segments(
+        "gh pr create --title T --body-file B"
+    )
+    assert len(segments_for_single_invocation) == 1
+    assert "--title T" in segments_for_single_invocation[0]
+
+
+def test_all_gh_pr_create_segments_returns_two_segments_for_chained_invocations() -> None:
+    """Two chained invocations → two separate segments split at ``&&``."""
+    segments_for_chained_invocations = utils_module._all_gh_pr_create_segments(
+        "gh pr create --web && gh pr create --title T"
+    )
+    assert len(segments_for_chained_invocations) == 2
+    assert "--web" in segments_for_chained_invocations[0]
+    assert "--web" not in segments_for_chained_invocations[1]
+    assert "--title T" in segments_for_chained_invocations[1]
+
+
+def test_all_gh_pr_create_segments_splits_on_newline_separator() -> None:
+    """Newline counts as a command separator between two ``gh pr create`` invocations."""
+    segments_for_newline_chained = utils_module._all_gh_pr_create_segments(
+        "gh pr create --web\ngh pr create --title T"
+    )
+    assert len(segments_for_newline_chained) == 2
+    assert "--web" in segments_for_newline_chained[0]
+    assert "--title T" in segments_for_newline_chained[1]

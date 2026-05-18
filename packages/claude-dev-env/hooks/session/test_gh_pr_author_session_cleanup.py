@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import pathlib
+import stat
 import sys
 import time
 from typing import Iterator
@@ -30,11 +31,23 @@ hook_module_spec.loader.exec_module(hook_module)
 
 
 _BACKDATE_SECONDS_BEFORE_NOW: int = 120
+_ENFORCER_WRITE_MODE: int = 0o600
 
 
 def _backdate_file(state_file: pathlib.Path) -> None:
     backdated_time_seconds = time.time() - _BACKDATE_SECONDS_BEFORE_NOW
     os.utime(state_file, (backdated_time_seconds, backdated_time_seconds))
+
+
+def _chmod_like_enforcer(state_file: pathlib.Path) -> None:
+    """Apply the same 0o600 mode the production enforcer sets on its write.
+
+    Tests must mirror the enforcer's write contract so the cleanup
+    hook's ownership / mode security check sees a "trustworthy" file.
+    Without this chmod, every backdated state file is silently skipped
+    on POSIX as if it were attacker-planted.
+    """
+    os.chmod(state_file, _ENFORCER_WRITE_MODE)
 
 
 def _write_state_file(state_file: pathlib.Path, original_account: str) -> None:
@@ -47,6 +60,7 @@ def _write_state_file(state_file: pathlib.Path, original_account: str) -> None:
         ),
         encoding="utf-8",
     )
+    _chmod_like_enforcer(state_file)
     _backdate_file(state_file)
 
 
@@ -129,6 +143,7 @@ def test_main_deletes_malformed_state_file_without_switching(
 ) -> None:
     malformed_state_file = isolated_temp_directory / "gh_pr_author_swap_broken.json"
     malformed_state_file.write_text("{not valid json", encoding="utf-8")
+    _chmod_like_enforcer(malformed_state_file)
     _backdate_file(malformed_state_file)
     switch_invocations = _install_fake_switch(monkeypatch, switch_succeeds=True)
 
@@ -300,6 +315,7 @@ def test_collect_stale_state_files_matches_prefix_and_suffix(
     wrong_suffix = isolated_temp_directory / "gh_pr_author_swap_session-D.txt"
     for each_file in (matching_a, matching_b, wrong_prefix, wrong_suffix):
         each_file.write_text("{}", encoding="utf-8")
+        _chmod_like_enforcer(each_file)
         _backdate_file(each_file)
 
     matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
@@ -348,6 +364,7 @@ def test_collect_stale_state_files_includes_old_files(
         json.dumps({"original_account": "jl-cmd", "primary_account": "JonEcho"}),
         encoding="utf-8",
     )
+    _chmod_like_enforcer(old_state_file)
     backdated_time_seconds = time.time() - _BACKDATE_SECONDS_BEFORE_NOW
     os.utime(old_state_file, (backdated_time_seconds, backdated_time_seconds))
 
@@ -367,6 +384,7 @@ def test_collect_stale_state_files_skips_unreadable_stat(
             json.dumps({"original_account": "jl-cmd", "primary_account": "JonEcho"}),
             encoding="utf-8",
         )
+        _chmod_like_enforcer(each_file)
         _backdate_file(each_file)
 
     original_stat_method = pathlib.Path.stat
@@ -386,3 +404,86 @@ def test_collect_stale_state_files_skips_unreadable_stat(
 
     assert unreadable_state_file not in matched_files
     assert readable_state_file in matched_files
+
+
+def test_collect_stale_state_files_skips_world_readable_file(
+    isolated_temp_directory: pathlib.Path,
+) -> None:
+    """A backdated state file written with 0o644 mode is silently skipped on POSIX.
+
+    The enforcer creates every file at 0o600. A divergent mode means
+    the file was not written by an enforcer running as this user — most
+    likely an attacker plant — and must not be allowed to drive
+    ``gh auth switch``.
+    """
+    if not hasattr(os, "getuid"):
+        return
+    world_readable_state_file = (
+        isolated_temp_directory / "gh_pr_author_swap_session-attacker.json"
+    )
+    world_readable_state_file.write_text(
+        json.dumps({"original_account": "attacker", "primary_account": "JonEcho"}),
+        encoding="utf-8",
+    )
+    os.chmod(world_readable_state_file, 0o644)
+    _backdate_file(world_readable_state_file)
+
+    matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
+
+    assert world_readable_state_file not in matched_files
+
+
+def test_collect_stale_state_files_skips_other_user_owned_file(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_temp_directory: pathlib.Path,
+) -> None:
+    """A POSIX file owned by a different uid is silently skipped.
+
+    The cleanup hook cannot chown without root, so the test fakes a
+    foreign uid by monkeypatching ``Path.stat`` to return a synthetic
+    ``stat_result`` whose ``st_uid`` does not match ``os.getuid()``.
+    """
+    if not hasattr(os, "getuid"):
+        return
+    foreign_owned_state_file = (
+        isolated_temp_directory / "gh_pr_author_swap_session-foreign.json"
+    )
+    foreign_owned_state_file.write_text(
+        json.dumps({"original_account": "attacker", "primary_account": "JonEcho"}),
+        encoding="utf-8",
+    )
+    _chmod_like_enforcer(foreign_owned_state_file)
+    _backdate_file(foreign_owned_state_file)
+
+    real_stat_result = os.stat(foreign_owned_state_file)
+    current_user_id = os.getuid()
+    foreign_user_id = current_user_id + 1
+    synthetic_stat_fields = (
+        stat.S_IFREG | _ENFORCER_WRITE_MODE,
+        real_stat_result.st_ino,
+        real_stat_result.st_dev,
+        real_stat_result.st_nlink,
+        foreign_user_id,
+        real_stat_result.st_gid,
+        real_stat_result.st_size,
+        real_stat_result.st_atime,
+        real_stat_result.st_mtime,
+        real_stat_result.st_ctime,
+    )
+    synthetic_stat_result = os.stat_result(synthetic_stat_fields)
+    original_stat_method = pathlib.Path.stat
+
+    def _stat_returning_foreign_uid_for_target(
+        self: pathlib.Path,
+        *call_arguments: object,
+        **call_keyword_arguments: object,
+    ) -> os.stat_result:
+        if self == foreign_owned_state_file:
+            return synthetic_stat_result
+        return original_stat_method(self, *call_arguments, **call_keyword_arguments)  # type: ignore[arg-type]  # forwarding mixed positional/keyword to stdlib Path.stat
+
+    monkeypatch.setattr(pathlib.Path, "stat", _stat_returning_foreign_uid_for_target)
+
+    matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
+
+    assert foreign_owned_state_file not in matched_files

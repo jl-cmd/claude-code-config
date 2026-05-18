@@ -37,9 +37,13 @@ from typing import TextIO
 from config.gh_pr_author_swap_constants import (
     ALL_GH_AUTH_SWITCH_COMMAND_HEAD,
     ALL_SHELL_QUOTE_CHARACTERS,
+    COMMAND_SEPARATOR_PATTERN,
+    COMMAND_SUBSTITUTION_OPENER_LENGTH,
     GH_AUTH_SWITCH_TIMEOUT_SECONDS,
     GH_PR_CREATE_PATTERN,
     SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH,
+    SHELL_BACKTICK_CHARACTER,
+    SHELL_PAREN_CLOSE_CHARACTER,
     SHELL_QUOTE_REPLACEMENT_CHARACTER,
     STATE_FILE_DEFAULT_SESSION_ID,
     STATE_FILE_ORIGINAL_ACCOUNT_KEY,
@@ -174,39 +178,96 @@ def _delete_state_file(state_file: Path) -> None:
         )
 
 
+def _index_after_command_substitution(all_scanned_characters: list[str], opener_index: int) -> int:
+    """Return the index one past the closing ``)`` of a ``$(...)`` substitution.
+
+    Walks from the opening ``$(`` past nested ``$(...)`` substitutions
+    and through any inner quoted regions so the closing paren matched is
+    the one that actually balances the opener. Bash executes the
+    substitution body, so the interior characters are left untouched —
+    callers must still see any ``gh pr create`` token sitting inside.
+
+    Args:
+        all_scanned_characters: Mutable list view of the command string.
+        opener_index: Index of the ``$`` that begins ``$(``.
+
+    Returns:
+        The index just past the matching ``)``. When no closing paren is
+        found the length of the buffer is returned, matching how an
+        interactive shell would consume the rest of the input on an
+        unterminated substitution.
+    """
+    paren_depth = 1
+    interior_index = opener_index + COMMAND_SUBSTITUTION_OPENER_LENGTH
+    buffer_length = len(all_scanned_characters)
+    while interior_index < buffer_length and paren_depth > 0:
+        interior_character = all_scanned_characters[interior_index]
+        if (
+            interior_character == "$"
+            and interior_index + 1 < buffer_length
+            and all_scanned_characters[interior_index + 1] == "("
+        ):
+            paren_depth += 1
+            interior_index += COMMAND_SUBSTITUTION_OPENER_LENGTH
+            continue
+        if interior_character == SHELL_PAREN_CLOSE_CHARACTER:
+            paren_depth -= 1
+            interior_index += 1
+            continue
+        interior_index += 1
+    return interior_index
+
+
 def _strip_quoted_regions(command: str) -> str:
-    """Replace double-quoted, single-quoted, and backtick-quoted regions with spaces.
+    """Replace inert quoted regions with spaces, leaving substitutions scannable.
 
-    The enforcer's matchers (``GH_PR_CREATE_PATTERN``,
-    ``WEB_FLAG_PATTERN``, ``COMMAND_SEPARATOR_PATTERN``) operate on the
-    raw command string. Without quote-stripping, a literal ``gh pr create``
-    or a ``-w`` token sitting inside a ``--body "..."`` argument would
-    false-positive into the matchers. Replacing each quoted region with
-    spaces of equal length preserves every offset so callers can keep
-    indexing the original command's match positions, while making the
-    quoted text inert to the regex search.
+    Single quotes (``'...'``) and double quotes (``"..."``) wrap inert
+    text in bash, so their interior is replaced with spaces. ``$(...)``
+    command substitution and backtick command substitution
+    (``` `...` ```) execute their bodies in a subshell, so the interior
+    is left intact — any ``gh pr create`` token sitting inside either
+    form must remain visible to the matchers, otherwise the enforcer
+    would silently no-op on ``echo "$(gh pr create --title T)"``.
 
-    Backslash-escaped quotes inside a quoted region (``\\"`` inside a
-    double-quoted segment, ``\\'`` inside a single-quoted segment) do not
-    terminate the region. An unterminated quote consumes the rest of the
-    string; this matches how an interactive shell would parse the same
-    input and keeps the matchers from seeing tokens past a syntactically
-    broken command.
+    Within a double-quoted region, ``$(...)`` substitution windows are
+    still expanded, so the walker recognizes the ``$(`` opener inside
+    the quoted scan and stops stripping until the matching ``)`` —
+    leaving the substitution body scannable while keeping the surrounding
+    quoted text inert.
+
+    Backslash-escaped quotes inside a double-quoted segment (``\\"``) do
+    not terminate the region. An unterminated quote consumes the rest of
+    the string, matching how an interactive shell parses the same input.
 
     Args:
         command: Raw bash command string from PreToolUse hook input.
 
     Returns:
-        A string of identical length to ``command`` with every quoted
-        region's interior replaced by spaces. The quote characters
-        themselves are also replaced with spaces so a stray ``--body
-        "gh pr create"`` does not look like an invocation.
+        A string of identical length to ``command`` with single- and
+        double-quoted region interiors replaced by spaces, and the
+        bodies of ``$(...)`` / ``` `...` ``` substitutions left intact.
     """
     scanned_characters = list(command)
     cursor_index = 0
     command_length = len(command)
     while cursor_index < command_length:
         current_character = scanned_characters[cursor_index]
+        if (
+            current_character == "$"
+            and cursor_index + 1 < command_length
+            and scanned_characters[cursor_index + 1] == "("
+        ):
+            cursor_index = _index_after_command_substitution(scanned_characters, cursor_index)
+            continue
+        if current_character == SHELL_BACKTICK_CHARACTER:
+            interior_index = cursor_index + 1
+            while interior_index < command_length:
+                if scanned_characters[interior_index] == SHELL_BACKTICK_CHARACTER:
+                    interior_index += 1
+                    break
+                interior_index += 1
+            cursor_index = interior_index
+            continue
         if current_character not in ALL_SHELL_QUOTE_CHARACTERS:
             cursor_index += 1
             continue
@@ -224,6 +285,14 @@ def _strip_quoted_regions(command: str) -> str:
                 scanned_characters[interior_index + 1] = SHELL_QUOTE_REPLACEMENT_CHARACTER
                 interior_index += SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH
                 continue
+            if (
+                quote_character == '"'
+                and interior_character == "$"
+                and interior_index + 1 < command_length
+                and scanned_characters[interior_index + 1] == "("
+            ):
+                interior_index = _index_after_command_substitution(scanned_characters, interior_index)
+                continue
             if interior_character == quote_character:
                 scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
                 interior_index += 1
@@ -232,6 +301,37 @@ def _strip_quoted_regions(command: str) -> str:
             interior_index += 1
         cursor_index = interior_index
     return "".join(scanned_characters)
+
+
+def _all_gh_pr_create_segments(quote_stripped_command: str) -> list[str]:
+    """Return every ``gh pr create`` segment in the (quote-stripped) command.
+
+    A "segment" is the substring from the end of a ``gh pr create`` match
+    up to the next shell command separator (``&&``, ``||``, ``;``,
+    ``|``, ``&``, newline) or the end of the string. The enforcer's
+    web-flag detection runs against each segment independently so a
+    chained ``gh pr create --web && gh pr create --title T`` does not
+    let the second invocation slip through on the strength of the
+    first segment's ``--web`` flag.
+
+    Args:
+        quote_stripped_command: Output of ``_strip_quoted_regions`` —
+            the caller is responsible for stripping inert quoted regions
+            before passing in.
+
+    Returns:
+        List of segment strings, one per ``gh pr create`` invocation
+        found in the command. Empty list when the command does not
+        invoke ``gh pr create`` at all.
+    """
+    all_segments: list[str] = []
+    command_length = len(quote_stripped_command)
+    for each_gh_pr_create_match in GH_PR_CREATE_PATTERN.finditer(quote_stripped_command):
+        segment_start = each_gh_pr_create_match.end()
+        separator_match = COMMAND_SEPARATOR_PATTERN.search(quote_stripped_command, segment_start)
+        segment_end = separator_match.start() if separator_match else command_length
+        all_segments.append(quote_stripped_command[segment_start:segment_end])
+    return all_segments
 
 
 def _command_invokes_gh_pr_create(command: str) -> bool:

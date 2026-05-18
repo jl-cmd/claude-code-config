@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json  # noqa: F401
 import os
+import stat
 import subprocess  # noqa: F401
 import sys
 import tempfile
@@ -36,22 +37,62 @@ _hooks_tree_path = str(Path(__file__).resolve().parent.parent)
 if _hooks_tree_path not in sys.path:
     sys.path.insert(0, _hooks_tree_path)
 
-from _gh_pr_author_swap_utils import (
+from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must run first
     _delete_state_file,
     _read_original_account,
     _switch_gh_account,
     _write_line,
 )
-from config.gh_pr_author_swap_constants import (
+from config.gh_pr_author_swap_constants import (  # noqa: E402  # sys.path shim above must run first
     REQUIRED_ACCOUNT_ENV_VAR,
+    STATE_FILE_PERMISSION_MODE,
     STATE_FILE_PREFIX,
     STATE_FILE_STALE_AGE_SECONDS,
     STATE_FILE_SUFFIX,
 )
 
 
+def _state_file_is_attacker_planted(file_stat_result: os.stat_result) -> bool:
+    """Return True when the file's owner or mode bits do not match an enforcer-written file.
+
+    The enforcer atomically creates each swap-state file with mode
+    ``STATE_FILE_PERMISSION_MODE`` (``0o600``) owned by the current
+    user. A file in the shared system temp directory that diverges on
+    either axis is overwhelmingly likely to be an attacker plant —
+    another user on the same workstation pre-creating a file at the
+    predictable swap-state path to trick the cleanup hook into running
+    ``gh auth switch --user <attacker-controlled-login>``.
+
+    The mode-bit and uid checks only apply on POSIX. Windows reports
+    ``0o666`` from ``stat`` for files chmod'd to ``0o600`` because
+    ``os.chmod`` on Windows only toggles the read-only attribute, and
+    ``os.getuid`` is absent there. ``tempfile.gettempdir()`` on Windows
+    is already per-user (``%LOCALAPPDATA%\\Temp``), which closes the
+    cross-user attack surface this check guards against on POSIX, so
+    the check is a no-op on Windows.
+
+    Args:
+        file_stat_result: ``os.stat_result`` for the candidate file.
+
+    Returns:
+        True when the file looks attacker-planted (POSIX: wrong mode
+        bits or wrong uid). False when the file matches the enforcer's
+        write contract, or when running on a platform without POSIX
+        ownership semantics.
+    """
+    if not hasattr(os, "getuid"):
+        return False
+    actual_permission_bits = stat.S_IMODE(file_stat_result.st_mode)
+    if actual_permission_bits != STATE_FILE_PERMISSION_MODE:
+        return True
+    current_user_id = os.getuid()
+    if file_stat_result.st_uid != current_user_id:
+        return True
+    return False
+
+
 def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
-    """Return swap-state files older than the stale threshold.
+    """Return swap-state files older than the stale threshold and safe to process.
 
     A state file younger than ``STATE_FILE_STALE_AGE_SECONDS`` is
     treated as belonging to a concurrent Claude Code session that may
@@ -62,14 +103,22 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
     + filesystem work), so any file older than 60s is past the longest
     plausible active window.
 
+    Each candidate is also screened for ownership and permission bits
+    matching the enforcer's write contract. A file with mode bits other
+    than ``STATE_FILE_PERMISSION_MODE`` or (on POSIX) owned by a
+    different user is silently skipped — it was not written by an
+    enforcer running as the current user and must not be allowed to
+    drive ``gh auth switch``.
+
     Args:
         temp_directory: System temp directory returned by
             ``tempfile.gettempdir()``.
 
     Returns:
         List of swap-state file paths whose modification time is older
-        than ``STATE_FILE_STALE_AGE_SECONDS`` seconds before now. Empty
-        list when the temp directory cannot be listed.
+        than ``STATE_FILE_STALE_AGE_SECONDS`` seconds before now and
+        whose ownership/mode bits match the enforcer's write contract.
+        Empty list when the temp directory cannot be listed.
     """
     glob_pattern = f"{STATE_FILE_PREFIX}*{STATE_FILE_SUFFIX}"
     current_time_seconds = time.time()
@@ -80,10 +129,12 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
         return []
     for each_candidate_path in all_candidate_paths:
         try:
-            file_modification_time = each_candidate_path.stat().st_mtime
+            file_stat_result = each_candidate_path.stat()
         except OSError:
             continue
-        file_age_seconds = current_time_seconds - file_modification_time
+        if _state_file_is_attacker_planted(file_stat_result):
+            continue
+        file_age_seconds = current_time_seconds - file_stat_result.st_mtime
         if file_age_seconds >= STATE_FILE_STALE_AGE_SECONDS:
             all_stale_state_files.append(each_candidate_path)
     return all_stale_state_files

@@ -31,8 +31,13 @@ import json
 import subprocess  # noqa: F401
 import sys
 import tempfile  # noqa: F401
+from pathlib import Path
 
-from _gh_pr_author_swap_utils import (
+_hooks_tree_path = str(Path(__file__).resolve().parent.parent)
+if _hooks_tree_path not in sys.path:
+    sys.path.insert(0, _hooks_tree_path)
+
+from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must run first
     _command_invokes_gh_pr_create,
     _delete_state_file,
     _read_original_account,
@@ -40,7 +45,7 @@ from _gh_pr_author_swap_utils import (
     _switch_gh_account,
     _write_line,
 )
-from config.gh_pr_author_swap_constants import BASH_TOOL_NAME
+from config.gh_pr_author_swap_constants import BASH_TOOL_NAME  # noqa: E402  # sys.path shim above must run first
 
 
 def main() -> None:

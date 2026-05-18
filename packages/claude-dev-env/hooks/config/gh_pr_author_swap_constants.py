@@ -22,8 +22,9 @@ BASH_TOOL_NAME: str = "Bash"
 GH_PR_CREATE_PATTERN: re.Pattern[str] = re.compile(r"\bgh\s+pr\s+create\b", re.IGNORECASE)
 WEB_FLAG_PATTERN: re.Pattern[str] = re.compile(r"(?<!\S)(?:--web|-w)(?!\S)")
 COMMAND_SEPARATOR_PATTERN: re.Pattern[str] = re.compile(
-    r"(?:&&|\|\||;|(?<!\|)\|(?!\|)|(?<!&)&(?!&))"
+    r"(?:&&|\|\||;|(?<!\|)\|(?!\|)|(?<!&)&(?!&)|[\r\n])"
 )
+COMMAND_SUBSTITUTION_OPENER_LENGTH: int = 2
 
 ALL_GH_API_USER_COMMAND: tuple[str, ...] = ("gh", "api", "user", "--jq", ".login")
 GH_API_USER_TIMEOUT_SECONDS: int = 5
@@ -40,8 +41,14 @@ STATE_FILE_PRIMARY_ACCOUNT_KEY: str = "primary_account"
 
 STATE_FILE_PERMISSION_MODE: int = 0o600
 
+OS_O_NOFOLLOW_ATTRIBUTE_NAME: str = "O_NOFOLLOW"
+
 STATE_FILE_STALE_AGE_SECONDS: int = 60
 
-ALL_SHELL_QUOTE_CHARACTERS: tuple[str, ...] = ("\"", "'", "`")
+ALL_SHELL_QUOTE_CHARACTERS: tuple[str, ...] = ("\"", "'")
 SHELL_QUOTE_REPLACEMENT_CHARACTER: str = " "
 SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH: int = 2
+SHELL_BACKTICK_CHARACTER: str = "`"
+SHELL_DOLLAR_CHARACTER: str = "$"
+SHELL_PAREN_OPEN_CHARACTER: str = "("
+SHELL_PAREN_CLOSE_CHARACTER: str = ")"

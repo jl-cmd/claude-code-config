@@ -226,6 +226,48 @@ def test_command_invokes_gh_pr_create_matches_tab_separated_tokens() -> None:
     )
 
 
+def test_command_invokes_gh_pr_create_matches_short_repo_flag() -> None:
+    """``gh -R owner/repo pr create`` must match — the short repo flag separates ``gh`` from ``pr``."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh -R foo/bar pr create --title T")
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_long_repo_flag_with_space() -> None:
+    """``gh --repo owner/repo pr create`` must match — space-separated long flag plus value."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh --repo foo/bar pr create --title T")
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_long_repo_flag_with_equals() -> None:
+    """``gh --repo=owner/repo pr create`` must match — equals-attached long flag value."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh --repo=foo/bar pr create --title T")
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_multiple_intervening_flags() -> None:
+    """Multiple top-level flags between ``gh`` and ``pr create`` must all be tolerated."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh -R foo/bar --hostname github.com pr create")
+    )
+
+
+def test_command_invokes_gh_pr_create_rejects_gh_dash_pr_create() -> None:
+    """``gh-pr-create`` is a single hyphenated token, not an invocation of ``gh pr create``."""
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh-pr-create --foo")
+    )
+
+
+def test_command_invokes_gh_pr_create_still_matches_basic_form() -> None:
+    """Regression — the original ``gh pr create`` form must continue to match after pattern widening."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh pr create --title T")
+    )
+
+
 def test_state_file_path_uses_session_id(
     isolated_temp_directory: pathlib.Path,
 ) -> None:

@@ -195,6 +195,100 @@ def test_should_block_when_bugteam_invoked_at_current_head_but_previous_tick(
     assert deny_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_should_block_when_invoked_head_is_non_string_type(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    _write_state(
+        claude_job_directory,
+        _bugteam_phase_state(
+            bugteam_skill_invoked_at_head=42,
+            bugteam_skill_invoked_at_tick=_TICK_CURRENT,
+        ),
+    )
+    captured_output = _run_main_with_io(json.dumps(_clean_coder_audit_payload()))
+    deny_payload = json.loads(captured_output)
+    assert deny_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_should_block_when_current_head_is_non_string_type(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    _write_state(
+        claude_job_directory,
+        _bugteam_phase_state(
+            current_head=42,
+            bugteam_skill_invoked_at_head=_HEAD_SHA_CURRENT,
+            bugteam_skill_invoked_at_tick=_TICK_CURRENT,
+        ),
+    )
+    captured_output = _run_main_with_io(json.dumps(_clean_coder_audit_payload()))
+    deny_payload = json.loads(captured_output)
+    assert deny_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_should_block_when_invoked_tick_is_string_type(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    _write_state(
+        claude_job_directory,
+        _bugteam_phase_state(
+            bugteam_skill_invoked_at_head=_HEAD_SHA_CURRENT,
+            bugteam_skill_invoked_at_tick="7",
+        ),
+    )
+    captured_output = _run_main_with_io(json.dumps(_clean_coder_audit_payload()))
+    deny_payload = json.loads(captured_output)
+    assert deny_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_should_block_when_current_tick_is_string_type(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    _write_state(
+        claude_job_directory,
+        _bugteam_phase_state(
+            tick_count="7",
+            bugteam_skill_invoked_at_head=_HEAD_SHA_CURRENT,
+            bugteam_skill_invoked_at_tick=_TICK_CURRENT,
+        ),
+    )
+    captured_output = _run_main_with_io(json.dumps(_clean_coder_audit_payload()))
+    deny_payload = json.loads(captured_output)
+    assert deny_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_should_block_when_invoked_tick_is_bool_type(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    _write_state(
+        claude_job_directory,
+        _bugteam_phase_state(
+            tick_count=1,
+            bugteam_skill_invoked_at_head=_HEAD_SHA_CURRENT,
+            bugteam_skill_invoked_at_tick=True,
+        ),
+    )
+    captured_output = _run_main_with_io(json.dumps(_clean_coder_audit_payload()))
+    deny_payload = json.loads(captured_output)
+    assert deny_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_should_block_when_current_tick_is_bool_type(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    _write_state(
+        claude_job_directory,
+        _bugteam_phase_state(
+            tick_count=True,
+            bugteam_skill_invoked_at_head=_HEAD_SHA_CURRENT,
+            bugteam_skill_invoked_at_tick=1,
+        ),
+    )
+    captured_output = _run_main_with_io(json.dumps(_clean_coder_audit_payload()))
+    deny_payload = json.loads(captured_output)
+    assert deny_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_should_allow_when_claude_job_dir_env_var_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

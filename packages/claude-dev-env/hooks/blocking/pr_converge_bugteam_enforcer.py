@@ -79,17 +79,22 @@ def _has_formal_skill_fired_this_tick(state_by_field: dict[str, object]) -> bool
     Returns:
         True when both ``bugteam_skill_invoked_at_head`` matches
         ``current_head`` and ``bugteam_skill_invoked_at_tick`` matches
-        ``tick_count``; False when either is missing or stale.
+        ``tick_count``; False when either is missing, stale, or carries a
+        type that violates state-schema.md (head must be ``str``, tick must
+        be a non-bool ``int``) — type-invalid values fail closed so the
+        enforcer rejects corrupted state.
     """
     invoked_head = state_by_field.get(STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_HEAD)
     current_head = state_by_field.get(STATE_FIELD_CURRENT_HEAD)
     invoked_tick = state_by_field.get(STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_TICK)
     current_tick = state_by_field.get(STATE_FIELD_TICK_COUNT)
-    if invoked_head is None or current_head is None:
+    if not isinstance(invoked_head, str) or not isinstance(current_head, str):
         return False
     if invoked_head != current_head:
         return False
-    if invoked_tick is None or current_tick is None:
+    if isinstance(invoked_tick, bool) or isinstance(current_tick, bool):
+        return False
+    if not isinstance(invoked_tick, int) or not isinstance(current_tick, int):
         return False
     return invoked_tick == current_tick
 

@@ -1,10 +1,11 @@
 """Shared state-loading helpers for the pr_converge_bugteam_enforcer hook pair.
 
 Both the enforcer (``pr_converge_bugteam_enforcer.py``) and the tracker
-(``pr_converge_bugteam_skill_tracker.py``) read the pr-converge state.json
-from the same per-job directory. This module hosts the byte-identical
-``load_state_dictionary`` and ``resolve_state_path`` helpers so each hook
-imports a single canonical definition.
+(``pr_converge_bugteam_skill_tracker.py``) read the per-job
+``$CLAUDE_JOB_DIR/pr-converge-state.json`` file from the same per-job
+directory. This module hosts the byte-identical ``load_state_dictionary``
+and ``resolve_state_path`` helpers so each hook imports a single canonical
+definition.
 """
 
 from __future__ import annotations

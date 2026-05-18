@@ -2,8 +2,9 @@
 """PreToolUse hook: record formal bugteam Skill invocations into pr-converge state.
 
 Companion to ``pr_converge_bugteam_enforcer``. On every
-``Skill({skill: "bugteam"})`` invocation, this hook stamps the pr-converge
-state.json with ``bugteam_skill_invoked_at_head = current_head`` and
+``Skill({skill: "bugteam"})`` invocation, this hook stamps
+``$CLAUDE_JOB_DIR/pr-converge-state.json`` with
+``bugteam_skill_invoked_at_head = current_head`` and
 ``bugteam_skill_invoked_at_tick = tick_count`` so the enforcer can confirm
 the formal Skill fired this tick at the current HEAD before allowing any
 follow-on clean-coder audit-shaped Agent spawn.

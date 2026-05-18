@@ -344,7 +344,7 @@ def main() -> None:
     current_account = _active_gh_account()
     if current_account is None:
         sys.exit(0)
-    if current_account == required_account:
+    if current_account.casefold() == required_account.casefold():
         sys.exit(0)
 
     has_switched_account = _switch_gh_account(required_account)

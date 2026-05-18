@@ -257,6 +257,44 @@ def test_main_no_op_when_active_account_matches(
     assert not state_file.exists()
 
 
+def test_main_allows_when_active_account_matches_case_insensitively(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """GitHub usernames are case-insensitive; ``jonecho`` env value matches ``JonEcho`` canonical login."""
+    monkeypatch.setenv("GITHUB_DEFAULT_ACCOUNT", "jonecho")
+    exit_code, stdout_text, switch_invocations = _run_hook_with(
+        _make_stdin_payload("gh pr create --title T --body-file B"),
+        active_account_or_none="JonEcho",
+        monkeypatch=monkeypatch,
+        switch_succeeds=True,
+    )
+    assert exit_code == 0
+    assert stdout_text == ""
+    assert switch_invocations == []
+    state_file = hook_module._state_file_path("test-session-001")
+    assert not state_file.exists()
+
+
+def test_main_allows_when_active_account_matches_canonical_case(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """Symmetric to the previous test: canonical-case env value matches lower-case login response."""
+    monkeypatch.setenv("GITHUB_DEFAULT_ACCOUNT", "JonEcho")
+    exit_code, stdout_text, switch_invocations = _run_hook_with(
+        _make_stdin_payload("gh pr create --title T --body-file B"),
+        active_account_or_none="jonecho",
+        monkeypatch=monkeypatch,
+        switch_succeeds=True,
+    )
+    assert exit_code == 0
+    assert stdout_text == ""
+    assert switch_invocations == []
+    state_file = hook_module._state_file_path("test-session-001")
+    assert not state_file.exists()
+
+
 def test_main_allows_when_required_account_unset(
     monkeypatch: pytest.MonkeyPatch,
     isolated_state_directory: pathlib.Path,

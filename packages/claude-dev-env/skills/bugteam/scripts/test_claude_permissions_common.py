@@ -118,16 +118,23 @@ def test_default_settings_file_mode_used_when_settings_file_missing(
     assert returned_mode == DEFAULT_SETTINGS_FILE_MODE
 
 
-def test_is_valid_project_root_helper_is_not_orphaned_in_common_module() -> None:
-    """The orphan helper in the common module must be removed.
+def test_is_valid_project_root_exported_from_common_and_consumer_modules(
+    tmp_path: Path,
+) -> None:
+    """is_valid_project_root must be reachable from common and both consumers.
 
-    Both grant and revoke keep their own local copies and consume them from
-    module scope; the common-module copy was dead code with zero call sites.
+    The sibling _shared/pr-loop/scripts/ grant and revoke modules import this
+    helper directly from _claude_permissions_common; when sys.path resolves
+    that import to this bugteam copy, the symbol has to exist here too. Grant
+    and revoke keep their own local copies for backward compatibility with
+    callers that reach them via module scope.
     """
-    assert not hasattr(common_module, "is_valid_project_root"), (
-        "is_valid_project_root must not live in _claude_permissions_common — "
-        "neither grant nor revoke imports it from there"
-    )
+    git_marker_project_root = tmp_path / "git_project"
+    (git_marker_project_root / ".git").mkdir(parents=True)
+    bare_directory = tmp_path / "no_marker"
+    bare_directory.mkdir()
+    assert common_module.is_valid_project_root(git_marker_project_root) is True
+    assert common_module.is_valid_project_root(bare_directory) is False
     assert callable(grant_module.is_valid_project_root)
     assert callable(revoke_module.is_valid_project_root)
 

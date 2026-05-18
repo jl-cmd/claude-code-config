@@ -27,11 +27,28 @@ for each_cached_module_name in [
 
 from config.claude_permissions_common_constants import (
     ATOMIC_WRITE_TEMPORARY_SUFFIX,
+    CLAUDE_DIRECTORY_MARKER,
     DEFAULT_SETTINGS_FILE_MODE,
+    GIT_DIRECTORY_MARKER,
     TEXT_FILE_ENCODING,
 )
 
 sys.modules.update(_previously_cached_config)
+
+
+def is_valid_project_root(candidate_path: Path) -> bool:
+    """Check whether a candidate path has expected project-root markers.
+
+    Args:
+        candidate_path: Path to check for project-root markers.
+
+    Returns:
+        True when the path contains .git or .claude directory.
+    """
+    return (
+        (candidate_path / GIT_DIRECTORY_MARKER).exists()
+        or (candidate_path / CLAUDE_DIRECTORY_MARKER).exists()
+    )
 
 
 def exit_with_error(message: str) -> NoReturn:

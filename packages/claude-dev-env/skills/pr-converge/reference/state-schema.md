@@ -61,6 +61,8 @@ live ONLY in the single-PR `$CLAUDE_JOB_DIR/pr-converge-state.json` file
   Skill invocation from a prior tick cannot wave through clean-coder
   audit-shaped Agent spawns on a later tick at the same HEAD.
 
-Tick begins reading prior state line from most recent assistant message
-(no `state.json`) and ends by emitting updated state line; with
-`state.json`, follow `multi-pr-orchestration.md` §What orchestrator does per tick.
+Single-PR tick begins by reading `$CLAUDE_JOB_DIR/pr-converge-state.json`
+if it exists and ends by writing the updated state back to that same file
+before scheduling the next wakeup. Multi-PR mode additionally coordinates
+across PRs via `<TMPDIR>/pr-converge-<session_id>/state.json` per
+`multi-pr-orchestration.md` §What orchestrator does per tick.

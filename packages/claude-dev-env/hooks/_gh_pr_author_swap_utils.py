@@ -347,22 +347,22 @@ def _strip_quoted_regions(command: str) -> str:
         double-quoted region interiors replaced by spaces, and the
         bodies of ``$(...)`` / ``` `...` ``` substitutions left intact.
     """
-    scanned_characters = list(command)
+    all_scanned_characters = list(command)
     cursor_index = 0
     command_length = len(command)
     while cursor_index < command_length:
-        current_character = scanned_characters[cursor_index]
+        current_character = all_scanned_characters[cursor_index]
         if (
             current_character == SHELL_DOLLAR_CHARACTER
             and cursor_index + 1 < command_length
-            and scanned_characters[cursor_index + 1] == SHELL_PAREN_OPEN_CHARACTER
+            and all_scanned_characters[cursor_index + 1] == SHELL_PAREN_OPEN_CHARACTER
         ):
-            cursor_index = _index_after_command_substitution(scanned_characters, cursor_index)
+            cursor_index = _index_after_command_substitution(all_scanned_characters, cursor_index)
             continue
         if current_character == SHELL_BACKTICK_CHARACTER:
             interior_index = cursor_index + 1
             while interior_index < command_length:
-                if scanned_characters[interior_index] == SHELL_BACKTICK_CHARACTER:
+                if all_scanned_characters[interior_index] == SHELL_BACKTICK_CHARACTER:
                     interior_index += 1
                     break
                 interior_index += 1
@@ -372,43 +372,43 @@ def _strip_quoted_regions(command: str) -> str:
             cursor_index += 1
             continue
         quote_character = current_character
-        scanned_characters[cursor_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+        all_scanned_characters[cursor_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
         interior_index = cursor_index + 1
         while interior_index < command_length:
-            interior_character = scanned_characters[interior_index]
+            interior_character = all_scanned_characters[interior_index]
             if (
                 quote_character == '"'
                 and interior_character == "\\"
                 and interior_index + 1 < command_length
             ):
-                scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
-                scanned_characters[interior_index + 1] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+                all_scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+                all_scanned_characters[interior_index + 1] = SHELL_QUOTE_REPLACEMENT_CHARACTER
                 interior_index += SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH
                 continue
             if (
                 quote_character == '"'
                 and interior_character == SHELL_DOLLAR_CHARACTER
                 and interior_index + 1 < command_length
-                and scanned_characters[interior_index + 1] == SHELL_PAREN_OPEN_CHARACTER
+                and all_scanned_characters[interior_index + 1] == SHELL_PAREN_OPEN_CHARACTER
             ):
-                interior_index = _index_after_command_substitution(scanned_characters, interior_index)
+                interior_index = _index_after_command_substitution(all_scanned_characters, interior_index)
                 continue
             if quote_character == '"' and interior_character == SHELL_BACKTICK_CHARACTER:
                 interior_index += 1
                 while interior_index < command_length:
-                    if scanned_characters[interior_index] == SHELL_BACKTICK_CHARACTER:
+                    if all_scanned_characters[interior_index] == SHELL_BACKTICK_CHARACTER:
                         interior_index += 1
                         break
                     interior_index += 1
                 continue
             if interior_character == quote_character:
-                scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+                all_scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
                 interior_index += 1
                 break
-            scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+            all_scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
             interior_index += 1
         cursor_index = interior_index
-    return "".join(scanned_characters)
+    return "".join(all_scanned_characters)
 
 
 def _all_gh_pr_create_segments(quote_stripped_command: str) -> list[str]:

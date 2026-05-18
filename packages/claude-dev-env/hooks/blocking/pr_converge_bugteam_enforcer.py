@@ -48,8 +48,8 @@ from config.pr_converge_bugteam_enforcer_constants import (
     STATE_FIELD_TICK_COUNT,
 )
 from config.pr_converge_bugteam_enforcer_state import (
-    _load_state_dictionary,
-    _resolve_state_path,
+    load_state_dictionary,
+    resolve_state_path,
 )
 
 
@@ -119,10 +119,10 @@ def _should_block(payload_by_field: dict[str, object]) -> bool:
         return False
     if not _prompt_is_audit_shaped(agent_prompt):
         return False
-    state_path = _resolve_state_path()
+    state_path = resolve_state_path()
     if state_path is None:
         return False
-    parsed_state = _load_state_dictionary(state_path)
+    parsed_state = load_state_dictionary(state_path)
     if parsed_state is None:
         return False
     if parsed_state.get(STATE_FIELD_PHASE) != BUGTEAM_PHASE:

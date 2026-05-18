@@ -45,8 +45,8 @@ from config.pr_converge_bugteam_enforcer_constants import (
     STATE_FILE_JSON_INDENT_SPACES,
 )
 from config.pr_converge_bugteam_enforcer_state import (
-    _load_state_dictionary,
-    _resolve_state_path,
+    load_state_dictionary,
+    resolve_state_path,
 )
 
 
@@ -76,12 +76,31 @@ def _atomic_write_state(state_path: Path, state_by_field: dict[str, object]) -> 
         raise
 
 
+def _emit_missing_state_warning(output_stream: TextIO) -> None:
+    """Write the missing-state warning to the provided stream.
+
+    Args:
+        output_stream: Writable text stream — production code passes
+            ``sys.stderr``; tests pass a ``StringIO`` to capture the message.
+    """
+    output_stream.write(
+        "pr_converge_bugteam_skill_tracker: state file lacks current_head or "
+        "tick_count; bugteam invocation NOT recorded\n"
+    )
+    output_stream.flush()
+
+
 def _record_bugteam_skill_invocation(state_by_field: dict[str, object]) -> dict[str, object]:
     """Return a copy of state with bugteam-Skill invocation fields stamped.
 
     The two stamp fields are owned exclusively by this tracker. Concurrent
     writes from the orchestrator never touch them, so the read-modify-write
     window cannot lose an orchestrator update on these specific keys.
+
+    When ``current_head`` (str) or ``tick_count`` (int) is missing or wrong-typed,
+    the function emits a stderr warning via ``_emit_missing_state_warning`` and
+    returns ``state_by_field`` unchanged so a valid prior stamp is never
+    overwritten with ``None``.
 
     Args:
         state_by_field: Existing pr-converge state mapping each field name to
@@ -90,11 +109,18 @@ def _record_bugteam_skill_invocation(state_by_field: dict[str, object]) -> dict[
     Returns:
         New dictionary identical to ``state_by_field`` plus
         ``bugteam_skill_invoked_at_head`` set to ``current_head`` and
-        ``bugteam_skill_invoked_at_tick`` set to ``tick_count``.
+        ``bugteam_skill_invoked_at_tick`` set to ``tick_count`` when both
+        source fields are present and well-typed; otherwise the original
+        ``state_by_field`` returned unmodified.
     """
-    updated_state = dict(state_by_field)
-    updated_state[STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_HEAD] = state_by_field.get(STATE_FIELD_CURRENT_HEAD)
-    updated_state[STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_TICK] = state_by_field.get(STATE_FIELD_TICK_COUNT)
+    current_head = state_by_field.get(STATE_FIELD_CURRENT_HEAD)
+    current_tick = state_by_field.get(STATE_FIELD_TICK_COUNT)
+    if not isinstance(current_head, str) or not isinstance(current_tick, int):
+        _emit_missing_state_warning(sys.stderr)
+        return state_by_field
+    updated_state: dict[str, object] = dict(state_by_field)
+    updated_state[STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_HEAD] = current_head
+    updated_state[STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_TICK] = current_tick
     return updated_state
 
 
@@ -151,10 +177,10 @@ def main() -> None:
         return
     if not _is_formal_bugteam_skill_invocation(hook_payload):
         return
-    state_path = _resolve_state_path()
+    state_path = resolve_state_path()
     if state_path is None:
         return
-    parsed_state = _load_state_dictionary(state_path)
+    parsed_state = load_state_dictionary(state_path)
     if parsed_state is None:
         return
     updated_state = _record_bugteam_skill_invocation(parsed_state)

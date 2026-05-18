@@ -71,6 +71,17 @@ def _run_main_with_io(input_text: str) -> None:
                 pass
 
 
+def _run_main_capturing_stderr(input_text: str) -> str:
+    with mock.patch("sys.stdin", io.StringIO(input_text)):
+        with mock.patch("sys.stdout", new_callable=io.StringIO):
+            with mock.patch("sys.stderr", new_callable=io.StringIO) as captured_stderr:
+                try:
+                    hook_module.main()
+                except SystemExit:
+                    pass
+                return captured_stderr.getvalue()
+
+
 @pytest.fixture()
 def claude_job_directory(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> pathlib.Path:
     monkeypatch.setenv(CLAUDE_JOB_DIR_ENV_VAR, str(tmp_path))
@@ -192,3 +203,59 @@ def test_should_no_op_when_payload_is_malformed_json(
     _run_main_with_io("not valid json {{{")
     updated_state = _read_state(claude_job_directory)
     assert updated_state["bugteam_skill_invoked_at_head"] is None
+
+
+def test_should_leave_state_unchanged_when_current_head_is_missing(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    state_without_head = _baseline_state()
+    del state_without_head["current_head"]
+    _write_state(claude_job_directory, state_without_head)
+    skill_payload: dict[str, Any] = {
+        "tool_name": "Skill",
+        "tool_input": {"skill": "bugteam"},
+    }
+    captured_stderr = _run_main_capturing_stderr(json.dumps(skill_payload))
+    updated_state = _read_state(claude_job_directory)
+    assert "current_head" not in updated_state
+    assert updated_state.get("bugteam_skill_invoked_at_head") is None
+    assert updated_state.get("bugteam_skill_invoked_at_tick") is None
+    assert "current_head or tick_count" in captured_stderr
+
+
+def test_should_leave_state_unchanged_when_tick_count_is_missing(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    state_without_tick = _baseline_state()
+    del state_without_tick["tick_count"]
+    _write_state(claude_job_directory, state_without_tick)
+    skill_payload: dict[str, Any] = {
+        "tool_name": "Skill",
+        "tool_input": {"skill": "bugteam"},
+    }
+    captured_stderr = _run_main_capturing_stderr(json.dumps(skill_payload))
+    updated_state = _read_state(claude_job_directory)
+    assert "tick_count" not in updated_state
+    assert updated_state.get("bugteam_skill_invoked_at_head") is None
+    assert updated_state.get("bugteam_skill_invoked_at_tick") is None
+    assert "current_head or tick_count" in captured_stderr
+
+
+def test_should_preserve_prior_stamp_when_current_head_becomes_missing(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    prior_head = "feedface0000feedface0000feedface0000feed"
+    prior_tick = 3
+    state_with_prior_stamp = _baseline_state()
+    state_with_prior_stamp["bugteam_skill_invoked_at_head"] = prior_head
+    state_with_prior_stamp["bugteam_skill_invoked_at_tick"] = prior_tick
+    del state_with_prior_stamp["current_head"]
+    _write_state(claude_job_directory, state_with_prior_stamp)
+    skill_payload: dict[str, Any] = {
+        "tool_name": "Skill",
+        "tool_input": {"skill": "bugteam"},
+    }
+    _run_main_capturing_stderr(json.dumps(skill_payload))
+    updated_state = _read_state(claude_job_directory)
+    assert updated_state["bugteam_skill_invoked_at_head"] == prior_head
+    assert updated_state["bugteam_skill_invoked_at_tick"] == prior_tick

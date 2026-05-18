@@ -37,20 +37,26 @@ plain text so next tick re-reads from context:
 - `bugteam_skill_invoked_at_head`: HEAD SHA (string) at which the formal
   `Skill({skill: "bugteam"})` was last invoked, or `null`. Stamped by the
   `pr_converge_bugteam_skill_tracker` hook on every formal bugteam Skill
-  invocation. Reset by overwrite on the next bugteam Skill invocation;
-  staleness is detected by the head/tick equality check rather than by
-  explicit reset. The `pr_converge_bugteam_enforcer` hook reads this
-  field together with `current_head` to confirm the formal Skill registered
-  at the current HEAD before allowing follow-on clean-coder audit-shaped
-  Agent spawns. `qbug` invocations deliberately do NOT update this field.
+  invocation. **On-disk location:** the tracker writes this field to
+  `$CLAUDE_JOB_DIR/pr-converge-state.json` (single-PR mode); it is NOT
+  mirrored into the multi-PR `<TMPDIR>/pr-converge-<session_id>/state.json`
+  file. Operators inspecting these stamps must read the single-PR
+  `pr-converge-state.json` under `$CLAUDE_JOB_DIR`. Reset by overwrite on
+  the next bugteam Skill invocation; staleness is detected by the head/tick
+  equality check rather than by explicit reset. The
+  `pr_converge_bugteam_enforcer` hook reads this field together with
+  `current_head` to confirm the formal Skill registered at the current HEAD
+  before allowing follow-on clean-coder audit-shaped Agent spawns. `qbug`
+  invocations deliberately do NOT update this field.
 - `bugteam_skill_invoked_at_tick`: integer tick number at which the formal
   bugteam Skill was last invoked, or `null`. Companion to
-  `bugteam_skill_invoked_at_head`. Reset by overwrite on the next bugteam
-  Skill invocation; staleness is detected by the head/tick equality check
-  rather than by explicit reset. The enforcer requires this value to equal
-  the current `tick_count` so a Skill invocation from a prior tick cannot
-  wave through clean-coder audit-shaped Agent spawns on a later tick at
-  the same HEAD.
+  `bugteam_skill_invoked_at_head` and persisted to the same
+  `$CLAUDE_JOB_DIR/pr-converge-state.json` file (single-PR mode only).
+  Reset by overwrite on the next bugteam Skill invocation; staleness is
+  detected by the head/tick equality check rather than by explicit reset.
+  The enforcer requires this value to equal the current `tick_count` so a
+  Skill invocation from a prior tick cannot wave through clean-coder
+  audit-shaped Agent spawns on a later tick at the same HEAD.
 
 Tick begins reading prior state line from most recent assistant message
 (no `state.json`) and ends by emitting updated state line; with

@@ -39,6 +39,7 @@ from _gh_pr_author_swap_utils import (
     _delete_state_file,
     _read_original_account,
     _switch_gh_account,
+    _write_line,
 )
 from config.gh_pr_author_swap_constants import (
     REQUIRED_ACCOUNT_ENV_VAR,
@@ -47,7 +48,7 @@ from config.gh_pr_author_swap_constants import (
 )
 
 
-def _all_stale_state_files(temp_directory: Path) -> list[Path]:
+def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
     """Return every swap-state file present under the temp directory.
 
     Args:
@@ -83,6 +84,12 @@ def _restore_stale_state_file(state_file: Path) -> None:
     has_switched_account = _switch_gh_account(original_account)
     if has_switched_account:
         _delete_state_file(state_file)
+    else:
+        _write_line(
+            f"[gh-pr-author-cleanup] failed to restore active gh account to {original_account!r} from "
+            f"stale state file {state_file}; left in place for next session",
+            sys.stderr,
+        )
 
 
 def main() -> None:
@@ -98,7 +105,7 @@ def main() -> None:
     if not required_account:
         return
     temp_directory = Path(tempfile.gettempdir())
-    all_stale_state_files = _all_stale_state_files(temp_directory)
+    all_stale_state_files = _collect_stale_state_files(temp_directory)
     for each_state_file in all_stale_state_files:
         _restore_stale_state_file(each_state_file)
 

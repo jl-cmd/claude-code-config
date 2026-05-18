@@ -279,7 +279,7 @@ def test_delete_state_file_is_silent_when_already_absent(
     assert not missing_file.exists()
 
 
-def test_all_stale_state_files_matches_prefix_and_suffix(
+def test_collect_stale_state_files_matches_prefix_and_suffix(
     isolated_temp_directory: pathlib.Path,
 ) -> None:
     matching_a = isolated_temp_directory / "gh_pr_author_swap_session-A.json"
@@ -289,7 +289,25 @@ def test_all_stale_state_files_matches_prefix_and_suffix(
     for each_file in (matching_a, matching_b, wrong_prefix, wrong_suffix):
         each_file.write_text("{}", encoding="utf-8")
 
-    matched_files = hook_module._all_stale_state_files(isolated_temp_directory)
+    matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
     matched_names = {each_file.name for each_file in matched_files}
 
     assert matched_names == {matching_a.name, matching_b.name}
+
+
+def test_restore_stale_state_file_logs_when_switch_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    isolated_temp_directory: pathlib.Path,
+) -> None:
+    state_file = isolated_temp_directory / "gh_pr_author_swap_session-A.json"
+    _write_state_file(state_file, original_account="jl-cmd")
+    _install_fake_switch(monkeypatch, switch_succeeds=False)
+
+    hook_module._restore_stale_state_file(state_file)
+
+    captured_streams = capsys.readouterr()
+    assert state_file.exists()
+    assert "[gh-pr-author-cleanup] failed to restore" in captured_streams.err
+    assert "'jl-cmd'" in captured_streams.err
+    assert str(state_file) in captured_streams.err

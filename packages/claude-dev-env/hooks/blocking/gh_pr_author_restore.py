@@ -38,6 +38,7 @@ from _gh_pr_author_swap_utils import (
     _read_original_account,
     _state_file_path,
     _switch_gh_account,
+    _write_line,
 )
 from config.gh_pr_author_swap_constants import BASH_TOOL_NAME
 
@@ -71,6 +72,12 @@ def main() -> None:
     has_restored_account = _switch_gh_account(original_account)
     if has_restored_account:
         _delete_state_file(state_file)
+    else:
+        _write_line(
+            f"[gh-pr-author-restore] failed to restore active gh account to {original_account!r}; "
+            f"state file {state_file} left in place so the SessionStart cleanup hook can retry",
+            sys.stderr,
+        )
     sys.exit(0)
 
 

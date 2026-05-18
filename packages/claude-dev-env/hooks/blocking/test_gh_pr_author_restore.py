@@ -387,3 +387,31 @@ def test_delete_state_file_is_silent_when_already_absent(
     missing_file = isolated_state_directory / "does_not_exist.json"
     hook_module._delete_state_file(missing_file)
     assert not missing_file.exists()
+
+
+def test_main_logs_high_level_failure_when_restore_switch_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    state_file = hook_module._state_file_path("test-session-001")
+    _write_state_file(state_file, original_account="jl-cmd")
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(_make_stdin_payload("gh pr create --title T")))
+
+    def _fake_switch(to_account: str) -> bool:
+        return False
+
+    monkeypatch.setattr(hook_module, "_switch_gh_account", _fake_switch)
+
+    with pytest.raises(SystemExit) as exit_info:
+        hook_module.main()
+
+    exit_code = exit_info.value.code if isinstance(exit_info.value.code, int) else 0
+    captured_streams = capsys.readouterr()
+
+    assert exit_code == 0
+    assert state_file.exists()
+    assert "[gh-pr-author-restore] failed to restore" in captured_streams.err
+    assert "'jl-cmd'" in captured_streams.err
+    assert str(state_file) in captured_streams.err

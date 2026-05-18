@@ -150,7 +150,12 @@ no longer applies.
 
       Pre-condition: `bugbot_clean_at == current_head` (or `bugbot_down == true`).
 
-      Run `Skill({skill: "bugteam", args: "<PR URL>"})`.
+      Step 5 advances ONLY after `Skill({skill: "bugteam", args: "<PR URL>"})`
+      fires this tick. Substituting an `Agent({subagent_type: "clean-coder"})`
+      audit call for the formal Skill invocation is a protocol violation — the
+      `pr_converge_bugteam_enforcer` hook blocks it. `qbug` is NOT an accepted
+      substitute; `bugteam` is the only allowed skill at this step.
+
       After bugteam completes, re-resolve HEAD.
 
       - [ ] **bugteam pushed new commits** →

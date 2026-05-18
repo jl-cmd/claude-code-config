@@ -184,13 +184,31 @@ def _index_after_command_substitution(all_scanned_characters: list[str], opener_
     """Return the index one past the closing ``)`` of a ``$(...)`` substitution.
 
     Walks from the opening ``$(`` past nested ``$(...)`` substitutions
-    and through any inner quoted regions so the closing paren matched is
-    the one that actually balances the opener. Bash executes the
-    substitution body, so the interior characters are left untouched —
-    callers must still see any ``gh pr create`` token sitting inside.
+    and skips past inner quoted regions and backtick substitutions so the
+    closing paren matched is the one that actually balances the opener.
+    Bash executes the substitution body, so the interior characters are
+    left untouched — callers must still see any ``gh pr create`` token
+    sitting inside.
+
+    Quote handling mirrors ``_strip_quoted_regions``:
+
+    * A single-quoted region (``'...'``) has no escape mechanism in bash —
+      the walker advances to the next ``'`` and resumes paren scanning.
+    * A double-quoted region (``"..."``) honors backslash escapes — a
+      ``\\`` followed by any character is consumed as a two-character
+      unit, so ``\\"`` does not terminate the region.
+    * A backtick substitution (``` `...` ```) inside the ``$(...)`` body
+      is itself a subshell — the walker advances past the next backtick
+      so that a ``)`` sitting inside the backtick body does not flip the
+      surrounding paren depth.
+
+    Unterminated quotes and backticks consume to the end of the buffer,
+    matching the behavior of ``_strip_quoted_regions``.
 
     Args:
         all_scanned_characters: Mutable list view of the command string.
+            The walker reads but does not write — interior characters of
+            the substitution body remain intact for downstream matching.
         opener_index: Index of the ``$`` that begins ``$(``.
 
     Returns:
@@ -212,10 +230,86 @@ def _index_after_command_substitution(all_scanned_characters: list[str], opener_
             paren_depth += 1
             interior_index += COMMAND_SUBSTITUTION_OPENER_LENGTH
             continue
+        if interior_character == SHELL_BACKTICK_CHARACTER:
+            interior_index = _index_after_backtick_substitution(
+                all_scanned_characters, interior_index, buffer_length
+            )
+            continue
+        if interior_character in ALL_SHELL_QUOTE_CHARACTERS:
+            interior_index = _index_after_quoted_region(
+                all_scanned_characters, interior_index, buffer_length, interior_character
+            )
+            continue
         if interior_character == SHELL_PAREN_CLOSE_CHARACTER:
             paren_depth -= 1
             interior_index += 1
             continue
+        interior_index += 1
+    return interior_index
+
+
+def _index_after_backtick_substitution(
+    all_scanned_characters: list[str],
+    opener_index: int,
+    buffer_length: int,
+) -> int:
+    """Return the index one past the closing backtick of a ``` `...` ``` region.
+
+    Args:
+        all_scanned_characters: Mutable list view of the command string.
+        opener_index: Index of the opening backtick.
+        buffer_length: Length of ``all_scanned_characters``, hoisted by
+            the caller to avoid a recomputation per call.
+
+    Returns:
+        The index just past the matching backtick, or ``buffer_length``
+        when the backtick region is unterminated.
+    """
+    interior_index = opener_index + 1
+    while interior_index < buffer_length:
+        if all_scanned_characters[interior_index] == SHELL_BACKTICK_CHARACTER:
+            return interior_index + 1
+        interior_index += 1
+    return interior_index
+
+
+def _index_after_quoted_region(
+    all_scanned_characters: list[str],
+    opener_index: int,
+    buffer_length: int,
+    quote_character: str,
+) -> int:
+    """Return the index one past the matching quote of a ``'...'`` or ``"..."`` region.
+
+    Single quotes have no escape mechanism in bash, so the walker advances
+    to the next matching ``'``. Double quotes honor ``\\`` escapes, so a
+    ``\\`` followed by any character is consumed as a two-character unit
+    (``\\"`` does not terminate the region).
+
+    Args:
+        all_scanned_characters: Mutable list view of the command string.
+        opener_index: Index of the opening quote.
+        buffer_length: Length of ``all_scanned_characters``, hoisted by
+            the caller to avoid a recomputation per call.
+        quote_character: ``'`` or ``"`` — the quote whose match closes
+            the region.
+
+    Returns:
+        The index just past the matching closing quote, or ``buffer_length``
+        when the quoted region is unterminated.
+    """
+    interior_index = opener_index + 1
+    while interior_index < buffer_length:
+        interior_character = all_scanned_characters[interior_index]
+        if (
+            quote_character == '"'
+            and interior_character == "\\"
+            and interior_index + 1 < buffer_length
+        ):
+            interior_index += SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH
+            continue
+        if interior_character == quote_character:
+            return interior_index + 1
         interior_index += 1
     return interior_index
 

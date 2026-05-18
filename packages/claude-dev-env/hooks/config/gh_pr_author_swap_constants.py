@@ -19,7 +19,7 @@ REQUIRED_ACCOUNT_ENV_VAR: str = "GITHUB_DEFAULT_ACCOUNT"
 
 BASH_TOOL_NAME: str = "Bash"
 
-GH_PR_CREATE_PATTERN: re.Pattern[str] = re.compile(r"\bgh\s+pr\s+create\b", re.IGNORECASE)
+GH_PR_CREATE_PATTERN: re.Pattern[str] = re.compile(r"\bgh[ \t]+pr[ \t]+create\b", re.IGNORECASE)
 WEB_FLAG_PATTERN: re.Pattern[str] = re.compile(r"(?<!\S)(?:--web|-w)(?!\S)")
 COMMAND_SEPARATOR_PATTERN: re.Pattern[str] = re.compile(
     r"(?:&&|\|\||;|(?<!\|)\|(?!\|)|(?<!&)&(?!&)|[\r\n])"

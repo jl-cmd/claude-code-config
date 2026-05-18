@@ -168,6 +168,64 @@ def test_command_invokes_gh_pr_create_still_matches_unquoted_invocation() -> Non
     )
 
 
+def test_strip_quoted_regions_balances_paren_inside_double_quoted_substitution_body() -> None:
+    """A ``)`` inside ``"..."`` within ``$(...)`` must not prematurely close the substitution."""
+    original_command = 'echo $(echo ")") && gh pr create --title T'
+    stripped_command = utils_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "gh pr create" in stripped_command
+
+
+def test_command_invokes_gh_pr_create_detects_real_invocation_after_double_quoted_paren_in_substitution() -> None:
+    """The real ``gh pr create`` after a ``$(echo ")")`` block must still be detected."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions('echo $(echo ")") && gh pr create --title T')
+    )
+
+
+def test_strip_quoted_regions_balances_paren_inside_single_quoted_substitution_body() -> None:
+    """A ``)`` inside ``'...'`` within ``$(...)`` must not prematurely close the substitution."""
+    original_command = "echo $(echo ')') && gh pr create --title T"
+    stripped_command = utils_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "gh pr create" in stripped_command
+
+
+def test_command_invokes_gh_pr_create_detects_real_invocation_after_single_quoted_paren_in_substitution() -> None:
+    """The real ``gh pr create`` after a ``$(echo ')')`` block must still be detected."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("echo $(echo ')') && gh pr create --title T")
+    )
+
+
+def test_command_invokes_gh_pr_create_detects_real_invocation_after_escaped_quote_in_substitution() -> None:
+    """A ``\\"`` inside ``"..."`` in ``$(...)`` does not close the quoted region; balance still holds."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions('echo $(echo "\\")") && gh pr create --title T')
+    )
+
+
+def test_command_invokes_gh_pr_create_detects_real_invocation_after_backtick_paren_in_substitution() -> None:
+    """A ``)`` inside ``` `...` ``` within ``$(...)`` must not prematurely close the substitution."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("echo $(echo `foo)bar`) && gh pr create --title T")
+    )
+
+
+def test_command_invokes_gh_pr_create_rejects_newline_between_pr_and_create() -> None:
+    """``gh pr\\ncreate-report.sh`` is two commands; the second is not ``create``."""
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh pr\ncreate-report.sh")
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_tab_separated_tokens() -> None:
+    """Tab characters between ``gh``, ``pr``, and ``create`` still match the invocation pattern."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh\tpr\tcreate --title T")
+    )
+
+
 def test_state_file_path_uses_session_id(
     isolated_temp_directory: pathlib.Path,
 ) -> None:

@@ -4,8 +4,8 @@ import os
 import re
 
 
-PLUGIN_ROOT: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-PR_GUIDE_PATH: str = os.path.join(PLUGIN_ROOT, "docs", "PR_DESCRIPTION_GUIDE.md")
+_PLUGIN_ROOT: str = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PR_GUIDE_PATH: str = os.path.join(_PLUGIN_ROOT, "docs", "PR_DESCRIPTION_GUIDE.md")
 
 MINIMUM_SUBSTANTIVE_PROSE_CHARS: int = 40
 

@@ -1,9 +1,10 @@
 """Unit tests for the pr_converge_bugteam_enforcer PreToolUse hook.
 
 Covers the Step 5 BUGTEAM contract: Agent({subagent_type: "clean-coder"})
-calls that look like audit substitutes are blocked when state.json shows
-phase=BUGTEAM and the formal Skill({skill: "bugteam"}) has not registered
-at the current HEAD and tick. qbug is explicitly NOT a substitute.
+calls that look like audit substitutes are blocked when
+$CLAUDE_JOB_DIR/pr-converge-state.json (named by PR_CONVERGE_STATE_FILENAME)
+shows phase=BUGTEAM and the formal Skill({skill: "bugteam"}) has not
+registered at the current HEAD and tick. qbug is explicitly NOT a substitute.
 """
 
 from __future__ import annotations

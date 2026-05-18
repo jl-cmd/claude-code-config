@@ -1,8 +1,9 @@
 """Unit tests for the pr_converge_bugteam_skill_tracker PreToolUse hook.
 
 Covers the bugteam-only update path: only Skill({skill: "bugteam"}) updates
-state.json's invocation fields. qbug, other skills, and missing-state cases
-all return exit 0 without modifying state.
+the invocation fields in $CLAUDE_JOB_DIR/pr-converge-state.json (the file
+named by PR_CONVERGE_STATE_FILENAME). qbug, other skills, and missing-state
+cases all return exit 0 without modifying state.
 """
 
 from __future__ import annotations

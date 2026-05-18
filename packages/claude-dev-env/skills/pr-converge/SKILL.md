@@ -38,7 +38,8 @@ clean-at SHAs. On tick exit, write updated state before calling ScheduleWakeup
 so the next tick resumes with accurate state.
 
 Fields: `phase`, `tick_count`, `bugbot_clean_at`, `bugteam_clean_at`,
-`copilot_clean_at`, `current_head`, `bugbot_acknowledged_at`, `bugbot_down`.
+`copilot_clean_at`, `current_head`, `bugbot_acknowledged_at`, `bugbot_down`,
+`bugteam_skill_invoked_at_head`, `bugteam_skill_invoked_at_tick`.
 
 ## Gotchas
 

@@ -1,10 +1,13 @@
 # State across ticks
 
-**Dual persistence:** `<TMPDIR>/pr-converge-<session_id>/state.json`
-exists (multi-PR) → that file is source of truth for `phase`, heads,
-counters, status, not conversation transcript. No `state.json` (typical
-single-PR `/pr-converge`) → track in each assistant turn as
-plain text so next tick re-reads from context:
+**Dual persistence:** Single-PR `/pr-converge` writes loop state to
+`$CLAUDE_JOB_DIR/pr-converge-state.json`; that file is the source of truth
+for `phase`, heads, counters, status. Multi-PR mode additionally maintains
+`<TMPDIR>/pr-converge-<session_id>/state.json` for orchestrator coordination
+across PRs. Both files share most of the fields below; the
+`bugteam_skill_invoked_at_head` and `bugteam_skill_invoked_at_tick` fields
+live ONLY in the single-PR `$CLAUDE_JOB_DIR/pr-converge-state.json` file
+(see those field entries below for details).
 
 - `phase`: `BUGBOT`, `BUGTEAM`, or `COPILOT_WAIT`. Start `BUGBOT` on first tick.
 - `bugbot_clean_at`: HEAD SHA where bugbot last reported clean, or `null`.

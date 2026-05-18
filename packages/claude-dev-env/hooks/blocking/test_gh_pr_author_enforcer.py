@@ -152,6 +152,13 @@ def test_command_uses_web_flag_ignores_w_after_or_separator() -> None:
     )
 
 
+def test_command_uses_web_flag_ignores_w_after_background_separator() -> None:
+    """`gh pr create & other-cmd -w` does not pick up the trailing -w."""
+    assert not hook_module._command_uses_web_flag(
+        "gh pr create --title T & other-cmd -w"
+    )
+
+
 def test_main_auto_switches_when_active_account_mismatches(
     monkeypatch: pytest.MonkeyPatch,
     required_account_jonecho: str,

@@ -21,7 +21,9 @@ BASH_TOOL_NAME: str = "Bash"
 
 GH_PR_CREATE_PATTERN: re.Pattern[str] = re.compile(r"\bgh\s+pr\s+create\b", re.IGNORECASE)
 WEB_FLAG_PATTERN: re.Pattern[str] = re.compile(r"(?<!\S)(?:--web|-w)(?!\S)")
-COMMAND_SEPARATOR_PATTERN: re.Pattern[str] = re.compile(r"(?:&&|\|\||;|(?<!\|)\|(?!\|))")
+COMMAND_SEPARATOR_PATTERN: re.Pattern[str] = re.compile(
+    r"(?:&&|\|\||;|(?<!\|)\|(?!\|)|(?<!&)&(?!&))"
+)
 
 ALL_GH_API_USER_COMMAND: tuple[str, ...] = ("gh", "api", "user", "--jq", ".login")
 GH_API_USER_TIMEOUT_SECONDS: int = 5

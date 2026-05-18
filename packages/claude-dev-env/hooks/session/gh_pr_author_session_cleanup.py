@@ -38,66 +38,16 @@ if _hooks_tree_path not in sys.path:
 from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must run first
     _delete_state_file,
     _read_original_account,
+    _state_file_is_attacker_planted,
     _switch_gh_account,
     _write_line,
 )
 from config.gh_pr_author_swap_constants import (  # noqa: E402  # sys.path shim above must run first
     REQUIRED_ACCOUNT_ENV_VAR,
-    STATE_FILE_PERMISSION_MODE,
     STATE_FILE_PREFIX,
     STATE_FILE_STALE_AGE_SECONDS,
     STATE_FILE_SUFFIX,
 )
-
-
-def _state_file_is_attacker_planted(file_lstat_result: os.stat_result) -> bool:
-    """Return True when the file's owner or mode bits do not match an enforcer-written file.
-
-    The enforcer atomically creates each swap-state file with mode
-    ``STATE_FILE_PERMISSION_MODE`` (``0o600``) owned by the current
-    user. A file in the shared system temp directory that diverges on
-    either axis is overwhelmingly likely to be an attacker plant —
-    another user on the same workstation pre-creating a file at the
-    predictable swap-state path to trick the cleanup hook into running
-    ``gh auth switch --user <attacker-controlled-login>``.
-
-    Callers must pass an ``lstat`` result rather than a ``stat`` result.
-    The enforcer creates state files with ``O_NOFOLLOW`` to prevent
-    symlink hijacking; the cleanup hook must mirror that contract by
-    inspecting the entry itself rather than what a symlink points to.
-    Otherwise an attacker-planted symlink pointing to any 0o600 file
-    owned by the current user (an SSH key, a token cache) would pass
-    the ownership/mode check and drive ``gh auth switch`` to an
-    attacker-influenced account.
-
-    The mode-bit and uid checks only apply on POSIX. Windows reports
-    ``0o666`` from ``stat`` for files chmod'd to ``0o600`` because
-    ``os.chmod`` on Windows only toggles the read-only attribute, and
-    ``os.getuid`` is absent there. ``tempfile.gettempdir()`` on Windows
-    is already per-user (``%LOCALAPPDATA%\\Temp``), which closes the
-    cross-user attack surface this check guards against on POSIX, so
-    the check is a no-op on Windows.
-
-    Args:
-        file_lstat_result: ``os.stat_result`` produced by ``lstat`` for
-            the candidate file. Symlinks must reach this function as
-            their own entry, not as their resolved target.
-
-    Returns:
-        True when the file looks attacker-planted (POSIX: wrong mode
-        bits or wrong uid). False when the file matches the enforcer's
-        write contract, or when running on a platform without POSIX
-        ownership semantics.
-    """
-    if not hasattr(os, "getuid"):
-        return False
-    actual_permission_bits = stat.S_IMODE(file_lstat_result.st_mode)
-    if actual_permission_bits != STATE_FILE_PERMISSION_MODE:
-        return True
-    current_user_id = os.getuid()
-    if file_lstat_result.st_uid != current_user_id:
-        return True
-    return False
 
 
 def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
@@ -154,7 +104,7 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
             continue
         if not stat.S_ISREG(file_lstat_result.st_mode):
             continue
-        if _state_file_is_attacker_planted(file_lstat_result):
+        if _state_file_is_attacker_planted(each_candidate_path):
             continue
         file_age_seconds = current_time_seconds - file_lstat_result.st_mtime
         if file_age_seconds >= STATE_FILE_STALE_AGE_SECONDS:

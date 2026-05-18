@@ -35,8 +35,6 @@ _insert_hooks_tree_for_imports()
 
 from config.pr_converge_bugteam_enforcer_constants import (
     BUGTEAM_SKILL_NAME,
-    CLAUDE_JOB_DIR_ENV_VAR,
-    PR_CONVERGE_STATE_FILENAME,
     SKILL_TOOL_NAME,
     STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_HEAD,
     STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_TICK,
@@ -45,40 +43,10 @@ from config.pr_converge_bugteam_enforcer_constants import (
     STATE_FILE_ATOMIC_WRITE_SUFFIX,
     STATE_FILE_JSON_INDENT_SPACES,
 )
-
-
-def _resolve_state_path() -> Path | None:
-    job_directory = os.environ.get(CLAUDE_JOB_DIR_ENV_VAR, "")
-    if not job_directory:
-        return None
-    return Path(job_directory) / PR_CONVERGE_STATE_FILENAME
-
-
-def _load_state_dictionary(state_path: Path) -> dict[str, object] | None:
-    """Return the parsed pr-converge state, or None when absent or unparseable.
-
-    Args:
-        state_path: Absolute path to ``pr-converge-state.json``.
-
-    Returns:
-        The decoded state dictionary, or None when the file is missing,
-        malformed, empty, or not a JSON object at the root.
-    """
-    if not state_path.is_file():
-        return None
-    try:
-        raw_text = state_path.read_text(encoding="utf-8")
-    except OSError:
-        return None
-    if not raw_text.strip():
-        return None
-    try:
-        parsed_state = json.loads(raw_text)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(parsed_state, dict):
-        return None
-    return parsed_state
+from config.pr_converge_bugteam_enforcer_state import (
+    _load_state_dictionary,
+    _resolve_state_path,
+)
 
 
 def _atomic_write_state(state_path: Path, state_by_field: dict[str, object]) -> None:

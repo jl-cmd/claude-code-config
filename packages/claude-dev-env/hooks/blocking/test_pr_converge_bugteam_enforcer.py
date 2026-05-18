@@ -179,7 +179,7 @@ def test_should_block_when_qbug_was_invoked_but_not_bugteam(
     assert deny_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_should_allow_when_bugteam_invoked_at_current_head_but_previous_tick(
+def test_should_block_when_bugteam_invoked_at_current_head_but_previous_tick(
     claude_job_directory: pathlib.Path,
 ) -> None:
     _write_state(

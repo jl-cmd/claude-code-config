@@ -15,7 +15,6 @@ SKILL_TOOL_NAME: str = "Skill"
 
 CLEAN_CODER_SUBAGENT_TYPE: str = "clean-coder"
 BUGTEAM_SKILL_NAME: str = "bugteam"
-QBUG_SKILL_NAME: str = "qbug"
 
 PR_CONVERGE_STATE_FILENAME: str = "pr-converge-state.json"
 CLAUDE_JOB_DIR_ENV_VAR: str = "CLAUDE_JOB_DIR"

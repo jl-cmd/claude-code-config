@@ -43,7 +43,9 @@ from config.gh_pr_author_swap_constants import (
     GH_PR_CREATE_PATTERN,
     SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH,
     SHELL_BACKTICK_CHARACTER,
+    SHELL_DOLLAR_CHARACTER,
     SHELL_PAREN_CLOSE_CHARACTER,
+    SHELL_PAREN_OPEN_CHARACTER,
     SHELL_QUOTE_REPLACEMENT_CHARACTER,
     STATE_FILE_DEFAULT_SESSION_ID,
     STATE_FILE_ORIGINAL_ACCOUNT_KEY,
@@ -203,9 +205,9 @@ def _index_after_command_substitution(all_scanned_characters: list[str], opener_
     while interior_index < buffer_length and paren_depth > 0:
         interior_character = all_scanned_characters[interior_index]
         if (
-            interior_character == "$"
+            interior_character == SHELL_DOLLAR_CHARACTER
             and interior_index + 1 < buffer_length
-            and all_scanned_characters[interior_index + 1] == "("
+            and all_scanned_characters[interior_index + 1] == SHELL_PAREN_OPEN_CHARACTER
         ):
             paren_depth += 1
             interior_index += COMMAND_SUBSTITUTION_OPENER_LENGTH
@@ -233,7 +235,11 @@ def _strip_quoted_regions(command: str) -> str:
     still expanded, so the walker recognizes the ``$(`` opener inside
     the quoted scan and stops stripping until the matching ``)`` —
     leaving the substitution body scannable while keeping the surrounding
-    quoted text inert.
+    quoted text inert. Backtick command substitution (``` `...` ```) is
+    likewise expanded by bash inside double quotes, so the same
+    skip-past-body behavior applies: the walker advances past the closing
+    backtick without stripping the interior, so any ``gh pr create`` token
+    sitting inside ``"`...`"`` remains visible to the matcher.
 
     Backslash-escaped quotes inside a double-quoted segment (``\\"``) do
     not terminate the region. An unterminated quote consumes the rest of
@@ -253,9 +259,9 @@ def _strip_quoted_regions(command: str) -> str:
     while cursor_index < command_length:
         current_character = scanned_characters[cursor_index]
         if (
-            current_character == "$"
+            current_character == SHELL_DOLLAR_CHARACTER
             and cursor_index + 1 < command_length
-            and scanned_characters[cursor_index + 1] == "("
+            and scanned_characters[cursor_index + 1] == SHELL_PAREN_OPEN_CHARACTER
         ):
             cursor_index = _index_after_command_substitution(scanned_characters, cursor_index)
             continue
@@ -287,11 +293,19 @@ def _strip_quoted_regions(command: str) -> str:
                 continue
             if (
                 quote_character == '"'
-                and interior_character == "$"
+                and interior_character == SHELL_DOLLAR_CHARACTER
                 and interior_index + 1 < command_length
-                and scanned_characters[interior_index + 1] == "("
+                and scanned_characters[interior_index + 1] == SHELL_PAREN_OPEN_CHARACTER
             ):
                 interior_index = _index_after_command_substitution(scanned_characters, interior_index)
+                continue
+            if quote_character == '"' and interior_character == SHELL_BACKTICK_CHARACTER:
+                interior_index += 1
+                while interior_index < command_length:
+                    if scanned_characters[interior_index] == SHELL_BACKTICK_CHARACTER:
+                        interior_index += 1
+                        break
+                    interior_index += 1
                 continue
             if interior_character == quote_character:
                 scanned_characters[interior_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER

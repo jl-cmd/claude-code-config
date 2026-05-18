@@ -79,6 +79,13 @@ def test_strip_quoted_regions_preserves_dollar_paren_inside_double_quotes() -> N
     assert "gh pr create" in stripped_command
 
 
+def test_strip_quoted_regions_preserves_backtick_substitution_inside_double_quotes() -> None:
+    """`gh pr create` inside a backtick substitution inside double quotes stays scannable."""
+    original_command = 'echo "`gh pr create --title T`"'
+    stripped_command = utils_module._strip_quoted_regions(original_command)
+    assert "gh pr create" in stripped_command
+
+
 def test_strip_quoted_regions_handles_escaped_quote_inside_double_quotes() -> None:
     original_command = 'gh pr create --body "escaped \\" quote" --title T'
     stripped_command = utils_module._strip_quoted_regions(original_command)

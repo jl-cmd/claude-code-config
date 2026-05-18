@@ -74,7 +74,15 @@ def _logical_line_has_bare_body_token(logical_line: str) -> bool:
 def _line_before_marker_has_unclosed_double_quote(
     line_excluding_trailing_marker: str,
 ) -> bool:
-    """Return True when the line text has an odd count of unescaped `"`.
+    """Return True when the line text has an odd count of `"` characters.
+
+    Counts every `"` character in the segment via `str.count('"')` and
+    returns True when the total is odd. The target shell for this
+    continuation check is PowerShell, which represents a literal double
+    quote inside a double-quoted string as a doubled `""` rather than a
+    backslash-escaped `\\"`. A raw `"` count is therefore the appropriate
+    signal for whether a quoted segment is still open at the end of the
+    line.
 
     An odd count means a body argument like `--body "Thanks ` opens a quote
     that this line never closes — the next line carries the closing quote.

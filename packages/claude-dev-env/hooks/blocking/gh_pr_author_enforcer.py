@@ -42,8 +42,9 @@ from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must
     _all_gh_pr_create_segments,
     _command_invokes_gh_pr_create_in_stripped,
     _delete_state_file,
+    _preprocess_command_for_matching,
     _state_file_path,
-    _strip_quoted_regions,
+    _strip_substitution_bodies,
     _switch_gh_account,
     _write_line,
 )
@@ -54,6 +55,7 @@ from config.gh_pr_author_swap_constants import (  # noqa: E402  # sys.path shim 
     OS_O_NOFOLLOW_ATTRIBUTE_NAME,
     REQUIRED_ACCOUNT_ENV_VAR,
     STATE_FILE_ORIGINAL_ACCOUNT_KEY,
+    STATE_FILE_PAYLOAD_TEXT_ENCODING_NAME,
     STATE_FILE_PERMISSION_MODE,
     STATE_FILE_PRIMARY_ACCOUNT_KEY,
     WEB_FLAG_PATTERN,
@@ -65,8 +67,14 @@ def _active_gh_account() -> str | None:
 
     Returns:
         The login string from ``gh api user --jq .login`` on success.
-        None when gh is missing, the command fails, times out, or returns
-        an empty value. The caller treats None as "skip the check."
+        None when gh is missing, the gh binary lacks executable permission,
+        the command fails, times out, or returns an empty value.
+        ``OSError`` covers every spawn-time failure
+        (``FileNotFoundError`` when gh is absent, ``PermissionError``
+        when gh exists but is not executable, and any other
+        platform-specific spawn errors) so the hook follows its
+        documented "skip the check" failure path rather than crashing.
+        The caller treats None as "skip the check."
     """
     try:
         completed_process = subprocess.run(
@@ -76,7 +84,7 @@ def _active_gh_account() -> str | None:
             timeout=GH_API_USER_TIMEOUT_SECONDS,
             check=False,
         )
-    except (FileNotFoundError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError):
         return None
     if completed_process.returncode != 0:
         return None
@@ -128,16 +136,14 @@ def _write_swap_state(
         STATE_FILE_ORIGINAL_ACCOUNT_KEY: original_account,
         STATE_FILE_PRIMARY_ACCOUNT_KEY: primary_account,
     }
-    serialized_payload = json.dumps(swap_state).encode("utf-8")
+    serialized_payload = json.dumps(swap_state).encode(STATE_FILE_PAYLOAD_TEXT_ENCODING_NAME)
     open_flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, OS_O_NOFOLLOW_ATTRIBUTE_NAME):
         open_flags |= os.O_NOFOLLOW
     file_descriptor = _open_state_file_with_retry(state_file, open_flags)
     if file_descriptor is None:
         return False
-    try:
-        os.write(file_descriptor, serialized_payload)
-    except OSError:
+    if not _write_payload_completely(file_descriptor, serialized_payload):
         os.close(file_descriptor)
         _delete_state_file(state_file)
         return False
@@ -147,6 +153,56 @@ def _write_swap_state(
     except OSError:
         _delete_state_file(state_file)
         return False
+    return True
+
+
+def _write_payload_completely(file_descriptor: int, serialized_payload: bytes) -> bool:
+    """Write every byte of ``serialized_payload`` to ``file_descriptor``.
+
+    ``os.write`` is documented to potentially write fewer bytes than
+    requested, especially on pipes and non-blocking descriptors. The
+    state file is opened in blocking mode, but the contract holds — a
+    signal arriving mid-write can cut a write short, and partial writes
+    have been observed across NFS mounts and FUSE filesystems. Treating
+    the first ``os.write`` return value as authoritative would leave a
+    truncated JSON state file on disk; the restore hook would then
+    parse the truncated file, log "malformed state file", delete it,
+    and leave the active gh CLI account stranded on the canonical
+    author instead of restoring the original account.
+
+    The loop reissues ``os.write`` against a slice of the payload that
+    starts at the byte count already written, until every byte has been
+    emitted. A return value of zero from ``os.write`` indicates the
+    underlying file descriptor cannot accept any more bytes and is
+    treated as a write failure so the caller can roll back rather than
+    spin forever.
+
+    Args:
+        file_descriptor: Open file descriptor returned by ``os.open``.
+            The caller retains ownership and is responsible for closing
+            the descriptor whether this function returns True or False.
+        serialized_payload: Encoded JSON payload to write. The caller
+            encodes via ``STATE_FILE_PAYLOAD_TEXT_ENCODING_NAME`` before
+            invoking this helper.
+
+    Returns:
+        True when every byte of ``serialized_payload`` was written.
+        False on any ``OSError`` raised by ``os.write`` or when
+        ``os.write`` returns zero before the payload is complete.
+    """
+    payload_length = len(serialized_payload)
+    bytes_already_written = 0
+    while bytes_already_written < payload_length:
+        try:
+            bytes_just_written = os.write(
+                file_descriptor,
+                serialized_payload[bytes_already_written:],
+            )
+        except OSError:
+            return False
+        if bytes_just_written == 0:
+            return False
+        bytes_already_written += bytes_just_written
     return True
 
 
@@ -252,7 +308,7 @@ def _build_state_write_failure_message(
     )
 
 
-def _command_uses_web_flag_in_stripped(quote_stripped_command: str) -> bool:
+def _command_uses_web_flag_in_stripped(preprocessed_command: str) -> bool:
     """Return True when EVERY ``gh pr create`` segment uses ``--web`` / ``-w``.
 
     The flag is only relevant when it modifies the ``gh pr create``
@@ -262,8 +318,20 @@ def _command_uses_web_flag_in_stripped(quote_stripped_command: str) -> bool:
     ``||`` / ``;`` / ``|`` / newline, must not flip the enforcer into
     the browser-flow no-op path. A ``-w`` sitting inside a quoted
     argument (for example ``--body "see -w docs"``) likewise must not
-    match — the caller blanks those out via ``_strip_quoted_regions``
-    before passing the command in here.
+    match — the caller blanks those out via
+    ``_preprocess_command_for_matching`` before passing the command in
+    here.
+
+    A ``--web`` token sitting inside a substitution body (for example
+    ``gh pr create --title "$(echo --web)"``) is an argument to the
+    subshell command, not a flag on the outer ``gh pr create`` —
+    ``_strip_substitution_bodies`` blanks the substitution before the
+    segment search so the false-positive does not skip the swap. The
+    safety bias is intentional: a substitution that genuinely expands
+    to ``--web`` is now treated as a non-web invocation and still
+    triggers the account swap, which is harmless because ``gh pr create``
+    with both ``--web`` and the canonical author swapped in just runs
+    the browser flow.
 
     When the command chains multiple ``gh pr create`` invocations
     (``gh pr create --web && gh pr create --title T``), the enforcer
@@ -273,24 +341,25 @@ def _command_uses_web_flag_in_stripped(quote_stripped_command: str) -> bool:
     "browser-flow only when EVERY segment opts in" semantics.
 
     Args:
-        quote_stripped_command: Output of ``_strip_quoted_regions`` —
-            the caller is responsible for stripping inert quoted regions
-            before passing in. ``main()`` computes this once and passes
-            it to both this helper and
+        preprocessed_command: Output of ``_preprocess_command_for_matching`` —
+            the caller is responsible for blanking inert quoted regions
+            and bash comments before passing in. ``main()`` computes
+            this once and passes it to both this helper and
             ``_command_invokes_gh_pr_create_in_stripped`` so the
-            character-walk in ``_strip_quoted_regions`` runs exactly
-            once per command.
+            character-walk preprocessing runs exactly once per command.
 
     Returns:
-        True when every ``gh pr create`` segment in the already-stripped
-        command carries ``--web`` or ``-w`` as a whole token. False when
-        ``gh pr create`` is absent, or when any segment lacks the flag.
+        True when every ``gh pr create`` segment in the preprocessed
+        command carries ``--web`` or ``-w`` as a whole token. False
+        when ``gh pr create`` is absent, or when any segment lacks the
+        flag (including segments whose only ``--web`` token sat inside
+        a substitution body that has now been blanked).
     """
-    all_gh_pr_create_segments = _all_gh_pr_create_segments(quote_stripped_command)
+    all_gh_pr_create_segments = _all_gh_pr_create_segments(preprocessed_command)
     if not all_gh_pr_create_segments:
         return False
     return all(
-        bool(WEB_FLAG_PATTERN.search(each_segment))
+        bool(WEB_FLAG_PATTERN.search(_strip_substitution_bodies(each_segment)))
         for each_segment in all_gh_pr_create_segments
     )
 
@@ -330,11 +399,11 @@ def main() -> None:
     if not command:
         sys.exit(0)
 
-    quote_stripped_command = _strip_quoted_regions(command)
-    if not _command_invokes_gh_pr_create_in_stripped(quote_stripped_command):
+    preprocessed_command = _preprocess_command_for_matching(command)
+    if not _command_invokes_gh_pr_create_in_stripped(preprocessed_command):
         sys.exit(0)
 
-    if _command_uses_web_flag_in_stripped(quote_stripped_command):
+    if _command_uses_web_flag_in_stripped(preprocessed_command):
         sys.exit(0)
 
     required_account = os.environ.get(REQUIRED_ACCOUNT_ENV_VAR, "").strip()

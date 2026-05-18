@@ -84,13 +84,13 @@ def _run_hook_with(
 
 def test_command_invokes_gh_pr_create_matches_basic_form() -> None:
     assert hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("gh pr create --title T")
+        hook_module._preprocess_command_for_matching("gh pr create --title T")
     )
 
 
 def test_command_invokes_gh_pr_create_rejects_pr_edit() -> None:
     assert not hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("gh pr edit 10")
+        hook_module._preprocess_command_for_matching("gh pr edit 10")
     )
 
 

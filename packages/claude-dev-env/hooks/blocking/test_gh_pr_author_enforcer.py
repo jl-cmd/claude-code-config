@@ -78,49 +78,49 @@ def _run_hook_with(
 
 def test_command_invokes_gh_pr_create_matches_basic_form() -> None:
     assert hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("gh pr create --title T")
+        hook_module._preprocess_command_for_matching("gh pr create --title T")
     )
 
 
 def test_command_invokes_gh_pr_create_matches_chained_form() -> None:
     assert hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("git push && gh pr create")
+        hook_module._preprocess_command_for_matching("git push && gh pr create")
     )
 
 
 def test_command_invokes_gh_pr_create_rejects_pr_edit() -> None:
     assert not hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("gh pr edit 10 --title X")
+        hook_module._preprocess_command_for_matching("gh pr edit 10 --title X")
     )
 
 
 def test_command_invokes_gh_pr_create_rejects_substring() -> None:
     assert not hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("some-gh pr created-by")
+        hook_module._preprocess_command_for_matching("some-gh pr created-by")
     )
 
 
 def test_command_uses_web_flag_matches_long_form() -> None:
     assert hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions("gh pr create --web")
+        hook_module._preprocess_command_for_matching("gh pr create --web")
     )
 
 
 def test_command_uses_web_flag_matches_short_form() -> None:
     assert hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions("gh pr create -w")
+        hook_module._preprocess_command_for_matching("gh pr create -w")
     )
 
 
 def test_command_uses_web_flag_rejects_webhook_substring() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions("gh pr create --webhook=foo")
+        hook_module._preprocess_command_for_matching("gh pr create --webhook=foo")
     )
 
 
 def test_command_uses_web_flag_ignores_curl_w_flag_before_gh() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "curl -w '%{http_code}' url && gh pr create --title T"
         )
     )
@@ -128,7 +128,7 @@ def test_command_uses_web_flag_ignores_curl_w_flag_before_gh() -> None:
 
 def test_command_uses_web_flag_ignores_w_after_separator() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T && other-cmd -w"
         )
     )
@@ -136,19 +136,19 @@ def test_command_uses_web_flag_ignores_w_after_separator() -> None:
 
 def test_command_uses_web_flag_detects_web_inside_gh_pr_create() -> None:
     assert hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions("gh pr create --web --title T")
+        hook_module._preprocess_command_for_matching("gh pr create --web --title T")
     )
 
 
 def test_command_uses_web_flag_detects_short_w_inside_gh_pr_create() -> None:
     assert hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions("gh pr create -w --title T")
+        hook_module._preprocess_command_for_matching("gh pr create -w --title T")
     )
 
 
 def test_command_uses_web_flag_handles_gh_pr_create_without_web() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T --body-file B"
         )
     )
@@ -156,13 +156,13 @@ def test_command_uses_web_flag_handles_gh_pr_create_without_web() -> None:
 
 def test_command_uses_web_flag_returns_false_when_gh_pr_create_absent() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions("curl -w '%{http_code}' url")
+        hook_module._preprocess_command_for_matching("curl -w '%{http_code}' url")
     )
 
 
 def test_command_uses_web_flag_ignores_w_after_pipe_separator() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T | tee -w log"
         )
     )
@@ -170,7 +170,7 @@ def test_command_uses_web_flag_ignores_w_after_pipe_separator() -> None:
 
 def test_command_uses_web_flag_ignores_w_after_semicolon_separator() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T ; other-cmd -w"
         )
     )
@@ -178,7 +178,7 @@ def test_command_uses_web_flag_ignores_w_after_semicolon_separator() -> None:
 
 def test_command_uses_web_flag_ignores_w_after_or_separator() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T || fallback -w"
         )
     )
@@ -187,7 +187,7 @@ def test_command_uses_web_flag_ignores_w_after_or_separator() -> None:
 def test_command_uses_web_flag_ignores_w_after_background_separator() -> None:
     """`gh pr create & other-cmd -w` does not pick up the trailing -w."""
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T & other-cmd -w"
         )
     )
@@ -560,7 +560,7 @@ def test_main_emits_deny_even_when_reverse_switch_also_fails(
 
 def test_strip_quoted_regions_preserves_offsets_for_double_quotes() -> None:
     original_command = "gh pr create --body \"some text\" --title T"
-    stripped_command = hook_module._strip_quoted_regions(original_command)
+    stripped_command = hook_module._preprocess_command_for_matching(original_command)
     assert len(stripped_command) == len(original_command)
     assert "some text" not in stripped_command
     assert "gh pr create" in stripped_command
@@ -569,7 +569,7 @@ def test_strip_quoted_regions_preserves_offsets_for_double_quotes() -> None:
 
 def test_strip_quoted_regions_preserves_offsets_for_single_quotes() -> None:
     original_command = "gh pr create --body 'single quoted body' --title T"
-    stripped_command = hook_module._strip_quoted_regions(original_command)
+    stripped_command = hook_module._preprocess_command_for_matching(original_command)
     assert len(stripped_command) == len(original_command)
     assert "single quoted body" not in stripped_command
 
@@ -577,7 +577,7 @@ def test_strip_quoted_regions_preserves_offsets_for_single_quotes() -> None:
 def test_strip_quoted_regions_preserves_backtick_substitution_body() -> None:
     """Backticks delimit command substitution, which executes — the body must remain scannable."""
     original_command = "echo `inner cmd` && gh pr create --title T"
-    stripped_command = hook_module._strip_quoted_regions(original_command)
+    stripped_command = hook_module._preprocess_command_for_matching(original_command)
     assert len(stripped_command) == len(original_command)
     assert "inner cmd" in stripped_command
     assert "gh pr create" in stripped_command
@@ -586,7 +586,7 @@ def test_strip_quoted_regions_preserves_backtick_substitution_body() -> None:
 def test_strip_quoted_regions_preserves_dollar_paren_substitution_body() -> None:
     """``$(...)`` substitution body must remain scannable for the same reason as backticks."""
     original_command = "echo $(inner cmd) && gh pr create --title T"
-    stripped_command = hook_module._strip_quoted_regions(original_command)
+    stripped_command = hook_module._preprocess_command_for_matching(original_command)
     assert len(stripped_command) == len(original_command)
     assert "inner cmd" in stripped_command
     assert "gh pr create" in stripped_command
@@ -595,7 +595,7 @@ def test_strip_quoted_regions_preserves_dollar_paren_substitution_body() -> None
 def test_strip_quoted_regions_preserves_dollar_paren_inside_double_quotes() -> None:
     """``"$(...)"`` substitution body remains scannable even when wrapped in double quotes."""
     original_command = 'echo "$(inner cmd)" && gh pr create --title T'
-    stripped_command = hook_module._strip_quoted_regions(original_command)
+    stripped_command = hook_module._preprocess_command_for_matching(original_command)
     assert len(stripped_command) == len(original_command)
     assert "inner cmd" in stripped_command
     assert "gh pr create" in stripped_command
@@ -603,7 +603,7 @@ def test_strip_quoted_regions_preserves_dollar_paren_inside_double_quotes() -> N
 
 def test_strip_quoted_regions_handles_escaped_quote_inside_double_quotes() -> None:
     original_command = "gh pr create --body \"escaped \\\" quote\" --title T"
-    stripped_command = hook_module._strip_quoted_regions(original_command)
+    stripped_command = hook_module._preprocess_command_for_matching(original_command)
     assert len(stripped_command) == len(original_command)
     assert "escaped" not in stripped_command
     assert "--title T" in stripped_command
@@ -611,19 +611,19 @@ def test_strip_quoted_regions_handles_escaped_quote_inside_double_quotes() -> No
 
 def test_command_invokes_gh_pr_create_ignores_literal_inside_quotes() -> None:
     assert not hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("echo \"gh pr create docs\"")
+        hook_module._preprocess_command_for_matching("echo \"gh pr create docs\"")
     )
 
 
 def test_command_invokes_gh_pr_create_ignores_literal_inside_single_quotes() -> None:
     assert not hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("echo 'gh pr create docs'")
+        hook_module._preprocess_command_for_matching("echo 'gh pr create docs'")
     )
 
 
 def test_command_invokes_gh_pr_create_still_matches_unquoted_invocation() -> None:
     assert hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --body \"see docs about gh pr create\""
         )
     )
@@ -631,7 +631,7 @@ def test_command_invokes_gh_pr_create_still_matches_unquoted_invocation() -> Non
 
 def test_command_uses_web_flag_ignores_dash_w_inside_body_string() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T --body \"see -w for web\""
         )
     )
@@ -639,7 +639,7 @@ def test_command_uses_web_flag_ignores_dash_w_inside_body_string() -> None:
 
 def test_command_uses_web_flag_handles_separator_inside_quoted_body() -> None:
     assert hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title \"T | foo\" --web"
         )
     )
@@ -647,7 +647,7 @@ def test_command_uses_web_flag_handles_separator_inside_quoted_body() -> None:
 
 def test_command_uses_web_flag_ignores_long_web_inside_quoted_body() -> None:
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T --body \"docs --web link\""
         )
     )
@@ -735,7 +735,7 @@ def test_command_uses_web_flag_false_when_one_of_two_gh_pr_create_lacks_web() ->
     returns False here and the enforcer proceeds to its swap path.
     """
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --web && gh pr create --title T"
         )
     )
@@ -744,7 +744,7 @@ def test_command_uses_web_flag_false_when_one_of_two_gh_pr_create_lacks_web() ->
 def test_command_uses_web_flag_true_when_both_gh_pr_create_have_web() -> None:
     """Two chained ``gh pr create`` invocations both carrying ``--web`` are still browser-flow."""
     assert hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --web && gh pr create --web --title T"
         )
     )
@@ -753,7 +753,7 @@ def test_command_uses_web_flag_true_when_both_gh_pr_create_have_web() -> None:
 def test_command_uses_web_flag_ignores_w_after_newline_separator() -> None:
     """Newline counts as a command separator; ``-w`` on the next line does not bind to gh pr create."""
     assert not hook_module._command_uses_web_flag_in_stripped(
-        hook_module._strip_quoted_regions(
+        hook_module._preprocess_command_for_matching(
             "gh pr create --title T\ncurl -w '%{http_code}'"
         )
     )
@@ -762,14 +762,14 @@ def test_command_uses_web_flag_ignores_w_after_newline_separator() -> None:
 def test_command_substitution_with_gh_pr_create_inside_is_still_detected() -> None:
     """``$(...)`` substitution body executes, so an inner ``gh pr create`` is real."""
     assert hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions('echo "$(gh pr create --title T)"')
+        hook_module._preprocess_command_for_matching('echo "$(gh pr create --title T)"')
     )
 
 
 def test_backtick_substitution_with_gh_pr_create_inside_is_still_detected() -> None:
     """Backtick substitution body executes, so an inner ``gh pr create`` is real."""
     assert hook_module._command_invokes_gh_pr_create_in_stripped(
-        hook_module._strip_quoted_regions("echo `gh pr create --title T`")
+        hook_module._preprocess_command_for_matching("echo `gh pr create --title T`")
     )
 
 
@@ -824,3 +824,104 @@ def test_write_swap_state_recovers_after_stale_file_collision(
         "original_account": "jl-cmd",
         "primary_account": "JonEcho",
     }
+
+
+def test_write_swap_state_loops_through_short_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """Regression for finding 1: short os.write returns must not truncate the JSON state file.
+
+    The fake ``os.write`` writes at most three bytes per call, simulating
+    a kernel that signals partial writes. The helper must loop until
+    every byte lands on disk so the resulting file holds the complete
+    JSON payload and the restore hook can parse it successfully.
+    """
+    real_os_write = hook_module.os.write
+
+    def _short_writer(file_descriptor: int, payload: bytes) -> int:
+        return real_os_write(file_descriptor, payload[:3])
+
+    monkeypatch.setattr(hook_module.os, "write", _short_writer)
+    state_file = hook_module._state_file_path("short-write-session")
+    has_written_state = hook_module._write_swap_state(
+        state_file,
+        original_account="jl-cmd",
+        primary_account="JonEcho",
+    )
+    assert has_written_state is True
+    persisted_state = json.loads(state_file.read_text(encoding="utf-8"))
+    assert persisted_state == {
+        "original_account": "jl-cmd",
+        "primary_account": "JonEcho",
+    }
+
+
+def test_write_swap_state_returns_false_when_os_write_keeps_returning_zero(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """Regression for finding 1 guard: ``os.write`` returning 0 must terminate as a failure.
+
+    A descriptor that cannot accept any more bytes signals zero from
+    ``os.write``. The helper must treat that as a write failure and
+    unlink the partially-written file, rather than spinning forever or
+    leaving a truncated file on disk.
+    """
+    monkeypatch.setattr(hook_module.os, "write", lambda *_args, **_kwargs: 0)
+    state_file = hook_module._state_file_path("zero-write-session")
+    has_written_state = hook_module._write_swap_state(
+        state_file,
+        original_account="jl-cmd",
+        primary_account="JonEcho",
+    )
+    assert has_written_state is False
+    assert not state_file.exists()
+
+
+def test_command_uses_web_flag_ignores_web_inside_substitution_body() -> None:
+    """Regression for finding 4: ``$(echo --web)`` body must not flip the enforcer into browser-flow.
+
+    ``--web`` inside a substitution is an argument to the subshell
+    command (``echo``), not a flag on the outer ``gh pr create``. The
+    web-flag detector blanks substitution bodies before searching, so
+    this command continues to trigger the account swap.
+    """
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            'gh pr create --title "$(echo --web)" --body-file B'
+        )
+    )
+
+
+def test_command_uses_web_flag_ignores_web_after_inline_bash_comment() -> None:
+    """Regression for findings 3 & 4: ``# --web`` is a comment and must not match the web flag."""
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "gh pr create --title T # --web"
+        )
+    )
+
+
+def test_active_gh_account_returns_none_on_permission_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for finding 6: ``PermissionError`` from subprocess.run must not crash the hook."""
+    monkeypatch.setattr(
+        hook_module.subprocess,
+        "run",
+        mock.Mock(side_effect=PermissionError("not executable")),
+    )
+    assert hook_module._active_gh_account() is None
+
+
+def test_active_gh_account_returns_none_on_generic_os_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any ``OSError`` subclass from subprocess.run must follow the documented skip path."""
+    monkeypatch.setattr(
+        hook_module.subprocess,
+        "run",
+        mock.Mock(side_effect=OSError("spawn refused")),
+    )
+    assert hook_module._active_gh_account() is None

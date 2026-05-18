@@ -474,3 +474,114 @@ def test_all_gh_pr_create_segments_splits_on_newline_separator() -> None:
     assert len(segments_for_newline_chained) == 2
     assert "--web" in segments_for_newline_chained[0]
     assert "--title T" in segments_for_newline_chained[1]
+
+
+def test_strip_quoted_regions_blanks_single_quoted_argument_inside_substitution() -> None:
+    """Regression for finding 2: ``$(printf 'gh pr create')`` must not leak the literal command.
+
+    The substitution executes ``printf`` against the literal data
+    ``gh pr create`` — the data must not be confused with a real
+    ``gh pr create`` invocation. Quoted regions inside substitution
+    bodies are blanked the same way as top-level quoted regions, so
+    the matcher sees ``$(printf                 )`` after stripping.
+    """
+    original_command = "echo $(printf 'gh pr create')"
+    stripped_command = utils_module._strip_quoted_regions(original_command)
+    assert len(stripped_command) == len(original_command)
+    assert "gh pr create" not in stripped_command
+
+
+def test_command_invokes_gh_pr_create_rejects_data_argument_inside_substitution() -> None:
+    """Regression for finding 2: ``echo $(printf 'gh pr create')`` runs printf, not gh pr create."""
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("echo $(printf 'gh pr create')")
+    )
+
+
+def test_command_invokes_gh_pr_create_rejects_double_quoted_substitution_data() -> None:
+    """Regression for finding 2: ``$(printf "gh pr create")`` runs printf, not gh pr create."""
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions('echo $(printf "gh pr create")')
+    )
+
+
+def test_command_invokes_gh_pr_create_still_detects_real_invocation_inside_substitution() -> None:
+    """Regression for finding 2 guard: ``$(gh pr create)`` runs the real command — must still match."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("echo $(gh pr create --title T)")
+    )
+
+
+def test_command_invokes_gh_pr_create_rejects_echo_argument() -> None:
+    """Regression for finding 3: ``echo gh pr create`` is data passed to echo, not a command."""
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("echo gh pr create")
+    )
+
+
+def test_command_invokes_gh_pr_create_rejects_inline_bash_comment() -> None:
+    """Regression for finding 3: ``git status # gh pr create later`` is a comment, not a command."""
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_bash_comments(
+            utils_module._strip_quoted_regions("git status # gh pr create later")
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_rejects_standalone_bash_comment() -> None:
+    """A line that begins with ``#`` is entirely comment — no command, no match."""
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_bash_comments(
+            utils_module._strip_quoted_regions("# gh pr create later")
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_still_matches_after_comment_on_prior_line() -> None:
+    """A comment on a prior line is stripped; the real ``gh pr create`` on the next line still matches."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_bash_comments(
+            utils_module._strip_quoted_regions("# leave it commented\ngh pr create --title T")
+        )
+    )
+
+
+def test_preprocess_command_for_matching_chains_strip_and_comments() -> None:
+    """The combined preprocess pipeline blanks quotes then comments in one step."""
+    preprocessed_command = utils_module._preprocess_command_for_matching(
+        'git status # gh pr create later --body "see docs"'
+    )
+    assert "see docs" not in preprocessed_command
+    assert "gh pr create" not in preprocessed_command
+
+
+def test_strip_substitution_bodies_replaces_dollar_paren_body_with_spaces() -> None:
+    """Regression for finding 4: ``$(echo --web)`` body is blanked so ``--web`` no longer leaks."""
+    quote_stripped_command = utils_module._strip_quoted_regions(
+        'gh pr create --title "$(echo --web)" --body-file B'
+    )
+    bodies_blanked_command = utils_module._strip_substitution_bodies(quote_stripped_command)
+    assert len(bodies_blanked_command) == len(quote_stripped_command)
+    assert "--web" not in bodies_blanked_command
+
+
+def test_strip_substitution_bodies_replaces_backtick_body_with_spaces() -> None:
+    """Regression for finding 4: backtick body is blanked so ``--web`` inside does not leak."""
+    quote_stripped_command = utils_module._strip_quoted_regions(
+        "gh pr create --title `echo --web` --body-file B"
+    )
+    bodies_blanked_command = utils_module._strip_substitution_bodies(quote_stripped_command)
+    assert len(bodies_blanked_command) == len(quote_stripped_command)
+    assert "--web" not in bodies_blanked_command
+
+
+def test_switch_gh_account_returns_false_on_permission_error() -> None:
+    """Regression for finding 5: ``PermissionError`` from subprocess.run must be caught as failure."""
+    with mock.patch.object(utils_module.subprocess, "run", side_effect=PermissionError):
+        assert utils_module._switch_gh_account("JonEcho") is False
+
+
+def test_switch_gh_account_returns_false_on_generic_os_error() -> None:
+    """Any ``OSError`` subclass from subprocess.run must follow the documented failure path."""
+    with mock.patch.object(utils_module.subprocess, "run", side_effect=OSError("spawn refused")):
+        assert utils_module._switch_gh_account("JonEcho") is False

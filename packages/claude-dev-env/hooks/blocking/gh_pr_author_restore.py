@@ -40,9 +40,9 @@ if _hooks_tree_path not in sys.path:
 from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must run first
     _command_invokes_gh_pr_create_in_stripped,
     _delete_state_file,
+    _preprocess_command_for_matching,
     _read_original_account,
     _state_file_path,
-    _strip_quoted_regions,
     _switch_gh_account,
     _write_line,
 )
@@ -66,8 +66,8 @@ def main() -> None:
     command = hook_input.get("tool_input", {}).get("command", "")
     if not command:
         sys.exit(0)
-    quote_stripped_command = _strip_quoted_regions(command)
-    if not _command_invokes_gh_pr_create_in_stripped(quote_stripped_command):
+    preprocessed_command = _preprocess_command_for_matching(command)
+    if not _command_invokes_gh_pr_create_in_stripped(preprocessed_command):
         sys.exit(0)
 
     session_id = str(hook_input.get("session_id") or "")

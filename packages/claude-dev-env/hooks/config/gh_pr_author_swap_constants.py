@@ -20,13 +20,16 @@ REQUIRED_ACCOUNT_ENV_VAR: str = "GITHUB_DEFAULT_ACCOUNT"
 BASH_TOOL_NAME: str = "Bash"
 
 GH_PR_CREATE_PATTERN: re.Pattern[str] = re.compile(
-    r"\bgh(?:[ \t]+(?:--[A-Za-z][\w-]*(?:=\S+)?|-[A-Za-z])(?:[ \t]+(?!-)\S+)?)*[ \t]+pr[ \t]+create\b",
+    r"(?:^|[;&|\n`]|\$\()[ \t]*"
+    r"gh(?:[ \t]+(?:--[A-Za-z][\w-]*(?:=\S+)?|-[A-Za-z])(?:[ \t]+(?!-)\S+)?)*"
+    r"[ \t]+pr[ \t]+create\b",
     re.IGNORECASE,
 )
 WEB_FLAG_PATTERN: re.Pattern[str] = re.compile(r"(?<!\S)(?:--web|-w)(?!\S)")
 COMMAND_SEPARATOR_PATTERN: re.Pattern[str] = re.compile(
     r"(?:&&|\|\||;|(?<!\|)\|(?!\|)|(?<!&)&(?!&)|[\r\n])"
 )
+BASH_COMMENT_PATTERN: re.Pattern[str] = re.compile(r"(?:(?<=\s)|^)#[^\n]*")
 COMMAND_SUBSTITUTION_OPENER_LENGTH: int = 2
 
 ALL_GH_API_USER_COMMAND: tuple[str, ...] = ("gh", "api", "user", "--jq", ".login")
@@ -43,6 +46,8 @@ STATE_FILE_ORIGINAL_ACCOUNT_KEY: str = "original_account"
 STATE_FILE_PRIMARY_ACCOUNT_KEY: str = "primary_account"
 
 STATE_FILE_PERMISSION_MODE: int = 0o600
+
+STATE_FILE_PAYLOAD_TEXT_ENCODING_NAME: str = "utf-8"
 
 OS_O_NOFOLLOW_ATTRIBUTE_NAME: str = "O_NOFOLLOW"
 

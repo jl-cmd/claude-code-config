@@ -137,14 +137,11 @@ def main() -> None:
 
     Reads the PreToolUse payload from stdin, records a formal
     ``Skill({skill: "bugteam"})`` invocation in the pr-converge state file,
-    and returns. Non-bugteam invocations and malformed inputs are skipped
-    silently so unrelated Skill calls are never disturbed.
-
-    Raises:
-        OSError: When the state file cannot be written. The error is
-            surfaced loudly via ``_emit_state_write_error`` before re-raising
-            so the operator sees the protocol-corruption event instead of a
-            silent no-op.
+    and always returns 0 — including on a state-write failure, since a
+    non-zero PreToolUse exit would block the very Skill invocation this
+    hook exists to record. State-write failures are surfaced via
+    ``_emit_state_write_error`` to stderr so the operator still sees the
+    protocol-corruption signal.
     """
     try:
         hook_payload = json.load(sys.stdin)
@@ -165,7 +162,7 @@ def main() -> None:
         _atomic_write_state(state_path, updated_state)
     except OSError as state_write_error:
         _emit_state_write_error(state_write_error, sys.stderr)
-        raise
+        return
     return
 
 

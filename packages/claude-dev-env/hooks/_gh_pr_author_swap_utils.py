@@ -241,10 +241,11 @@ def _state_file_is_attacker_planted(state_file: Path) -> bool:
         state_file: Path produced by ``_state_file_path``.
 
     Returns:
-        True when the file exists with wrong mode bits or wrong uid on
-        POSIX. False when the file matches the enforcer's write
-        contract, is absent, is not a regular file, or the platform
-        lacks POSIX ownership semantics.
+        True when the file exists on POSIX with wrong mode bits or
+        wrong uid, or the path is not a regular file (symlink, FIFO,
+        device, etc.), or ``os.lstat`` raises ``OSError``. False when
+        the file matches the enforcer's write contract, is absent, or
+        the platform lacks POSIX ownership semantics.
     """
     if not hasattr(os, "getuid"):
         return False

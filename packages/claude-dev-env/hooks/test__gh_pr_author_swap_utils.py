@@ -127,3 +127,45 @@ def test_state_file_is_attacker_planted_returns_false_for_missing_file(
     missing_state_file = tmp_path / "gh_pr_author_swap_session-missing.json"
 
     assert utils_module._state_file_is_attacker_planted(missing_state_file) is False
+
+
+def test_state_file_is_attacker_planted_returns_true_for_non_regular_file(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A FIFO at the predictable swap-state path is flagged as attacker-planted.
+
+    The enforcer only writes regular files; any non-regular file type
+    (symlink, FIFO, device) at the predictable path indicates another
+    party pre-created it to redirect the restore or cleanup hook.
+    """
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("mkfifo not available on this platform")
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX ownership semantics not available on this platform")
+    fifo_state_file = tmp_path / "gh_pr_author_swap_session-fifo.json"
+    os.mkfifo(fifo_state_file, STATE_FILE_PERMISSION_MODE)
+
+    assert utils_module._state_file_is_attacker_planted(fifo_state_file) is True
+
+
+def test_state_file_is_attacker_planted_returns_true_when_lstat_raises_os_error(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An ``OSError`` from ``lstat`` fails closed — the path is treated as planted.
+
+    A path that exists but is unreadable (permission denied, broken
+    filesystem mount, etc.) cannot be proven safe, so the helper
+    returns True to keep the restore or cleanup hook from trusting it.
+    """
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX ownership semantics not available on this platform")
+    unreadable_state_file = tmp_path / "gh_pr_author_swap_session-unreadable.json"
+    unreadable_state_file.write_text("{}", encoding="utf-8")
+
+    def raise_permission_error(self: pathlib.Path) -> os.stat_result:
+        raise PermissionError("simulated lstat failure")
+
+    monkeypatch.setattr(pathlib.Path, "lstat", raise_permission_error)
+
+    assert utils_module._state_file_is_attacker_planted(unreadable_state_file) is True

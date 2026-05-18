@@ -144,7 +144,7 @@ def _emit_deny_payload(output_stream: TextIO) -> None:
             "permissionDecisionReason": ENFORCER_CORRECTIVE_MESSAGE,
         }
     }
-    output_stream.write(json.dumps(deny_payload))
+    output_stream.write(json.dumps(deny_payload) + "\n")
     output_stream.flush()
 
 

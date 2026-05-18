@@ -69,7 +69,7 @@ def _prompt_is_audit_shaped(agent_prompt: str) -> bool:
     )
 
 
-def _formal_skill_fired_this_tick(state_by_field: dict[str, object]) -> bool:
+def _has_formal_skill_fired_this_tick(state_by_field: dict[str, object]) -> bool:
     """Return True when the bugteam Skill registered at current HEAD and tick.
 
     Args:
@@ -127,7 +127,7 @@ def _should_block(payload_by_field: dict[str, object]) -> bool:
         return False
     if parsed_state.get(STATE_FIELD_PHASE) != BUGTEAM_PHASE:
         return False
-    return not _formal_skill_fired_this_tick(parsed_state)
+    return not _has_formal_skill_fired_this_tick(parsed_state)
 
 
 def _emit_deny_payload(output_stream: TextIO) -> None:

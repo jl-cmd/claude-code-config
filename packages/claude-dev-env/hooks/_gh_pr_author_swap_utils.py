@@ -202,6 +202,12 @@ def _index_after_command_substitution(all_scanned_characters: list[str], opener_
       so that a ``)`` sitting inside the backtick body does not flip the
       surrounding paren depth.
 
+    Bare ``(`` and ``)`` characters inside the substitution body
+    (bash subshells like ``(echo b)``, array assignments like
+    ``arr=(a b c)``, function definitions like ``f() { ...; }``) also
+    track paren depth so they cancel out before a bare ``)`` can
+    prematurely close the outer ``$(...)`` substitution.
+
     Unterminated quotes and backticks consume to the end of the buffer,
     matching the behavior of ``_strip_quoted_regions``.
 
@@ -239,6 +245,10 @@ def _index_after_command_substitution(all_scanned_characters: list[str], opener_
             interior_index = _index_after_quoted_region(
                 all_scanned_characters, interior_index, buffer_length, interior_character
             )
+            continue
+        if interior_character == SHELL_PAREN_OPEN_CHARACTER:
+            paren_depth += 1
+            interior_index += 1
             continue
         if interior_character == SHELL_PAREN_CLOSE_CHARACTER:
             paren_depth -= 1

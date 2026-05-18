@@ -212,6 +212,30 @@ def test_command_invokes_gh_pr_create_detects_real_invocation_after_backtick_par
     )
 
 
+def test_command_invokes_gh_pr_create_detects_real_invocation_after_subshell_in_substitution() -> None:
+    """A bash subshell ``(echo b)`` inside ``$(...)`` must not prematurely close the outer substitution."""
+    command = '''echo "$(printf 'before'; (echo nested); printf 'after')" && gh pr create --title T'''
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions(command)
+    )
+
+
+def test_command_invokes_gh_pr_create_detects_real_invocation_after_array_in_substitution() -> None:
+    """A bash array assignment ``arr=(a b c)`` inside ``$(...)`` must not prematurely close the outer substitution."""
+    command = '''echo "$(arr=(a b c); echo "${arr[@]}")" && gh pr create --title T'''
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions(command)
+    )
+
+
+def test_command_invokes_gh_pr_create_detects_real_invocation_after_function_in_substitution() -> None:
+    """A bash function definition ``f() { ... }`` inside ``$(...)`` must not prematurely close the outer substitution."""
+    command = '''echo "$(f() { echo z; }; f)" && gh pr create --title T'''
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions(command)
+    )
+
+
 def test_command_invokes_gh_pr_create_rejects_newline_between_pr_and_create() -> None:
     """``gh pr\\ncreate-report.sh`` is two commands; the second is not ``create``."""
     assert not utils_module._command_invokes_gh_pr_create_in_stripped(

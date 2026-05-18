@@ -28,6 +28,7 @@ import os
 import subprocess  # noqa: F401
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 
@@ -44,27 +45,48 @@ from _gh_pr_author_swap_utils import (
 from config.gh_pr_author_swap_constants import (
     REQUIRED_ACCOUNT_ENV_VAR,
     STATE_FILE_PREFIX,
+    STATE_FILE_STALE_AGE_SECONDS,
     STATE_FILE_SUFFIX,
 )
 
 
 def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
-    """Return every swap-state file present under the temp directory.
+    """Return swap-state files older than the stale threshold.
+
+    A state file younger than ``STATE_FILE_STALE_AGE_SECONDS`` is
+    treated as belonging to a concurrent Claude Code session that may
+    still be mid-``gh pr create``. Sweeping such a file would steal the
+    active session's restore target. Files older than the threshold are
+    overwhelmingly likely to be stale — the enforcer-to-restore window
+    is bounded by the gh subprocess timeouts (10s switch + 5s api user
+    + filesystem work), so any file older than 60s is past the longest
+    plausible active window.
 
     Args:
         temp_directory: System temp directory returned by
             ``tempfile.gettempdir()``.
 
     Returns:
-        A list of absolute paths matching
-        ``{STATE_FILE_PREFIX}*{STATE_FILE_SUFFIX}``. Empty list when the
-        temp directory cannot be listed or contains no matches.
+        List of swap-state file paths whose modification time is older
+        than ``STATE_FILE_STALE_AGE_SECONDS`` seconds before now. Empty
+        list when the temp directory cannot be listed.
     """
     glob_pattern = f"{STATE_FILE_PREFIX}*{STATE_FILE_SUFFIX}"
+    current_time_seconds = time.time()
+    all_stale_state_files: list[Path] = []
     try:
-        return sorted(temp_directory.glob(glob_pattern))
+        all_candidate_paths = sorted(temp_directory.glob(glob_pattern))
     except OSError:
         return []
+    for each_candidate_path in all_candidate_paths:
+        try:
+            file_modification_time = each_candidate_path.stat().st_mtime
+        except OSError:
+            continue
+        file_age_seconds = current_time_seconds - file_modification_time
+        if file_age_seconds >= STATE_FILE_STALE_AGE_SECONDS:
+            all_stale_state_files.append(each_candidate_path)
+    return all_stale_state_files
 
 
 def _restore_stale_state_file(state_file: Path) -> None:

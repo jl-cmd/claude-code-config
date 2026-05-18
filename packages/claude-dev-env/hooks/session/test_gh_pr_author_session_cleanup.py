@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import pathlib
 import sys
+import time
 from typing import Iterator
 from unittest import mock
 
@@ -27,6 +29,14 @@ hook_module = importlib.util.module_from_spec(hook_module_spec)
 hook_module_spec.loader.exec_module(hook_module)
 
 
+_BACKDATE_SECONDS_BEFORE_NOW: int = 120
+
+
+def _backdate_file(state_file: pathlib.Path) -> None:
+    backdated_time_seconds = time.time() - _BACKDATE_SECONDS_BEFORE_NOW
+    os.utime(state_file, (backdated_time_seconds, backdated_time_seconds))
+
+
 def _write_state_file(state_file: pathlib.Path, original_account: str) -> None:
     state_file.write_text(
         json.dumps(
@@ -37,6 +47,7 @@ def _write_state_file(state_file: pathlib.Path, original_account: str) -> None:
         ),
         encoding="utf-8",
     )
+    _backdate_file(state_file)
 
 
 @pytest.fixture
@@ -118,6 +129,7 @@ def test_main_deletes_malformed_state_file_without_switching(
 ) -> None:
     malformed_state_file = isolated_temp_directory / "gh_pr_author_swap_broken.json"
     malformed_state_file.write_text("{not valid json", encoding="utf-8")
+    _backdate_file(malformed_state_file)
     switch_invocations = _install_fake_switch(monkeypatch, switch_succeeds=True)
 
     hook_module.main()
@@ -288,6 +300,7 @@ def test_collect_stale_state_files_matches_prefix_and_suffix(
     wrong_suffix = isolated_temp_directory / "gh_pr_author_swap_session-D.txt"
     for each_file in (matching_a, matching_b, wrong_prefix, wrong_suffix):
         each_file.write_text("{}", encoding="utf-8")
+        _backdate_file(each_file)
 
     matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
     matched_names = {each_file.name for each_file in matched_files}
@@ -311,3 +324,65 @@ def test_restore_stale_state_file_logs_when_switch_fails(
     assert "[gh-pr-author-cleanup] failed to restore" in captured_streams.err
     assert "'jl-cmd'" in captured_streams.err
     assert str(state_file) in captured_streams.err
+
+
+def test_collect_stale_state_files_excludes_recent_files(
+    isolated_temp_directory: pathlib.Path,
+) -> None:
+    recent_state_file = isolated_temp_directory / "gh_pr_author_swap_session-recent.json"
+    recent_state_file.write_text(
+        json.dumps({"original_account": "jl-cmd", "primary_account": "JonEcho"}),
+        encoding="utf-8",
+    )
+
+    matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
+
+    assert recent_state_file not in matched_files
+
+
+def test_collect_stale_state_files_includes_old_files(
+    isolated_temp_directory: pathlib.Path,
+) -> None:
+    old_state_file = isolated_temp_directory / "gh_pr_author_swap_session-old.json"
+    old_state_file.write_text(
+        json.dumps({"original_account": "jl-cmd", "primary_account": "JonEcho"}),
+        encoding="utf-8",
+    )
+    backdated_time_seconds = time.time() - _BACKDATE_SECONDS_BEFORE_NOW
+    os.utime(old_state_file, (backdated_time_seconds, backdated_time_seconds))
+
+    matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
+
+    assert old_state_file in matched_files
+
+
+def test_collect_stale_state_files_skips_unreadable_stat(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_temp_directory: pathlib.Path,
+) -> None:
+    unreadable_state_file = isolated_temp_directory / "gh_pr_author_swap_session-unreadable.json"
+    readable_state_file = isolated_temp_directory / "gh_pr_author_swap_session-readable.json"
+    for each_file in (unreadable_state_file, readable_state_file):
+        each_file.write_text(
+            json.dumps({"original_account": "jl-cmd", "primary_account": "JonEcho"}),
+            encoding="utf-8",
+        )
+        _backdate_file(each_file)
+
+    original_stat_method = pathlib.Path.stat
+
+    def _stat_with_failure_for_unreadable(
+        self: pathlib.Path,
+        *call_arguments: object,
+        **call_keyword_arguments: object,
+    ) -> os.stat_result:
+        if self == unreadable_state_file:
+            raise OSError("simulated stat failure")
+        return original_stat_method(self, *call_arguments, **call_keyword_arguments)  # type: ignore[arg-type]  # forwarding mixed positional/keyword to stdlib Path.stat
+
+    monkeypatch.setattr(pathlib.Path, "stat", _stat_with_failure_for_unreadable)
+
+    matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
+
+    assert unreadable_state_file not in matched_files
+    assert readable_state_file in matched_files

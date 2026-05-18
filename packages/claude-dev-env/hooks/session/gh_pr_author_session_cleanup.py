@@ -25,14 +25,13 @@ from __future__ import annotations
 
 import os
 import stat
-import subprocess  # noqa: F401
 import sys
 import tempfile
 import time
 from pathlib import Path
 
 
-_hooks_tree_path = str(Path(__file__).resolve().parent.parent)
+_hooks_tree_path = str(Path(__file__).absolute().parent.parent)
 if _hooks_tree_path not in sys.path:
     sys.path.insert(0, _hooks_tree_path)
 

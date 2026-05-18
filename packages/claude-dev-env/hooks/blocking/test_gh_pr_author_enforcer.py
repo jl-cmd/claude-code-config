@@ -27,6 +27,8 @@ assert hook_module_spec.loader is not None
 hook_module = importlib.util.module_from_spec(hook_module_spec)
 hook_module_spec.loader.exec_module(hook_module)
 
+import _gh_pr_author_swap_utils as swap_utils_module  # noqa: E402
+
 from config.gh_pr_author_swap_constants import STATE_FILE_PERMISSION_MODE  # noqa: E402
 
 
@@ -51,7 +53,7 @@ def isolated_state_directory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
 ) -> Iterator[pathlib.Path]:
-    monkeypatch.setattr(hook_module.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(swap_utils_module.tempfile, "gettempdir", lambda: str(tmp_path))
     yield tmp_path
 
 

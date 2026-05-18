@@ -5,12 +5,16 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import pathlib
+import stat
 import sys
 from typing import Iterator
 from unittest import mock
 
 import pytest
+
+from config.gh_pr_author_swap_constants import STATE_FILE_PERMISSION_MODE
 
 _HOOK_DIR = pathlib.Path(__file__).parent
 if str(_HOOK_DIR) not in sys.path:
@@ -24,6 +28,8 @@ assert hook_module_spec is not None
 assert hook_module_spec.loader is not None
 hook_module = importlib.util.module_from_spec(hook_module_spec)
 hook_module_spec.loader.exec_module(hook_module)
+
+import _gh_pr_author_swap_utils as swap_utils_module  # noqa: E402
 
 
 def _make_stdin_payload(
@@ -57,7 +63,7 @@ def isolated_state_directory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: pathlib.Path,
 ) -> Iterator[pathlib.Path]:
-    monkeypatch.setattr(hook_module.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(swap_utils_module.tempfile, "gettempdir", lambda: str(tmp_path))
     yield tmp_path
 
 
@@ -361,26 +367,26 @@ def test_read_original_account_returns_none_for_blank_value(
 
 def test_switch_gh_account_returns_true_on_success() -> None:
     completed = mock.Mock(returncode=0, stdout="", stderr="")
-    with mock.patch.object(hook_module.subprocess, "run", return_value=completed):
+    with mock.patch.object(swap_utils_module.subprocess, "run", return_value=completed):
         assert hook_module._switch_gh_account("jl-cmd") is True
 
 
 def test_switch_gh_account_returns_false_on_nonzero_exit() -> None:
     completed = mock.Mock(returncode=1, stdout="", stderr="boom")
-    with mock.patch.object(hook_module.subprocess, "run", return_value=completed):
+    with mock.patch.object(swap_utils_module.subprocess, "run", return_value=completed):
         assert hook_module._switch_gh_account("jl-cmd") is False
 
 
 def test_switch_gh_account_returns_false_when_gh_missing() -> None:
-    with mock.patch.object(hook_module.subprocess, "run", side_effect=FileNotFoundError):
+    with mock.patch.object(swap_utils_module.subprocess, "run", side_effect=FileNotFoundError):
         assert hook_module._switch_gh_account("jl-cmd") is False
 
 
 def test_switch_gh_account_returns_false_on_timeout() -> None:
     with mock.patch.object(
-        hook_module.subprocess,
+        swap_utils_module.subprocess,
         "run",
-        side_effect=hook_module.subprocess.TimeoutExpired(cmd="gh", timeout=10),
+        side_effect=swap_utils_module.subprocess.TimeoutExpired(cmd="gh", timeout=10),
     ):
         assert hook_module._switch_gh_account("jl-cmd") is False
 
@@ -418,6 +424,55 @@ def test_main_logs_high_level_failure_when_restore_switch_fails(
     assert state_file.exists()
     assert "[gh-pr-author-restore] failed to restore" in captured_streams.err
     assert "'jl-cmd'" in captured_streams.err
+    assert str(state_file) in captured_streams.err
+
+
+def test_main_skips_switch_and_preserves_state_file_when_planted_with_wrong_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """A state file with mode 0o644 must not drive a gh-account switch.
+
+    Regression guard: an attacker on the same workstation could plant a
+    state file at the predictable swap-state path with an
+    attacker-controlled ``original_account`` value. The restore hook
+    must validate the file's mode and owner before reading the
+    payload — a divergent mode signals the file was not written by the
+    enforcer running as this user. The hook must skip the switch, leave
+    the file on disk for inspection, and log a rejection line to
+    stderr.
+    """
+    if not hasattr(os, "getuid"):
+        return
+    state_file = hook_module._state_file_path("test-session-001")
+    _write_state_file(state_file, original_account="attacker")
+    os.chmod(state_file, 0o644)
+
+    monkeypatch.setattr(
+        sys, "stdin", io.StringIO(_make_stdin_payload("gh pr create --title T"))
+    )
+    switch_invocations: list[str] = []
+
+    def _fake_switch(to_account: str) -> bool:
+        switch_invocations.append(to_account)
+        return True
+
+    monkeypatch.setattr(hook_module, "_switch_gh_account", _fake_switch)
+
+    with pytest.raises(SystemExit) as exit_info:
+        hook_module.main()
+
+    exit_code = exit_info.value.code if isinstance(exit_info.value.code, int) else 0
+    captured_streams = capsys.readouterr()
+
+    assert exit_code == 0
+    assert switch_invocations == []
+    assert state_file.exists()
+    expected_mode_bits = stat.S_IMODE(state_file.stat().st_mode)
+    assert expected_mode_bits == 0o644
+    assert "[gh-pr-author-restore]" in captured_streams.err
+    assert "unexpected mode" in captured_streams.err or "unexpected" in captured_streams.err
     assert str(state_file) in captured_streams.err
 
 

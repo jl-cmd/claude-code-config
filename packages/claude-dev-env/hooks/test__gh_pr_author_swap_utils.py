@@ -10,11 +10,14 @@ match. The broader behavioural suite lives alongside in
 from __future__ import annotations
 
 import importlib.util
+import os
 import pathlib
 import sys
 import tempfile
 
 import pytest
+
+from config.gh_pr_author_swap_constants import STATE_FILE_PERMISSION_MODE
 
 _HOOKS_ROOT = pathlib.Path(__file__).resolve().parent
 if str(_HOOKS_ROOT) not in sys.path:
@@ -85,3 +88,42 @@ def test_backtick_substitution_matches_unquoted_gh_pr_create_inside_body() -> No
     """
     stripped_command = utils_module._strip_quoted_regions("echo `gh pr create --title T`")
     assert utils_module._command_invokes_gh_pr_create_in_stripped(stripped_command)
+
+
+def test_state_file_is_attacker_planted_returns_true_for_world_readable_mode(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A state file with mode 0o644 is flagged as attacker-planted on POSIX.
+
+    The enforcer always atomically creates state files at 0o600. A file
+    at the predictable swap-state path with any other mode bits cannot
+    have come from the enforcer running as this user.
+    """
+    if not hasattr(os, "getuid"):
+        return
+    state_file = tmp_path / "gh_pr_author_swap_session-attacker.json"
+    state_file.write_text("{}", encoding="utf-8")
+    os.chmod(state_file, 0o644)
+
+    assert utils_module._state_file_is_attacker_planted(state_file) is True
+
+
+def test_state_file_is_attacker_planted_returns_false_for_well_formed_file(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A state file written exactly the way the enforcer writes is not flagged."""
+    state_file = tmp_path / "gh_pr_author_swap_session-good.json"
+    state_file.write_text("{}", encoding="utf-8")
+    if hasattr(os, "getuid"):
+        os.chmod(state_file, STATE_FILE_PERMISSION_MODE)
+
+    assert utils_module._state_file_is_attacker_planted(state_file) is False
+
+
+def test_state_file_is_attacker_planted_returns_false_for_missing_file(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A missing state file is treated as not-planted so callers can no-op cleanly."""
+    missing_state_file = tmp_path / "gh_pr_author_swap_session-missing.json"
+
+    assert utils_module._state_file_is_attacker_planted(missing_state_file) is False

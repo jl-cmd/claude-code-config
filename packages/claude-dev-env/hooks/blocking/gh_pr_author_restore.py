@@ -28,12 +28,10 @@ Behavior:
 from __future__ import annotations
 
 import json
-import subprocess  # noqa: F401
 import sys
-import tempfile  # noqa: F401
 from pathlib import Path
 
-_hooks_tree_path = str(Path(__file__).resolve().parent.parent)
+_hooks_tree_path = str(Path(__file__).absolute().parent.parent)
 if _hooks_tree_path not in sys.path:
     sys.path.insert(0, _hooks_tree_path)
 
@@ -42,6 +40,7 @@ from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must
     _delete_state_file,
     _preprocess_command_for_matching,
     _read_original_account,
+    _state_file_is_attacker_planted,
     _state_file_path,
     _switch_gh_account,
     _write_line,
@@ -72,6 +71,13 @@ def main() -> None:
 
     session_id = str(hook_input.get("session_id") or "")
     state_file = _state_file_path(session_id)
+    if _state_file_is_attacker_planted(state_file):
+        _write_line(
+            f"[gh-pr-author-restore] state file at {state_file} has unexpected mode/owner; "
+            f"skipping restore and preserving file for inspection",
+            sys.stderr,
+        )
+        sys.exit(0)
     original_account = _read_original_account(state_file)
     if original_account is None:
         if state_file.exists():

@@ -29,6 +29,8 @@ assert hook_module_spec.loader is not None
 hook_module = importlib.util.module_from_spec(hook_module_spec)
 hook_module_spec.loader.exec_module(hook_module)
 
+import _gh_pr_author_swap_utils as swap_utils_module  # noqa: E402
+
 from config.gh_pr_author_swap_constants import (  # noqa: E402
     STATE_FILE_PERMISSION_MODE,
     STATE_FILE_STALE_AGE_SECONDS,
@@ -278,26 +280,26 @@ def test_read_original_account_returns_none_for_blank_value(
 
 def test_switch_gh_account_returns_true_on_success() -> None:
     completed = mock.Mock(returncode=0, stdout="", stderr="")
-    with mock.patch.object(hook_module.subprocess, "run", return_value=completed):
+    with mock.patch.object(swap_utils_module.subprocess, "run", return_value=completed):
         assert hook_module._switch_gh_account("jl-cmd") is True
 
 
 def test_switch_gh_account_returns_false_on_nonzero_exit() -> None:
     completed = mock.Mock(returncode=1, stdout="", stderr="boom")
-    with mock.patch.object(hook_module.subprocess, "run", return_value=completed):
+    with mock.patch.object(swap_utils_module.subprocess, "run", return_value=completed):
         assert hook_module._switch_gh_account("jl-cmd") is False
 
 
 def test_switch_gh_account_returns_false_when_gh_missing() -> None:
-    with mock.patch.object(hook_module.subprocess, "run", side_effect=FileNotFoundError):
+    with mock.patch.object(swap_utils_module.subprocess, "run", side_effect=FileNotFoundError):
         assert hook_module._switch_gh_account("jl-cmd") is False
 
 
 def test_switch_gh_account_returns_false_on_timeout() -> None:
     with mock.patch.object(
-        hook_module.subprocess,
+        swap_utils_module.subprocess,
         "run",
-        side_effect=hook_module.subprocess.TimeoutExpired(cmd="gh", timeout=10),
+        side_effect=swap_utils_module.subprocess.TimeoutExpired(cmd="gh", timeout=10),
     ):
         assert hook_module._switch_gh_account("jl-cmd") is False
 

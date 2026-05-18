@@ -24,6 +24,8 @@ without a per-directory path shim.
 from __future__ import annotations
 
 import json
+import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -47,6 +49,7 @@ from config.gh_pr_author_swap_constants import (
     SHELL_QUOTE_REPLACEMENT_CHARACTER,
     STATE_FILE_DEFAULT_SESSION_ID,
     STATE_FILE_ORIGINAL_ACCOUNT_KEY,
+    STATE_FILE_PERMISSION_MODE,
     STATE_FILE_PREFIX,
     STATE_FILE_SUFFIX,
 )
@@ -204,6 +207,62 @@ def _delete_state_file(state_file: Path) -> None:
             f"[gh-pr-author-utils] failed to delete state file {state_file}: {os_error}",
             sys.stderr,
         )
+
+
+def _state_file_is_attacker_planted(state_file: Path) -> bool:
+    """Return True when the state file's mode or owner does not match an enforcer-written file.
+
+    The enforcer atomically creates each swap-state file with mode
+    ``STATE_FILE_PERMISSION_MODE`` (``0o600``) owned by the current
+    user. A file at the predictable swap-state path that diverges on
+    either axis is overwhelmingly likely to be an attacker plant —
+    another user on the same workstation pre-creating a file to trick
+    the restore or cleanup hook into running
+    ``gh auth switch --user <attacker-controlled-login>``.
+
+    The candidate is inspected via ``lstat`` rather than ``stat`` so a
+    symlink at the predictable path is screened on its own metadata,
+    not on whatever the symlink resolves to. The enforcer creates state
+    files with ``O_NOFOLLOW`` to prevent symlink hijacking; this helper
+    mirrors that contract.
+
+    The mode-bit and uid checks only apply on POSIX. Windows reports
+    ``0o666`` from ``stat`` for files chmod'd to ``0o600`` because
+    ``os.chmod`` on Windows only toggles the read-only attribute, and
+    ``os.getuid`` is absent there. ``tempfile.gettempdir()`` on Windows
+    is already per-user (``%LOCALAPPDATA%\\Temp``), which closes the
+    cross-user attack surface this check guards against on POSIX, so
+    the check is a no-op on Windows.
+
+    A missing file returns False so callers can treat the missing-file
+    case the same way they treat a normal absent-state-file path.
+
+    Args:
+        state_file: Path produced by ``_state_file_path``.
+
+    Returns:
+        True when the file exists with wrong mode bits or wrong uid on
+        POSIX. False when the file matches the enforcer's write
+        contract, is absent, is not a regular file, or the platform
+        lacks POSIX ownership semantics.
+    """
+    if not hasattr(os, "getuid"):
+        return False
+    try:
+        file_lstat_result = state_file.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    if not stat.S_ISREG(file_lstat_result.st_mode):
+        return True
+    actual_permission_bits = stat.S_IMODE(file_lstat_result.st_mode)
+    if actual_permission_bits != STATE_FILE_PERMISSION_MODE:
+        return True
+    current_user_id = os.getuid()
+    if file_lstat_result.st_uid != current_user_id:
+        return True
+    return False
 
 
 def _index_after_command_substitution(all_scanned_characters: list[str], opener_index: int) -> int:

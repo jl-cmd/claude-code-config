@@ -54,22 +54,22 @@ from config.gh_pr_author_swap_constants import (
 )
 
 
-def _write_line(message: str, output_stream: TextIO) -> None:
+def _write_line(message: str, into_stream: TextIO) -> None:
     """Write a single line to the caller-provided text stream.
 
     Wrapping ``stream.write`` in a function that accepts an explicit
-    ``output_stream`` parameter satisfies the project's logging rule
+    ``into_stream`` parameter satisfies the project's logging rule
     (route through logger or accept an explicit stream parameter) without
     pulling the logging module into a self-contained hook script.
 
     Args:
         message: Single line of output. A trailing newline is appended.
-        output_stream: Destination stream (typically ``sys.stdout`` for
+        into_stream: Destination stream (typically ``sys.stdout`` for
             the JSON deny payload or ``sys.stderr`` for diagnostics).
             Each caller formats its own prefix into ``message``.
     """
-    output_stream.write(message + "\n")
-    output_stream.flush()
+    into_stream.write(message + "\n")
+    into_stream.flush()
 
 
 def _state_file_path(session_id: str) -> Path:

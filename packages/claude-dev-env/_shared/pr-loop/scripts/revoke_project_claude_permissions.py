@@ -15,8 +15,8 @@ try:
     sys.path.remove(parent_directory)
 except ValueError:
     pass
-if str(Path(__file__).resolve().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
 
 for each_cached_module_name in [
     each_module_key

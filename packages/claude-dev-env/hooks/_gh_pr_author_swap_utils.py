@@ -3,23 +3,19 @@
 The PreToolUse enforcer (``hooks/blocking/gh_pr_author_enforcer.py``), the
 PostToolUse restore (``hooks/blocking/gh_pr_author_restore.py``), and the
 SessionStart cleanup (``hooks/session/gh_pr_author_session_cleanup.py``)
-all need a small overlapping set of helpers: write a line to a stream,
-build the per-session state-file path, run ``gh auth switch``, read the
+all share a small set of helpers: write a line to a stream, build the
+per-session state-file path, run ``gh auth switch``, read the
 original-account login from a state file, delete a state file, and
 detect a ``gh pr create`` invocation while ignoring quoted regions.
 
-Pulling these into one module fixes two related defects in one step:
+Centralising these helpers keeps the three hooks' contracts in
+lock-step — a fix in the shared ``_command_invokes_gh_pr_create_in_stripped``
+detector lands in the enforcer and the restore hook from a single edit,
+and the state-file path and gh subprocess shape stay uniform across the
+trio so a file written by the enforcer is always resolvable by the
+restore and cleanup hooks.
 
-1. A bug fix applied to one copy of a helper used to require remembering
-   to apply it to the other two. The previous round shipped a regression
-   where the enforcer's ``_command_invokes_gh_pr_create`` was updated to
-   strip quoted regions but the restore hook's copy was missed.
-2. The hook trio shares stable state-file shape and gh subprocess
-   contracts. Centralizing those contracts removes the temptation to
-   let the copies drift apart on future edits.
-
-This module follows the precedent set by ``_gh_body_arg_utils.py`` in
-``hooks/blocking/`` — leading underscore marks it as internal to the
+Layout: a leading underscore marks the module as internal to the swap
 feature, and the file lives directly under ``hooks/`` so both
 ``hooks/blocking/`` and ``hooks/session/`` consumers can import it
 without a per-directory path shim.
@@ -42,6 +38,7 @@ from config.gh_pr_author_swap_constants import (
     COMMAND_SUBSTITUTION_OPENER_LENGTH,
     GH_AUTH_SWITCH_TIMEOUT_SECONDS,
     GH_PR_CREATE_PATTERN,
+    SESSION_ID_UNSAFE_CHARACTERS_PATTERN,
     SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH,
     SHELL_BACKTICK_CHARACTER,
     SHELL_DOLLAR_CHARACTER,
@@ -73,6 +70,25 @@ def _write_line(message: str, into_stream: TextIO) -> None:
     into_stream.flush()
 
 
+def _sanitize_session_id(session_id: str) -> str:
+    """Strip every character outside ``[A-Za-z0-9_-]`` from a session id.
+
+    The raw session id comes from the Claude Code hook input JSON, which
+    is attacker-influenceable. Path-traversal characters (``/``, ``\\``,
+    ``..``), NUL bytes, and any other shell-metacharacter must be removed
+    before the value participates in a filename so the produced path
+    stays anchored inside ``tempfile.gettempdir()``.
+
+    Args:
+        session_id: Raw session id value.
+
+    Returns:
+        The input with every unsafe character removed. An empty result
+        signals the caller to fall back to the default session id.
+    """
+    return SESSION_ID_UNSAFE_CHARACTERS_PATTERN.sub("", session_id)
+
+
 def _state_file_path(session_id: str) -> Path:
     """Return the per-session state-file path used by the hook trio.
 
@@ -84,11 +100,15 @@ def _state_file_path(session_id: str) -> Path:
     Args:
         session_id: ``session_id`` from the Claude Code hook input JSON.
             Empty string falls back to ``STATE_FILE_DEFAULT_SESSION_ID``.
+            Unsafe characters (path-traversal, NUL, shell metacharacters)
+            are stripped before the value participates in the filename so
+            the returned path stays anchored inside the temp directory.
 
     Returns:
         Absolute path to the state file in the system temp directory.
     """
-    effective_session_id = session_id or STATE_FILE_DEFAULT_SESSION_ID
+    sanitized_session_id = _sanitize_session_id(session_id)
+    effective_session_id = sanitized_session_id or STATE_FILE_DEFAULT_SESSION_ID
     filename = f"{STATE_FILE_PREFIX}{effective_session_id}{STATE_FILE_SUFFIX}"
     return Path(tempfile.gettempdir()) / filename
 
@@ -283,8 +303,17 @@ def _index_after_backtick_substitution(
 ) -> int:
     """Return the index one past the closing backtick of a ``` `...` ``` region.
 
+    The backtick body is executed by bash, so the walker mirrors the
+    ``$(...)`` helper: a single- or double-quoted region inside the
+    body is blanked via ``_blank_quoted_region`` so a literal token
+    sitting inside a quoted argument (for example
+    ``` `printf ';gh pr create'` ```) cannot leak out as if it were a
+    real command.
+
     Args:
         all_scanned_characters: Mutable list view of the command string.
+            The walker MUTATES the buffer to blank quoted regions inside
+            the substitution body.
         opener_index: Index of the opening backtick.
         buffer_length: Length of ``all_scanned_characters``, hoisted by
             the caller to avoid a recomputation per call.
@@ -295,8 +324,14 @@ def _index_after_backtick_substitution(
     """
     interior_index = opener_index + 1
     while interior_index < buffer_length:
-        if all_scanned_characters[interior_index] == SHELL_BACKTICK_CHARACTER:
+        interior_character = all_scanned_characters[interior_index]
+        if interior_character == SHELL_BACKTICK_CHARACTER:
             return interior_index + 1
+        if interior_character in ALL_SHELL_QUOTE_CHARACTERS:
+            interior_index = _blank_quoted_region(
+                all_scanned_characters, interior_index, buffer_length, interior_character
+            )
+            continue
         interior_index += 1
     return interior_index
 

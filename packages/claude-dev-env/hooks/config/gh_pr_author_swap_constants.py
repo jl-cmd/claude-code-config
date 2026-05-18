@@ -42,6 +42,8 @@ STATE_FILE_PREFIX: str = "gh_pr_author_swap_"
 STATE_FILE_SUFFIX: str = ".json"
 STATE_FILE_DEFAULT_SESSION_ID: str = "default"
 
+SESSION_ID_UNSAFE_CHARACTERS_PATTERN: re.Pattern[str] = re.compile(r"[^A-Za-z0-9_-]")
+
 STATE_FILE_ORIGINAL_ACCOUNT_KEY: str = "original_account"
 STATE_FILE_PRIMARY_ACCOUNT_KEY: str = "primary_account"
 

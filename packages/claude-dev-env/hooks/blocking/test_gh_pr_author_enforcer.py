@@ -27,6 +27,8 @@ assert hook_module_spec.loader is not None
 hook_module = importlib.util.module_from_spec(hook_module_spec)
 hook_module_spec.loader.exec_module(hook_module)
 
+from config.gh_pr_author_swap_constants import STATE_FILE_PERMISSION_MODE  # noqa: E402
+
 
 def _make_stdin_payload(command: str, session_id: str = "test-session-001") -> str:
     return json.dumps(
@@ -668,7 +670,7 @@ def test_write_swap_state_uses_owner_only_permissions(
     )
     assert has_written_state is True
     file_mode_bits = stat.S_IMODE(os.stat(state_file).st_mode)
-    assert file_mode_bits == 0o600
+    assert file_mode_bits == STATE_FILE_PERMISSION_MODE
 
 
 def test_write_swap_state_unlinks_file_when_chmod_fails(

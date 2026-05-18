@@ -29,9 +29,13 @@ assert hook_module_spec.loader is not None
 hook_module = importlib.util.module_from_spec(hook_module_spec)
 hook_module_spec.loader.exec_module(hook_module)
 
+from config.gh_pr_author_swap_constants import (  # noqa: E402
+    STATE_FILE_PERMISSION_MODE,
+    STATE_FILE_STALE_AGE_SECONDS,
+)
 
-_BACKDATE_SECONDS_BEFORE_NOW: int = 120
-_ENFORCER_WRITE_MODE: int = 0o600
+
+_BACKDATE_SECONDS_BEFORE_NOW: int = STATE_FILE_STALE_AGE_SECONDS * 2
 
 
 def _backdate_file(state_file: pathlib.Path) -> None:
@@ -47,7 +51,7 @@ def _chmod_like_enforcer(state_file: pathlib.Path) -> None:
     Without this chmod, every backdated state file is silently skipped
     on POSIX as if it were attacker-planted.
     """
-    os.chmod(state_file, _ENFORCER_WRITE_MODE)
+    os.chmod(state_file, STATE_FILE_PERMISSION_MODE)
 
 
 def _write_state_file(state_file: pathlib.Path, original_account: str) -> None:
@@ -460,7 +464,7 @@ def test_collect_stale_state_files_skips_other_user_owned_file(
     current_user_id = os.getuid()
     foreign_user_id = current_user_id + 1
     synthetic_stat_fields = (
-        stat.S_IFREG | _ENFORCER_WRITE_MODE,
+        stat.S_IFREG | STATE_FILE_PERMISSION_MODE,
         real_lstat_result.st_ino,
         real_lstat_result.st_dev,
         real_lstat_result.st_nlink,

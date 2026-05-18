@@ -296,6 +296,16 @@ def _index_after_quoted_region(
     ``\\`` followed by any character is consumed as a two-character unit
     (``\\"`` does not terminate the region).
 
+    Within a double-quoted region, bash still expands ``$(...)`` and
+    ``` `...` `` substitutions. The walker recognizes both openers and
+    skips past their matching closer via the existing substitution
+    helpers — otherwise a ``"`` sitting inside a nested substitution body
+    would be misidentified as the closing quote of the outer region,
+    misplacing the substitution boundary on shapes like
+    ``$(echo "$(echo "inner")")``. Single-quoted regions intentionally
+    do NOT skip substitutions because ``$`` and ``` ` `` are literal
+    text inside ``'...'``.
+
     Args:
         all_scanned_characters: Mutable list view of the command string.
         opener_index: Index of the opening quote.
@@ -317,6 +327,21 @@ def _index_after_quoted_region(
             and interior_index + 1 < buffer_length
         ):
             interior_index += SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH
+            continue
+        if (
+            quote_character == '"'
+            and interior_character == SHELL_DOLLAR_CHARACTER
+            and interior_index + 1 < buffer_length
+            and all_scanned_characters[interior_index + 1] == SHELL_PAREN_OPEN_CHARACTER
+        ):
+            interior_index = _index_after_command_substitution(
+                all_scanned_characters, interior_index
+            )
+            continue
+        if quote_character == '"' and interior_character == SHELL_BACKTICK_CHARACTER:
+            interior_index = _index_after_backtick_substitution(
+                all_scanned_characters, interior_index, buffer_length
+            )
             continue
         if interior_character == quote_character:
             return interior_index + 1

@@ -236,6 +236,22 @@ def test_command_invokes_gh_pr_create_detects_real_invocation_after_function_in_
     )
 
 
+def test_command_invokes_gh_pr_create_detects_invocation_after_nested_substitution_in_double_quoted_region() -> None:
+    """A ``$(...)`` nested inside a ``"..."`` inside an outer ``$(...)`` must not flip the outer quoted boundary."""
+    command = '''echo "$(echo "$(echo "deeply nested")")" && gh pr create --title T'''
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions(command)
+    )
+
+
+def test_command_invokes_gh_pr_create_detects_invocation_after_backtick_substitution_in_double_quoted_region() -> None:
+    """A ``` `...` ``` nested inside a ``"..."`` inside an outer ``$(...)`` must not flip the outer quoted boundary."""
+    command = '''echo "$(echo "`echo nested`")" && gh pr create --title T'''
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions(command)
+    )
+
+
 def test_command_invokes_gh_pr_create_rejects_newline_between_pr_and_create() -> None:
     """``gh pr\\ncreate-report.sh`` is two commands; the second is not ``create``."""
     assert not utils_module._command_invokes_gh_pr_create_in_stripped(

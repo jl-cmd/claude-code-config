@@ -350,6 +350,7 @@ def test_collect_stale_state_files_excludes_recent_files(
         json.dumps({"original_account": "jl-cmd", "primary_account": "JonEcho"}),
         encoding="utf-8",
     )
+    _chmod_like_enforcer(recent_state_file)
 
     matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
 

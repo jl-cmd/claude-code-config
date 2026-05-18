@@ -259,3 +259,24 @@ def test_should_preserve_prior_stamp_when_current_head_becomes_missing(
     updated_state = _read_state(claude_job_directory)
     assert updated_state["bugteam_skill_invoked_at_head"] == prior_head
     assert updated_state["bugteam_skill_invoked_at_tick"] == prior_tick
+
+
+def test_should_skip_atomic_write_when_state_missing_required_fields(
+    claude_job_directory: pathlib.Path,
+) -> None:
+    state_without_head = _baseline_state()
+    del state_without_head["current_head"]
+    _write_state(claude_job_directory, state_without_head)
+    skill_payload: dict[str, Any] = {
+        "tool_name": "Skill",
+        "tool_input": {"skill": "bugteam"},
+    }
+    with mock.patch.object(hook_module, "_atomic_write_state") as patched_atomic_write:
+        with mock.patch("sys.stdin", io.StringIO(json.dumps(skill_payload))):
+            with mock.patch("sys.stdout", new_callable=io.StringIO):
+                with mock.patch("sys.stderr", new_callable=io.StringIO):
+                    try:
+                        hook_module.main()
+                    except SystemExit:
+                        pass
+        assert patched_atomic_write.call_count == 0

@@ -40,7 +40,7 @@ if _hooks_tree_path not in sys.path:
 
 from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must run first
     _all_gh_pr_create_segments,
-    _command_invokes_gh_pr_create,
+    _command_invokes_gh_pr_create_in_stripped,
     _delete_state_file,
     _state_file_path,
     _strip_quoted_regions,
@@ -252,7 +252,7 @@ def _build_state_write_failure_message(
     )
 
 
-def _command_uses_web_flag(command: str) -> bool:
+def _command_uses_web_flag_in_stripped(quote_stripped_command: str) -> bool:
     """Return True when EVERY ``gh pr create`` segment uses ``--web`` / ``-w``.
 
     The flag is only relevant when it modifies the ``gh pr create``
@@ -262,7 +262,8 @@ def _command_uses_web_flag(command: str) -> bool:
     ``||`` / ``;`` / ``|`` / newline, must not flip the enforcer into
     the browser-flow no-op path. A ``-w`` sitting inside a quoted
     argument (for example ``--body "see -w docs"``) likewise must not
-    match.
+    match — the caller blanks those out via ``_strip_quoted_regions``
+    before passing the command in here.
 
     When the command chains multiple ``gh pr create`` invocations
     (``gh pr create --web && gh pr create --title T``), the enforcer
@@ -272,15 +273,19 @@ def _command_uses_web_flag(command: str) -> bool:
     "browser-flow only when EVERY segment opts in" semantics.
 
     Args:
-        command: Raw bash command string from PreToolUse hook input.
+        quote_stripped_command: Output of ``_strip_quoted_regions`` —
+            the caller is responsible for stripping inert quoted regions
+            before passing in. ``main()`` computes this once and passes
+            it to both this helper and
+            ``_command_invokes_gh_pr_create_in_stripped`` so the
+            character-walk in ``_strip_quoted_regions`` runs exactly
+            once per command.
 
     Returns:
-        True when every ``gh pr create`` segment in ``command`` carries
-        ``--web`` or ``-w`` as a whole token (with quoted regions
-        stripped before the scan). False when ``gh pr create`` is
-        absent, or when any segment lacks the flag.
+        True when every ``gh pr create`` segment in the already-stripped
+        command carries ``--web`` or ``-w`` as a whole token. False when
+        ``gh pr create`` is absent, or when any segment lacks the flag.
     """
-    quote_stripped_command = _strip_quoted_regions(command)
     all_gh_pr_create_segments = _all_gh_pr_create_segments(quote_stripped_command)
     if not all_gh_pr_create_segments:
         return False
@@ -325,10 +330,11 @@ def main() -> None:
     if not command:
         sys.exit(0)
 
-    if not _command_invokes_gh_pr_create(command):
+    quote_stripped_command = _strip_quoted_regions(command)
+    if not _command_invokes_gh_pr_create_in_stripped(quote_stripped_command):
         sys.exit(0)
 
-    if _command_uses_web_flag(command):
+    if _command_uses_web_flag_in_stripped(quote_stripped_command):
         sys.exit(0)
 
     required_account = os.environ.get(REQUIRED_ACCOUNT_ENV_VAR, "").strip()

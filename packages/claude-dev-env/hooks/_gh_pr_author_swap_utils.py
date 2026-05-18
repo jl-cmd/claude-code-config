@@ -348,23 +348,27 @@ def _all_gh_pr_create_segments(quote_stripped_command: str) -> list[str]:
     return all_segments
 
 
-def _command_invokes_gh_pr_create(command: str) -> bool:
-    """Return True when the command string contains a ``gh pr create`` invocation.
+def _command_invokes_gh_pr_create_in_stripped(quote_stripped_command: str) -> bool:
+    """Return True when the (quote-stripped) command contains a ``gh pr create`` invocation.
 
-    Strips quoted regions before searching so a literal ``gh pr create``
-    inside ``echo "..."`` or any other quoted argument is intentionally
-    ignored. Both the enforcer's PreToolUse gate and the restore hook's
+    Both the enforcer's PreToolUse gate and the restore hook's
     PostToolUse gate share this function, so the pair stays in sync —
     a fix here lands on both ends of the swap-restore pair at once.
+    A literal ``gh pr create`` inside ``echo "..."`` or any other quoted
+    argument is intentionally ignored because the caller has already run
+    ``_strip_quoted_regions`` to blank out inert quoted text.
 
     Args:
-        command: Raw bash command string from PreToolUse / PostToolUse
-            hook input.
+        quote_stripped_command: Output of ``_strip_quoted_regions`` —
+            the caller is responsible for stripping inert quoted regions
+            before passing in. ``main()`` in the enforcer computes this
+            once and passes it to both this helper and
+            ``_command_uses_web_flag_in_stripped`` so the character-walk
+            in ``_strip_quoted_regions`` runs exactly once per command.
 
     Returns:
-        True when ``gh pr create`` appears as a whole-word match outside
-        any quoted region. Matches regardless of whether ``gh`` is at the
-        start of the command or embedded in a chained pipeline.
+        True when ``gh pr create`` appears as a whole-word match in the
+        already-stripped command. Matches regardless of whether ``gh``
+        is at the start of the command or embedded in a chained pipeline.
     """
-    quote_stripped_command = _strip_quoted_regions(command)
     return bool(GH_PR_CREATE_PATTERN.search(quote_stripped_command))

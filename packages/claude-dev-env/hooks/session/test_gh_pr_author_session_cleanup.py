@@ -387,18 +387,18 @@ def test_collect_stale_state_files_skips_unreadable_stat(
         _chmod_like_enforcer(each_file)
         _backdate_file(each_file)
 
-    original_stat_method = pathlib.Path.stat
+    original_lstat_method = pathlib.Path.lstat
 
-    def _stat_with_failure_for_unreadable(
+    def _lstat_with_failure_for_unreadable(
         self: pathlib.Path,
         *call_arguments: object,
         **call_keyword_arguments: object,
     ) -> os.stat_result:
         if self == unreadable_state_file:
-            raise OSError("simulated stat failure")
-        return original_stat_method(self, *call_arguments, **call_keyword_arguments)  # type: ignore[arg-type]  # forwarding mixed positional/keyword to stdlib Path.stat
+            raise OSError("simulated lstat failure")
+        return original_lstat_method(self, *call_arguments, **call_keyword_arguments)  # type: ignore[arg-type]  # forwarding mixed positional/keyword to stdlib Path.lstat
 
-    monkeypatch.setattr(pathlib.Path, "stat", _stat_with_failure_for_unreadable)
+    monkeypatch.setattr(pathlib.Path, "lstat", _lstat_with_failure_for_unreadable)
 
     matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
 
@@ -455,34 +455,34 @@ def test_collect_stale_state_files_skips_other_user_owned_file(
     _chmod_like_enforcer(foreign_owned_state_file)
     _backdate_file(foreign_owned_state_file)
 
-    real_stat_result = os.stat(foreign_owned_state_file)
+    real_lstat_result = os.lstat(foreign_owned_state_file)
     current_user_id = os.getuid()
     foreign_user_id = current_user_id + 1
     synthetic_stat_fields = (
         stat.S_IFREG | _ENFORCER_WRITE_MODE,
-        real_stat_result.st_ino,
-        real_stat_result.st_dev,
-        real_stat_result.st_nlink,
+        real_lstat_result.st_ino,
+        real_lstat_result.st_dev,
+        real_lstat_result.st_nlink,
         foreign_user_id,
-        real_stat_result.st_gid,
-        real_stat_result.st_size,
-        real_stat_result.st_atime,
-        real_stat_result.st_mtime,
-        real_stat_result.st_ctime,
+        real_lstat_result.st_gid,
+        real_lstat_result.st_size,
+        real_lstat_result.st_atime,
+        real_lstat_result.st_mtime,
+        real_lstat_result.st_ctime,
     )
     synthetic_stat_result = os.stat_result(synthetic_stat_fields)
-    original_stat_method = pathlib.Path.stat
+    original_lstat_method = pathlib.Path.lstat
 
-    def _stat_returning_foreign_uid_for_target(
+    def _lstat_returning_foreign_uid_for_target(
         self: pathlib.Path,
         *call_arguments: object,
         **call_keyword_arguments: object,
     ) -> os.stat_result:
         if self == foreign_owned_state_file:
             return synthetic_stat_result
-        return original_stat_method(self, *call_arguments, **call_keyword_arguments)  # type: ignore[arg-type]  # forwarding mixed positional/keyword to stdlib Path.stat
+        return original_lstat_method(self, *call_arguments, **call_keyword_arguments)  # type: ignore[arg-type]  # forwarding mixed positional/keyword to stdlib Path.lstat
 
-    monkeypatch.setattr(pathlib.Path, "stat", _stat_returning_foreign_uid_for_target)
+    monkeypatch.setattr(pathlib.Path, "lstat", _lstat_returning_foreign_uid_for_target)
 
     matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
 

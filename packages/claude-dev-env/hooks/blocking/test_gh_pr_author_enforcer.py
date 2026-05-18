@@ -77,85 +77,119 @@ def _run_hook_with(
 
 
 def test_command_invokes_gh_pr_create_matches_basic_form() -> None:
-    assert hook_module._command_invokes_gh_pr_create("gh pr create --title T")
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("gh pr create --title T")
+    )
 
 
 def test_command_invokes_gh_pr_create_matches_chained_form() -> None:
-    assert hook_module._command_invokes_gh_pr_create("git push && gh pr create")
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("git push && gh pr create")
+    )
 
 
 def test_command_invokes_gh_pr_create_rejects_pr_edit() -> None:
-    assert not hook_module._command_invokes_gh_pr_create("gh pr edit 10 --title X")
+    assert not hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("gh pr edit 10 --title X")
+    )
 
 
 def test_command_invokes_gh_pr_create_rejects_substring() -> None:
-    assert not hook_module._command_invokes_gh_pr_create("some-gh pr created-by")
+    assert not hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("some-gh pr created-by")
+    )
 
 
 def test_command_uses_web_flag_matches_long_form() -> None:
-    assert hook_module._command_uses_web_flag("gh pr create --web")
+    assert hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions("gh pr create --web")
+    )
 
 
 def test_command_uses_web_flag_matches_short_form() -> None:
-    assert hook_module._command_uses_web_flag("gh pr create -w")
+    assert hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions("gh pr create -w")
+    )
 
 
 def test_command_uses_web_flag_rejects_webhook_substring() -> None:
-    assert not hook_module._command_uses_web_flag("gh pr create --webhook=foo")
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions("gh pr create --webhook=foo")
+    )
 
 
 def test_command_uses_web_flag_ignores_curl_w_flag_before_gh() -> None:
-    assert not hook_module._command_uses_web_flag(
-        "curl -w '%{http_code}' url && gh pr create --title T"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "curl -w '%{http_code}' url && gh pr create --title T"
+        )
     )
 
 
 def test_command_uses_web_flag_ignores_w_after_separator() -> None:
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T && other-cmd -w"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T && other-cmd -w"
+        )
     )
 
 
 def test_command_uses_web_flag_detects_web_inside_gh_pr_create() -> None:
-    assert hook_module._command_uses_web_flag("gh pr create --web --title T")
+    assert hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions("gh pr create --web --title T")
+    )
 
 
 def test_command_uses_web_flag_detects_short_w_inside_gh_pr_create() -> None:
-    assert hook_module._command_uses_web_flag("gh pr create -w --title T")
+    assert hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions("gh pr create -w --title T")
+    )
 
 
 def test_command_uses_web_flag_handles_gh_pr_create_without_web() -> None:
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T --body-file B"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T --body-file B"
+        )
     )
 
 
 def test_command_uses_web_flag_returns_false_when_gh_pr_create_absent() -> None:
-    assert not hook_module._command_uses_web_flag("curl -w '%{http_code}' url")
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions("curl -w '%{http_code}' url")
+    )
 
 
 def test_command_uses_web_flag_ignores_w_after_pipe_separator() -> None:
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T | tee -w log"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T | tee -w log"
+        )
     )
 
 
 def test_command_uses_web_flag_ignores_w_after_semicolon_separator() -> None:
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T ; other-cmd -w"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T ; other-cmd -w"
+        )
     )
 
 
 def test_command_uses_web_flag_ignores_w_after_or_separator() -> None:
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T || fallback -w"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T || fallback -w"
+        )
     )
 
 
 def test_command_uses_web_flag_ignores_w_after_background_separator() -> None:
     """`gh pr create & other-cmd -w` does not pick up the trailing -w."""
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T & other-cmd -w"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T & other-cmd -w"
+        )
     )
 
 
@@ -538,38 +572,46 @@ def test_strip_quoted_regions_handles_escaped_quote_inside_double_quotes() -> No
 
 
 def test_command_invokes_gh_pr_create_ignores_literal_inside_quotes() -> None:
-    assert not hook_module._command_invokes_gh_pr_create(
-        "echo \"gh pr create docs\""
+    assert not hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("echo \"gh pr create docs\"")
     )
 
 
 def test_command_invokes_gh_pr_create_ignores_literal_inside_single_quotes() -> None:
-    assert not hook_module._command_invokes_gh_pr_create(
-        "echo 'gh pr create docs'"
+    assert not hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("echo 'gh pr create docs'")
     )
 
 
 def test_command_invokes_gh_pr_create_still_matches_unquoted_invocation() -> None:
-    assert hook_module._command_invokes_gh_pr_create(
-        "gh pr create --body \"see docs about gh pr create\""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --body \"see docs about gh pr create\""
+        )
     )
 
 
 def test_command_uses_web_flag_ignores_dash_w_inside_body_string() -> None:
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T --body \"see -w for web\""
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T --body \"see -w for web\""
+        )
     )
 
 
 def test_command_uses_web_flag_handles_separator_inside_quoted_body() -> None:
-    assert hook_module._command_uses_web_flag(
-        "gh pr create --title \"T | foo\" --web"
+    assert hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title \"T | foo\" --web"
+        )
     )
 
 
 def test_command_uses_web_flag_ignores_long_web_inside_quoted_body() -> None:
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T --body \"docs --web link\""
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T --body \"docs --web link\""
+        )
     )
 
 
@@ -651,39 +693,45 @@ def test_command_uses_web_flag_false_when_one_of_two_gh_pr_create_lacks_web() ->
 
     The first segment's ``--web`` does not exempt the second segment.
     A short-circuiting ``all()`` over every segment returns False when
-    any segment lacks the flag, so ``_command_uses_web_flag`` returns
-    False here and the enforcer proceeds to its swap path.
+    any segment lacks the flag, so ``_command_uses_web_flag_in_stripped``
+    returns False here and the enforcer proceeds to its swap path.
     """
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --web && gh pr create --title T"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --web && gh pr create --title T"
+        )
     )
 
 
 def test_command_uses_web_flag_true_when_both_gh_pr_create_have_web() -> None:
     """Two chained ``gh pr create`` invocations both carrying ``--web`` are still browser-flow."""
-    assert hook_module._command_uses_web_flag(
-        "gh pr create --web && gh pr create --web --title T"
+    assert hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --web && gh pr create --web --title T"
+        )
     )
 
 
 def test_command_uses_web_flag_ignores_w_after_newline_separator() -> None:
     """Newline counts as a command separator; ``-w`` on the next line does not bind to gh pr create."""
-    assert not hook_module._command_uses_web_flag(
-        "gh pr create --title T\ncurl -w '%{http_code}'"
+    assert not hook_module._command_uses_web_flag_in_stripped(
+        hook_module._strip_quoted_regions(
+            "gh pr create --title T\ncurl -w '%{http_code}'"
+        )
     )
 
 
 def test_command_substitution_with_gh_pr_create_inside_is_still_detected() -> None:
     """``$(...)`` substitution body executes, so an inner ``gh pr create`` is real."""
-    assert hook_module._command_invokes_gh_pr_create(
-        'echo "$(gh pr create --title T)"'
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions('echo "$(gh pr create --title T)"')
     )
 
 
 def test_backtick_substitution_with_gh_pr_create_inside_is_still_detected() -> None:
     """Backtick substitution body executes, so an inner ``gh pr create`` is real."""
-    assert hook_module._command_invokes_gh_pr_create(
-        "echo `gh pr create --title T`"
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("echo `gh pr create --title T`")
     )
 
 

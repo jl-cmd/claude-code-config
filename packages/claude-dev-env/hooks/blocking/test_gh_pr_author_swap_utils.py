@@ -111,42 +111,60 @@ def test_strip_quoted_regions_handles_unterminated_quote_to_end() -> None:
 
 
 def test_command_invokes_gh_pr_create_matches_basic_form() -> None:
-    assert utils_module._command_invokes_gh_pr_create("gh pr create --title T")
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh pr create --title T")
+    )
 
 
 def test_command_invokes_gh_pr_create_matches_chained_form() -> None:
-    assert utils_module._command_invokes_gh_pr_create("git push && gh pr create")
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("git push && gh pr create")
+    )
 
 
 def test_command_invokes_gh_pr_create_rejects_pr_edit() -> None:
-    assert not utils_module._command_invokes_gh_pr_create("gh pr edit 10 --title X")
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("gh pr edit 10 --title X")
+    )
 
 
 def test_command_invokes_gh_pr_create_rejects_substring() -> None:
-    assert not utils_module._command_invokes_gh_pr_create("some-gh pr created-by")
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("some-gh pr created-by")
+    )
 
 
 def test_command_invokes_gh_pr_create_ignores_literal_inside_double_quotes() -> None:
-    assert not utils_module._command_invokes_gh_pr_create('echo "gh pr create docs"')
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions('echo "gh pr create docs"')
+    )
 
 
 def test_command_invokes_gh_pr_create_ignores_literal_inside_single_quotes() -> None:
-    assert not utils_module._command_invokes_gh_pr_create("echo 'gh pr create docs'")
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("echo 'gh pr create docs'")
+    )
 
 
 def test_command_invokes_gh_pr_create_detects_backtick_substitution_body() -> None:
     """Backtick substitution body executes, so an inner ``gh pr create`` is real."""
-    assert utils_module._command_invokes_gh_pr_create("echo `gh pr create docs`")
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions("echo `gh pr create docs`")
+    )
 
 
 def test_command_invokes_gh_pr_create_detects_dollar_paren_substitution_body() -> None:
     """``$(...)`` substitution body executes, so an inner ``gh pr create`` is real."""
-    assert utils_module._command_invokes_gh_pr_create('echo "$(gh pr create docs)"')
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions('echo "$(gh pr create docs)"')
+    )
 
 
 def test_command_invokes_gh_pr_create_still_matches_unquoted_invocation() -> None:
-    assert utils_module._command_invokes_gh_pr_create(
-        'gh pr create --body "see docs about gh pr create"'
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._strip_quoted_regions(
+            'gh pr create --body "see docs about gh pr create"'
+        )
     )
 
 

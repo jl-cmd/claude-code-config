@@ -83,11 +83,15 @@ def _run_hook_with(
 
 
 def test_command_invokes_gh_pr_create_matches_basic_form() -> None:
-    assert hook_module._command_invokes_gh_pr_create("gh pr create --title T")
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("gh pr create --title T")
+    )
 
 
 def test_command_invokes_gh_pr_create_rejects_pr_edit() -> None:
-    assert not hook_module._command_invokes_gh_pr_create("gh pr edit 10")
+    assert not hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._strip_quoted_regions("gh pr edit 10")
+    )
 
 
 def test_state_file_path_uses_session_id(

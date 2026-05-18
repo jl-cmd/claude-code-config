@@ -52,7 +52,7 @@ from config.gh_pr_author_swap_constants import (  # noqa: E402  # sys.path shim 
 )
 
 
-def _state_file_is_attacker_planted(file_stat_result: os.stat_result) -> bool:
+def _state_file_is_attacker_planted(file_lstat_result: os.stat_result) -> bool:
     """Return True when the file's owner or mode bits do not match an enforcer-written file.
 
     The enforcer atomically creates each swap-state file with mode
@@ -63,6 +63,15 @@ def _state_file_is_attacker_planted(file_stat_result: os.stat_result) -> bool:
     predictable swap-state path to trick the cleanup hook into running
     ``gh auth switch --user <attacker-controlled-login>``.
 
+    Callers must pass an ``lstat`` result rather than a ``stat`` result.
+    The enforcer creates state files with ``O_NOFOLLOW`` to prevent
+    symlink hijacking; the cleanup hook must mirror that contract by
+    inspecting the entry itself rather than what a symlink points to.
+    Otherwise an attacker-planted symlink pointing to any 0o600 file
+    owned by the current user (an SSH key, a token cache) would pass
+    the ownership/mode check and drive ``gh auth switch`` to an
+    attacker-influenced account.
+
     The mode-bit and uid checks only apply on POSIX. Windows reports
     ``0o666`` from ``stat`` for files chmod'd to ``0o600`` because
     ``os.chmod`` on Windows only toggles the read-only attribute, and
@@ -72,7 +81,9 @@ def _state_file_is_attacker_planted(file_stat_result: os.stat_result) -> bool:
     the check is a no-op on Windows.
 
     Args:
-        file_stat_result: ``os.stat_result`` for the candidate file.
+        file_lstat_result: ``os.stat_result`` produced by ``lstat`` for
+            the candidate file. Symlinks must reach this function as
+            their own entry, not as their resolved target.
 
     Returns:
         True when the file looks attacker-planted (POSIX: wrong mode
@@ -82,11 +93,11 @@ def _state_file_is_attacker_planted(file_stat_result: os.stat_result) -> bool:
     """
     if not hasattr(os, "getuid"):
         return False
-    actual_permission_bits = stat.S_IMODE(file_stat_result.st_mode)
+    actual_permission_bits = stat.S_IMODE(file_lstat_result.st_mode)
     if actual_permission_bits != STATE_FILE_PERMISSION_MODE:
         return True
     current_user_id = os.getuid()
-    if file_stat_result.st_uid != current_user_id:
+    if file_lstat_result.st_uid != current_user_id:
         return True
     return False
 
@@ -110,15 +121,26 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
     enforcer running as the current user and must not be allowed to
     drive ``gh auth switch``.
 
+    The candidate is inspected via ``lstat`` rather than ``stat`` so a
+    symlink at the predictable swap-state path is screened on its own
+    metadata, not on whatever the symlink resolves to. Any entry that
+    is not a regular file (symlink, socket, fifo, device) is silently
+    skipped. The enforcer creates state files with ``O_NOFOLLOW``;
+    mirroring that contract here closes the symlink-hijack window where
+    an attacker plants a symlink pointing to a legitimate 0o600 file
+    owned by the current user to trick the cleanup hook into reading
+    that file as a swap-state payload.
+
     Args:
         temp_directory: System temp directory returned by
             ``tempfile.gettempdir()``.
 
     Returns:
-        List of swap-state file paths whose modification time is older
-        than ``STATE_FILE_STALE_AGE_SECONDS`` seconds before now and
-        whose ownership/mode bits match the enforcer's write contract.
-        Empty list when the temp directory cannot be listed.
+        List of swap-state file paths that are regular files whose
+        modification time is older than ``STATE_FILE_STALE_AGE_SECONDS``
+        seconds before now and whose ownership/mode bits match the
+        enforcer's write contract. Empty list when the temp directory
+        cannot be listed.
     """
     glob_pattern = f"{STATE_FILE_PREFIX}*{STATE_FILE_SUFFIX}"
     current_time_seconds = time.time()
@@ -129,12 +151,14 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
         return []
     for each_candidate_path in all_candidate_paths:
         try:
-            file_stat_result = each_candidate_path.stat()
+            file_lstat_result = each_candidate_path.lstat()
         except OSError:
             continue
-        if _state_file_is_attacker_planted(file_stat_result):
+        if not stat.S_ISREG(file_lstat_result.st_mode):
             continue
-        file_age_seconds = current_time_seconds - file_stat_result.st_mtime
+        if _state_file_is_attacker_planted(file_lstat_result):
+            continue
+        file_age_seconds = current_time_seconds - file_lstat_result.st_mtime
         if file_age_seconds >= STATE_FILE_STALE_AGE_SECONDS:
             all_stale_state_files.append(each_candidate_path)
     return all_stale_state_files

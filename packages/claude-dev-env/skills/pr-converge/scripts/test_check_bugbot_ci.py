@@ -159,6 +159,42 @@ def test_should_return_false_when_no_bugbot_check_run_present(
     assert is_clean is False
 
 
+def test_should_return_false_when_first_bugbot_run_is_in_progress_even_if_later_one_clean(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
+    stdout = _build_stdout(
+        {"name": "Cursor Bugbot", "status": "in_progress", "conclusion": None},
+        {"name": "Cursor Bugbot", "status": "completed", "conclusion": "success"},
+    )
+    with patch.object(
+        check_bugbot_ci_module,
+        "_run_check_runs_api",
+        return_value=_make_completed_process(stdout),
+    ):
+        is_clean = check_bugbot_ci_module.is_bugbot_run_clean(
+            owner="acme", repo="repo", sha="abc"
+        )
+    assert is_clean is False
+
+
+def test_should_return_false_when_first_bugbot_run_failed_even_if_later_one_clean(
+    check_bugbot_ci_module: ModuleType,
+) -> None:
+    stdout = _build_stdout(
+        {"name": "Cursor Bugbot", "status": "completed", "conclusion": "failure"},
+        {"name": "Cursor Bugbot", "status": "completed", "conclusion": "success"},
+    )
+    with patch.object(
+        check_bugbot_ci_module,
+        "_run_check_runs_api",
+        return_value=_make_completed_process(stdout),
+    ):
+        is_clean = check_bugbot_ci_module.is_bugbot_run_clean(
+            owner="acme", repo="repo", sha="abc"
+        )
+    assert is_clean is False
+
+
 def test_should_return_none_when_gh_cli_fails(
     check_bugbot_ci_module: ModuleType,
 ) -> None:

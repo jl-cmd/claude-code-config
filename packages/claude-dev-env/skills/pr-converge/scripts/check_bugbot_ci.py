@@ -168,16 +168,13 @@ def _classify_bugbot_check_run(
         if BUGBOT_CHECK_RUN_NAME_SUBSTRING.lower() not in each_name.lower():
             continue
         each_status: object = check_entry.get("status")
-        if not isinstance(each_status, str):
-            continue
         if each_status != BUGBOT_CHECK_RUN_COMPLETED_STATUS:
-            continue
+            return False
         each_conclusion: object = check_entry.get("conclusion")
-        if (
+        return (
             isinstance(each_conclusion, str)
             and each_conclusion in ALL_BUGBOT_CHECK_RUN_COMPLETE_CONCLUSIONS
-        ):
-            return True
+        )
     return False
 
 

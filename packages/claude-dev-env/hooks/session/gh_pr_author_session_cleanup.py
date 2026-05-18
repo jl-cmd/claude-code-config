@@ -23,7 +23,6 @@ into the swap workflow are completely unaffected.
 
 from __future__ import annotations
 
-import json  # noqa: F401
 import os
 import stat
 import subprocess  # noqa: F401

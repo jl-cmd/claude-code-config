@@ -22,6 +22,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from typing import TextIO
 
 
 def _insert_hooks_tree_for_imports() -> None:
@@ -68,11 +69,19 @@ def _atomic_write_state(state_path: Path, state_by_field: dict[str, object]) -> 
     ) as temporary_handle:
         temporary_handle.write(encoded_text)
         temporary_path = Path(temporary_handle.name)
-    os.replace(str(temporary_path), str(state_path))
+    try:
+        os.replace(str(temporary_path), str(state_path))
+    except OSError:
+        Path(temporary_path).unlink(missing_ok=True)
+        raise
 
 
 def _record_bugteam_skill_invocation(state_by_field: dict[str, object]) -> dict[str, object]:
     """Return a copy of state with bugteam-Skill invocation fields stamped.
+
+    The two stamp fields are owned exclusively by this tracker. Concurrent
+    writes from the orchestrator never touch them, so the read-modify-write
+    window cannot lose an orchestrator update on these specific keys.
 
     Args:
         state_by_field: Existing pr-converge state mapping each field name to
@@ -108,27 +117,56 @@ def _is_formal_bugteam_skill_invocation(payload_by_field: dict[str, object]) -> 
     return tool_input.get("skill", "") == BUGTEAM_SKILL_NAME
 
 
+def _emit_state_write_error(state_write_error: OSError, output_stream: TextIO) -> None:
+    """Write the state-write failure message to the provided stream.
+
+    Args:
+        state_write_error: The OSError raised by ``_atomic_write_state``.
+        output_stream: Writable text stream — production code passes
+            ``sys.stderr``; tests pass a ``StringIO`` to capture the message.
+    """
+    output_stream.write(
+        f"pr_converge_bugteam_skill_tracker: state write failed; "
+        f"stamp not recorded: {state_write_error}\n"
+    )
+    output_stream.flush()
+
+
 def main() -> None:
+    """Tracker entry point for the PreToolUse:Skill hook.
+
+    Reads the PreToolUse payload from stdin, records a formal
+    ``Skill({skill: "bugteam"})`` invocation in the pr-converge state file,
+    and returns. Non-bugteam invocations and malformed inputs are skipped
+    silently so unrelated Skill calls are never disturbed.
+
+    Raises:
+        OSError: When the state file cannot be written. The error is
+            surfaced loudly via ``_emit_state_write_error`` before re-raising
+            so the operator sees the protocol-corruption event instead of a
+            silent no-op.
+    """
     try:
         hook_payload = json.load(sys.stdin)
     except json.JSONDecodeError:
-        sys.exit(0)
+        return
     if not isinstance(hook_payload, dict):
-        sys.exit(0)
+        return
     if not _is_formal_bugteam_skill_invocation(hook_payload):
-        sys.exit(0)
+        return
     state_path = _resolve_state_path()
     if state_path is None:
-        sys.exit(0)
+        return
     parsed_state = _load_state_dictionary(state_path)
     if parsed_state is None:
-        sys.exit(0)
+        return
     updated_state = _record_bugteam_skill_invocation(parsed_state)
     try:
         _atomic_write_state(state_path, updated_state)
-    except OSError:
-        sys.exit(0)
-    sys.exit(0)
+    except OSError as state_write_error:
+        _emit_state_write_error(state_write_error, sys.stderr)
+        raise
+    return
 
 
 if __name__ == "__main__":

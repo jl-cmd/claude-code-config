@@ -37,17 +37,20 @@ plain text so next tick re-reads from context:
 - `bugteam_skill_invoked_at_head`: HEAD SHA (string) at which the formal
   `Skill({skill: "bugteam"})` was last invoked, or `null`. Stamped by the
   `pr_converge_bugteam_skill_tracker` hook on every formal bugteam Skill
-  invocation. Reset to `null` on every push (same lifecycle as the other
-  `*_clean_at` fields). The `pr_converge_bugteam_enforcer` hook reads this
+  invocation. Reset by overwrite on the next bugteam Skill invocation;
+  staleness is detected by the head/tick equality check rather than by
+  explicit reset. The `pr_converge_bugteam_enforcer` hook reads this
   field together with `current_head` to confirm the formal Skill registered
   at the current HEAD before allowing follow-on clean-coder audit-shaped
   Agent spawns. `qbug` invocations deliberately do NOT update this field.
 - `bugteam_skill_invoked_at_tick`: integer tick number at which the formal
   bugteam Skill was last invoked, or `null`. Companion to
-  `bugteam_skill_invoked_at_head`. Reset to `null` on every push. The
-  enforcer requires this value to equal the current `tick_count` so a
-  Skill invocation from a prior tick cannot wave through clean-coder
-  audit-shaped Agent spawns on a later tick at the same HEAD.
+  `bugteam_skill_invoked_at_head`. Reset by overwrite on the next bugteam
+  Skill invocation; staleness is detected by the head/tick equality check
+  rather than by explicit reset. The enforcer requires this value to equal
+  the current `tick_count` so a Skill invocation from a prior tick cannot
+  wave through clean-coder audit-shaped Agent spawns on a later tick at
+  the same HEAD.
 
 Tick begins reading prior state line from most recent assistant message
 (no `state.json`) and ends by emitting updated state line; with

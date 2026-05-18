@@ -34,7 +34,7 @@ ALL_AUDIT_PROMPT_SUBSTRINGS: tuple[str, ...] = (
     "a-j categor",
     "code-quality",
     "verify_clean",
-    "converge",
+    "convergence loop",
 )
 
 ENFORCER_CORRECTIVE_MESSAGE: str = (

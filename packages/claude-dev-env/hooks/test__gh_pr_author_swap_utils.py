@@ -169,3 +169,55 @@ def test_state_file_is_attacker_planted_returns_true_when_lstat_raises_os_error(
     monkeypatch.setattr(pathlib.Path, "lstat", raise_permission_error)
 
     assert utils_module._state_file_is_attacker_planted(unreadable_state_file) is True
+
+
+def test_strip_bash_comments_preserves_substitution_body_when_hash_is_inside_dollar_paren() -> None:
+    """Regression: ``$(date +%H # 24h) && gh pr create`` must not let the regex eat past the substitution closer.
+
+    Before this fix ``_strip_bash_comments`` ran a flat regex sweep that
+    blanked from ``#`` to end-of-line regardless of substitution depth.
+    A ``#`` preceded by whitespace inside a ``$(...)`` body consumed
+    the closing ``)`` AND every byte after it on the same line,
+    erasing a real ``gh pr create`` invocation from the enforcer's
+    view and silently bypassing the swap.
+    """
+    raw_command = "$(date +%H # 24h) && gh pr create --title T"
+    preprocessed_command = utils_module._preprocess_command_for_matching(raw_command)
+    assert "gh pr create" in preprocessed_command
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(preprocessed_command)
+
+
+def test_strip_bash_comments_preserves_substitution_body_when_hash_is_inside_backtick() -> None:
+    """Regression: a ``#`` inside a backtick body must not erase a trailing ``gh pr create``.
+
+    Backtick substitution is symmetric with ``$(...)``; the
+    substitution-aware comment walker must treat both shapes the same.
+    """
+    raw_command = "foo `cmd # comment` bar && gh pr create"
+    preprocessed_command = utils_module._preprocess_command_for_matching(raw_command)
+    assert "gh pr create" in preprocessed_command
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(preprocessed_command)
+
+
+def test_strip_bash_comments_strips_top_level_trailing_comment() -> None:
+    """Existing behaviour: a top-level trailing ``#`` comment after ``gh pr create`` is blanked.
+
+    The comment-stripping pass must still erase a real top-level
+    comment so the enforcer treats only the command portion as code.
+    """
+    raw_command = "gh pr create # this is a comment"
+    preprocessed_command = utils_module._preprocess_command_for_matching(raw_command)
+    assert "this is a comment" not in preprocessed_command
+
+
+def test_strip_bash_comments_strips_prior_line_comment_only() -> None:
+    """Existing behaviour: a comment on line 1 is blanked but a ``gh pr create`` on line 2 still matches.
+
+    The newline is preserved so the matcher can still tell the two
+    lines apart, and the second-line command stays intact.
+    """
+    raw_command = "echo a # b\ngh pr create"
+    preprocessed_command = utils_module._preprocess_command_for_matching(raw_command)
+    assert "gh pr create" in preprocessed_command
+    assert "# b" not in preprocessed_command
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(preprocessed_command)

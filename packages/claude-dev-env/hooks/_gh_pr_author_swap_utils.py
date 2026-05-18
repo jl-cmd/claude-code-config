@@ -35,7 +35,7 @@ from typing import TextIO
 from config.gh_pr_author_swap_constants import (
     ALL_GH_AUTH_SWITCH_COMMAND_HEAD,
     ALL_SHELL_QUOTE_CHARACTERS,
-    BASH_COMMENT_PATTERN,
+    BASH_COMMENT_INTRODUCER_CHARACTER,
     COMMAND_SEPARATOR_PATTERN,
     COMMAND_SUBSTITUTION_OPENER_LENGTH,
     GH_AUTH_SWITCH_TIMEOUT_SECONDS,
@@ -548,17 +548,29 @@ def _strip_quoted_regions(command: str) -> str:
 
 
 def _strip_bash_comments(quote_stripped_command: str) -> str:
-    """Replace bash comments with spaces so a hash-prefixed token is inert.
+    """Replace top-level bash comments with spaces so a hash-prefixed token is inert.
 
     Bash treats a hash character as the start of a comment only when it
     appears at the beginning of the command or immediately after
     whitespace. Inside a quoted region the hash character is literal,
     but the caller is responsible for running ``_strip_quoted_regions``
     first, which already blanks quoted text, so any hash character
-    reaching this helper is a real comment introducer or a
-    token-internal character (for example
+    reaching this helper at the top level is a real comment introducer
+    or a token-internal character (for example
     ``--body-file body.md@@HASH@@fragment`` where ``@@HASH@@`` stands
     in for the literal hash byte).
+
+    The walker is substitution-aware: it descends past ``$(...)`` and
+    ``` `...` ``` bodies via the existing helpers and does NOT blank
+    any hash inside those bodies. A flat regex sweep would otherwise
+    consume the closing ``)`` or backtick — and every byte after it on
+    the same line — when a hash character appears inside the
+    substitution body (for example a ``$(date +%H ... 24h) && gh pr
+    create --title T`` shape where ``...`` stands in for the literal
+    hash byte), silently erasing the real ``gh pr create`` from the
+    enforcer's view. Preserving substitution bodies verbatim is
+    symmetric with how ``_strip_quoted_regions`` already keeps
+    substitution body characters scannable.
 
     Comments extend from the hash character to the next newline. The
     newline itself is preserved so downstream command-separator
@@ -568,18 +580,93 @@ def _strip_bash_comments(quote_stripped_command: str) -> str:
         quote_stripped_command: Output of ``_strip_quoted_regions``.
 
     Returns:
-        A string of identical length with every bash comment replaced
-        by spaces. The trailing newline of each commented line is
-        retained so the matcher can still tell where one command ended
-        and the next began.
+        A string of identical length with every top-level bash comment
+        replaced by spaces. The trailing newline of each commented line
+        is retained so the matcher can still tell where one command
+        ended and the next began. Hash-introduced text inside a
+        substitution body is left intact.
     """
     all_scanned_characters = list(quote_stripped_command)
-    for each_comment_match in BASH_COMMENT_PATTERN.finditer(quote_stripped_command):
-        comment_start_index = each_comment_match.start()
-        comment_end_index = each_comment_match.end()
-        for each_blank_target_index in range(comment_start_index, comment_end_index):
-            all_scanned_characters[each_blank_target_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+    cursor_index = 0
+    command_length = len(quote_stripped_command)
+    while cursor_index < command_length:
+        current_character = all_scanned_characters[cursor_index]
+        if (
+            current_character == SHELL_DOLLAR_CHARACTER
+            and cursor_index + 1 < command_length
+            and all_scanned_characters[cursor_index + 1] == SHELL_PAREN_OPEN_CHARACTER
+        ):
+            cursor_index = _index_after_command_substitution(all_scanned_characters, cursor_index)
+            continue
+        if current_character == SHELL_BACKTICK_CHARACTER:
+            cursor_index = _index_after_backtick_substitution(
+                all_scanned_characters, cursor_index, command_length
+            )
+            continue
+        if (
+            current_character == BASH_COMMENT_INTRODUCER_CHARACTER
+            and _is_comment_introducer_position(all_scanned_characters, cursor_index)
+        ):
+            cursor_index = _blank_top_level_comment(
+                all_scanned_characters, cursor_index, command_length
+            )
+            continue
+        cursor_index += 1
     return "".join(all_scanned_characters)
+
+
+def _is_comment_introducer_position(
+    all_scanned_characters: list[str], hash_index: int
+) -> bool:
+    """Return True when the hash at ``hash_index`` introduces a bash comment.
+
+    Bash treats a hash as a comment introducer only at the start of the
+    command or immediately after whitespace. This mirrors the lookbehind
+    branch of the bash comment rule (``(?<=\\s)|^``) while operating on
+    a mutable character list so the substitution-aware walker can
+    consult it inline.
+
+    Args:
+        all_scanned_characters: Character buffer being walked.
+        hash_index: Index of the hash character under test.
+
+    Returns:
+        True when ``hash_index`` is zero or the prior character is a
+        Python ``str.isspace`` whitespace character.
+    """
+    if hash_index == 0:
+        return True
+    prior_character = all_scanned_characters[hash_index - 1]
+    return prior_character.isspace()
+
+
+def _blank_top_level_comment(
+    all_scanned_characters: list[str], hash_index: int, command_length: int
+) -> int:
+    """Blank a top-level bash comment in place and return the next cursor position.
+
+    The comment runs from the hash character to the next newline. The
+    newline is preserved so downstream command-separator detection still
+    sees the line break.
+
+    Args:
+        all_scanned_characters: Mutable list view of the command string.
+            The walker MUTATES the buffer to blank the comment body.
+        hash_index: Index of the hash character that introduces the
+            comment.
+        command_length: Length of ``all_scanned_characters``, hoisted by
+            the caller to avoid a recomputation per call.
+
+    Returns:
+        The index of the preserved newline (or ``command_length`` when
+        the comment runs to end-of-string), suitable as the next cursor
+        position.
+    """
+    blanking_index = hash_index
+    while blanking_index < command_length and all_scanned_characters[blanking_index] != "\n":
+        all_scanned_characters[blanking_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+        blanking_index += 1
+    return blanking_index
 
 
 def _strip_substitution_bodies(quote_stripped_command: str) -> str:

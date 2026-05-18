@@ -29,7 +29,7 @@ WEB_FLAG_PATTERN: re.Pattern[str] = re.compile(r"(?<!\S)(?:--web|-w)(?!\S)")
 COMMAND_SEPARATOR_PATTERN: re.Pattern[str] = re.compile(
     r"(?:&&|\|\||;|(?<!\|)\|(?!\|)|(?<!&)&(?!&)|[\r\n])"
 )
-BASH_COMMENT_PATTERN: re.Pattern[str] = re.compile(r"(?:(?<=\s)|^)#[^\n]*")
+BASH_COMMENT_INTRODUCER_CHARACTER: str = "#"
 COMMAND_SUBSTITUTION_OPENER_LENGTH: int = 2
 
 ALL_GH_API_USER_COMMAND: tuple[str, ...] = ("gh", "api", "user", "--jq", ".login")

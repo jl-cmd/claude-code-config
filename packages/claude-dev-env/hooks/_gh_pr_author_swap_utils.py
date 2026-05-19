@@ -629,22 +629,33 @@ def _walk_and_blank_comments(
         bounded_by_substitution_closer: ``None`` for the top-level
             walk. ``")"`` when walking inside a ``$(...)`` body so a
             comment inside the body terminates at the matching ``)``.
+            When bounded by ``)``, paren depth is tracked so a bare
+            ``(`` inside the body matches its own bare ``)`` rather
+            than letting that ``)`` exit the walker prematurely.
             ``"`"`` when walking inside a ``` `...` ``` body so a
             comment inside the body terminates at the matching
-            backtick.
+            backtick. Backtick bodies do not need depth tracking
+            because backticks do not nest in unescaped form.
 
     Returns:
         The index just past the substitution closer when bounded, or
         ``end_index`` when the walker reaches the end of the buffer.
     """
     cursor_index = cursor_start_index
+    paren_depth = (
+        1 if bounded_by_substitution_closer == SHELL_PAREN_CLOSE_CHARACTER else 0
+    )
     while cursor_index < end_index:
         current_character = all_scanned_characters[cursor_index]
         if (
             bounded_by_substitution_closer == SHELL_PAREN_CLOSE_CHARACTER
             and current_character == SHELL_PAREN_CLOSE_CHARACTER
         ):
-            return cursor_index + 1
+            paren_depth -= 1
+            if paren_depth == 0:
+                return cursor_index + 1
+            cursor_index += 1
+            continue
         if (
             bounded_by_substitution_closer == SHELL_BACKTICK_CHARACTER
             and current_character == SHELL_BACKTICK_CHARACTER
@@ -669,6 +680,13 @@ def _walk_and_blank_comments(
                 end_index=end_index,
                 bounded_by_substitution_closer=SHELL_BACKTICK_CHARACTER,
             )
+            continue
+        if (
+            bounded_by_substitution_closer == SHELL_PAREN_CLOSE_CHARACTER
+            and current_character == SHELL_PAREN_OPEN_CHARACTER
+        ):
+            paren_depth += 1
+            cursor_index += 1
             continue
         if (
             current_character == BASH_COMMENT_INTRODUCER_CHARACTER

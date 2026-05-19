@@ -706,3 +706,69 @@ def test_strip_bash_comments_real_invocation_after_substitution_still_matches() 
     assert utils_module._command_invokes_gh_pr_create_in_stripped(
         utils_module._preprocess_command_for_matching("echo $(echo ok); gh pr create")
     )
+
+
+def test_strip_bash_comments_preserves_real_gh_pr_create_after_subshell_in_substitution() -> None:
+    """An inner ``(subshell)`` inside ``$(...)`` must not let the walker exit early.
+
+    Without paren-depth tracking, the bare ``)`` of ``(subshell)`` would
+    match the outer substitution closer, leaving the walker at
+    ``# comment) && gh pr create``. The walker would then treat ``#`` as
+    a top-level comment introducer and blank everything through the real
+    ``)`` and the trailing ``gh pr create``, silently bypassing the
+    enforcer. Depth tracking keeps the outer substitution intact so the
+    real ``gh pr create`` after ``&&`` stays visible.
+    """
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "$(cmd; (subshell) # comment) && gh pr create"
+        )
+    )
+
+
+def test_strip_bash_comments_handles_deeply_nested_bare_parens_inside_substitution() -> None:
+    """Multiple inner bare-paren groups inside ``$(...)`` resolve to their own closers.
+
+    ``$(( 1 + 1 ))`` is bash arithmetic expansion that lexically
+    contains two opening parens and two closing parens, and
+    ``(other_subshell)`` adds one more inner pair. Paren-depth tracking
+    ensures every inner pair cancels out before the walker accepts the
+    real outer ``)``, so the trailing ``gh pr create`` is reached.
+    """
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "echo $(echo $(( 1 + 1 )) (other_subshell) # x) && gh pr create"
+        )
+    )
+
+
+def test_strip_bash_comments_unterminated_substitution_with_inner_subshell_does_not_crash() -> None:
+    """An unterminated ``$(...)`` body containing an inner ``(`` must not raise.
+
+    The walker increments depth on the inner ``(``, never finds the
+    matching outer ``)``, and reaches the end of the buffer. It must
+    return ``end_index`` gracefully rather than raising IndexError or
+    recursing forever.
+    """
+    preprocessed_command = utils_module._preprocess_command_for_matching(
+        "$(echo (subshell"
+    )
+    assert isinstance(preprocessed_command, str)
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        preprocessed_command
+    )
+
+
+def test_strip_bash_comments_backtick_bound_ignores_bare_parens() -> None:
+    """Backtick bodies do not track paren depth — bare parens inside are inert.
+
+    Backticks cannot nest in unescaped form, so paren depth tracking is
+    unnecessary. The walker treats a bare ``)`` inside ``` `...` ``` as
+    an ordinary character and exits the body only on the matching
+    closing backtick, leaving any trailing ``gh pr create`` visible.
+    """
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "`( inner ) # comment` && gh pr create"
+        )
+    )

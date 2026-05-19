@@ -7,6 +7,7 @@ from config.preflight_constants import GIT_DIRECTORY_NAME
 __all__ = (
     "ALL_AGENT_CONFIG_PATH_PATTERNS",
     "ALL_PERMISSION_ALLOW_TOOLS",
+    "ALL_TRUST_ENTRY_PROJECT_PATH_BOUNDARY_QUOTE_CHARACTERS",
     "AUTO_MODE_ENVIRONMENT_ENTRY_PREFIX",
     "AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE",
     "CLAUDE_SETTINGS_DIRECTORY_NAME",
@@ -32,13 +33,46 @@ ALL_AGENT_CONFIG_PATH_PATTERNS: tuple[str, ...] = (
 
 AUTO_MODE_ENVIRONMENT_ENTRY_PREFIX: str = "Trusted local workspace:"
 
-AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
-    "Trusted local workspace: Files under {project_path}/.claude/** inherit "
-    "the workspace's trust for Edit, Write, Read, and Glob operations EXCEPT "
-    "for agent-config files: settings*.json, anything under hooks/, commands/, "
-    "agents/, skills/, the mcp.json file, and CLAUDE.md. Edits to those "
-    "agent-config files always require explicit per-edit user approval."
+
+def _describe_agent_config_pattern_for_humans(agent_config_path_pattern: str) -> str:
+    glob_suffix_under_directory = "/**"
+    file_name_for_special_phrasing = "mcp.json"
+    if agent_config_path_pattern.endswith(glob_suffix_under_directory):
+        directory_name = agent_config_path_pattern[
+            : -len(glob_suffix_under_directory)
+        ]
+        return f"anything under {directory_name}/"
+    if agent_config_path_pattern == file_name_for_special_phrasing:
+        return f"the {file_name_for_special_phrasing} file"
+    return agent_config_path_pattern
+
+
+def _build_agent_config_pattern_phrase(
+    all_agent_config_path_patterns: tuple[str, ...],
+) -> str:
+    all_described_patterns: list[str] = [
+        _describe_agent_config_pattern_for_humans(each_pattern)
+        for each_pattern in all_agent_config_path_patterns
+    ]
+    if len(all_described_patterns) <= 1:
+        return ", ".join(all_described_patterns)
+    leading_phrase_parts = ", ".join(all_described_patterns[:-1])
+    final_phrase_part = all_described_patterns[-1]
+    return f"{leading_phrase_parts}, and {final_phrase_part}"
+
+
+_AGENT_CONFIG_PATTERN_PHRASE: str = _build_agent_config_pattern_phrase(
+    ALL_AGENT_CONFIG_PATH_PATTERNS
 )
+
+AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
+    f"Trusted local workspace: Files under {{project_path}}/.claude/** inherit "
+    f"the workspace's trust for Edit, Write, Read, and Glob operations EXCEPT "
+    f"for agent-config files: {_AGENT_CONFIG_PATTERN_PHRASE}. Edits to those "
+    f"agent-config files always require explicit per-edit user approval."
+)
+
+ALL_TRUST_ENTRY_PROJECT_PATH_BOUNDARY_QUOTE_CHARACTERS: tuple[str, ...] = ('"', "'")
 
 CLAUDE_SETTINGS_DIRECTORY_NAME: str = ".claude"
 

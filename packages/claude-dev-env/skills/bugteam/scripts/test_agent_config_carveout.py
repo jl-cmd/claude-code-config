@@ -253,3 +253,76 @@ def test_is_trust_entry_for_project_predicate_filters_by_prefix_and_project_path
         )
         is True
     )
+
+
+def test_is_trust_entry_rejects_cross_project_path_suffix_collision() -> None:
+    """When the project_path is a path suffix of an unrelated entry's path,
+    the predicate must reject the unrelated entry (the boundary anchor case)."""
+    short_project_path = "/projects/foo"
+    trust_prefix = "Trusted local workspace:"
+    longer_unrelated_path_entry = (
+        "Trusted local workspace: /Users/jon/projects/foo/.claude/** unrelated path"
+    )
+    assert (
+        common_module.is_trust_entry_for_project(
+            longer_unrelated_path_entry, short_project_path, trust_prefix
+        )
+        is False
+    )
+    quoted_matching_entry = (
+        f'Trusted local workspace: "{short_project_path}/.claude/**" quoted form'
+    )
+    assert (
+        common_module.is_trust_entry_for_project(
+            quoted_matching_entry, short_project_path, trust_prefix
+        )
+        is True
+    )
+
+
+def test_second_grant_is_idempotent_when_no_other_settings_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Running grant twice in a row must perform zero changes the second time.
+
+    On the second call the existing trust entry is byte-identical to the
+    freshly-formatted current entry, so purge_stale_trust_entries treats it as
+    protected and does not remove it; add_auto_mode_environment_entry then
+    no-ops because the entry is already present.
+    """
+    fake_project_root = _make_fake_project(tmp_path)
+    fake_settings_path = _prepare_fake_home(tmp_path)
+    _seed_grant_then_run(
+        fake_settings_path, fake_project_root, monkeypatch, pre_existing_settings={}
+    )
+    first_run_output = capsys.readouterr()
+    assert "No changes needed" not in first_run_output.out
+    _redirect_settings_to_fake_path(fake_settings_path, monkeypatch)
+    monkeypatch.chdir(fake_project_root)
+    grant_module.grant_permissions_for_current_directory()
+    second_run_output = capsys.readouterr()
+    assert "No changes needed; settings file left untouched." in second_run_output.out
+    assert "Stale auto-mode environment entries purged" not in second_run_output.out
+
+
+def test_template_derives_human_readable_pattern_list_from_pattern_tuple() -> None:
+    """Every pattern in ALL_AGENT_CONFIG_PATH_PATTERNS must surface in the
+    rendered template through its derived human-readable form, and the
+    template must still expose the {project_path} placeholder for .format()
+    substitution at runtime."""
+    template_text: str = AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE
+    assert "{project_path}" in template_text
+    for each_pattern in ALL_AGENT_CONFIG_PATH_PATTERNS:
+        if each_pattern.endswith("/**"):
+            directory_name = each_pattern[: -len("/**")]
+            expected_phrase = f"anything under {directory_name}/"
+        elif each_pattern == "mcp.json":
+            expected_phrase = "the mcp.json file"
+        else:
+            expected_phrase = each_pattern
+        assert expected_phrase in template_text, (
+            f"template missing derived phrase for pattern {each_pattern!r}: "
+            f"expected {expected_phrase!r}"
+        )
+    rendered_template_text = template_text.format(project_path="/tmp/x")
+    assert "/tmp/x" in rendered_template_text

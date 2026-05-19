@@ -149,19 +149,29 @@ def add_auto_mode_environment_entry(
 
 
 def purge_stale_trust_entries(
-    all_settings: dict[str, object], project_path: str, prefix: str
+    all_settings: dict[str, object],
+    project_path: str,
+    prefix: str,
+    protected_entry: str | None = None,
 ) -> int:
     """Remove every prior trust entry for the project from autoMode.environment.
 
     A trust entry is any string in autoMode.environment whose prefix matches
     the trust-entry marker and that contains the project's .claude/** path.
     Purging stale entries before adding the current template prevents
-    accumulation across template revisions.
+    accumulation across template revisions. The optional protected_entry
+    survives the purge so an entry byte-identical to the one about to be
+    re-added is not removed and re-added on every invocation, preserving the
+    idempotency contract documented on grant_permissions_for_current_directory.
 
     Args:
         all_settings: The parsed settings dictionary.
         project_path: The POSIX-style project root path.
         prefix: The literal prefix that marks a trust entry.
+        protected_entry: Optional entry text that, when byte-equal to a
+            candidate, prevents removal. Pass the freshly-formatted current
+            template entry from grant to preserve idempotency. Revoke passes
+            None so every matching entry is removed.
 
     Returns:
         Number of stale entries removed.
@@ -172,11 +182,17 @@ def purge_stale_trust_entries(
     existing_environment = auto_mode_section.get(SETTINGS_ENVIRONMENT_KEY)
     if not isinstance(existing_environment, list):
         return 0
+
+    def _should_purge_candidate(candidate_entry: object) -> bool:
+        if not is_trust_entry_for_project(candidate_entry, project_path, prefix):
+            return False
+        if protected_entry is not None and candidate_entry == protected_entry:
+            return False
+        return True
+
     return remove_matching_entries_from_list(
         existing_environment,
-        lambda candidate_entry: is_trust_entry_for_project(
-            candidate_entry, project_path, prefix
-        ),
+        _should_purge_candidate,
     )
 
 
@@ -225,7 +241,10 @@ def grant_permissions_for_current_directory() -> None:
         settings, project_path
     )
     stale_trust_entries_purged_count = purge_stale_trust_entries(
-        settings, project_path, AUTO_MODE_ENVIRONMENT_ENTRY_PREFIX
+        settings,
+        project_path,
+        AUTO_MODE_ENVIRONMENT_ENTRY_PREFIX,
+        protected_entry=environment_entry,
     )
     environment_entries_added_count = add_auto_mode_environment_entry(
         settings, environment_entry

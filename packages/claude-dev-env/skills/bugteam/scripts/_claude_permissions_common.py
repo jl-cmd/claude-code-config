@@ -27,6 +27,7 @@ for each_cached_module_name in [
     )
 
 from config.claude_permissions_common_constants import (
+    ALL_TRUST_ENTRY_PROJECT_PATH_BOUNDARY_QUOTE_CHARACTERS,
     ATOMIC_WRITE_TEMPORARY_SUFFIX,
     DEFAULT_SETTINGS_FILE_MODE,
     TEXT_FILE_ENCODING,
@@ -144,14 +145,29 @@ def build_agent_config_deny_rules(
     ]
 
 
+def _is_project_path_token_at_word_boundary(
+    body_after_prefix: str, token_position: int
+) -> bool:
+    if token_position == 0:
+        return True
+    preceding_character = body_after_prefix[token_position - 1]
+    if preceding_character.isspace():
+        return True
+    return preceding_character in ALL_TRUST_ENTRY_PROJECT_PATH_BOUNDARY_QUOTE_CHARACTERS
+
+
 def is_trust_entry_for_project(
     candidate_entry: object, project_path: str, prefix: str
 ) -> bool:
     """Detect whether an autoMode.environment entry is a trust entry for the project.
 
     The predicate matches any string entry whose prefix matches the trust-entry
-    marker and that contains the project's .claude/** path token. The exact
-    wording after the prefix is allowed to vary between template revisions.
+    marker and that contains the project's .claude/** path token anchored on a
+    non-path boundary (the start of the body after the prefix, a whitespace
+    character, or a quote character). The boundary anchor prevents
+    cross-project false positives where the current project's path is a path
+    suffix of an unrelated entry's path. The exact wording after the prefix is
+    allowed to vary between template revisions.
 
     Args:
         candidate_entry: The autoMode.environment list value to inspect.
@@ -165,7 +181,15 @@ def is_trust_entry_for_project(
         return False
     if not candidate_entry.startswith(prefix):
         return False
-    return f"{project_path}/.claude/**" in candidate_entry
+    project_path_token = f"{project_path}/.claude/**"
+    body_after_prefix = candidate_entry[len(prefix):]
+    token_position = body_after_prefix.find(project_path_token)
+    while token_position != -1:
+        if _is_project_path_token_at_word_boundary(body_after_prefix, token_position):
+            return True
+        next_search_start = token_position + 1
+        token_position = body_after_prefix.find(project_path_token, next_search_start)
+    return False
 
 
 def remove_matching_entries_from_list(

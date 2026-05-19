@@ -171,7 +171,7 @@ For each iteration `N` from 1 to 10:
    - The plan file path
    - The structured findings from the latest audit
    - The path to `Research/<topic>/<slug>-implementation-notes.html`
-   - The path to `templates/implementation-notes-template.html` and a directive: copy the iteration `<section class="iteration">` markup from the HTML-commented reference block at the top of the template, substitute the placeholders (`<N>` → iteration number; `<YYYY-MM-DD HH:MM>` → UTC timestamp; `<count>` → number of findings addressed this iteration; each `<ul>` group → bullets covering Design decisions, Deviations, Tradeoffs, Open questions), and insert the populated `<section>` immediately before the closing `</body>` tag
+   - The path to `templates/implementation-notes-template.html` and a directive: on iteration 1 only, copy the template into the notes file path and substitute every `{{slug}}` placeholder (in the page `<title>`, the `<h1>`, and both occurrences inside the `<a href="{{slug}}.md">{{slug}}.md</a>` companion link) with the actual slug from the vault plan path. On every iteration (including 1), copy the iteration `<section class="iteration">` markup from the HTML-commented reference block at the top of the template, substitute its placeholders (`<N>` → iteration number; `<YYYY-MM-DD HH:MM>` → UTC timestamp; `<count>` → number of findings addressed this iteration; each `<ul>` group → bullets covering Design decisions, Deviations, Tradeoffs, Open questions), and insert the populated `<section>` immediately before the closing `</body>` tag
    - The verbatim `<notes_instruction>` block below
 2. The fix agent rewrites the plan in place in the vault via `mcp__obsidian__write_note` addressing the findings, and appends one new `<section>` to the notes file with iteration number, timestamp, and the four bullet groups.
 3. Re-spawn `general-purpose` against the rewritten plan with the same audit prompt as step 7 (plan-quality rubric, not code rubric).
@@ -196,15 +196,16 @@ As you work maintain a running implementation-notes.html file that captures anyt
 
 #### Notes file structure
 
-Use `templates/implementation-notes-template.html` as the skeleton on iteration 1. On iterations 2+, read the existing file, append a new `<section>` block before the closing `</body>` tag, write it back.
+Use `templates/implementation-notes-template.html` as the skeleton on iteration 1 — copy it to the notes file path and substitute every `{{slug}}` placeholder in the title, h1, and companion-link anchor with the actual slug before writing. On iterations 2+, read the existing file (which already has the `{{slug}}` substitutions baked in from iteration 1), append a new `<section>` block before the closing `</body>` tag, write it back.
 
 ### 9. Halt and surface (cap reached)
 
-If iteration 10 still fails audit, stop the loop. Report:
+If iteration 10 still fails audit, stop the loop. Surface:
 
 - The remaining findings (highest severity first)
-- The paths to the current plan and notes file
 - A one-line recommendation: drop scope, simplify the plan, or hand back to the user for a decision
+
+Then proceed to step 10 so the cap-reached path emits the same standard final report (vault path of the plan, iteration count with `halted at cap` outcome, core-decision summary, and notes-file path) that the CLEAN-after-N-iterations path emits.
 
 ### 10. Report
 

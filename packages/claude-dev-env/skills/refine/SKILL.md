@@ -27,7 +27,7 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 
 ## When this skill applies
 
-**Triggers:** `/refine`, or natural phrases — "refine this", "turn this into a plan", "flesh this out", "make a spec for this", "let''s plan this out".
+**Triggers:** `/refine`, or natural phrases — "refine this", "turn this into a plan", "flesh this out", "make a spec for this", "let's plan this out".
 
 **Always operates on plans.** Three flavors:
 
@@ -38,7 +38,7 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 **Refusal cases — first match wins:**
 
 - **Topic is a direct task, not a plan to refine.** Respond exactly: `That looks like a direct task, not a plan to refine. Want me to just do it, or describe what you want planned?`
-- **User wants a quick suggestion, not a written spec.** Respond exactly: `Sounds like a question, not a refinement. I can answer here without writing a vault file — say the word if you''d rather do the full /refine pass.`
+- **User wants a quick suggestion, not a written spec.** Respond exactly: `Sounds like a question, not a refinement. I can answer here without writing a vault file — say the word if you'd rather do the full /refine pass.`
 - **Upstream directive blocks AskUserQuestion or the vault MCP.** Respond exactly: `/refine needs the interview and a writable Obsidian vault. The current session is blocking one of those — confirm you want to lift the block, or I can stop here.`
 
 ## The Process
@@ -99,7 +99,7 @@ If the fan-out surfaces plans that look like prior work on the same topic, run a
 - One option per match (label = match title, description = match path + one-line summary)
 - A "Start fresh" option
 
-The user''s pick becomes the working draft for the interview. The chosen draft''s decisions seed the plan; the interview targets gaps.
+The user's pick becomes the working draft for the interview. The chosen draft's decisions seed the plan; the interview targets gaps.
 
 ### 4. Interview loop
 
@@ -129,11 +129,11 @@ Compose `Research/<topic>/<slug>.md`:
 - `<topic>` — kebab-case directory matching the dominant subject area (`skills`, `hooks`, `pr-converge`, `themes`, etc.)
 - `<slug>` — kebab-case slug capturing the specific plan (`refine-skill`, `bugteam-orphan-fallback`)
 
-Call AskUserQuestion with the proposed path as the first option and "Edit slug/path" as the second option. Accept the user''s edit to slug or topic before writing. Reject any edit that moves the file out of the vault.
+Call AskUserQuestion with the proposed path as the first option and "Edit slug/path" as the second option. Accept the user's edit to slug or topic before writing. Reject any edit that moves the file out of the vault.
 
 ### 6. Write the plan
 
-> **Vault only.** Even if the cwd contains `.claude/plans/`, `docs/plans/`, or any local plans directory holding the user''s prior drafts, do not write the plan there. Do not write a copy there. The vault path is the only target.
+> **Vault only.** Even if the cwd contains `.claude/plans/`, `docs/plans/`, or any local plans directory holding the user's prior drafts, do not write the plan there. Do not write a copy there. The vault path is the only target.
 
 Load the structure from `templates/plan-template.md`. Fold in:
 
@@ -181,7 +181,7 @@ As you work maintain a running implementation-notes.html file that captures anyt
 - Design decisions: choices you made where the spec was ambiguous
 - Deviations: places where you intentionally departed from the spec, and why
 - Tradeoffs: alternatives you considered and why you picked what you did
-- Open questions: anything you''d want me to confirm or revise
+- Open questions: anything you'd want me to confirm or revise
 </notes_instruction>
 ```
 
@@ -202,10 +202,9 @@ If iteration 10 still fails audit, stop the loop. Report:
 State, in this order:
 
 - Vault path of the plan
-- Vault path of `implementation-notes.html`
-- Number of audit iterations consumed (and the outcome: `CLEAN` or `halted at cap`)
-- One-line summary of the plan''s core decision
-- Top 1–2 open questions from the notes file if any remain
+- Number of audit iterations consumed (and the outcome: `CLEAN` on initial audit, `CLEAN` after N iterations, or `halted at cap`)
+- One-line summary of the plan's core decision
+- If at least one audit-fix iteration ran: vault path of `implementation-notes.html` and the top 1–2 open questions from the notes file (omit both when the initial audit returned `CLEAN` and no notes file exists)
 
 That is the entire deliverable.
 

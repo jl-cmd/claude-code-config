@@ -19,8 +19,11 @@ __all__ = (
 ALL_PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
 
 AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
-    "Trusted local workspace: {project_path}/.claude/** is the user's "
-    "project Claude Code config tree; edits inside are routine"
+    "Trusted local workspace: Files under {project_path}/.claude/** inherit "
+    "the workspace's trust for Edit, Write, Read, and Glob operations EXCEPT "
+    "for agent-config files: settings*.json, anything under hooks/, commands/, "
+    "agents/, skills/, the mcp.json file, and CLAUDE.md. Edits to those "
+    "agent-config files always require explicit per-edit user approval."
 )
 
 CLAUDE_SETTINGS_DIRECTORY_NAME: str = ".claude"

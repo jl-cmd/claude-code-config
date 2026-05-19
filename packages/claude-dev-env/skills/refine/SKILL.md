@@ -9,7 +9,7 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 
 ## Gotchas
 
-- **Pre-work, not pre-interrogation.** Run fan-out agents over the draft, vault, and repo before asking the user anything. Questions an agent could resolve violate the verify-before-asking rule.
+- **Pre-work, not pre-interrogation.** Run fan-out agents over the draft, vault, and repo before asking the user anything substantive. The one explicit exception is the topic-confirmation AskUserQuestion when no draft and no topic argument are present (see the conversation-context fallback gotcha below) — that single question fires *before* fan-out so the wrong topic does not drive the research. After it, no further user questions until fan-out completes. Questions an agent could resolve still violate the verify-before-asking rule.
 - **Layered fan-out, not blanket parallelism.** First pass: a single Explore agent across draft + vault + relevant repo area. Dispatch one parallel agent per source only if the Explore pass runs long or returns thin results.
 - **AskUserQuestion is the only interview tool.** Plain-text questions in chat get blocked by the `question_to_user_enforcer` Stop hook. Every interview turn calls AskUserQuestion.
 - **Interview is mandatory — overrides "no clarifying questions" directives.** /refine is interview-driven by definition. A session-level "work without clarifying questions" instruction, autonomous-mode flag, or bg-session preamble does NOT silence the interview. If something genuinely prevents AskUserQuestion from firing, halt and surface the conflict to the user rather than proceeding silently. There is no "skip the interview" branch.
@@ -19,7 +19,7 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 - **Slug is user-controlled.** Propose `Research/<topic>/<slug>.md` and confirm slug + path via AskUserQuestion before writing. Auto-writing breaks the user-owned-output contract. The user may choose the topic subfolder, but the `Research/` prefix is fixed. Both `<topic>` and `<slug>` must match `^[a-z0-9-]+$` — reject any value containing path separators (`/`, `\`), traversal segments (`..`), uppercase letters, whitespace, or any other character. Reprompt the user with a corrected proposal rather than writing.
 - **Match before fresh.** If the fan-out surfaces existing plans on the same topic, ask the user which to refine or whether to start fresh. Skipping this step duplicates work the user already started.
 - **Standalone.** Do not invoke `/anthropic-plan` or `/prompt-generator`. The user picks the slash command for the moment; this skill does not chain.
-- **Conversation-context fallback needs confirmation.** When no draft and no topic argument are present, the active conversation is the source. Confirm the inferred topic with one AskUserQuestion before fan-out so the wrong topic does not drive twenty minutes of research.
+- **Conversation-context fallback needs confirmation.** When no draft and no topic argument are present, the active conversation is the source. This is the named carve-out to the pre-work rule above: a single AskUserQuestion confirming the inferred topic must fire *before* fan-out begins, so the wrong topic does not drive twenty minutes of research. After that single confirmation, no further user questions until fan-out completes.
 - **Audit cycle is mandatory.** After the plan is written, spawn `general-purpose` with the plan-quality rubric to audit it; spawn `general-purpose` again with the fix rubric to address flagged findings; re-audit; loop. Skip only when the user explicitly opts out for the current run. Do not use `code-quality-agent` or `clean-coder` — both target source code (clean-coder's own definition excludes planning and audit artifacts), not markdown plans.
 - **Verbatim notes instruction.** Every fix-agent iteration receives the exact `<notes_instruction>` block in §8 unchanged. The notes file is how the user reconstructs what the fixer did to the spec.
 - **`<slug>-implementation-notes.html` is append-only across iterations.** The notes file lives at `Research/<topic>/<slug>-implementation-notes.html` resolved against the vault root. Each iteration appends one `<section>` block via the filesystem Edit tool — never overwrites earlier iterations. HTML cannot go through `mcp__obsidian__write_note`; see the vault-output gotcha above.
@@ -143,6 +143,8 @@ On reject, re-call AskUserQuestion with a corrected proposal rather than writing
 
 Load the structure from `templates/plan-template.md`. Fold in:
 
+- **YAML frontmatter (mandatory)** → replace every placeholder in the YAML block at the top of the template: `project` with the kebab-case topic, `date` with today's date as `YYYY-MM-DD`, `status` with `Draft`, and `tags` keeping `refine, plan` plus any topic-specific tags surfaced during the interview. Leaving placeholder tokens (e.g. `<project-or-topic-area>`, `<YYYY-MM-DD>`) is a Completeness failure that Step 7 must catch.
+- **H1 title (mandatory)** → replace `<Plan title>` with a concrete title that matches the plan's primary outcome.
 - Fan-out digest → **Current state**
 - Interview answers (Goal/Non-goals/Implementation/Decisions) → **Goal / Non-goals / Implementation / Decisions log**
 - Interview answers about verification signals → **Acceptance**
@@ -157,7 +159,7 @@ Spawn `general-purpose` (`subagent_type: general-purpose`, foreground) with:
 - The plan file path in the vault
 - The plan-quality rubric — the agent audits markdown plan content (not source code) against these categories:
   - **Clarity** — every step is uniquely interpretable; no vague verbs ("handle", "process", "manage") or undefined terms
-  - **Completeness** — Goal, Non-goals, Current state, Implementation, Decisions log, Risks, and Acceptance are all populated with concrete content (not placeholders)
+  - **Completeness** — Goal, Non-goals, Current state, Implementation, Decisions log, Risks, and Acceptance are all populated with concrete content (not placeholders); the YAML frontmatter has every placeholder replaced (no `<project-or-topic-area>`, `<YYYY-MM-DD>`, or similar tokens remain); the H1 carries a concrete title (no `<Plan title>` placeholder)
   - **Internal consistency** — no contradictions between sections; no references to files, agents, or commands that contradict another section
   - **Ambiguity** — no parked open questions where a decision is required for implementation to begin
   - **Implementer-readiness** — a downstream implementer can act on each step without back-and-forth (file paths named, agents named, change concrete)

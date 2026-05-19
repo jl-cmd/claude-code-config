@@ -1,6 +1,6 @@
 ---
 name: refine
-description: Interview-driven plan refiner with built-in audit loop. Takes a draft, a topic, or the active conversation; fans out research agents; interviews via AskUserQuestion until further questions would be impractical hypotheticals; writes the plan to the Obsidian vault under Research/<topic>/<slug>.md; then loops code-quality-agent audit → clean-coder fix until the plan is clean, with a sibling implementation-notes.html capturing design decisions, deviations, tradeoffs, and open questions across iterations. The interview is mandatory and the vault is the only output target — these survive any session-level "no clarifying questions" or local plans/ shortcut. Use when the user says /refine, "refine this", "turn this into a plan", "flesh this out", "make a spec for this", or asks for a vague idea to be matured into a plan. Always operates on plans — skill plans, new-code implementation plans, or code-refinement plans.
+description: Interview-driven plan refiner with built-in audit loop. Takes a draft, a topic, or the active conversation; fans out research agents; interviews via AskUserQuestion until further questions would be impractical hypotheticals; writes the plan to the Obsidian vault under Research/<topic>/<slug>.md; then loops a general-purpose audit (with a plan-quality rubric) → clean-coder fix until the plan is clean, with a sibling <slug>-implementation-notes.html capturing design decisions, deviations, tradeoffs, and open questions across iterations. The interview is mandatory and the vault is the only output target — these survive any session-level "no clarifying questions" or local plans/ shortcut. Use when the user says /refine, "refine this", "turn this into a plan", "flesh this out", "make a spec for this", or asks for a vague idea to be matured into a plan. Always operates on plans — skill plans, new-code implementation plans, or code-refinement plans.
 ---
 
 # refine
@@ -22,7 +22,7 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 - **Conversation-context fallback needs confirmation.** When no draft and no topic argument are present, the active conversation is the source. Confirm the inferred topic with one AskUserQuestion before fan-out so the wrong topic does not drive twenty minutes of research.
 - **Audit cycle is mandatory.** After the plan is written, spawn `general-purpose` with the plan-quality rubric to audit it; spawn `clean-coder` to fix flagged findings; re-audit; loop. Skip only when the user explicitly opts out for the current run. Do not use `code-quality-agent` — its rubric targets source code, not markdown plans.
 - **Verbatim notes instruction.** Every clean-coder iteration receives the exact `<notes_instruction>` block in §8 unchanged. The notes file is how the user reconstructs what the fixer did to the spec.
-- **`implementation-notes.html` is append-only across iterations.** The notes file lives at `Research/<topic>/<slug>-implementation-notes.html`. Each iteration appends one `<section>` block — never overwrites earlier iterations.
+- **`<slug>-implementation-notes.html` is append-only across iterations.** The notes file lives at `Research/<topic>/<slug>-implementation-notes.html`. Each iteration appends one `<section>` block — never overwrites earlier iterations.
 - **Cap at 10 audit iterations.** If the plan still fails audit after 10 rounds, halt and surface open findings. Do not raise the cap without user direction.
 
 ## When this skill applies
@@ -37,7 +37,7 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 
 **Refusal cases — first match wins:**
 
-- **Topic is a direct task, not a plan to refine.** Respond exactly: `That looks like a direct task, not a plan to refine. Want me to just do it, or describe what you want planned?`
+- **Topic is a direct task, not a plan to refine.** Respond exactly: `That looks like a direct task, not a plan to refine. Tell me to just do it, or describe what you want planned.`
 - **User wants a quick suggestion, not a written spec.** Respond exactly: `Sounds like a question, not a refinement. I can answer here without writing a vault file — say the word if you'd rather do the full /refine pass.`
 - **Upstream directive blocks AskUserQuestion or the vault MCP.** Respond exactly: `/refine needs the interview and a writable Obsidian vault. The current session is blocking one of those — confirm you want to lift the block, or I can stop here.`
 
@@ -52,7 +52,7 @@ Copy this checklist into your response and tick items as they complete.
 - [ ] 4. Interview loop via AskUserQuestion (mandatory; do not skip)
 - [ ] 5. Propose slug + Research/<topic>/<slug>.md; confirm via AskUserQuestion
 - [ ] 6. Write the plan inline via mcp__obsidian__write_note (vault only)
-- [ ] 7. Initial audit via code-quality-agent
+- [ ] 7. Initial audit via general-purpose (plan-quality rubric)
 - [ ] 8. Audit-fix loop: clean-coder + verbatim notes instruction + re-audit
 - [ ] 9. Cap at 10 iterations; halt and surface open findings if not clean
 - [ ] 10. Report vault paths, iterations used, notes summary
@@ -210,7 +210,7 @@ State, in this order:
 - Vault path of the plan
 - Number of audit iterations consumed (and the outcome: `CLEAN` on initial audit, `CLEAN` after N iterations, or `halted at cap`)
 - One-line summary of the plan's core decision
-- If at least one audit-fix iteration ran: vault path of `implementation-notes.html` and the top 1–2 open questions from the notes file (omit both when the initial audit returned `CLEAN` and no notes file exists)
+- If at least one audit-fix iteration ran: vault path of `<slug>-implementation-notes.html` and the top 1–2 open questions from the notes file (omit both when the initial audit returned `CLEAN` and no notes file exists)
 
 That is the entire deliverable.
 
@@ -225,7 +225,7 @@ That is the entire deliverable.
 - Fan-out before interview — research what can be researched.
 - Audit-fix loop is mandatory unless the user explicitly opts out for the run.
 - Iteration cap is 10. Do not raise without user direction.
-- `implementation-notes.html` is append-only across iterations within a single /refine run.
+- `<slug>-implementation-notes.html` is append-only across iterations within a single /refine run.
 
 ## File index
 

@@ -162,6 +162,28 @@ def should_fail_when_no_bugteam_review_present_on_current_head(
     assert "no bugteam review found" in detail
 
 
+def should_fail_with_shape_detail_when_gh_returns_non_list_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error_object_payload = {"message": "Not Found", "documentation_url": "https://docs.github.com/rest"}
+    serialized_error = json.dumps(error_object_payload)
+
+    def stub_gh_api_paginated_returning_object(endpoint_path: str) -> tuple[int, str]:
+        return 0, serialized_error
+
+    monkeypatch.setattr(
+        check_convergence, "_gh_api_paginated", stub_gh_api_paginated_returning_object
+    )
+    passed, detail = check_convergence._check_bugteam_clean(
+        owner="JonEcho",
+        repo="tests",
+        number=42,
+        head_sha=CURRENT_HEAD_SHA,
+    )
+    assert passed is False
+    assert "unexpected gh api response shape" in detail
+
+
 def test_private_helpers_recognize_clean_new_header_body() -> None:
     assert check_convergence._is_bugteam_review(CLEAN_BUGTEAM_BODY) is True
     assert check_convergence._is_clean_bugteam_review(CLEAN_BUGTEAM_BODY) is True

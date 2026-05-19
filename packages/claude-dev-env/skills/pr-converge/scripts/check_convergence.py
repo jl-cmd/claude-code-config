@@ -101,7 +101,7 @@ def _check_bugteam_clean(
     except json.JSONDecodeError:
         return False, "gh api response not valid JSON"
     if not isinstance(raw_output, list):
-        return False, "no bugteam review found"
+        return False, "unexpected gh api response shape (expected list)"
     all_pages = [p for p in raw_output if isinstance(p, list)]
     all_flat: list[dict[str, object]] = [
         each_entry

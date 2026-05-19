@@ -899,3 +899,12 @@ def test_command_invokes_gh_pr_create_still_matches_real_invocation_before_hered
             "gh pr create --title T && cat <<'EOF'\nbody line\nEOF"
         )
     )
+
+
+def test_advance_past_single_quoted_region_unterminated_returns_buffer_length() -> None:
+    """An unterminated single-quoted region must clamp the return to ``buffer_length``."""
+    all_scanned_characters = ["'", "a", "b"]
+    advance_index = utils_module._advance_past_single_quoted_region(
+        all_scanned_characters, 0, 3
+    )
+    assert advance_index == 3

@@ -962,9 +962,11 @@ def _advance_past_single_quoted_region(
 ) -> int:
     """Return the index one past the closing ``'`` without mutating the buffer."""
     cursor_index = opener_index + 1
-    while cursor_index < buffer_length and all_scanned_characters[cursor_index] != "'":
+    while cursor_index < buffer_length:
+        if all_scanned_characters[cursor_index] == "'":
+            return cursor_index + 1
         cursor_index += 1
-    return cursor_index + 1
+    return cursor_index
 
 
 def _advance_past_double_quoted_region(

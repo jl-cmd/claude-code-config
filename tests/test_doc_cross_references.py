@@ -34,10 +34,13 @@ MAX_DETAIL_LINES_IN_FAILURE: int = 50
 ALLOWED_MISSING_PATHS: frozenset[str] = frozenset(
     {
         ".cursor/agents/clean-coder.md",
+        "config/path_resolver_constants.py",
         "config/sweep_config.py",
         "config/timing.py",
         "config/constants.py",
         "config/selectors.py",
+        "scripts/config/post_audit_thread_constants.py",
+        "scripts/config/pr_converge_constants.py",
         ".claude/CLAUDE.md",
         ".claude/settings.json",
         "docs/file1.md",

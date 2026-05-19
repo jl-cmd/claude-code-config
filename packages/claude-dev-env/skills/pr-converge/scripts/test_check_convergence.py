@@ -312,3 +312,15 @@ def should_bypass_bugbot_gates_when_bugbot_down_is_true(
     assert "_check_bugbot_not_dirty" not in all_invocation_names
     assert "bypassed (bugbot_down)" in captured_stdout
     assert exit_code == 0
+
+
+def should_document_head_sha_systemexit_in_check_all_docstring() -> None:
+    check_all_docstring = check_convergence.check_all.__doc__
+    assert check_all_docstring is not None
+    assert "_get_pr_head_sha" in check_all_docstring
+    assert "SystemExit" in check_all_docstring
+    assert "EXIT_CODE_GH_ERROR" in check_all_docstring
+
+
+def test_check_all_docstring_documents_head_sha_systemexit() -> None:
+    should_document_head_sha_systemexit_in_check_all_docstring()

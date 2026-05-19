@@ -16,15 +16,23 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Callable
+from typing import Callable, Generator
 
 import pytest
 
 _SCRIPTS_DIRECTORY = Path(__file__).absolute().parent
 _PR_CONVERGE_DIRECTORY = _SCRIPTS_DIRECTORY.parent
 
+_ORIGINAL_SYS_PATH = list(sys.path)
+
 if str(_PR_CONVERGE_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(_PR_CONVERGE_DIRECTORY))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _restore_sys_path_at_session_end() -> Generator[None, None, None]:
+    yield
+    sys.path[:] = _ORIGINAL_SYS_PATH
 
 
 def _load_module() -> ModuleType:

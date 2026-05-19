@@ -5,7 +5,7 @@ description: Interview-driven plan refiner with built-in audit loop. Takes a dra
 
 # refine
 
-Walk a half-formed plan to a complete, audited implementation spec — research first, interview only what research cannot answer, write the result to the Obsidian vault, then loop a quality audit and clean-coder fix until the plan is clean. **A plan and a vault, always.**
+Walk a half-formed plan to a complete, audited implementation spec — research first, interview only what research cannot answer, write the result to the Obsidian vault, then loop a general-purpose audit and fix pass until the plan is clean. **A plan and a vault, always.**
 
 ## Gotchas
 
@@ -220,7 +220,7 @@ That is the entire deliverable.
 
 - **Output target is the Obsidian vault. Only the vault.** Filesystem writes outside the vault are out of scope, including `.claude/plans/`, `docs/plans/`, `plans/`, and the cwd. No dual writes.
 - **Interview is mandatory.** Session-level "no clarifying questions" or autonomous directives do not silence the AskUserQuestion loop. Halt rather than skip.
-- Initial write is inline by the skill; only audit-driven fixes are delegated to clean-coder.
+- Initial write is inline by the skill; only audit-driven fixes are delegated to the general-purpose fix agent.
 - AskUserQuestion is the only interview surface — plain-text questions in chat are blocked by the Stop hook.
 - The skill does not call `/anthropic-plan` or `/prompt-generator`.
 - Slug and path are user-confirmed before any write. `Research/` prefix is fixed.
@@ -235,7 +235,7 @@ That is the entire deliverable.
 |---|---|
 | `SKILL.md` | This hub — process, gotchas, constraints |
 | `templates/plan-template.md` | Plan-mode-conformant structure for the written plan |
-| `templates/implementation-notes-template.html` | Iteration-log skeleton clean-coder appends to during the audit-fix loop |
+| `templates/implementation-notes-template.html` | Iteration-log skeleton the fix agent appends to during the audit-fix loop |
 
 ## Folder map
 

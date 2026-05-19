@@ -21,6 +21,7 @@ BASH_TOOL_NAME: str = "Bash"
 
 GH_PR_CREATE_PATTERN: re.Pattern[str] = re.compile(
     r"(?:^|[;&|\n`({]|\$\()[ \t]*"
+    r"(?:(?:if|then|else|elif|while|until|do|!)[ \t]+)*"
     r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+[ \t]+)*"
     r"gh(?:[ \t]+(?:--[A-Za-z][\w-]*(?:=\S+)?|-[A-Za-z])(?:[ \t]+(?!-)\S+)?)*"
     r"[ \t]+pr[ \t]+create\b",
@@ -63,3 +64,13 @@ SHELL_BACKTICK_CHARACTER: str = "`"
 SHELL_DOLLAR_CHARACTER: str = "$"
 SHELL_PAREN_OPEN_CHARACTER: str = "("
 SHELL_PAREN_CLOSE_CHARACTER: str = ")"
+SHELL_LESS_THAN_CHARACTER: str = "<"
+SHELL_BACKSLASH_CHARACTER: str = "\\"
+SHELL_NEWLINE_CHARACTER: str = "\n"
+
+HEREDOC_OPENER_TAG_PATTERN: re.Pattern[str] = re.compile(
+    r"[ \t]*(?P<dash>-?)[ \t]*(?:'(?P<sq_tag>[A-Za-z_][A-Za-z0-9_]*)'"
+    r"|\"(?P<dq_tag>[A-Za-z_][A-Za-z0-9_]*)\""
+    r"|(?P<bare_tag>[A-Za-z_][A-Za-z0-9_]*))"
+)
+HEREDOC_OPENER_TOKEN_LENGTH: int = 2

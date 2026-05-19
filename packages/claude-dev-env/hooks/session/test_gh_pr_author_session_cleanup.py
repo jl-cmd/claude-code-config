@@ -510,3 +510,66 @@ def test_collect_stale_state_files_skips_other_user_owned_file(
     matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
 
     assert foreign_owned_state_file not in matched_files
+
+
+def test_collect_stale_state_files_sorts_by_mtime_ascending(
+    isolated_temp_directory: pathlib.Path,
+) -> None:
+    """Regression for finding 2: returned paths must be sorted by mtime ascending.
+
+    A name-order sort would mismatch real age: a session_id starting
+    with ``z`` (created earliest) would sort after one starting with
+    ``a`` (created latest). Since the caller iterates and runs
+    ``gh auth switch`` for each file in order, the LAST switch wins
+    globally. Ordering by mtime ascending guarantees the newest stale
+    file's original account is the active gh account after the sweep.
+    """
+    earliest_state_file = isolated_temp_directory / "gh_pr_author_swap_session-z-earliest.json"
+    middle_state_file = isolated_temp_directory / "gh_pr_author_swap_session-a-middle.json"
+    latest_state_file = isolated_temp_directory / "gh_pr_author_swap_session-m-latest.json"
+    for each_state_file in (earliest_state_file, middle_state_file, latest_state_file):
+        _write_state_file(each_state_file, original_account="any-account")
+    base_backdate_seconds = time.time() - _BACKDATE_SECONDS_BEFORE_NOW
+    os.utime(earliest_state_file, (base_backdate_seconds - 100, base_backdate_seconds - 100))
+    os.utime(middle_state_file, (base_backdate_seconds - 50, base_backdate_seconds - 50))
+    os.utime(latest_state_file, (base_backdate_seconds - 10, base_backdate_seconds - 10))
+
+    matched_files = hook_module._collect_stale_state_files(isolated_temp_directory)
+
+    assert matched_files == [earliest_state_file, middle_state_file, latest_state_file]
+
+
+def test_main_leaves_newest_stale_files_account_active_when_multiple_crashed(
+    monkeypatch: pytest.MonkeyPatch,
+    required_account_jonecho: str,
+    isolated_temp_directory: pathlib.Path,
+) -> None:
+    """Regression for finding 2: the final ``gh auth switch`` must target the newest file's account.
+
+    Three sessions crashed with different original accounts. The
+    cleanup hook must iterate them oldest-first so the final
+    invocation of ``gh auth switch`` (the only one that actually wins
+    in the global gh CLI state) targets the original account from the
+    newest stale file.
+    """
+    oldest_state_file = isolated_temp_directory / "gh_pr_author_swap_session-z-oldest.json"
+    middle_state_file = isolated_temp_directory / "gh_pr_author_swap_session-a-middle.json"
+    newest_state_file = isolated_temp_directory / "gh_pr_author_swap_session-m-newest.json"
+    _write_state_file(oldest_state_file, original_account="oldest-original-user")
+    _write_state_file(middle_state_file, original_account="middle-original-user")
+    _write_state_file(newest_state_file, original_account="newest-original-user")
+    base_backdate_seconds = time.time() - _BACKDATE_SECONDS_BEFORE_NOW
+    os.utime(oldest_state_file, (base_backdate_seconds - 100, base_backdate_seconds - 100))
+    os.utime(middle_state_file, (base_backdate_seconds - 50, base_backdate_seconds - 50))
+    os.utime(newest_state_file, (base_backdate_seconds - 10, base_backdate_seconds - 10))
+
+    switch_invocations = _install_fake_switch(monkeypatch, switch_succeeds=True)
+
+    hook_module.main()
+
+    assert switch_invocations == [
+        "oldest-original-user",
+        "middle-original-user",
+        "newest-original-user",
+    ]
+    assert switch_invocations[-1] == "newest-original-user"

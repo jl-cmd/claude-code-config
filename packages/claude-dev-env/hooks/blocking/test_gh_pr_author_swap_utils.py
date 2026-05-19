@@ -772,3 +772,130 @@ def test_strip_bash_comments_backtick_bound_ignores_bare_parens() -> None:
             "`( inner ) # comment` && gh pr create"
         )
     )
+
+
+def test_strip_heredoc_bodies_blanks_single_quoted_tag_body() -> None:
+    """Regression for finding 3: ``cat <<'EOF'\\ngh pr create\\nEOF`` body must not match.
+
+    The body of a single-quoted-tag heredoc is literal data fed to
+    ``cat``. The matcher must blank the body so ``gh pr create`` inside
+    it does not trigger the enforcer.
+    """
+    heredoc_command = "cat <<'EOF'\ngh pr create\nEOF"
+    blanked_command = utils_module._strip_heredoc_bodies(heredoc_command)
+    assert len(blanked_command) == len(heredoc_command)
+    assert "gh pr create" not in blanked_command
+    assert "EOF" in blanked_command
+
+
+def test_strip_heredoc_bodies_blanks_double_quoted_tag_body() -> None:
+    """A double-quoted heredoc tag (``<<"EOF"``) is matched the same way as single-quoted."""
+    heredoc_command = "cat <<\"EOF\"\ngh pr create\nEOF"
+    blanked_command = utils_module._strip_heredoc_bodies(heredoc_command)
+    assert len(blanked_command) == len(heredoc_command)
+    assert "gh pr create" not in blanked_command
+
+
+def test_strip_heredoc_bodies_blanks_bare_tag_body() -> None:
+    """A bare-tag heredoc (``<<EOF``) is detected the same as a quoted-tag form."""
+    heredoc_command = "cat <<EOF\ngh pr create\nEOF"
+    blanked_command = utils_module._strip_heredoc_bodies(heredoc_command)
+    assert len(blanked_command) == len(heredoc_command)
+    assert "gh pr create" not in blanked_command
+
+
+def test_strip_heredoc_bodies_allows_leading_tabs_for_dash_form() -> None:
+    """The ``<<-`` form strips leading TAB characters on the closing tag line."""
+    heredoc_command = "cat <<-EOF\n\tgh pr create\n\tEOF"
+    blanked_command = utils_module._strip_heredoc_bodies(heredoc_command)
+    assert len(blanked_command) == len(heredoc_command)
+    assert "gh pr create" not in blanked_command
+
+
+def test_strip_heredoc_bodies_handles_multiple_heredocs_in_one_command() -> None:
+    """Two heredocs in one command must each have their body blanked independently."""
+    heredoc_command = (
+        "cat <<'EOF1'\ngh pr create one\nEOF1\ncat <<'EOF2'\ngh pr create two\nEOF2"
+    )
+    blanked_command = utils_module._strip_heredoc_bodies(heredoc_command)
+    assert len(blanked_command) == len(heredoc_command)
+    assert "gh pr create one" not in blanked_command
+    assert "gh pr create two" not in blanked_command
+
+
+def test_strip_heredoc_bodies_leaves_unrelated_command_unchanged() -> None:
+    """A command without any heredoc opener must pass through untouched."""
+    unaffected_command = "gh pr create --title T"
+    assert utils_module._strip_heredoc_bodies(unaffected_command) == unaffected_command
+
+
+def test_strip_heredoc_bodies_does_nothing_when_closing_tag_missing() -> None:
+    """An apparent heredoc opener without a matching closing tag leaves the buffer alone.
+
+    The conservative branch protects against false positives where a
+    quoted ``<<TAG`` inside an unusual context lacks a real closer; the
+    walker must not erase a real ``gh pr create`` that follows on the
+    expectation of a body that does not exist.
+    """
+    pseudo_heredoc_command = "cat <<EOF\nno closing tag here\ngh pr create --title T"
+    blanked_command = utils_module._strip_heredoc_bodies(pseudo_heredoc_command)
+    assert blanked_command == pseudo_heredoc_command
+
+
+def test_strip_heredoc_bodies_skips_here_string_triple_less_than() -> None:
+    """``<<<`` is a here-string, not a heredoc, and has no body to blank."""
+    here_string_command = "command <<< 'literal input' && gh pr create --title T"
+    blanked_command = utils_module._strip_heredoc_bodies(here_string_command)
+    assert blanked_command == here_string_command
+
+
+def test_strip_heredoc_bodies_skips_double_less_inside_double_quotes() -> None:
+    """A literal ``<<EOF`` inside ``"..."`` is text, not a heredoc opener."""
+    quoted_literal_command = 'echo "use <<EOF in your script" && gh pr create --title T'
+    blanked_command = utils_module._strip_heredoc_bodies(quoted_literal_command)
+    assert blanked_command == quoted_literal_command
+
+
+def test_strip_heredoc_bodies_skips_double_less_inside_single_quotes() -> None:
+    """A literal ``<<EOF`` inside ``'...'`` is text, not a heredoc opener."""
+    quoted_literal_command = "echo 'use <<EOF docs' && gh pr create --title T"
+    blanked_command = utils_module._strip_heredoc_bodies(quoted_literal_command)
+    assert blanked_command == quoted_literal_command
+
+
+def test_command_invokes_gh_pr_create_rejects_heredoc_body_data() -> None:
+    """Regression for finding 3: heredoc body data must not trigger the enforcer.
+
+    ``cat <<'EOF'\\ngh pr create\\nEOF`` runs ``cat`` against literal
+    data; the data is not a command bash will execute. The full
+    preprocess pipeline must blank the body so the matcher returns
+    False.
+    """
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "cat <<'EOF'\ngh pr create\nEOF"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_still_matches_real_invocation_after_heredoc() -> None:
+    """A real ``gh pr create`` following a heredoc must still be detected.
+
+    The heredoc body is blanked but the surrounding command structure
+    stays scannable, so a trailing real invocation after the heredoc
+    closer triggers the matcher.
+    """
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "cat <<'EOF'\nbody data line\nEOF\ngh pr create --title T"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_still_matches_real_invocation_before_heredoc() -> None:
+    """A real ``gh pr create`` preceding a heredoc must still be detected."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "gh pr create --title T && cat <<'EOF'\nbody line\nEOF"
+        )
+    )

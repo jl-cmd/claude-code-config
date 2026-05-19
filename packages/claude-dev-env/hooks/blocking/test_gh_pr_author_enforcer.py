@@ -965,3 +965,202 @@ def test_write_swap_state_unlinks_file_when_os_close_raises_after_successful_wri
     )
     assert has_written_state is False
     assert not state_file.exists()
+
+
+def test_command_invokes_gh_pr_create_matches_if_keyword_prefix() -> None:
+    """Regression for finding 1: ``if gh pr create ...; then`` must trigger the enforcer."""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "if gh pr create --title T; then echo ok; fi"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_then_keyword_prefix() -> None:
+    """Regression for finding 1: ``if foo; then gh pr create`` slipping past needs catching."""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "if foo; then gh pr create --title T; fi"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_else_keyword_prefix() -> None:
+    """Regression for finding 1: ``else gh pr create`` after an if branch must match."""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "if foo; then bar; else gh pr create --title T; fi"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_elif_keyword_prefix() -> None:
+    """Regression for finding 1: ``elif`` precedes a real ``gh pr create`` in the same shape."""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "if foo; then bar; elif gh pr create --title T; then ok; fi"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_while_keyword_prefix() -> None:
+    """Regression for finding 1: ``while gh pr create`` loop guard is a real invocation."""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "while gh pr create --title T; do echo loop; done"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_until_keyword_prefix() -> None:
+    """Regression for finding 1: ``until gh pr create`` loop guard is a real invocation."""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "until gh pr create --title T; do sleep 1; done"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_do_keyword_prefix() -> None:
+    """Regression for finding 1: ``for ...; do gh pr create`` body must match."""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "for tag in T1 T2; do gh pr create --title $tag; done"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_bang_negation_prefix() -> None:
+    """Regression for finding 1: ``! gh pr create`` (negate exit status) is a real invocation."""
+    assert hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching(
+            "! gh pr create --title T"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_still_rejects_keyword_substring() -> None:
+    """A bash keyword substring inside a longer identifier must not flip the matcher.
+
+    ``notify_then gh pr create`` is a single hyphenated/underscored
+    identifier followed by text; the regex must not detect ``then`` as
+    a real keyword prefix here.
+    """
+    assert not hook_module._command_invokes_gh_pr_create_in_stripped(
+        hook_module._preprocess_command_for_matching("notify_then gh pr create")
+    )
+
+
+def test_build_state_write_failure_message_describes_rollback_success(
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """Regression for finding 6: the deny text on rollback success names the original account.
+
+    When the reverse ``gh auth switch`` succeeds the message must
+    describe the swap as reversed and tell the user the original
+    account is back in place.
+    """
+    deny_text = hook_module._build_state_write_failure_message(
+        required_account="JonEcho",
+        current_account="jl-cmd",
+        state_file=isolated_state_directory / "stub_state.json",
+        has_rollback_succeeded=True,
+    )
+    assert "swap was reversed" in deny_text
+    assert "JonEcho" in deny_text
+    assert "jl-cmd" in deny_text
+
+
+def test_build_state_write_failure_message_describes_rollback_failure(
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """Regression for finding 6: the deny text on rollback failure flags the still-swapped state.
+
+    When the reverse switch ALSO fails the message must surface that
+    the user is still on the required account so the user knows the
+    rollback did not succeed and recovery is required.
+    """
+    deny_text = hook_module._build_state_write_failure_message(
+        required_account="JonEcho",
+        current_account="jl-cmd",
+        state_file=isolated_state_directory / "stub_state.json",
+        has_rollback_succeeded=False,
+    )
+    assert "reverse" in deny_text.lower()
+    assert "ALSO failed" in deny_text
+    assert "still" in deny_text.lower()
+    assert "JonEcho" in deny_text
+    assert "jl-cmd" in deny_text
+
+
+def test_main_deny_message_names_rollback_failure_when_reverse_switch_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    required_account_jonecho: str,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """Regression for finding 6: end-to-end check that the deny message branch wires up correctly.
+
+    When state-write fails AND the rollback switch also fails, the
+    deny payload must include the "ALSO failed" language so the user
+    is told the gh CLI is still on ``required_account``.
+    """
+    monkeypatch.setattr(sys, "stdin", io.StringIO(_make_stdin_payload("gh pr create --title T")))
+    captured_stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_stdout)
+    monkeypatch.setattr(hook_module, "_active_gh_account", lambda: "jl-cmd")
+    monkeypatch.setattr(
+        hook_module,
+        "_write_swap_state",
+        lambda state_file, original_account, primary_account: False,
+    )
+
+    switch_invocations: list[str] = []
+
+    def _fake_switch_first_succeeds_second_fails(to_account: str) -> bool:
+        switch_invocations.append(to_account)
+        return len(switch_invocations) == 1
+
+    monkeypatch.setattr(hook_module, "_switch_gh_account", _fake_switch_first_succeeds_second_fails)
+
+    with pytest.raises(SystemExit):
+        hook_module.main()
+
+    assert switch_invocations == ["JonEcho", "jl-cmd"]
+    payload = json.loads(captured_stdout.getvalue())
+    deny_reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "ALSO failed" in deny_reason
+    assert "still" in deny_reason.lower()
+
+
+def test_main_deny_message_keeps_reversal_language_when_rollback_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+    required_account_jonecho: str,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """Regression for finding 6 guard: rollback-success path must NOT carry the failure language."""
+    monkeypatch.setattr(sys, "stdin", io.StringIO(_make_stdin_payload("gh pr create --title T")))
+    captured_stdout = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", captured_stdout)
+    monkeypatch.setattr(hook_module, "_active_gh_account", lambda: "jl-cmd")
+    monkeypatch.setattr(
+        hook_module,
+        "_write_swap_state",
+        lambda state_file, original_account, primary_account: False,
+    )
+
+    switch_invocations: list[str] = []
+
+    def _fake_switch_always_succeeds(to_account: str) -> bool:
+        switch_invocations.append(to_account)
+        return True
+
+    monkeypatch.setattr(hook_module, "_switch_gh_account", _fake_switch_always_succeeds)
+
+    with pytest.raises(SystemExit):
+        hook_module.main()
+
+    assert switch_invocations == ["JonEcho", "jl-cmd"]
+    payload = json.loads(captured_stdout.getvalue())
+    deny_reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "swap was reversed" in deny_reason
+    assert "ALSO failed" not in deny_reason

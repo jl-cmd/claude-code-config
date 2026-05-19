@@ -288,6 +288,7 @@ def _build_state_write_failure_message(
     required_account: str,
     current_account: str,
     state_file: Path,
+    has_rollback_succeeded: bool,
 ) -> str:
     """Build the deny reason emitted when state-file persistence fails after a successful swap.
 
@@ -296,28 +297,44 @@ def _build_state_write_failure_message(
         current_account: Login that was active before the swap (the
             restore target the failed state file should have recorded).
         state_file: Path the enforcer tried and failed to write.
+        has_rollback_succeeded: True when the reverse ``gh auth switch``
+            back to ``current_account`` returned zero, so the user is
+            on the original account again. False when the reverse switch
+            also failed and the user is still on ``required_account``.
 
     Returns:
-        A multi-line corrective message explaining that the swap was
-        attempted and reversed, so the PR command is being denied to
-        prevent leaving the user on the wrong account. The reverse-switch
-        may itself have failed; the message tells the user to verify the
-        active account manually and gives the exact ``gh auth switch``
-        command needed to recover.
+        A multi-line corrective message explaining the swap and
+        rollback outcome. The lead-in sentence describes the actual
+        state — "the swap was reversed" when the rollback succeeded,
+        "the reverse-switch also failed and you are still on
+        ``required_account``" when it did not. The trailing
+        ``gh auth status`` / ``gh auth switch`` recovery commands are
+        emitted in both branches so the user can verify and recover
+        regardless of where the gh CLI ended up.
     """
+    if has_rollback_succeeded:
+        rollback_outcome_sentence = (
+            f"The swap was reversed to put `{current_account}` back in place, "
+            f"and `gh pr create` is being denied to prevent leaving the "
+            f"workflow in an inconsistent state."
+        )
+    else:
+        rollback_outcome_sentence = (
+            f"The reverse `gh auth switch` to put `{current_account}` back "
+            f"in place ALSO failed, so the active gh CLI account is still "
+            f"`{required_account}`. `gh pr create` is being denied so the "
+            f"user can recover the original account before re-running."
+        )
     return (
         f"BLOCKED [gh-pr-author]: swapped the active gh CLI account "
         f"from `{current_account}` to `{required_account}` so "
         f"`gh pr create` would author from the canonical account, but "
         f"writing the per-session state file used to restore the prior "
-        f"account afterward failed. The swap was reversed to put "
-        f"`{current_account}` back in place, and `gh pr create` is being "
-        f"denied to prevent leaving the workflow in an inconsistent state.\n\n"
-        f"  Current (intended):   {current_account}\n"
+        f"account afterward failed. {rollback_outcome_sentence}\n\n"
+        f"  Original:             {current_account}\n"
         f"  Required:             {required_account}  (from ${REQUIRED_ACCOUNT_ENV_VAR})\n"
         f"  State file (failed):  {state_file}\n\n"
-        f"Verify the active account and recover manually if the reverse-switch "
-        f"also failed:\n"
+        f"Verify the active account and recover manually:\n"
         f"  gh auth status\n"
         f"  gh auth switch --user {current_account}\n\n"
         f"Then re-run `gh pr create` so the enforcer can retry the swap."
@@ -447,12 +464,13 @@ def main() -> None:
         primary_account=required_account,
     )
     if not has_written_state:
-        _switch_gh_account(current_account)
+        has_rollback_succeeded = _switch_gh_account(current_account)
         _emit_deny_payload(
             _build_state_write_failure_message(
                 required_account,
                 current_account,
                 state_file,
+                has_rollback_succeeded,
             )
         )
     sys.exit(0)

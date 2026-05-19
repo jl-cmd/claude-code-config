@@ -58,8 +58,9 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
     active session's restore target. Files older than the threshold are
     overwhelmingly likely to be stale — the enforcer-to-restore window
     is bounded by the gh subprocess timeouts (10s switch + 5s api user
-    + filesystem work), so any file older than 60s is past the longest
-    plausible active window.
+    + filesystem work), so any file older than
+    ``STATE_FILE_STALE_AGE_SECONDS`` is past the longest plausible
+    active window.
 
     Each candidate is also screened for ownership and permission bits
     matching the enforcer's write contract. A file with mode bits other
@@ -78,6 +79,16 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
     owned by the current user to trick the cleanup hook into reading
     that file as a swap-state payload.
 
+    Returned paths are sorted by modification time in ascending order so
+    that when the caller iterates and runs ``gh auth switch`` for each
+    file, the newest stale file is processed LAST. ``gh auth switch``
+    is global state — only the last switch wins — so processing the
+    newest file last leaves the gh CLI on the most recently captured
+    original account when multiple sessions crashed with different
+    original accounts. The single ``lstat`` syscall performed per
+    candidate is reused for both the attacker-planted screen and the
+    mtime ordering key so the sort does not double-stat.
+
     Args:
         temp_directory: System temp directory returned by
             ``tempfile.gettempdir()``.
@@ -86,14 +97,15 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
         List of swap-state file paths that are regular files whose
         modification time is older than ``STATE_FILE_STALE_AGE_SECONDS``
         seconds before now and whose ownership/mode bits match the
-        enforcer's write contract. Empty list when the temp directory
-        cannot be listed.
+        enforcer's write contract. Sorted by mtime ascending so the
+        newest stale file is last in iteration order. Empty list when
+        the temp directory cannot be listed.
     """
     glob_pattern = f"{STATE_FILE_PREFIX}*{STATE_FILE_SUFFIX}"
     current_time_seconds = time.time()
-    all_stale_state_files: list[Path] = []
+    all_stale_candidates_with_mtime: list[tuple[float, Path]] = []
     try:
-        all_candidate_paths = sorted(temp_directory.glob(glob_pattern))
+        all_candidate_paths = list(temp_directory.glob(glob_pattern))
     except OSError:
         return []
     for each_candidate_path in all_candidate_paths:
@@ -105,8 +117,11 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
             continue
         file_age_seconds = current_time_seconds - file_lstat_result.st_mtime
         if file_age_seconds >= STATE_FILE_STALE_AGE_SECONDS:
-            all_stale_state_files.append(each_candidate_path)
-    return all_stale_state_files
+            all_stale_candidates_with_mtime.append(
+                (file_lstat_result.st_mtime, each_candidate_path)
+            )
+    all_stale_candidates_with_mtime.sort(key=lambda each_mtime_path_pair: each_mtime_path_pair[0])
+    return [each_mtime_path_pair[1] for each_mtime_path_pair in all_stale_candidates_with_mtime]
 
 
 def _restore_stale_state_file(state_file: Path) -> None:

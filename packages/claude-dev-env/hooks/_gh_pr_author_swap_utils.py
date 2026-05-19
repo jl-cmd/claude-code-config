@@ -40,10 +40,15 @@ from config.gh_pr_author_swap_constants import (
     COMMAND_SUBSTITUTION_OPENER_LENGTH,
     GH_AUTH_SWITCH_TIMEOUT_SECONDS,
     GH_PR_CREATE_PATTERN,
+    HEREDOC_OPENER_TAG_PATTERN,
+    HEREDOC_OPENER_TOKEN_LENGTH,
     SESSION_ID_UNSAFE_CHARACTERS_PATTERN,
+    SHELL_BACKSLASH_CHARACTER,
     SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH,
     SHELL_BACKTICK_CHARACTER,
     SHELL_DOLLAR_CHARACTER,
+    SHELL_LESS_THAN_CHARACTER,
+    SHELL_NEWLINE_CHARACTER,
     SHELL_PAREN_CLOSE_CHARACTER,
     SHELL_PAREN_OPEN_CHARACTER,
     SHELL_QUOTE_REPLACEMENT_CHARACTER,
@@ -874,26 +879,277 @@ def _strip_substitution_bodies(quote_stripped_command: str) -> str:
     return "".join(all_scanned_characters)
 
 
+def _strip_heredoc_bodies(command: str) -> str:
+    """Replace heredoc bodies with spaces so embedded text is inert.
+
+    A here-document opener (``<<TAG``, ``<<'TAG'``, ``<<"TAG"``, or
+    ``<<-TAG``) followed by a newline begins a body whose contents bash
+    treats as literal data, not as commands. The body terminates at the
+    first subsequent line whose only content is the tag — or, for the
+    ``<<-`` form, leading TAB characters followed by the tag. Any
+    ``gh pr create`` token sitting inside a heredoc body is data being
+    fed to a command like ``cat`` or ``ssh``, not a command the shell
+    will execute, so the matcher must not see it.
+
+    Quote tracking is required because a literal ``<<EOF`` sitting
+    inside a quoted argument (for example ``echo "use <<EOF in your
+    script"``) is not a heredoc opener — it is literal text. The walker
+    skips past single- and double-quoted regions so the opener detector
+    only fires on syntactically real openers. ``<<<`` (here-string) is
+    explicitly skipped because it carries no body.
+
+    Body characters between the end of the opener line (the newline
+    after the opener) and the start of the closing tag line are
+    replaced with ``SHELL_QUOTE_REPLACEMENT_CHARACTER`` so offsets are
+    preserved end-to-end. The opener line and the closing tag line are
+    left intact so the surrounding command structure stays scannable.
+
+    When the closing tag is never found, no blanking happens — the
+    function returns the buffer unchanged for that opener. This
+    conservative branch protects against false positives where an
+    apparent ``<<TAG`` opener inside an unusual context lacks a real
+    matching closer; without it the walker would consume to end of
+    buffer and silently erase any real ``gh pr create`` that follows.
+
+    Multiple heredocs in one command are all handled — after each
+    successful blanking the walker resumes scanning from the closing
+    tag line so a second ``<<TAG2`` opener later in the command is
+    processed independently.
+
+    Args:
+        command: Raw bash command string from the PreToolUse or
+            PostToolUse hook input. The helper runs BEFORE
+            ``_strip_quoted_regions`` so a heredoc opener whose tag
+            is itself quoted (``<<'EOF'``) still has its tag visible
+            for closing-tag matching.
+
+    Returns:
+        A string of identical length to ``command`` with every heredoc
+        body blanked to spaces and opener/closer lines left intact.
+    """
+    all_scanned_characters = list(command)
+    command_length = len(command)
+    cursor_index = 0
+    while cursor_index < command_length:
+        current_character = all_scanned_characters[cursor_index]
+        if current_character == "'":
+            cursor_index = _advance_past_single_quoted_region(
+                all_scanned_characters, cursor_index, command_length
+            )
+            continue
+        if current_character == "\"":
+            cursor_index = _advance_past_double_quoted_region(
+                all_scanned_characters, cursor_index, command_length
+            )
+            continue
+        if not _is_heredoc_opener_position(all_scanned_characters, cursor_index, command_length):
+            cursor_index += 1
+            continue
+        advance_after_blanking = _try_blank_one_heredoc_body(
+            all_scanned_characters, cursor_index, command_length
+        )
+        if advance_after_blanking is None:
+            cursor_index += 1
+            continue
+        cursor_index = advance_after_blanking
+    return "".join(all_scanned_characters)
+
+
+def _advance_past_single_quoted_region(
+    all_scanned_characters: list[str],
+    opener_index: int,
+    buffer_length: int,
+) -> int:
+    """Return the index one past the closing ``'`` without mutating the buffer."""
+    cursor_index = opener_index + 1
+    while cursor_index < buffer_length and all_scanned_characters[cursor_index] != "'":
+        cursor_index += 1
+    return cursor_index + 1
+
+
+def _advance_past_double_quoted_region(
+    all_scanned_characters: list[str],
+    opener_index: int,
+    buffer_length: int,
+) -> int:
+    """Return the index one past the closing ``"`` honoring ``\\`` escapes."""
+    cursor_index = opener_index + 1
+    while cursor_index < buffer_length:
+        current_character = all_scanned_characters[cursor_index]
+        if (
+            current_character == SHELL_BACKSLASH_CHARACTER
+            and cursor_index + 1 < buffer_length
+        ):
+            cursor_index += SHELL_BACKSLASH_ESCAPE_PAIR_LENGTH
+            continue
+        if current_character == "\"":
+            return cursor_index + 1
+        cursor_index += 1
+    return cursor_index
+
+
+def _is_heredoc_opener_position(
+    all_scanned_characters: list[str],
+    cursor_index: int,
+    buffer_length: int,
+) -> bool:
+    """Return True when the cursor sits at a ``<<`` (but not ``<<<``) heredoc opener."""
+    if cursor_index + 1 >= buffer_length:
+        return False
+    if all_scanned_characters[cursor_index] != SHELL_LESS_THAN_CHARACTER:
+        return False
+    if all_scanned_characters[cursor_index + 1] != SHELL_LESS_THAN_CHARACTER:
+        return False
+    if (
+        cursor_index + HEREDOC_OPENER_TOKEN_LENGTH < buffer_length
+        and all_scanned_characters[cursor_index + HEREDOC_OPENER_TOKEN_LENGTH]
+        == SHELL_LESS_THAN_CHARACTER
+    ):
+        return False
+    return True
+
+
+def _try_blank_one_heredoc_body(
+    all_scanned_characters: list[str],
+    opener_index: int,
+    buffer_length: int,
+) -> int | None:
+    """Blank one heredoc body in place when a matching closing tag is found.
+
+    Args:
+        all_scanned_characters: Mutable list view of the command string.
+            The function MUTATES the buffer to blank body characters
+            with ``SHELL_QUOTE_REPLACEMENT_CHARACTER``.
+        opener_index: Index of the first ``<`` in the ``<<`` opener.
+        buffer_length: Length of ``all_scanned_characters``, hoisted by
+            the caller.
+
+    Returns:
+        The index just past the closing tag line on a successful match.
+        ``None`` when no tag could be parsed or no matching closing tag
+        was found — the buffer is left unchanged in either case so the
+        outer walker can advance by one and continue scanning.
+    """
+    after_opener_index = opener_index + HEREDOC_OPENER_TOKEN_LENGTH
+    tag_match = HEREDOC_OPENER_TAG_PATTERN.match(
+        "".join(all_scanned_characters), after_opener_index
+    )
+    if tag_match is None:
+        return None
+    parsed_tag = (
+        tag_match.group("sq_tag")
+        or tag_match.group("dq_tag")
+        or tag_match.group("bare_tag")
+    )
+    if not parsed_tag:
+        return None
+    tag_allows_leading_tabs = tag_match.group("dash") == "-"
+    end_of_opener_line_index = _index_of_next_newline(
+        all_scanned_characters, tag_match.end(), buffer_length
+    )
+    if end_of_opener_line_index >= buffer_length:
+        return None
+    body_start_index = end_of_opener_line_index + 1
+    closing_tag_line_start, closing_tag_line_end = _find_closing_heredoc_tag_line(
+        all_scanned_characters,
+        body_start_index,
+        buffer_length,
+        parsed_tag,
+        tag_allows_leading_tabs,
+    )
+    if closing_tag_line_start is None:
+        return None
+    for each_blank_target_index in range(body_start_index, closing_tag_line_start):
+        all_scanned_characters[each_blank_target_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+    return closing_tag_line_end
+
+
+def _index_of_next_newline(
+    all_scanned_characters: list[str],
+    start_index: int,
+    buffer_length: int,
+) -> int:
+    """Return the index of the next newline at or after ``start_index``."""
+    cursor_index = start_index
+    while cursor_index < buffer_length:
+        if all_scanned_characters[cursor_index] == SHELL_NEWLINE_CHARACTER:
+            return cursor_index
+        cursor_index += 1
+    return cursor_index
+
+
+def _find_closing_heredoc_tag_line(
+    all_scanned_characters: list[str],
+    body_start_index: int,
+    buffer_length: int,
+    expected_tag: str,
+    tag_allows_leading_tabs: bool,
+) -> tuple[int | None, int]:
+    """Return ``(start_of_closing_tag_line, end_of_closing_tag_line)`` for the tag.
+
+    The closing tag must appear on its own line — the entire line, after
+    any allowed leading tabs (only when the opener used ``<<-``), is the
+    tag and nothing else. Trailing carriage returns and trailing spaces
+    are tolerated so heredocs authored in CRLF files still match.
+
+    Args:
+        all_scanned_characters: Character buffer being walked.
+        body_start_index: Index of the first byte of the heredoc body
+            (the character after the newline that ended the opener line).
+        buffer_length: Length of ``all_scanned_characters``.
+        expected_tag: The tag extracted from the opener.
+        tag_allows_leading_tabs: True when the opener used ``<<-`` (so
+            leading TAB characters on the closing line are allowed).
+
+    Returns:
+        ``(start_of_closing_tag_line, end_of_closing_tag_line)`` when a
+        matching closing line is found. ``(None, body_start_index)``
+        when no matching line is found.
+    """
+    line_start_index = body_start_index
+    while line_start_index < buffer_length:
+        line_end_index = _index_of_next_newline(
+            all_scanned_characters, line_start_index, buffer_length
+        )
+        line_text = "".join(
+            all_scanned_characters[line_start_index:line_end_index]
+        )
+        stripped_line_text = line_text.rstrip(" \t\r")
+        if tag_allows_leading_tabs:
+            stripped_line_text = stripped_line_text.lstrip("\t")
+        if stripped_line_text == expected_tag:
+            return line_start_index, line_end_index
+        line_start_index = line_end_index + 1
+    return None, body_start_index
+
+
 def _preprocess_command_for_matching(command: str) -> str:
     """Return the canonical preprocessed form used by every command-shape matcher.
 
     The enforcer, the restore hook, and the web-flag detector all share
-    the same preprocessing pipeline: blank inert quoted regions, then
-    blank bash comments. Running both passes through a single helper
-    keeps the three callers in lock-step — adding a new preprocessing
-    pass (for example, blanking heredoc bodies) lands on every consumer
-    automatically.
+    the same preprocessing pipeline: blank heredoc bodies first so a
+    literal ``gh pr create`` inside heredoc data text cannot leak out
+    as a real command; blank inert quoted regions next; blank bash
+    comments last. Running every pass through a single helper keeps the
+    three callers in lock-step — adding a new preprocessing pass lands
+    on every consumer automatically.
+
+    Heredoc stripping runs BEFORE quoted-region stripping because a
+    heredoc tag can itself be quoted (``<<'EOF'``); stripping quotes
+    first would blank the tag and break the closing-tag match. The
+    heredoc walker carries its own minimal quote skip so a literal
+    ``<<EOF`` sitting inside a string is not mistaken for a real opener.
 
     Args:
         command: Raw bash command string from the PreToolUse or
             PostToolUse hook input.
 
     Returns:
-        The command with quoted regions and bash comments blanked,
-        substitution bodies kept scannable, and original offsets
-        preserved end-to-end.
+        The command with heredoc bodies, quoted regions, and bash
+        comments blanked, substitution bodies kept scannable, and
+        original offsets preserved end-to-end.
     """
-    return _strip_bash_comments(_strip_quoted_regions(command))
+    return _strip_bash_comments(_strip_quoted_regions(_strip_heredoc_bodies(command)))
 
 
 def _all_gh_pr_create_segments(quote_stripped_command: str) -> list[str]:

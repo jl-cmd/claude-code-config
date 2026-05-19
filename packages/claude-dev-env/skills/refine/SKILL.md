@@ -1,6 +1,6 @@
 ---
 name: refine
-description: Interview-driven plan refiner with built-in audit loop. Takes a draft, a topic, or the active conversation; fans out research agents; interviews via AskUserQuestion until further questions would be impractical hypotheticals; writes the plan to the Obsidian vault under Research/<topic>/<slug>.md; then loops a general-purpose audit and fix pass (both with plan-quality rubrics) until the plan is clean, with a sibling <slug>-implementation-notes.html capturing design decisions, deviations, tradeoffs, and open questions across iterations. The interview is mandatory and the vault is the only output target — these survive any session-level "no clarifying questions" or local plans/ shortcut. Use when the user says /refine, "refine this", "turn this into a plan", "flesh this out", "make a spec for this", "let's plan this out", or asks for a vague idea to be matured into a plan. Always operates on plans — skill plans, new-code implementation plans, or code-refinement plans.
+description: Interview-driven plan refiner with built-in audit loop. Takes a draft, a topic, or the active conversation; fans out research agents; interviews via AskUserQuestion until further questions would be impractical hypotheticals; writes the plan to the Obsidian vault under Research/<topic>/<slug>.md; then loops a general-purpose audit and fix pass (both with plan-quality rubrics) until the plan is clean, with a sibling <slug>-implementation-notes.html capturing design decisions, deviations, tradeoffs, and open questions across iterations. The interview is mandatory and the vault is the only output target — these survive any session-level "no clarifying questions" or local plans/ shortcuts. Use when the user says /refine, "refine this", "turn this into a plan", "flesh this out", "make a spec for this", "let's plan this out", or asks for a vague idea to be matured into a plan. Always operates on plans — skill plans, new-code implementation plans, or code-refinement plans.
 ---
 
 # refine
@@ -16,7 +16,7 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 - **Skill writes the plan inline.** Do not hand the initial write to any subagent. Assemble the answers and write the markdown directly. (The fix agent enters later, only for audit-driven fixes.)
 - **Vault output via mcp__obsidian — only.** The output target is the Obsidian vault, written through `mcp__obsidian__write_note`. Do not write to project `docs/`, `.claude/plans/`, `$CLAUDE_JOB_DIR`, the cwd, or anywhere on local disk outside the vault.
 - **Never write in place even when a local plans/ folder exists.** The presence of `.claude/plans/`, `docs/plans/`, `plans/`, or any sibling plans directory in the cwd does NOT override the vault contract. Do not write the plan in-place "as a convenience" or "to keep it near the codebase." Do not dual-write. The vault is the canonical home; the local repo never receives the plan from this skill.
-- **Slug is user-controlled.** Propose `Research/<topic>/<slug>.md` and confirm slug + path via AskUserQuestion before writing. Auto-writing breaks the user-owned-output contract. The user may choose the topic subfolder, but the `Research/` prefix is fixed.
+- **Slug is user-controlled.** Propose `Research/<topic>/<slug>.md` and confirm slug + path via AskUserQuestion before writing. Auto-writing breaks the user-owned-output contract. The user may choose the topic subfolder, but the `Research/` prefix is fixed. Both `<topic>` and `<slug>` must match `^[a-z0-9-]+$` — reject any value containing path separators (`/`, `\`), traversal segments (`..`), uppercase letters, whitespace, or any other character. Reprompt the user with a corrected proposal rather than writing.
 - **Match before fresh.** If the fan-out surfaces existing plans on the same topic, ask the user which to refine or whether to start fresh. Skipping this step duplicates work the user already started.
 - **Standalone.** Do not invoke `/anthropic-plan` or `/prompt-generator`. The user picks the slash command for the moment; this skill does not chain.
 - **Conversation-context fallback needs confirmation.** When no draft and no topic argument are present, the active conversation is the source. Confirm the inferred topic with one AskUserQuestion before fan-out so the wrong topic does not drive twenty minutes of research.
@@ -127,10 +127,15 @@ Use `AskUserQuestion` for every question. Pick the shape that fits the moment:
 Compose `Research/<topic>/<slug>.md`:
 
 - `Research/` prefix is fixed — non-negotiable, even when the cwd has a local plans folder
-- `<topic>` — kebab-case directory matching the dominant subject area (`skills`, `hooks`, `pr-converge`, `themes`, etc.)
-- `<slug>` — kebab-case slug capturing the specific plan (`refine-skill`, `bugteam-orphan-fallback`)
+- `<topic>` — kebab-case directory matching the dominant subject area (`skills`, `hooks`, `pr-converge`, `themes`, etc.). Must match `^[a-z0-9-]+$`.
+- `<slug>` — kebab-case slug capturing the specific plan (`refine-skill`, `bugteam-orphan-fallback`). Must match `^[a-z0-9-]+$`.
 
-Call AskUserQuestion with the proposed path as the first option and "Edit slug/path" as the second option. Accept the user's edit to slug or topic before writing. Reject any edit that moves the file out of the vault.
+Call AskUserQuestion with the proposed path as the first option and "Edit slug/path" as the second option. Accept the user's edit to slug or topic before writing. Reject any edit that:
+
+- Contains path separators (`/`, `\`), traversal segments (`..`), uppercase letters, whitespace, or any character outside `[a-z0-9-]`
+- Moves the file out of the `Research/` vault subtree
+
+On reject, re-call AskUserQuestion with a corrected proposal rather than writing.
 
 ### 6. Write the plan
 

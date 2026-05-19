@@ -22,7 +22,8 @@ locate ``config`` packages from a UNC ``sys.path`` entry. The Y:-form entry
 gets pushed to a later index by subsequent inserts, making
 ``from config.<submodule> import ...`` fail.
 
-This autouse fixture restores both invariants before each test:
+This autouse fixture restores both invariants once at session start,
+before any test module loads:
   1. evict every ``config`` and ``config.*`` entry from ``sys.modules``
   2. prepend the drive-letter (``.absolute()``) form of the pr-converge
      directory to ``sys.path`` so package resolution always has a
@@ -43,7 +44,7 @@ if PR_CONVERGE_DIRECTORY_DRIVE_LETTER_FORM not in sys.path:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _evict_config_namespace_between_tests() -> None:
+def _evict_config_namespace_at_session_start() -> None:
     for each_module_name in [
         each_key
         for each_key in list(sys.modules)

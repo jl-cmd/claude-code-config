@@ -1,6 +1,6 @@
 """Root pytest configuration: evicts conflicting ``config`` imports during collection.
 
-Seven different objects share the top-level name ``config``:
+Eight different objects share the top-level name ``config``:
 
 - Repository package ``config/`` (for example ``config.sync_ai_rules_paths``).
 - ``packages/claude-dev-env/hooks/config/`` (hook messages and shared hook tests).

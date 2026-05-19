@@ -120,6 +120,16 @@ def _write_swap_state(
     SessionStart cleanup hook to later pick up and trigger an unexpected
     ``gh auth switch``.
 
+    Every ``os.close`` call is guarded by ``try``/``except OSError``
+    because delayed-writeback filesystems (NFS, FUSE) can surface a
+    write error at close time rather than at write time. On the
+    post-successful-write branch, an ``OSError`` from ``os.close`` is
+    treated as a write failure: the file is unlinked and False is
+    returned so the caller rolls back the gh auth switch. On the
+    partial-write failure branch the file is already being unlinked,
+    so an ``OSError`` from ``os.close`` is swallowed — re-raising
+    would crash the hook mid-rollback.
+
     Args:
         state_file: Destination path returned by ``_state_file_path``.
         original_account: Login that was active before the swap.
@@ -143,10 +153,17 @@ def _write_swap_state(
     if file_descriptor is None:
         return False
     if not _write_payload_completely(file_descriptor, serialized_payload):
-        os.close(file_descriptor)
+        try:
+            os.close(file_descriptor)
+        except OSError:
+            pass
         _delete_state_file(state_file)
         return False
-    os.close(file_descriptor)
+    try:
+        os.close(file_descriptor)
+    except OSError:
+        _delete_state_file(state_file)
+        return False
     try:
         os.chmod(state_file, STATE_FILE_PERMISSION_MODE)
     except OSError:

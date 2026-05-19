@@ -548,71 +548,194 @@ def _strip_quoted_regions(command: str) -> str:
 
 
 def _strip_bash_comments(quote_stripped_command: str) -> str:
-    """Replace top-level bash comments with spaces so a hash-prefixed token is inert.
+    """Replace bash comments with spaces so a hash-prefixed token is inert.
 
     Bash treats a hash character as the start of a comment only when it
     appears at the beginning of the command or immediately after
     whitespace. Inside a quoted region the hash character is literal,
     but the caller is responsible for running ``_strip_quoted_regions``
     first, which already blanks quoted text, so any hash character
-    reaching this helper at the top level is a real comment introducer
-    or a token-internal character (for example
+    reaching this helper is either a real comment introducer or a
+    token-internal character (for example
     ``--body-file body.md@@HASH@@fragment`` where ``@@HASH@@`` stands
     in for the literal hash byte).
 
-    The walker is substitution-aware: it descends past ``$(...)`` and
-    ``` `...` ``` bodies via the existing helpers and does NOT blank
-    any hash inside those bodies. A flat regex sweep would otherwise
-    consume the closing ``)`` or backtick — and every byte after it on
-    the same line — when a hash character appears inside the
-    substitution body (for example a ``$(date +%H ... 24h) && gh pr
-    create --title T`` shape where ``...`` stands in for the literal
-    hash byte), silently erasing the real ``gh pr create`` from the
-    enforcer's view. Preserving substitution bodies verbatim is
-    symmetric with how ``_strip_quoted_regions`` already keeps
-    substitution body characters scannable.
+    The walker is substitution-aware: it descends INTO ``$(...)`` and
+    ``` `...` ``` bodies so a hash character inside a substitution
+    body is processed as a comment too — bash executes the substitution
+    body as its own command, so a hash after whitespace inside the
+    body really does start a comment. The substitution-bounded comment
+    runs to the next newline OR to the substitution closer (``)`` for
+    ``$(...)``, backtick for ``` `...` ```), whichever comes first.
+    The substitution OPENER and CLOSER characters themselves are
+    preserved so the outer paren-depth tracking remains intact and the
+    surrounding command structure stays scannable.
 
-    Comments extend from the hash character to the next newline. The
-    newline itself is preserved so downstream command-separator
-    detection still sees the line break.
+    A hash character at the top level (outside every substitution)
+    consumes until the next newline as usual. A comment inside a
+    substitution body must NOT escape outward — that is why the closer
+    bounds the consumption. Without that bound, a flat regex sweep
+    would consume the closing ``)`` or backtick and every byte after
+    it on the same line, silently erasing a real ``gh pr create``
+    invocation that follows the substitution.
 
     Args:
         quote_stripped_command: Output of ``_strip_quoted_regions``.
 
     Returns:
-        A string of identical length with every top-level bash comment
-        replaced by spaces. The trailing newline of each commented line
-        is retained so the matcher can still tell where one command
-        ended and the next began. Hash-introduced text inside a
-        substitution body is left intact.
+        A string of identical length with every bash comment replaced
+        by spaces. The trailing newline of each commented line is
+        retained so the matcher can still tell where one command ended
+        and the next began. Substitution openers and closers stay
+        intact.
     """
     all_scanned_characters = list(quote_stripped_command)
-    cursor_index = 0
     command_length = len(quote_stripped_command)
-    while cursor_index < command_length:
+    _walk_and_blank_comments(
+        all_scanned_characters,
+        cursor_start_index=0,
+        end_index=command_length,
+        bounded_by_substitution_closer=None,
+    )
+    return "".join(all_scanned_characters)
+
+
+def _walk_and_blank_comments(
+    all_scanned_characters: list[str],
+    cursor_start_index: int,
+    end_index: int,
+    bounded_by_substitution_closer: str | None,
+) -> int:
+    """Walk a region of the character buffer and blank every comment found.
+
+    The walker is recursive over substitution bodies: when it encounters
+    a ``$(...)`` or ``` `...` ``` opener it descends into the body with
+    a substitution closer in hand, blanks any comment that appears
+    inside the body, and returns control to the outer caller once the
+    closer is consumed. The substitution opener and closer characters
+    themselves are preserved so paren-depth tracking elsewhere
+    (``_index_after_command_substitution``,
+    ``_strip_substitution_bodies``) remains correct on the blanked
+    string.
+
+    Args:
+        all_scanned_characters: Mutable list view of the command string.
+            The walker MUTATES the buffer to blank comment text in place.
+        cursor_start_index: Index at which to begin scanning.
+        end_index: Index at which to stop scanning. The caller passes
+            ``len(all_scanned_characters)`` for the top-level walk and
+            the same value for substitution-body walks (each recursive
+            call independently checks for its closer).
+        bounded_by_substitution_closer: ``None`` for the top-level
+            walk. ``")"`` when walking inside a ``$(...)`` body so a
+            comment inside the body terminates at the matching ``)``.
+            ``"`"`` when walking inside a ``` `...` ``` body so a
+            comment inside the body terminates at the matching
+            backtick.
+
+    Returns:
+        The index just past the substitution closer when bounded, or
+        ``end_index`` when the walker reaches the end of the buffer.
+    """
+    cursor_index = cursor_start_index
+    while cursor_index < end_index:
         current_character = all_scanned_characters[cursor_index]
         if (
+            bounded_by_substitution_closer == SHELL_PAREN_CLOSE_CHARACTER
+            and current_character == SHELL_PAREN_CLOSE_CHARACTER
+        ):
+            return cursor_index + 1
+        if (
+            bounded_by_substitution_closer == SHELL_BACKTICK_CHARACTER
+            and current_character == SHELL_BACKTICK_CHARACTER
+        ):
+            return cursor_index + 1
+        if (
             current_character == SHELL_DOLLAR_CHARACTER
-            and cursor_index + 1 < command_length
+            and cursor_index + 1 < end_index
             and all_scanned_characters[cursor_index + 1] == SHELL_PAREN_OPEN_CHARACTER
         ):
-            cursor_index = _index_after_command_substitution(all_scanned_characters, cursor_index)
+            cursor_index = _walk_and_blank_comments(
+                all_scanned_characters,
+                cursor_start_index=cursor_index + COMMAND_SUBSTITUTION_OPENER_LENGTH,
+                end_index=end_index,
+                bounded_by_substitution_closer=SHELL_PAREN_CLOSE_CHARACTER,
+            )
             continue
         if current_character == SHELL_BACKTICK_CHARACTER:
-            cursor_index = _index_after_backtick_substitution(
-                all_scanned_characters, cursor_index, command_length
+            cursor_index = _walk_and_blank_comments(
+                all_scanned_characters,
+                cursor_start_index=cursor_index + 1,
+                end_index=end_index,
+                bounded_by_substitution_closer=SHELL_BACKTICK_CHARACTER,
             )
             continue
         if (
             current_character == BASH_COMMENT_INTRODUCER_CHARACTER
             and _is_comment_introducer_position(all_scanned_characters, cursor_index)
         ):
-            cursor_index = _blank_top_level_comment(
-                all_scanned_characters, cursor_index, command_length
+            cursor_index = _blank_bounded_comment(
+                all_scanned_characters,
+                cursor_index,
+                end_index,
+                bounded_by_substitution_closer,
             )
             continue
         cursor_index += 1
-    return "".join(all_scanned_characters)
+    return cursor_index
+
+
+def _blank_bounded_comment(
+    all_scanned_characters: list[str],
+    hash_index: int,
+    end_index: int,
+    bounded_by_substitution_closer: str | None,
+) -> int:
+    """Blank a comment in place up to a newline or substitution closer.
+
+    A comment at the top level runs from the hash character to the next
+    newline. A comment inside a substitution body has the same upper
+    bound but ALSO terminates at the substitution closer (``)`` or
+    backtick), so the closer character itself is preserved and the
+    outer walker can continue from there.
+
+    Args:
+        all_scanned_characters: Mutable list view of the command string.
+            The walker MUTATES the buffer to blank the comment body.
+        hash_index: Index of the hash character that introduces the
+            comment.
+        end_index: Buffer length, hoisted by the caller to avoid a
+            recomputation per call.
+        bounded_by_substitution_closer: ``None`` for the top-level
+            walk. ``")"`` when inside a ``$(...)`` body. ``"`"`` when
+            inside a ``` `...` ``` body.
+
+    Returns:
+        The cursor position the outer walker should resume from. The
+        preserved terminating newline (when present) is included in
+        the returned range so command-separator detection still sees
+        the line break. When the comment terminates at a substitution
+        closer, the closer's own index is returned so the recursive
+        caller picks up the closer on its next iteration.
+    """
+    blanking_index = hash_index
+    while blanking_index < end_index:
+        current_character = all_scanned_characters[blanking_index]
+        if current_character == "\n":
+            return blanking_index
+        if (
+            bounded_by_substitution_closer == SHELL_PAREN_CLOSE_CHARACTER
+            and current_character == SHELL_PAREN_CLOSE_CHARACTER
+        ):
+            return blanking_index
+        if (
+            bounded_by_substitution_closer == SHELL_BACKTICK_CHARACTER
+            and current_character == SHELL_BACKTICK_CHARACTER
+        ):
+            return blanking_index
+        all_scanned_characters[blanking_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
+        blanking_index += 1
+    return blanking_index
 
 
 def _is_comment_introducer_position(
@@ -638,35 +761,6 @@ def _is_comment_introducer_position(
         return True
     prior_character = all_scanned_characters[hash_index - 1]
     return prior_character.isspace()
-
-
-def _blank_top_level_comment(
-    all_scanned_characters: list[str], hash_index: int, command_length: int
-) -> int:
-    """Blank a top-level bash comment in place and return the next cursor position.
-
-    The comment runs from the hash character to the next newline. The
-    newline is preserved so downstream command-separator detection still
-    sees the line break.
-
-    Args:
-        all_scanned_characters: Mutable list view of the command string.
-            The walker MUTATES the buffer to blank the comment body.
-        hash_index: Index of the hash character that introduces the
-            comment.
-        command_length: Length of ``all_scanned_characters``, hoisted by
-            the caller to avoid a recomputation per call.
-
-    Returns:
-        The index of the preserved newline (or ``command_length`` when
-        the comment runs to end-of-string), suitable as the next cursor
-        position.
-    """
-    blanking_index = hash_index
-    while blanking_index < command_length and all_scanned_characters[blanking_index] != "\n":
-        all_scanned_characters[blanking_index] = SHELL_QUOTE_REPLACEMENT_CHARACTER
-        blanking_index += 1
-    return blanking_index
 
 
 def _strip_substitution_bodies(quote_stripped_command: str) -> str:

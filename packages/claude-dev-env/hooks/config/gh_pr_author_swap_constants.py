@@ -20,7 +20,8 @@ REQUIRED_ACCOUNT_ENV_VAR: str = "GITHUB_DEFAULT_ACCOUNT"
 BASH_TOOL_NAME: str = "Bash"
 
 GH_PR_CREATE_PATTERN: re.Pattern[str] = re.compile(
-    r"(?:^|[;&|\n`]|\$\()[ \t]*"
+    r"(?:^|[;&|\n`({]|\$\()[ \t]*"
+    r"(?:[A-Za-z_][A-Za-z0-9_]*=\S+[ \t]+)*"
     r"gh(?:[ \t]+(?:--[A-Za-z][\w-]*(?:=\S+)?|-[A-Za-z])(?:[ \t]+(?!-)\S+)?)*"
     r"[ \t]+pr[ \t]+create\b",
     re.IGNORECASE,
@@ -53,7 +54,7 @@ STATE_FILE_PAYLOAD_TEXT_ENCODING_NAME: str = "utf-8"
 
 OS_O_NOFOLLOW_ATTRIBUTE_NAME: str = "O_NOFOLLOW"
 
-STATE_FILE_STALE_AGE_SECONDS: int = 60
+STATE_FILE_STALE_AGE_SECONDS: int = 1800
 
 ALL_SHELL_QUOTE_CHARACTERS: tuple[str, ...] = ("\"", "'")
 SHELL_QUOTE_REPLACEMENT_CHARACTER: str = " "

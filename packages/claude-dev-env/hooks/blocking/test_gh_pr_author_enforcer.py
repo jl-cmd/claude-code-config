@@ -929,3 +929,39 @@ def test_active_gh_account_returns_none_on_generic_os_error(
         mock.Mock(side_effect=OSError("spawn refused")),
     )
     assert hook_module._active_gh_account() is None
+
+
+def test_write_swap_state_unlinks_file_when_os_close_raises_after_successful_write(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_state_directory: pathlib.Path,
+) -> None:
+    """An ``OSError`` from ``os.close`` after a successful write rolls back the state file.
+
+    Delayed-writeback filesystems (NFS, FUSE) can surface a write error
+    at close time rather than at write time. The helper must treat
+    that as a write failure: unlink the partially-written file and
+    return False so the caller reverses the gh auth switch.
+    """
+    real_os_close = hook_module.os.close
+    real_os_write = hook_module.os.write
+    write_invocation_counter = {"value": 0}
+
+    def _counting_os_write(file_descriptor: int, payload: bytes) -> int:
+        write_invocation_counter["value"] += 1
+        return real_os_write(file_descriptor, payload)
+
+    def _close_raises_after_successful_write(file_descriptor: int) -> None:
+        real_os_close(file_descriptor)
+        if write_invocation_counter["value"] > 0:
+            raise OSError("delayed writeback failure on close")
+
+    monkeypatch.setattr(hook_module.os, "write", _counting_os_write)
+    monkeypatch.setattr(hook_module.os, "close", _close_raises_after_successful_write)
+    state_file = hook_module._state_file_path("close-fail-session")
+    has_written_state = hook_module._write_swap_state(
+        state_file,
+        original_account="jl-cmd",
+        primary_account="JonEcho",
+    )
+    assert has_written_state is False
+    assert not state_file.exists()

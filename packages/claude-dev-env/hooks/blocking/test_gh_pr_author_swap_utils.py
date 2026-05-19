@@ -585,3 +585,124 @@ def test_switch_gh_account_returns_false_on_generic_os_error() -> None:
     """Any ``OSError`` subclass from subprocess.run must follow the documented failure path."""
     with mock.patch.object(utils_module.subprocess, "run", side_effect=OSError("spawn refused")):
         assert utils_module._switch_gh_account("JonEcho") is False
+
+
+def test_command_invokes_gh_pr_create_matches_paren_subshell_prefix() -> None:
+    """``( gh pr create --title T )`` is a real paren subshell — must match.
+
+    Bash executes commands inside ``( ... )`` in a subshell. The
+    boundary class in ``GH_PR_CREATE_PATTERN`` includes ``(`` so the
+    enforcer recognises the invocation.
+    """
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching("( gh pr create --title T )")
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_brace_group_prefix() -> None:
+    """``{ gh pr create --title T ; }`` is a real brace group — must match.
+
+    Bash executes commands inside ``{ ...; }`` in the current shell.
+    The boundary class in ``GH_PR_CREATE_PATTERN`` includes ``{`` so
+    the enforcer recognises the invocation.
+    """
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching("{ gh pr create --title T ; }")
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_single_env_var_prefix() -> None:
+    """``GH_DEBUG=1 gh pr create --title T`` is a real invocation with an env var assignment.
+
+    Bash applies the assignment to the ``gh`` process environment. The
+    pattern allows zero or more ``VAR=VALUE`` prefix segments before
+    the ``gh`` command name.
+    """
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching("GH_DEBUG=1 gh pr create --title T")
+    )
+
+
+def test_command_invokes_gh_pr_create_matches_multiple_env_var_prefixes() -> None:
+    """Multiple env var assignments stacked before ``gh`` must all be tolerated."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "GH_DEBUG=1 GH_HOST=github.com gh pr create --title T"
+        )
+    )
+
+
+def test_command_invokes_gh_pr_create_rejects_shell_variable_expansion_prefix() -> None:
+    """``${var} gh pr create`` is a shell variable expansion, not an env var assignment.
+
+    The env-var-assignment branch of the pattern requires a literal
+    ``=`` character in the prefix segment. ``${var}`` carries no ``=``,
+    so the pattern correctly rejects it and the matcher returns False.
+    """
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching("${var} gh pr create")
+    )
+
+
+def test_strip_bash_comments_strips_comment_inside_dollar_paren_substitution_body() -> None:
+    """A ``#`` after whitespace inside ``$(...)`` is a comment INSIDE the substitution.
+
+    The substitution body executes as its own command, so the comment
+    must consume the trailing text inside the body — but ONLY up to
+    the closing ``)``. The ``echo $(echo ok # ; gh pr create)`` case
+    runs ``echo ok`` in the subshell; ``gh pr create`` is comment text
+    and must not match.
+    """
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching("echo $(echo ok # ; gh pr create)")
+    )
+
+
+def test_strip_bash_comments_strips_comment_inside_backtick_substitution_body() -> None:
+    """A ``#`` after whitespace inside ``` `...` ``` is a comment INSIDE the substitution.
+
+    Symmetric with ``$(...)`` — the backtick body executes, so a hash
+    after whitespace introduces a comment bounded by the closing
+    backtick.
+    """
+    assert not utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching("echo `echo ok # gh pr create`")
+    )
+
+
+def test_strip_bash_comments_substitution_comment_does_not_consume_closer() -> None:
+    """A comment inside a substitution body must terminate at the closer.
+
+    Without the closer-bound, a flat regex sweep would consume the
+    ``)`` and every byte after it on the same line, erasing a real
+    ``gh pr create`` that follows the substitution. The walker bounds
+    the comment at the closer so the trailing command stays visible.
+    """
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "$(date +%H # 24h) && gh pr create --title T"
+        )
+    )
+
+
+def test_strip_bash_comments_substitution_comment_in_backtick_does_not_consume_closer() -> None:
+    """Backtick variant of the closer-bound: the trailing ``gh pr create`` stays visible."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching(
+            "foo `cmd # comment` bar && gh pr create"
+        )
+    )
+
+
+def test_strip_bash_comments_real_invocation_inside_substitution_still_matches() -> None:
+    """A real ``$(gh pr create)`` (no comment) must still trigger the matcher."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching("echo $(gh pr create)")
+    )
+
+
+def test_strip_bash_comments_real_invocation_after_substitution_still_matches() -> None:
+    """``echo $(echo ok); gh pr create`` — the trailing command is OUTSIDE the substitution."""
+    assert utils_module._command_invokes_gh_pr_create_in_stripped(
+        utils_module._preprocess_command_for_matching("echo $(echo ok); gh pr create")
+    )

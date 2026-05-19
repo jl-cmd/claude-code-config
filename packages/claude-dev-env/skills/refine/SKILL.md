@@ -94,9 +94,9 @@ Wait for all to complete, merge the digests, proceed.
 
 ### 3. Existing-match decision
 
-If the fan-out surfaces plans that look like prior work on the same topic, run an AskUserQuestion with the matches as options:
+If the fan-out surfaces plans that look like prior work on the same topic, run an AskUserQuestion. AskUserQuestion's contract caps options at four, so cap the displayed matches at three to leave room for "Start fresh":
 
-- One option per match (label = match title, description = match path + one-line summary)
+- Up to three match options, one per match (label = match title, description = match path + one-line summary). When more than three matches surface, name the top three by recency or relevance and list the remainder in the question prose so the user can name a specific one via the free-text fallback.
 - A "Start fresh" option
 
 The user's pick becomes the working draft for the interview. The chosen draft's decisions seed the plan; the interview targets gaps.
@@ -171,6 +171,7 @@ For each iteration `N` from 1 to 10:
    - The plan file path
    - The structured findings from the latest audit
    - The path to `Research/<topic>/<slug>-implementation-notes.html`
+   - The path to `templates/implementation-notes-template.html` and a directive: copy the iteration `<section class="iteration">` markup from the HTML-commented reference block at the top of the template, substitute the placeholders (`<N>` → iteration number; `<YYYY-MM-DD HH:MM>` → UTC timestamp; `<count>` → number of findings addressed this iteration; each `<ul>` group → bullets covering Design decisions, Deviations, Tradeoffs, Open questions), and insert the populated `<section>` immediately before the closing `</body>` tag
    - The verbatim `<notes_instruction>` block below
 2. The fix agent rewrites the plan in place in the vault via `mcp__obsidian__write_note` addressing the findings, and appends one new `<section>` to the notes file with iteration number, timestamp, and the four bullet groups.
 3. Re-spawn `general-purpose` against the rewritten plan with the same audit prompt as step 7 (plan-quality rubric, not code rubric).

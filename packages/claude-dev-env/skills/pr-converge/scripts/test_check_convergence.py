@@ -18,6 +18,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Callable
 
+import pytest
+
 _SCRIPTS_DIRECTORY = Path(__file__).absolute().parent
 _PR_CONVERGE_DIRECTORY = _SCRIPTS_DIRECTORY.parent
 
@@ -86,7 +88,7 @@ def _make_stub_gh_paginated(
 
 
 def should_pass_when_clean_bugteam_review_present_on_current_head(
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reviews_payload = [
         {
@@ -110,7 +112,7 @@ def should_pass_when_clean_bugteam_review_present_on_current_head(
 
 
 def should_fail_when_dirty_bugteam_review_present_on_current_head(
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reviews_payload = [
         {
@@ -134,7 +136,7 @@ def should_fail_when_dirty_bugteam_review_present_on_current_head(
 
 
 def should_fail_when_no_bugteam_review_present_on_current_head(
-    monkeypatch: object,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     reviews_payload = [
         {
@@ -160,3 +162,18 @@ def should_fail_when_no_bugteam_review_present_on_current_head(
     )
     assert passed is False
     assert "no bugteam review found" in detail
+
+
+def test_private_helpers_recognize_clean_new_header_body() -> None:
+    assert check_convergence._is_bugteam_review(CLEAN_BUGTEAM_BODY) is True
+    assert check_convergence._is_clean_bugteam_review(CLEAN_BUGTEAM_BODY) is True
+
+
+def test_private_helpers_recognize_dirty_new_header_body() -> None:
+    assert check_convergence._is_bugteam_review(DIRTY_BUGTEAM_BODY) is True
+    assert check_convergence._is_clean_bugteam_review(DIRTY_BUGTEAM_BODY) is False
+
+
+def test_private_helpers_reject_non_bugteam_body() -> None:
+    assert check_convergence._is_bugteam_review(NON_BUGTEAM_BODY) is False
+    assert check_convergence._is_clean_bugteam_review(NON_BUGTEAM_BODY) is False

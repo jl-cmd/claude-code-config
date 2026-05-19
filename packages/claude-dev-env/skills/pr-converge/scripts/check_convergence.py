@@ -49,7 +49,7 @@ from config.constants import (
 )
 
 
-def is_bugteam_review(review_body: str) -> bool:
+def _is_bugteam_review(review_body: str) -> bool:
     """Return True when a review body opens with a bugteam audit header.
 
     Args:
@@ -68,12 +68,12 @@ def is_bugteam_review(review_body: str) -> bool:
     )
 
 
-def is_clean_bugteam_review(review_body: str) -> bool:
+def _is_clean_bugteam_review(review_body: str) -> bool:
     """Return True when a bugteam audit review body declares a clean pass.
 
     Args:
         review_body: Body text of a review that has already satisfied
-            :func:`is_bugteam_review`.
+            :func:`_is_bugteam_review`.
 
     Returns:
         True when the new-shape body's first line carries the clean state
@@ -82,7 +82,7 @@ def is_clean_bugteam_review(review_body: str) -> bool:
         bodies that do not match the bugteam header signature.
     """
     if review_body.startswith(BUGTEAM_NEW_HEADER_PREFIX):
-        first_line = review_body.splitlines()[0] if review_body else ""
+        first_line = review_body.splitlines()[0]
         return BUGTEAM_NEW_CLEAN_LABEL in first_line
     if review_body.startswith(BUGTEAM_LEGACY_HEADER_PREFIX):
         return review_body.rstrip().endswith(BUGTEAM_LEGACY_CLEAN_TOKEN)
@@ -117,14 +117,14 @@ def _check_bugteam_clean(
         body = each_review.get("body", "")
         if not isinstance(body, str):
             continue
-        if not is_bugteam_review(body):
+        if not _is_bugteam_review(body):
             continue
         commit_id = each_review.get("commit_id", "")
         if not isinstance(commit_id, str) or not commit_id.startswith(head_sha):
             continue
         review_id = each_review.get("id", "?")
         short_commit = commit_id[:7]
-        if is_clean_bugteam_review(body):
+        if _is_clean_bugteam_review(body):
             return (
                 True,
                 f"review #{review_id}, clean bugteam audit, commit: {short_commit}",
@@ -567,13 +567,11 @@ def check_all(*, owner: str, repo: str, number: int, bugbot_down: bool) -> int:
     )
 
     is_all_passed = True
-    index = 1
-    for each_label, (each_passed, each_detail) in conditions:
+    for each_index, (each_label, (each_passed, each_detail)) in enumerate(conditions, start=1):
         status = "PASS" if each_passed else "FAIL"
-        print(f"{index}. {each_label}: {status} — {each_detail}")
+        print(f"{each_index}. {each_label}: {status} — {each_detail}")
         if not each_passed:
             is_all_passed = False
-        index += 1
 
     print()
     if is_all_passed:

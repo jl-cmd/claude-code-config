@@ -4,6 +4,7 @@ from __future__ import annotations
 
 TEXT_FILE_ENCODING: str = "utf-8"
 ALL_PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
+ALL_AGENT_CONFIG_DENY_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read", "Glob")
 ALL_AGENT_CONFIG_PATH_PATTERNS: tuple[str, ...] = (
     "settings*.json",
     "hooks/**",

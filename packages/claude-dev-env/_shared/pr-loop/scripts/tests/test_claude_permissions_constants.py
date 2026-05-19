@@ -26,6 +26,16 @@ def test_exposes_all_permission_allow_tools_tuple() -> None:
     assert constants_module.ALL_PERMISSION_ALLOW_TOOLS == ("Edit", "Write", "Read")
 
 
+def test_exposes_all_agent_config_deny_tools_tuple_with_glob() -> None:
+    assert constants_module.ALL_AGENT_CONFIG_DENY_TOOLS == (
+        "Edit",
+        "Write",
+        "Read",
+        "Glob",
+    )
+    assert "Glob" not in constants_module.ALL_PERMISSION_ALLOW_TOOLS
+
+
 def test_auto_mode_environment_entry_template_is_format_string() -> None:
     rendered_template_text = (
         constants_module.AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE.format(

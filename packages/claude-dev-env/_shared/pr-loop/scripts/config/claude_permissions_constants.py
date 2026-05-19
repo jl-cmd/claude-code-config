@@ -5,6 +5,7 @@ from pathlib import Path
 from config.preflight_constants import GIT_DIRECTORY_NAME
 
 __all__ = (
+    "ALL_AGENT_CONFIG_DENY_TOOLS",
     "ALL_AGENT_CONFIG_PATH_PATTERNS",
     "ALL_PERMISSION_ALLOW_TOOLS",
     "ALL_TRUST_ENTRY_PROJECT_PATH_BOUNDARY_QUOTE_CHARACTERS",
@@ -20,6 +21,8 @@ __all__ = (
 
 
 ALL_PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
+
+ALL_AGENT_CONFIG_DENY_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read", "Glob")
 
 ALL_AGENT_CONFIG_PATH_PATTERNS: tuple[str, ...] = (
     "settings*.json",

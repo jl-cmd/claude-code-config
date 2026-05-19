@@ -25,6 +25,7 @@ import _claude_permissions_common as common_module
 import grant_project_claude_permissions as grant_module
 import revoke_project_claude_permissions as revoke_module
 from config.claude_permissions_common_constants import (
+    ALL_AGENT_CONFIG_DENY_TOOLS,
     ALL_AGENT_CONFIG_PATH_PATTERNS,
     ALL_PERMISSION_ALLOW_TOOLS,
     AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE,
@@ -91,12 +92,39 @@ def test_grant_writes_deny_rules_for_every_tool_and_pattern(
     written_settings = json.loads(fake_settings_path.read_text(encoding="utf-8"))
     deny_list = written_settings["permissions"]["deny"]
     project_path_posix = _project_path_as_posix(fake_project_root)
-    for each_tool in ALL_PERMISSION_ALLOW_TOOLS:
+    for each_tool in ALL_AGENT_CONFIG_DENY_TOOLS:
         for each_pattern in ALL_AGENT_CONFIG_PATH_PATTERNS:
             expected_rule = f"{each_tool}({project_path_posix}/.claude/{each_pattern})"
             assert expected_rule in deny_list, (
                 f"deny list missing expected rule {expected_rule!r}"
             )
+
+
+def test_grant_writes_glob_deny_rules_for_every_agent_config_pattern(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Glob must be in the deny tuple so agent-config paths require approval.
+
+    The AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE promises Edit/Write/Read/Glob
+    trust EXCEPT for agent-config files. Glob deny rules are how the EXCEPT
+    clause is honored for the Glob tool.
+    """
+    fake_project_root = _make_fake_project(tmp_path)
+    fake_settings_path = _prepare_fake_home(tmp_path)
+    _seed_grant_then_run(
+        fake_settings_path, fake_project_root, monkeypatch, pre_existing_settings={}
+    )
+    capsys.readouterr()
+    written_settings = json.loads(fake_settings_path.read_text(encoding="utf-8"))
+    deny_list = written_settings["permissions"]["deny"]
+    project_path_posix = _project_path_as_posix(fake_project_root)
+    assert "Glob" in ALL_AGENT_CONFIG_DENY_TOOLS
+    assert "Glob" not in ALL_PERMISSION_ALLOW_TOOLS
+    for each_pattern in ALL_AGENT_CONFIG_PATH_PATTERNS:
+        expected_glob_rule = f"Glob({project_path_posix}/.claude/{each_pattern})"
+        assert expected_glob_rule in deny_list, (
+            f"deny list missing expected Glob rule {expected_glob_rule!r}"
+        )
 
 
 def test_grant_purges_stale_trust_entries_then_writes_current_template(
@@ -149,7 +177,7 @@ def test_revoke_removes_deny_rules(
     project_path_posix = _project_path_as_posix(fake_project_root)
     all_deny_rules = common_module.build_agent_config_deny_rules(
         project_path_posix,
-        ALL_PERMISSION_ALLOW_TOOLS,
+        ALL_AGENT_CONFIG_DENY_TOOLS,
         ALL_AGENT_CONFIG_PATH_PATTERNS,
     )
     pre_existing_settings: dict[str, Any] = {

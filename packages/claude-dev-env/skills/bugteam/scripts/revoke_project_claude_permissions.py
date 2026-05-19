@@ -32,6 +32,7 @@ from _claude_permissions_common import (  # noqa: E402
     save_settings,
 )
 from config.claude_permissions_common_constants import (  # noqa: E402
+    ALL_AGENT_CONFIG_DENY_TOOLS,
     ALL_AGENT_CONFIG_PATH_PATTERNS,
     ALL_PERMISSION_ALLOW_TOOLS,
     AUTO_MODE_ENVIRONMENT_ENTRY_PREFIX,
@@ -224,7 +225,7 @@ def revoke_permissions_for_current_directory() -> None:
     permission_rules = build_permission_rules(project_path, ALL_PERMISSION_ALLOW_TOOLS)
     all_agent_config_deny_rules = build_agent_config_deny_rules(
         project_path,
-        ALL_PERMISSION_ALLOW_TOOLS,
+        ALL_AGENT_CONFIG_DENY_TOOLS,
         ALL_AGENT_CONFIG_PATH_PATTERNS,
     )
     settings = load_settings(claude_user_settings_path)

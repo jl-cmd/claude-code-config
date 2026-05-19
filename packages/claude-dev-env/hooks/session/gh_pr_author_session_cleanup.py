@@ -24,7 +24,6 @@ into the swap workflow are completely unaffected.
 from __future__ import annotations
 
 import os
-import stat
 import sys
 import tempfile
 import time
@@ -37,8 +36,9 @@ if _hooks_tree_path not in sys.path:
 
 from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must run first
     _delete_state_file,
+    _lstat_indicates_attacker_planted,
     _read_original_account,
-    _state_file_is_attacker_planted,
+    _state_file_is_attacker_planted,  # noqa: F401
     _switch_gh_account,
     _write_line,
 )
@@ -102,9 +102,7 @@ def _collect_stale_state_files(temp_directory: Path) -> list[Path]:
             file_lstat_result = each_candidate_path.lstat()
         except OSError:
             continue
-        if not stat.S_ISREG(file_lstat_result.st_mode):
-            continue
-        if _state_file_is_attacker_planted(each_candidate_path):
+        if _lstat_indicates_attacker_planted(file_lstat_result):
             continue
         file_age_seconds = current_time_seconds - file_lstat_result.st_mtime
         if file_age_seconds >= STATE_FILE_STALE_AGE_SECONDS:

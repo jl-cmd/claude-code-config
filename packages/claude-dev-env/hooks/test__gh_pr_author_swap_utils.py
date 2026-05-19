@@ -221,3 +221,113 @@ def test_strip_bash_comments_strips_prior_line_comment_only() -> None:
     assert "gh pr create" in preprocessed_command
     assert "# b" not in preprocessed_command
     assert utils_module._command_invokes_gh_pr_create_in_stripped(preprocessed_command)
+
+
+def test_lstat_indicates_attacker_planted_returns_false_for_well_formed_lstat(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A 0o600 regular file owned by the current user is not flagged.
+
+    Mirrors ``test_state_file_is_attacker_planted_returns_false_for_well_formed_file``
+    but feeds the helper a pre-computed ``lstat`` result so the helper
+    does not perform its own syscall.
+    """
+    state_file = tmp_path / "gh_pr_author_swap_session-well_formed.json"
+    state_file.write_text("{}", encoding="utf-8")
+    if hasattr(os, "getuid"):
+        os.chmod(state_file, STATE_FILE_PERMISSION_MODE)
+
+    file_lstat_result = state_file.lstat()
+
+    assert utils_module._lstat_indicates_attacker_planted(file_lstat_result) is False
+
+
+def test_lstat_indicates_attacker_planted_returns_true_for_world_readable_mode(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A 0o644 regular file is flagged as attacker-planted on POSIX.
+
+    The enforcer always creates state files at 0o600, so a divergent
+    mode is treated as a plant.
+    """
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX ownership semantics not available on this platform")
+    state_file = tmp_path / "gh_pr_author_swap_session-mode_wrong.json"
+    state_file.write_text("{}", encoding="utf-8")
+    os.chmod(state_file, 0o644)
+
+    file_lstat_result = state_file.lstat()
+
+    assert utils_module._lstat_indicates_attacker_planted(file_lstat_result) is True
+
+
+def test_lstat_indicates_attacker_planted_returns_true_for_foreign_uid(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A regular 0o600 file owned by a different uid is flagged on POSIX.
+
+    The helper sees only the ``stat_result`` it is given, so the test
+    builds a synthetic ``os.stat_result`` whose ``st_uid`` does not match
+    ``os.getuid()`` and feeds it directly to the helper.
+    """
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX ownership semantics not available on this platform")
+    state_file = tmp_path / "gh_pr_author_swap_session-foreign_uid.json"
+    state_file.write_text("{}", encoding="utf-8")
+    os.chmod(state_file, STATE_FILE_PERMISSION_MODE)
+    real_lstat_result = state_file.lstat()
+    foreign_user_id = os.getuid() + 1
+    synthetic_stat_fields = (
+        real_lstat_result.st_mode,
+        real_lstat_result.st_ino,
+        real_lstat_result.st_dev,
+        real_lstat_result.st_nlink,
+        foreign_user_id,
+        real_lstat_result.st_gid,
+        real_lstat_result.st_size,
+        real_lstat_result.st_atime,
+        real_lstat_result.st_mtime,
+        real_lstat_result.st_ctime,
+    )
+    synthetic_stat_result = os.stat_result(synthetic_stat_fields)
+
+    assert utils_module._lstat_indicates_attacker_planted(synthetic_stat_result) is True
+
+
+def test_lstat_indicates_attacker_planted_returns_true_for_non_regular_file(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A FIFO at the predictable swap-state path is flagged.
+
+    Mirrors ``test_state_file_is_attacker_planted_returns_true_for_non_regular_file``
+    but feeds the helper the FIFO's own ``lstat`` result rather than the
+    path.
+    """
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("mkfifo not available on this platform")
+    if not hasattr(os, "getuid"):
+        pytest.skip("POSIX ownership semantics not available on this platform")
+    fifo_state_file = tmp_path / "gh_pr_author_swap_session-fifo.json"
+    os.mkfifo(fifo_state_file, STATE_FILE_PERMISSION_MODE)
+
+    file_lstat_result = fifo_state_file.lstat()
+
+    assert utils_module._lstat_indicates_attacker_planted(file_lstat_result) is True
+
+
+def test_lstat_indicates_attacker_planted_returns_false_on_windows(
+    tmp_path: pathlib.Path,
+) -> None:
+    """On Windows (no ``os.getuid``) the helper short-circuits to False.
+
+    Windows tempdir is already per-user, so the cross-user attack
+    surface this check guards against on POSIX does not exist there.
+    """
+    if hasattr(os, "getuid"):
+        pytest.skip("POSIX has os.getuid; this case asserts Windows-only behaviour")
+    state_file = tmp_path / "gh_pr_author_swap_session-windows.json"
+    state_file.write_text("{}", encoding="utf-8")
+
+    file_lstat_result = state_file.lstat()
+
+    assert utils_module._lstat_indicates_attacker_planted(file_lstat_result) is False

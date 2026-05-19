@@ -237,6 +237,10 @@ def _state_file_is_attacker_planted(state_file: Path) -> bool:
     A missing file returns False so callers can treat the missing-file
     case the same way they treat a normal absent-state-file path.
 
+    For callers that already hold an ``lstat`` result for the candidate
+    path, prefer ``_lstat_indicates_attacker_planted`` to avoid a
+    redundant syscall and the TOCTOU window between two ``lstat`` calls.
+
     Args:
         state_file: Path produced by ``_state_file_path``.
 
@@ -255,6 +259,39 @@ def _state_file_is_attacker_planted(state_file: Path) -> bool:
         return False
     except OSError:
         return True
+    return _lstat_indicates_attacker_planted(file_lstat_result)
+
+
+def _lstat_indicates_attacker_planted(file_lstat_result: os.stat_result) -> bool:
+    """Return True when an ``lstat`` result does not match an enforcer-written state file.
+
+    Callers that already hold a fresh ``lstat`` result for a candidate
+    state-file path use this helper directly instead of
+    ``_state_file_is_attacker_planted``, which would re-stat the path.
+    Skipping the second stat avoids a redundant syscall and the TOCTOU
+    window where an attacker could swap the inode between the two stat
+    calls.
+
+    The mode-bit and uid checks only apply on POSIX. Windows ``stat``
+    semantics differ (see ``_state_file_is_attacker_planted`` for the
+    full rationale) so the helper is a no-op on platforms without
+    ``os.getuid``.
+
+    Args:
+        file_lstat_result: Result of ``os.lstat`` (or ``Path.lstat``)
+            on the candidate state-file path. The caller is responsible
+            for using ``lstat`` rather than ``stat`` so symlinks are
+            screened on their own metadata.
+
+    Returns:
+        True on POSIX when the file is not a regular file, the mode
+        bits do not equal ``STATE_FILE_PERMISSION_MODE``, or the uid
+        does not match the current user. False on POSIX when the
+        candidate matches the enforcer's write contract, and on Windows
+        unconditionally.
+    """
+    if not hasattr(os, "getuid"):
+        return False
     if not stat.S_ISREG(file_lstat_result.st_mode):
         return True
     actual_permission_bits = stat.S_IMODE(file_lstat_result.st_mode)

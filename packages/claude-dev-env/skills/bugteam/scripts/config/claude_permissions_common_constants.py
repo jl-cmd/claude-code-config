@@ -4,6 +4,16 @@ from __future__ import annotations
 
 TEXT_FILE_ENCODING: str = "utf-8"
 ALL_PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
+ALL_AGENT_CONFIG_PATH_PATTERNS: tuple[str, ...] = (
+    "settings*.json",
+    "hooks/**",
+    "commands/**",
+    "agents/**",
+    "skills/**",
+    "mcp.json",
+    "CLAUDE.md",
+)
+AUTO_MODE_ENVIRONMENT_ENTRY_PREFIX: str = "Trusted local workspace:"
 AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "Trusted local workspace: Files under {project_path}/.claude/** inherit "
     "the workspace's trust for Edit, Write, Read, and Glob operations EXCEPT "
@@ -18,6 +28,7 @@ CLAUDE_USER_SETTINGS_FILENAME: str = "settings.json"
 DEFAULT_SETTINGS_FILE_MODE: int = 0o600
 SETTINGS_PERMISSIONS_KEY: str = "permissions"
 SETTINGS_ALLOW_KEY: str = "allow"
+SETTINGS_DENY_KEY: str = "deny"
 SETTINGS_ADDITIONAL_DIRECTORIES_KEY: str = "additionalDirectories"
 SETTINGS_AUTO_MODE_KEY: str = "autoMode"
 SETTINGS_ENVIRONMENT_KEY: str = "environment"

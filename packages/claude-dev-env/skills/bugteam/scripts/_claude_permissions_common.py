@@ -12,6 +12,7 @@ import json
 import os
 import stat
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import NoReturn
 
@@ -103,6 +104,90 @@ def build_permission_rules(
         build_permission_rule(each_tool, project_path)
         for each_tool in all_permission_allow_tools
     ]
+
+
+def build_agent_config_deny_rule(
+    tool_name: str, project_path: str, agent_config_path_pattern: str
+) -> str:
+    """Construct a deny rule for a single agent-config path pattern.
+
+    Args:
+        tool_name: The permission tool name (e.g., "Edit", "Write", "Read").
+        project_path: The POSIX-style project root path.
+        agent_config_path_pattern: The agent-config path pattern under .claude/.
+
+    Returns:
+        The deny rule string Claude Code matches against tool invocations.
+    """
+    return f"{tool_name}({project_path}/.claude/{agent_config_path_pattern})"
+
+
+def build_agent_config_deny_rules(
+    project_path: str,
+    all_permission_allow_tools: tuple[str, ...],
+    all_agent_config_path_patterns: tuple[str, ...],
+) -> list[str]:
+    """Construct deny rules covering every tool and pattern pair.
+
+    Args:
+        project_path: The POSIX-style project root path.
+        all_permission_allow_tools: Tool names to build deny rules for.
+        all_agent_config_path_patterns: Agent-config path patterns to deny under .claude/.
+
+    Returns:
+        List of deny rule strings, one per tool/pattern combination.
+    """
+    return [
+        build_agent_config_deny_rule(each_tool, project_path, each_pattern)
+        for each_tool in all_permission_allow_tools
+        for each_pattern in all_agent_config_path_patterns
+    ]
+
+
+def is_trust_entry_for_project(
+    candidate_entry: object, project_path: str, prefix: str
+) -> bool:
+    """Detect whether an autoMode.environment entry is a trust entry for the project.
+
+    The predicate matches any string entry whose prefix matches the trust-entry
+    marker and that contains the project's .claude/** path token. The exact
+    wording after the prefix is allowed to vary between template revisions.
+
+    Args:
+        candidate_entry: The autoMode.environment list value to inspect.
+        project_path: The POSIX-style project root path.
+        prefix: The literal prefix that marks a trust entry.
+
+    Returns:
+        True when the entry is a prior trust entry for this project.
+    """
+    if not isinstance(candidate_entry, str):
+        return False
+    if not candidate_entry.startswith(prefix):
+        return False
+    return f"{project_path}/.claude/**" in candidate_entry
+
+
+def remove_matching_entries_from_list(
+    all_target_list: list[object],
+    match_predicate: Callable[[object], bool],
+) -> int:
+    """Remove every entry from a list that satisfies the predicate.
+
+    Args:
+        all_target_list: The list to filter in place.
+        match_predicate: Function returning True for entries to remove.
+
+    Returns:
+        Number of entries removed.
+    """
+    original_length = len(all_target_list)
+    all_target_list[:] = [
+        each_value
+        for each_value in all_target_list
+        if not match_predicate(each_value)
+    ]
+    return original_length - len(all_target_list)
 
 
 def load_settings(settings_path: Path) -> dict[str, object]:

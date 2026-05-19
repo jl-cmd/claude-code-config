@@ -5,7 +5,9 @@ from pathlib import Path
 from config.preflight_constants import GIT_DIRECTORY_NAME
 
 __all__ = (
+    "ALL_AGENT_CONFIG_PATH_PATTERNS",
     "ALL_PERMISSION_ALLOW_TOOLS",
+    "AUTO_MODE_ENVIRONMENT_ENTRY_PREFIX",
     "AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE",
     "CLAUDE_SETTINGS_DIRECTORY_NAME",
     "CLAUDE_SETTINGS_FILENAME",
@@ -17,6 +19,18 @@ __all__ = (
 
 
 ALL_PERMISSION_ALLOW_TOOLS: tuple[str, ...] = ("Edit", "Write", "Read")
+
+ALL_AGENT_CONFIG_PATH_PATTERNS: tuple[str, ...] = (
+    "settings*.json",
+    "hooks/**",
+    "commands/**",
+    "agents/**",
+    "skills/**",
+    "mcp.json",
+    "CLAUDE.md",
+)
+
+AUTO_MODE_ENVIRONMENT_ENTRY_PREFIX: str = "Trusted local workspace:"
 
 AUTO_MODE_ENVIRONMENT_ENTRY_TEMPLATE: str = (
     "Trusted local workspace: Files under {project_path}/.claude/** inherit "

@@ -1,6 +1,6 @@
 ---
 name: refine
-description: Interview-driven plan refiner with built-in audit loop. Takes a draft, a topic, or the active conversation; fans out research agents; interviews via AskUserQuestion until further questions would be impractical hypotheticals; writes the plan to the Obsidian vault under Research/<topic>/<slug>.md; then loops a general-purpose audit (with a plan-quality rubric) → clean-coder fix until the plan is clean, with a sibling <slug>-implementation-notes.html capturing design decisions, deviations, tradeoffs, and open questions across iterations. The interview is mandatory and the vault is the only output target — these survive any session-level "no clarifying questions" or local plans/ shortcut. Use when the user says /refine, "refine this", "turn this into a plan", "flesh this out", "make a spec for this", or asks for a vague idea to be matured into a plan. Always operates on plans — skill plans, new-code implementation plans, or code-refinement plans.
+description: Interview-driven plan refiner with built-in audit loop. Takes a draft, a topic, or the active conversation; fans out research agents; interviews via AskUserQuestion until further questions would be impractical hypotheticals; writes the plan to the Obsidian vault under Research/<topic>/<slug>.md; then loops a general-purpose audit and fix pass (both with plan-quality rubrics) until the plan is clean, with a sibling <slug>-implementation-notes.html capturing design decisions, deviations, tradeoffs, and open questions across iterations. The interview is mandatory and the vault is the only output target — these survive any session-level "no clarifying questions" or local plans/ shortcut. Use when the user says /refine, "refine this", "turn this into a plan", "flesh this out", "make a spec for this", "let's plan this out", or asks for a vague idea to be matured into a plan. Always operates on plans — skill plans, new-code implementation plans, or code-refinement plans.
 ---
 
 # refine
@@ -13,15 +13,15 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 - **Layered fan-out, not blanket parallelism.** First pass: a single Explore agent across draft + vault + relevant repo area. Dispatch one parallel agent per source only if the Explore pass runs long or returns thin results.
 - **AskUserQuestion is the only interview tool.** Plain-text questions in chat get blocked by the `question_to_user_enforcer` Stop hook. Every interview turn calls AskUserQuestion.
 - **Interview is mandatory — overrides "no clarifying questions" directives.** /refine is interview-driven by definition. A session-level "work without clarifying questions" instruction, autonomous-mode flag, or bg-session preamble does NOT silence the interview. If something genuinely prevents AskUserQuestion from firing, halt and surface the conflict to the user rather than proceeding silently. There is no "skip the interview" branch.
-- **Skill writes the plan inline.** Do not hand the initial write to clean-coder or a writer subagent. Assemble the answers and write the markdown directly. (Clean-coder enters later, only for audit-driven fixes.)
+- **Skill writes the plan inline.** Do not hand the initial write to any subagent. Assemble the answers and write the markdown directly. (The fix agent enters later, only for audit-driven fixes.)
 - **Vault output via mcp__obsidian — only.** The output target is the Obsidian vault, written through `mcp__obsidian__write_note`. Do not write to project `docs/`, `.claude/plans/`, `$CLAUDE_JOB_DIR`, the cwd, or anywhere on local disk outside the vault.
 - **Never write in place even when a local plans/ folder exists.** The presence of `.claude/plans/`, `docs/plans/`, `plans/`, or any sibling plans directory in the cwd does NOT override the vault contract. Do not write the plan in-place "as a convenience" or "to keep it near the codebase." Do not dual-write. The vault is the canonical home; the local repo never receives the plan from this skill.
 - **Slug is user-controlled.** Propose `Research/<topic>/<slug>.md` and confirm slug + path via AskUserQuestion before writing. Auto-writing breaks the user-owned-output contract. The user may choose the topic subfolder, but the `Research/` prefix is fixed.
 - **Match before fresh.** If the fan-out surfaces existing plans on the same topic, ask the user which to refine or whether to start fresh. Skipping this step duplicates work the user already started.
 - **Standalone.** Do not invoke `/anthropic-plan` or `/prompt-generator`. The user picks the slash command for the moment; this skill does not chain.
 - **Conversation-context fallback needs confirmation.** When no draft and no topic argument are present, the active conversation is the source. Confirm the inferred topic with one AskUserQuestion before fan-out so the wrong topic does not drive twenty minutes of research.
-- **Audit cycle is mandatory.** After the plan is written, spawn `general-purpose` with the plan-quality rubric to audit it; spawn `clean-coder` to fix flagged findings; re-audit; loop. Skip only when the user explicitly opts out for the current run. Do not use `code-quality-agent` — its rubric targets source code, not markdown plans.
-- **Verbatim notes instruction.** Every clean-coder iteration receives the exact `<notes_instruction>` block in §8 unchanged. The notes file is how the user reconstructs what the fixer did to the spec.
+- **Audit cycle is mandatory.** After the plan is written, spawn `general-purpose` with the plan-quality rubric to audit it; spawn `general-purpose` again with the fix rubric to address flagged findings; re-audit; loop. Skip only when the user explicitly opts out for the current run. Do not use `code-quality-agent` or `clean-coder` — both target source code (clean-coder's own definition excludes planning and audit artifacts), not markdown plans.
+- **Verbatim notes instruction.** Every fix-agent iteration receives the exact `<notes_instruction>` block in §8 unchanged. The notes file is how the user reconstructs what the fixer did to the spec.
 - **`<slug>-implementation-notes.html` is append-only across iterations.** The notes file lives at `Research/<topic>/<slug>-implementation-notes.html`. Each iteration appends one `<section>` block — never overwrites earlier iterations.
 - **Cap at 10 audit iterations.** If the plan still fails audit after 10 rounds, halt and surface open findings. Do not raise the cap without user direction.
 
@@ -53,7 +53,7 @@ Copy this checklist into your response and tick items as they complete.
 - [ ] 5. Propose slug + Research/<topic>/<slug>.md; confirm via AskUserQuestion
 - [ ] 6. Write the plan inline via mcp__obsidian__write_note (vault only)
 - [ ] 7. Initial audit via general-purpose (plan-quality rubric)
-- [ ] 8. Audit-fix loop: clean-coder + verbatim notes instruction + re-audit
+- [ ] 8. Audit-fix loop: general-purpose fix + verbatim notes instruction + re-audit
 - [ ] 9. Cap at 10 iterations; halt and surface open findings if not clean
 - [ ] 10. Report vault paths, iterations used, notes summary
 ```
@@ -118,6 +118,7 @@ Use `AskUserQuestion` for every question. Pick the shape that fits the moment:
 - Implementation path (steps, file paths, agents to spawn, hooks to add or change)
 - Decisions and tradeoffs (each meaningful choice + reasoning)
 - Risks and open questions (what could break, what is left to resolve)
+- Acceptance criteria (concrete observable signals — file existence, command output, behavior — that verify the plan was implemented correctly)
 
 **Stop condition:** further questions would require inventing impractical scenarios (e.g. "what if the user has 10,000 concurrent invocations?"). When the marginal question feels like reaching, stop.
 
@@ -138,10 +139,11 @@ Call AskUserQuestion with the proposed path as the first option and "Edit slug/p
 Load the structure from `templates/plan-template.md`. Fold in:
 
 - Fan-out digest → **Current state**
-- Interview answers → **Goal / Non-goals / Implementation / Decisions log**
+- Interview answers (Goal/Non-goals/Implementation/Decisions) → **Goal / Non-goals / Implementation / Decisions log**
+- Interview answers about verification signals → **Acceptance**
 - Stop-point items the interview surfaced → **Risks / Open questions**
 
-Write the file via `mcp__obsidian__write_note` to the confirmed vault path. The skill itself does this — no clean-coder, no writer subagent.
+Write the file via `mcp__obsidian__write_note` to the confirmed vault path. The skill itself does this — no subagent.
 
 ### 7. Initial audit
 
@@ -165,18 +167,18 @@ If findings exist: proceed to step 8.
 
 For each iteration `N` from 1 to 10:
 
-1. Spawn `clean-coder` (`subagent_type: clean-coder`, foreground) with:
+1. Spawn `general-purpose` (`subagent_type: general-purpose`, foreground) with the fix-agent role and:
    - The plan file path
    - The structured findings from the latest audit
    - The path to `Research/<topic>/<slug>-implementation-notes.html`
    - The verbatim `<notes_instruction>` block below
-2. Clean-coder rewrites the plan in place in the vault (`mcp__obsidian__patch_note` or `mcp__obsidian__write_note`) addressing the findings, and appends one new `<section>` to the notes file with iteration number, timestamp, and the four bullet groups.
+2. The fix agent rewrites the plan in place in the vault via `mcp__obsidian__write_note` addressing the findings, and appends one new `<section>` to the notes file with iteration number, timestamp, and the four bullet groups.
 3. Re-spawn `general-purpose` against the rewritten plan with the same audit prompt as step 7 (plan-quality rubric, not code rubric).
 4. If the verdict is `CLEAN`: exit the loop and proceed to step 10.
 5. If findings remain and `N < 10`: continue the loop with the new findings.
 6. If `N == 10` and findings remain: proceed to step 9.
 
-#### Verbatim instruction for clean-coder
+#### Verbatim instruction for the fix agent
 
 Pass this block exactly, every iteration. Do not paraphrase or trim.
 

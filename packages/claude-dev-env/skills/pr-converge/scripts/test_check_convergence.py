@@ -320,7 +320,3 @@ def should_document_head_sha_systemexit_in_check_all_docstring() -> None:
     assert "_get_pr_head_sha" in check_all_docstring
     assert "SystemExit" in check_all_docstring
     assert "EXIT_CODE_GH_ERROR" in check_all_docstring
-
-
-def test_check_all_docstring_documents_head_sha_systemexit() -> None:
-    should_document_head_sha_systemexit_in_check_all_docstring()

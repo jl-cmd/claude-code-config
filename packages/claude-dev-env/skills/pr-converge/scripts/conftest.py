@@ -42,7 +42,7 @@ if PR_CONVERGE_DIRECTORY_DRIVE_LETTER_FORM not in sys.path:
     sys.path.insert(0, PR_CONVERGE_DIRECTORY_DRIVE_LETTER_FORM)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _evict_config_namespace_between_tests() -> None:
     for each_module_name in [
         each_key

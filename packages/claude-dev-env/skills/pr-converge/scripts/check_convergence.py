@@ -484,11 +484,14 @@ def check_all(*, owner: str, repo: str, number: int, bugbot_down: bool) -> int:
         owner: GitHub repository owner login.
         repo: GitHub repository name.
         number: Pull request number to inspect.
-        bugbot_down: When True, bypass gate 1 (the Cursor Bugbot check run
-            presence) with a ``bypassed (bugbot_down)`` note. Callers pass
-            True when the lead has declared Cursor Bugbot unreachable on
-            the current HEAD so the broader convergence gate can still
-            close on the remaining signals.
+        bugbot_down: When True, bypass both the Cursor Bugbot check-run
+            presence gate and the bugbot review-body content gate. The
+            check-run gate appears in the condition list with a
+            ``bypassed (bugbot_down)`` note; the review-body gate is
+            omitted entirely. Callers pass True when the lead has
+            declared Cursor Bugbot unreachable on the current HEAD so the
+            broader convergence gate can still close on the remaining
+            signals.
 
     Returns:
         ``0`` when every gate reports PASS, ``1`` when at least one gate

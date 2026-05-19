@@ -26,8 +26,6 @@ _PR_CONVERGE_DIRECTORY = _SCRIPTS_DIRECTORY.parent
 if str(_PR_CONVERGE_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(_PR_CONVERGE_DIRECTORY))
 
-import config.constants  # type: ignore[import-not-found]  # noqa: F401, E402
-
 
 def _load_module() -> ModuleType:
     for each_cached_name in [

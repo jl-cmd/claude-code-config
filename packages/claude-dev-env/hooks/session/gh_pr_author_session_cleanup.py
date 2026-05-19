@@ -38,7 +38,6 @@ from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must
     _delete_state_file,
     _lstat_indicates_attacker_planted,
     _read_original_account,
-    _state_file_is_attacker_planted,  # noqa: F401
     _switch_gh_account,
     _write_line,
 )

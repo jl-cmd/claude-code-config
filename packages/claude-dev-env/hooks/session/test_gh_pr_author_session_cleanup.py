@@ -440,18 +440,19 @@ def test_collect_stale_state_files_skips_world_readable_file(
     assert world_readable_state_file not in matched_files
 
 
-def test_session_cleanup_uses_shared_attacker_planted_helper() -> None:
-    """Session cleanup must reuse the shared ``_state_file_is_attacker_planted``.
+def test_session_cleanup_uses_shared_lstat_helper() -> None:
+    """Session cleanup must reuse the shared ``_lstat_indicates_attacker_planted``.
 
-    Two implementations of the security check would let the permission
-    and ownership logic drift between the restore hook and the cleanup
-    hook. The session cleanup module must import the same callable the
-    shared utils exposes so a future fix to the check lands on both
-    consumers from a single edit.
+    Two implementations of the lstat-based security check would let the
+    permission and ownership logic drift between the restore hook and
+    the cleanup hook. The session cleanup module must import the same
+    callable the shared utils exposes so a future fix to the check in
+    ``_gh_pr_author_swap_utils.py`` lands on both consumers from a
+    single edit.
     """
     assert (
-        hook_module._state_file_is_attacker_planted
-        is swap_utils_module._state_file_is_attacker_planted
+        hook_module._lstat_indicates_attacker_planted
+        is swap_utils_module._lstat_indicates_attacker_planted
     )
 
 

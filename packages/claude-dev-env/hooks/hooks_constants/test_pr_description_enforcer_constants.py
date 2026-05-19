@@ -6,6 +6,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 _HOOKS_ROOT = Path(__file__).resolve().parent.parent
 if str(_HOOKS_ROOT) not in sys.path:
     sys.path.insert(0, str(_HOOKS_ROOT))
@@ -80,3 +82,48 @@ def test_link_text_pattern_captures_anchor_text() -> None:
 def test_whitespace_run_pattern_collapses_multiple_spaces() -> None:
     collapsed_text = constants_module.WHITESPACE_RUN_PATTERN.sub(" ", "a   b\t\tc\n\nd")
     assert collapsed_text == "a b c d"
+
+
+def test_all_heavy_detection_headers_unions_opening_and_testing() -> None:
+    assert constants_module.ALL_HEAVY_DETECTION_HEADERS == (
+        constants_module.ALL_HEAVY_OPENING_HEADERS
+        | constants_module.ALL_HEAVY_TESTING_HEADERS
+    )
+
+
+def test_heavy_detection_header_count_minimum_is_positive_integer() -> None:
+    assert isinstance(constants_module.HEAVY_DETECTION_HEADER_COUNT_MIN, int)
+    assert constants_module.HEAVY_DETECTION_HEADER_COUNT_MIN >= 1
+
+
+def test_atomic_write_temp_suffix_starts_with_dot() -> None:
+    assert constants_module.ATOMIC_WRITE_TEMP_SUFFIX.startswith(".")
+    assert len(constants_module.ATOMIC_WRITE_TEMP_SUFFIX) >= 2
+
+
+def test_self_closing_reference_message_prefix_and_suffix_compose_full_message() -> None:
+    pr_number = 42
+    composed_message = (
+        f"{constants_module.SELF_CLOSING_REFERENCE_MESSAGE_PREFIX}"
+        f"{pr_number}"
+        f"{constants_module.SELF_CLOSING_REFERENCE_MESSAGE_SUFFIX}"
+    )
+    assert "#42" in composed_message
+    assert "Fixes/Closes/Resolves" in composed_message
+    assert "self-reference" in composed_message
+
+
+def test_readability_flesch_loosen_factor_is_below_one() -> None:
+    assert constants_module.READABILITY_FLESCH_LOOSEN_FACTOR == 0.9
+    assert 0.0 < constants_module.READABILITY_FLESCH_LOOSEN_FACTOR < 1.0
+
+
+def test_readability_sentence_words_loosen_factor_is_above_one() -> None:
+    assert constants_module.READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR == 10 / 9
+    assert constants_module.READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR > 1.0
+
+
+def test_loosen_factors_are_inverse_paired() -> None:
+    flesch_factor = constants_module.READABILITY_FLESCH_LOOSEN_FACTOR
+    sentence_factor = constants_module.READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR
+    assert flesch_factor * sentence_factor == pytest.approx(1.0)

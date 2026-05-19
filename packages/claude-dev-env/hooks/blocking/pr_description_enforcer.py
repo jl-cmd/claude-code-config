@@ -1,8 +1,10 @@
 import json
+import math
 import os
 import re
 import sys
 from pathlib import Path
+from typing import TextIO
 
 import shlex
 
@@ -26,15 +28,40 @@ from blocking._gh_body_arg_utils import (  # noqa: E402
 
 
 from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
+    ALL_HEAVY_DETECTION_HEADERS,
+    ALL_HEAVY_OPENING_HEADERS,
+    ALL_HEAVY_TESTING_HEADERS,
+    ATOMIC_WRITE_TEMP_SUFFIX,
     BLOCKQUOTE_MARKER_PATTERN,
     BOLD_PAIR_PATTERN,
     BULLET_MARKER_PATTERN,
+    CEREMONY_HEADER_PATTERN,
+    DEFAULT_READABILITY_THRESHOLDS,
     FENCED_CODE_BLOCK_PATTERN,
+    GH_PR_COMMAND_MIN_TOKEN_COUNT,
     HEADING_LINE_PATTERN,
+    HEAVY_DETECTION_HEADER_COUNT_MIN,
+    HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION,
     INLINE_CODE_PATTERN,
     LINK_TEXT_PATTERN,
     MINIMUM_SUBSTANTIVE_PROSE_CHARS,
     PR_GUIDE_PATH,
+    READABILITY_AVG_SENTENCE_WORDS_CEILING,
+    READABILITY_ENABLED_STATE_FILE,
+    READABILITY_FLESCH_LOOSEN_FACTOR,
+    READABILITY_LOOSEN_CAP,
+    READABILITY_MAX_SENTENCE_WORDS_CEILING,
+    READABILITY_MIN_FLESCH_FLOOR,
+    READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR,
+    READABILITY_STATE_FILE,
+    READABILITY_STRIKE_THRESHOLD,
+    READABILITY_THRESHOLD_OVERRIDE_FILE,
+    ReadabilityThresholds,
+    SELF_CLOSING_REFERENCE_MESSAGE_PREFIX,
+    SELF_CLOSING_REFERENCE_MESSAGE_SUFFIX,
+    SELF_REFERENCE_PATTERN_TEMPLATE,
+    THIS_PR_OPENING_PATTERN,
+    TRIVIAL_BODY_CHAR_THRESHOLD,
     WHITESPACE_RUN_PATTERN,
 )
 
@@ -296,16 +323,379 @@ def _count_substantive_prose_chars(body: str) -> int:
     return len(body_collapsed)
 
 
-def validate_pr_body(body: str) -> list[str]:
-    """Audit a PR body for substantive-prose and vague-language violations.
+def _iter_section_headers(body: str) -> list[str]:
+    """Return the list of `## Header` lines in the body, preserving canonical form."""
+    all_headers: list[str] = []
+    for each_match in HEADING_LINE_PATTERN.finditer(body):
+        header_text = each_match.group(0).strip()
+        all_headers.append(header_text)
+    return all_headers
+
+
+def _compute_pr_body_shape(body: str) -> str:
+    """Classify a PR body as `trivial`, `standard`, or `heavy` from content alone."""
+    body_length = len(body)
+    all_headers = _iter_section_headers(body)
+    header_count = len(all_headers)
+
+    if body_length < TRIVIAL_BODY_CHAR_THRESHOLD and header_count == 0:
+        return "trivial"
+
+    if body_length >= HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION:
+        matching_heavy_headers = sum(
+            1 for each_header in all_headers
+            if any(each_header.lower().startswith(known.lower()) for known in ALL_HEAVY_DETECTION_HEADERS)
+        )
+        if matching_heavy_headers >= HEAVY_DETECTION_HEADER_COUNT_MIN:
+            return "heavy"
+
+    return "standard"
+
+
+def _body_contains_any_header(body: str, all_candidate_headers: frozenset[str]) -> bool:
+    body_headers_lower = {each_header.lower() for each_header in _iter_section_headers(body)}
+    for each_candidate in all_candidate_headers:
+        candidate_lower = each_candidate.lower()
+        for each_present in body_headers_lower:
+            if each_present.startswith(candidate_lower):
+                return True
+    return False
+
+
+def _first_non_empty_line(body: str) -> str:
+    for each_line in body.splitlines():
+        if each_line.strip():
+            return each_line
+    return ""
+
+
+def _matches_self_closing_reference(body: str, pr_number: int) -> bool:
+    pattern_source = SELF_REFERENCE_PATTERN_TEMPLATE.format(pr_number=pr_number)
+    compiled_pattern = re.compile(pattern_source)
+    return compiled_pattern.search(body) is not None
+
+
+def _strip_leading_hash_lines(body: str) -> str:
+    body_lines = body.splitlines()
+    skip_index = 0
+    while skip_index < len(body_lines):
+        each_line = body_lines[skip_index]
+        if each_line.strip().startswith("#"):
+            skip_index += 1
+            continue
+        if not each_line.strip():
+            skip_index += 1
+            continue
+        break
+    return "\n".join(body_lines[skip_index:])
+
+
+def _opens_with_this_pr_phrase(body: str) -> bool:
+    return THIS_PR_OPENING_PATTERN.search(body) is not None
+
+
+def _atomic_write_json(target_path: Path, all_payload_fields: dict[str, object]) -> None:
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = target_path.with_suffix(target_path.suffix + ATOMIC_WRITE_TEMP_SUFFIX)
+    with open(temporary_path, "w", encoding=file_encoding_utf8) as write_handle:
+        json.dump(all_payload_fields, write_handle)
+    os.replace(temporary_path, target_path)
+
+
+def _read_json_or_default(target_path: Path, all_default_payload_fields: dict[str, object]) -> dict[str, object]:
+    if not target_path.exists():
+        return dict(all_default_payload_fields)
+    try:
+        with open(target_path, "r", encoding=file_encoding_utf8) as read_handle:
+            loaded_payload = json.load(read_handle)
+    except (FileNotFoundError, PermissionError, OSError, json.JSONDecodeError):
+        return dict(all_default_payload_fields)
+    if not isinstance(loaded_payload, dict):
+        return dict(all_default_payload_fields)
+    return loaded_payload
+
+
+def _read_strike_count() -> int:
+    payload = _read_json_or_default(READABILITY_STATE_FILE, {"strikes": 0})
+    raw_count = payload.get("strikes", 0)
+    if isinstance(raw_count, int):
+        return raw_count
+    return 0
+
+
+def _increment_strike_count() -> int:
+    payload = _read_json_or_default(READABILITY_STATE_FILE, {"strikes": 0})
+    raw_count = payload.get("strikes", 0)
+    new_count = (raw_count if isinstance(raw_count, int) else 0) + 1
+    _atomic_write_json(READABILITY_STATE_FILE, {"strikes": new_count})
+    return new_count
+
+
+def _reset_strike_count() -> None:
+    _atomic_write_json(READABILITY_STATE_FILE, {"strikes": 0})
+
+
+def _load_readability_thresholds() -> ReadabilityThresholds:
+    payload = _read_json_or_default(READABILITY_THRESHOLD_OVERRIDE_FILE, {})
+    flesch_min_value = payload.get("flesch_min", DEFAULT_READABILITY_THRESHOLDS.flesch_min)
+    max_sentence_value = payload.get(
+        "max_sentence_words", DEFAULT_READABILITY_THRESHOLDS.max_sentence_words
+    )
+    avg_sentence_value = payload.get(
+        "avg_sentence_words", DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
+    )
+    resolved_flesch = flesch_min_value if isinstance(flesch_min_value, int) else DEFAULT_READABILITY_THRESHOLDS.flesch_min
+    resolved_max = max_sentence_value if isinstance(max_sentence_value, int) else DEFAULT_READABILITY_THRESHOLDS.max_sentence_words
+    resolved_avg = avg_sentence_value if isinstance(avg_sentence_value, int) else DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
+    return ReadabilityThresholds(
+        flesch_min=resolved_flesch,
+        max_sentence_words=resolved_max,
+        avg_sentence_words=resolved_avg,
+    )
+
+
+def _read_loosens_used() -> int:
+    payload = _read_json_or_default(READABILITY_THRESHOLD_OVERRIDE_FILE, {})
+    raw_count = payload.get("loosens_used", 0)
+    if isinstance(raw_count, int):
+        return raw_count
+    return 0
+
+
+def _is_readability_enabled() -> bool:
+    payload = _read_json_or_default(READABILITY_ENABLED_STATE_FILE, {"enabled": True})
+    enabled_value = payload.get("enabled", True)
+    if isinstance(enabled_value, bool):
+        return enabled_value
+    return True
+
+
+def _set_readability_enabled(enabled: bool) -> None:
+    _atomic_write_json(READABILITY_ENABLED_STATE_FILE, {"enabled": enabled})
+
+
+_vowel_set: frozenset[str] = frozenset("aeiouy")
+
+
+def _count_syllables_in_word(word: str) -> int:
+    cleaned_word = "".join(each_character for each_character in word.lower() if each_character.isalpha())
+    if not cleaned_word:
+        return 0
+    syllable_count = 0
+    is_previous_character_vowel = False
+    for each_character in cleaned_word:
+        is_vowel = each_character in _vowel_set
+        if is_vowel and not is_previous_character_vowel:
+            syllable_count += 1
+        is_previous_character_vowel = is_vowel
+    if cleaned_word.endswith("e") and syllable_count > 1:
+        syllable_count -= 1
+    return max(syllable_count, 1)
+
+
+_sentence_split_pattern: re.Pattern[str] = re.compile(r"[.!?]+\s+")
+
+
+def _strip_markdown_ceremony_for_metrics(body: str) -> str:
+    body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub("", body)
+    body_without_inline_code = INLINE_CODE_PATTERN.sub("", body_without_fences)
+    body_without_blockquotes = BLOCKQUOTE_MARKER_PATTERN.sub("", body_without_inline_code)
+    body_without_headings = HEADING_LINE_PATTERN.sub("", body_without_blockquotes)
+    body_without_bullets = BULLET_MARKER_PATTERN.sub("", body_without_headings)
+    body_without_bold = BOLD_PAIR_PATTERN.sub(r"\1", body_without_bullets)
+    body_without_emphasis = body_without_bold.replace("*", "")
+    body_without_links = LINK_TEXT_PATTERN.sub(r"\1", body_without_emphasis)
+    return body_without_links
+
+
+def _split_sentences(text: str) -> list[str]:
+    cleaned_text = text.strip()
+    if not cleaned_text:
+        return []
+    raw_pieces = _sentence_split_pattern.split(cleaned_text)
+    all_sentences = [each_piece.strip() for each_piece in raw_pieces if each_piece.strip()]
+    return all_sentences
+
+
+def _compute_flesch_reading_ease(text: str) -> float:
+    all_sentences = _split_sentences(text)
+    if not all_sentences:
+        return 100.0
+    all_words: list[str] = []
+    total_syllables = 0
+    for each_sentence in all_sentences:
+        sentence_words = [each_token for each_token in re.split(r"\s+", each_sentence) if each_token]
+        all_words.extend(sentence_words)
+        for each_word in sentence_words:
+            total_syllables += _count_syllables_in_word(each_word)
+    total_words = len(all_words)
+    if total_words == 0:
+        return 100.0
+    total_sentences = len(all_sentences)
+    return 206.835 - 1.015 * (total_words / total_sentences) - 84.6 * (total_syllables / total_words)
+
+
+def _extract_readability_target_text(body: str) -> str:
+    intro_paragraph = ""
+    body_after_strip = body.lstrip()
+    blank_line_position = body_after_strip.find("\n\n")
+    header_position_match = HEADING_LINE_PATTERN.search(body_after_strip)
+    header_position = header_position_match.start() if header_position_match else -1
+
+    if blank_line_position == -1 and header_position == -1:
+        intro_paragraph = body_after_strip
+    elif blank_line_position == -1:
+        intro_paragraph = body_after_strip[:header_position]
+    elif header_position == -1:
+        intro_paragraph = body_after_strip[:blank_line_position]
+    else:
+        first_boundary = min(blank_line_position, header_position)
+        intro_paragraph = body_after_strip[:first_boundary]
+
+    first_body_section = ""
+    if header_position_match is not None:
+        section_start = header_position_match.end()
+        remainder = body_after_strip[section_start:]
+        next_header_match = HEADING_LINE_PATTERN.search(remainder)
+        if next_header_match is not None:
+            first_body_section = remainder[: next_header_match.start()]
+        else:
+            first_body_section = remainder
+
+    combined_text = f"{intro_paragraph}\n\n{first_body_section}"
+    return _strip_markdown_ceremony_for_metrics(combined_text)
+
+
+def _evaluate_readability_metrics(
+    target_text: str,
+    thresholds: ReadabilityThresholds,
+) -> list[str]:
+    all_metric_violations: list[str] = []
+    all_sentences = _split_sentences(target_text)
+    if not all_sentences:
+        return all_metric_violations
+    word_counts_per_sentence: list[int] = []
+    for each_sentence in all_sentences:
+        sentence_words = [each_token for each_token in re.split(r"\s+", each_sentence) if each_token]
+        word_counts_per_sentence.append(len(sentence_words))
+    max_sentence_words = max(word_counts_per_sentence) if word_counts_per_sentence else 0
+    average_sentence_words = (
+        sum(word_counts_per_sentence) / len(word_counts_per_sentence)
+        if word_counts_per_sentence
+        else 0.0
+    )
+    if max_sentence_words > thresholds.max_sentence_words:
+        all_metric_violations.append(
+            f"Readability: longest sentence is {max_sentence_words} words "
+            f"(threshold {thresholds.max_sentence_words}); break long sentences"
+        )
+    if average_sentence_words > thresholds.avg_sentence_words:
+        all_metric_violations.append(
+            f"Readability: average sentence is {average_sentence_words:.1f} words "
+            f"(threshold {thresholds.avg_sentence_words}); shorten intro sentences"
+        )
+    flesch_score = _compute_flesch_reading_ease(target_text)
+    if flesch_score < thresholds.flesch_min:
+        all_metric_violations.append(
+            f"Readability: Flesch Reading Ease is {flesch_score:.1f} "
+            f"(minimum {thresholds.flesch_min}); use shorter words and sentences"
+        )
+    return all_metric_violations
+
+
+def _build_readability_escape_hatch_message() -> str:
+    return (
+        "Readability strike threshold reached. Pick one: "
+        "(1) python <enforcer-path> --readability-loosen to widen thresholds 10%, "
+        "(2) python <enforcer-path> --readability-disable to skip the readability check, "
+        "(3) python <enforcer-path> --readability-reset to zero the strike counter, "
+        "(4) reply with the body plus the intended message to report a false positive."
+    )
+
+
+def _apply_readability_loosen() -> str:
+    current_thresholds = _load_readability_thresholds()
+    loosens_used = _read_loosens_used()
+
+    if loosens_used >= READABILITY_LOOSEN_CAP:
+        return "cap_reached"
+
+    if current_thresholds.flesch_min <= READABILITY_MIN_FLESCH_FLOOR:
+        return "floor_reached"
+
+    if current_thresholds.max_sentence_words >= READABILITY_MAX_SENTENCE_WORDS_CEILING:
+        return "ceiling_reached"
+
+    if current_thresholds.avg_sentence_words >= READABILITY_AVG_SENTENCE_WORDS_CEILING:
+        return "ceiling_reached"
+
+    next_flesch = max(
+        READABILITY_MIN_FLESCH_FLOOR,
+        math.floor(current_thresholds.flesch_min * READABILITY_FLESCH_LOOSEN_FACTOR),
+    )
+    next_max_sentence = min(
+        READABILITY_MAX_SENTENCE_WORDS_CEILING,
+        math.ceil(current_thresholds.max_sentence_words * READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR),
+    )
+    next_avg_sentence = min(
+        READABILITY_AVG_SENTENCE_WORDS_CEILING,
+        math.ceil(current_thresholds.avg_sentence_words * READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR),
+    )
+
+    next_payload: dict[str, object] = {
+        "flesch_min": next_flesch,
+        "max_sentence_words": next_max_sentence,
+        "avg_sentence_words": next_avg_sentence,
+        "loosens_used": loosens_used + 1,
+    }
+    _atomic_write_json(READABILITY_THRESHOLD_OVERRIDE_FILE, next_payload)
+    return "ok"
+
+
+def _apply_readability_reset() -> None:
+    _reset_strike_count()
+    _atomic_write_json(READABILITY_THRESHOLD_OVERRIDE_FILE, {"loosens_used": 0})
+
+
+def _extract_pr_number_from_command(command: str) -> int | None:
+    logical_line = get_logical_first_line(command)
+    if not logical_line:
+        return None
+    try:
+        all_tokens = shlex.split(logical_line, posix=False)
+    except ValueError:
+        return None
+    if len(all_tokens) < GH_PR_COMMAND_MIN_TOKEN_COUNT:
+        return None
+    if all_tokens[0] != "gh" or all_tokens[1] != "pr":
+        return None
+    subcommand_token = all_tokens[2]
+    if subcommand_token not in {"edit", "comment"}:
+        return None
+    for each_token in all_tokens[3:]:
+        if _is_flag_shaped_token(each_token):
+            return None
+        stripped_candidate = _strip_surrounding_quotes(each_token)
+        if _is_unresolvable_shell_value(stripped_candidate):
+            return None
+        try:
+            return int(stripped_candidate)
+        except ValueError:
+            return None
+    return None
+
+
+def validate_pr_body(body: str, pr_number: int | None = None) -> list[str]:
+    """Audit a PR body against the Anthropic claude-code style rules.
 
     Args:
         body: The PR body markdown text to audit.
+        pr_number: The PR number when known (gh pr edit / gh pr comment); None at gh pr create time.
 
     Returns:
         A list of human-readable violation messages. Empty when the body passes.
     """
-    violations = []
+    violations: list[str] = []
 
     substantive_chars = _count_substantive_prose_chars(body)
     if substantive_chars < MINIMUM_SUBSTANTIVE_PROSE_CHARS:
@@ -314,14 +704,115 @@ def validate_pr_body(body: str) -> list[str]:
             "substantive explanation, not only headers and bullets"
         )
 
+    body_shape = _compute_pr_body_shape(body)
+
+    if body_shape == "heavy":
+        if not _body_contains_any_header(body, ALL_HEAVY_OPENING_HEADERS):
+            violations.append(
+                f"Heavy PR body missing required opening header -- add one of "
+                f"{sorted(ALL_HEAVY_OPENING_HEADERS)}"
+            )
+        if not _body_contains_any_header(body, ALL_HEAVY_TESTING_HEADERS):
+            violations.append(
+                f"Heavy PR body missing required testing-category header -- add one of "
+                f"{sorted(ALL_HEAVY_TESTING_HEADERS)}"
+            )
+
+    first_line_text = _first_non_empty_line(body)
+    opens_with_ceremony_header = bool(CEREMONY_HEADER_PATTERN.match(first_line_text))
+    body_is_trivial_sized = substantive_chars < TRIVIAL_BODY_CHAR_THRESHOLD
+    if opens_with_ceremony_header and body_is_trivial_sized:
+        violations.append(
+            "Trivial PR body opens with a ceremony header -- drop the header "
+            "and write the one-sentence body directly"
+        )
+
+    if pr_number is not None and _matches_self_closing_reference(body, pr_number):
+        violations.append(
+            f"{SELF_CLOSING_REFERENCE_MESSAGE_PREFIX}{pr_number}{SELF_CLOSING_REFERENCE_MESSAGE_SUFFIX}"
+        )
+
+    if _opens_with_this_pr_phrase(body):
+        violations.append(
+            "PR body opens with 'This PR ...' -- open with an imperative verb "
+            "(Adds, Fixes, Updates, Removes, Tightens, Ports)"
+        )
+
     vague_matches = VAGUE_LANGUAGE_PATTERN.findall(body)
     if vague_matches:
-        violations.append(f"Vague language detected: {', '.join(vague_matches)} -- be specific about what changed and why")
+        violations.append(
+            f"Vague language detected: {', '.join(vague_matches)} -- "
+            "be specific about what changed and why"
+        )
+
+    if _is_readability_enabled():
+        thresholds = _load_readability_thresholds()
+        target_text = _extract_readability_target_text(body)
+        metric_violations = _evaluate_readability_metrics(target_text, thresholds)
+        if metric_violations:
+            post_increment_count = _increment_strike_count()
+            if post_increment_count >= READABILITY_STRIKE_THRESHOLD:
+                violations.append(_build_readability_escape_hatch_message())
+            else:
+                violations.extend(metric_violations)
 
     return violations
 
 
+_all_cli_flag_tokens: frozenset[str] = frozenset(
+    {
+        "--readability-loosen",
+        "--readability-reset",
+        "--readability-disable",
+        "--readability-enable",
+    }
+)
+
+
+def _dispatch_cli_flag(
+    flag_token: str,
+    output_stream: TextIO,
+    error_stream: TextIO,
+) -> None:
+    """Handle a single readability-management CLI flag and exit the process."""
+    if flag_token == "--readability-loosen":
+        outcome = _apply_readability_loosen()
+        if outcome == "cap_reached":
+            error_stream.write(
+                "loosen cap reached; use --readability-disable or --readability-reset\n"
+            )
+            sys.exit(1)
+        if outcome in {"floor_reached", "ceiling_reached"}:
+            error_stream.write(
+                "thresholds already at floor/ceiling; use --readability-disable or --readability-reset\n"
+            )
+            sys.exit(1)
+        output_stream.write("readability thresholds loosened 10%\n")
+        sys.exit(0)
+    if flag_token == "--readability-reset":
+        _apply_readability_reset()
+        output_stream.write("readability strike counter and override thresholds reset\n")
+        sys.exit(0)
+    if flag_token == "--readability-disable":
+        _set_readability_enabled(False)
+        output_stream.write("readability check disabled\n")
+        sys.exit(0)
+    if flag_token == "--readability-enable":
+        _set_readability_enabled(True)
+        output_stream.write("readability check enabled\n")
+        sys.exit(0)
+
+
 def main() -> None:
+    for each_argv_token in sys.argv[1:]:
+        if each_argv_token in _all_cli_flag_tokens:
+            _dispatch_cli_flag(
+                each_argv_token,
+                output_stream=sys.stdout,
+                error_stream=sys.stderr,
+            )
+            return
+
     try:
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError:
@@ -337,8 +828,14 @@ def main() -> None:
 
     is_pr_create = "gh pr create" in command and ("--body" in command or "-b " in command)
     is_pr_edit = "gh pr edit" in command and "--body" in command
+    is_pr_comment = "gh pr comment" in command and (
+        "--body" in command
+        or "-b " in command
+        or "--body-file" in command
+        or "-F " in command
+    )
 
-    if not (is_pr_create or is_pr_edit):
+    if not (is_pr_create or is_pr_edit or is_pr_comment):
         sys.exit(0)
 
     body = extract_body_from_command(command)
@@ -349,7 +846,11 @@ def main() -> None:
     if not body:
         sys.exit(0)
 
-    violations = validate_pr_body(body)
+    extracted_pr_number = None
+    if is_pr_edit or is_pr_comment:
+        extracted_pr_number = _extract_pr_number_from_command(command)
+
+    violations = validate_pr_body(body, pr_number=extracted_pr_number)
 
     if violations:
         violation_list = "; ".join(violations)

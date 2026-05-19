@@ -14,6 +14,14 @@ from typing import TextIO
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 _exempt_root_filenames = ("readme.md", "changelog.md")
+_claude_code_source_segment_indicators: tuple[str, ...] = (
+    "/packages/claude-dev-env/agents/",
+    "/packages/claude-dev-env/docs/",
+    "/packages/claude-dev-env/skills/",
+    "/packages/claude-dev-env/rules/",
+    "/packages/claude-dev-env/system-prompts/",
+    "/packages/claude-dev-env/commands/",
+)
 
 
 def _is_exempt_path(file_path: str) -> bool:
@@ -21,6 +29,10 @@ def _is_exempt_path(file_path: str) -> bool:
     lower_normalized = normalized.lower()
     if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
         return True
+    padded_for_segment_match = lower_normalized if lower_normalized.startswith("/") else "/" + lower_normalized
+    for each_indicator in _claude_code_source_segment_indicators:
+        if each_indicator in padded_for_segment_match:
+            return True
     basename = os.path.basename(normalized)
     if basename.lower() in _exempt_root_filenames:
         directory = os.path.dirname(normalized)

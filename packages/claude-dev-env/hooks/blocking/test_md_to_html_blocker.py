@@ -315,3 +315,95 @@ def test_blocks_md_with_curly_braces_in_path():
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_passes_claude_code_source_agents_dir():
+    """Agent SKILLs live at packages/claude-dev-env/agents/ and must be .md to load."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/agents/pr-description-writer.md",
+            "content": "---\nname: x\n---\n# Agent",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_code_source_docs_dir():
+    """Docs referenced from CLAUDE.md (CODE_RULES.md, guides) live at packages/claude-dev-env/docs/."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/docs/PR_DESCRIPTION_GUIDE.md",
+            "content": "# Guide",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_code_source_skills_dir():
+    """SKILL.md files live at packages/claude-dev-env/skills/."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/skills/my-skill/SKILL.md",
+            "content": "# SKILL",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_code_source_rules_dir():
+    """Rule .md files live at packages/claude-dev-env/rules/."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/rules/my-rule.md",
+            "content": "# Rule",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_code_source_windows_path():
+    """Windows-style backslash paths under packages/claude-dev-env/agents/ must also pass."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages\\claude-dev-env\\agents\\pr-description-writer.md",
+            "content": "---\nname: x\n---\n# Agent",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_code_source_absolute_path():
+    """Absolute path under packages/claude-dev-env/agents/ must pass on Windows-style drive letter."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "Y:\\repo\\packages\\claude-dev-env\\agents\\my-agent.md",
+            "content": "# Agent",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_blocks_md_under_packages_but_not_in_source_subdir():
+    """A .md file under packages/claude-dev-env/hooks/blocking/ is not an exempt source dir."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/hooks/blocking/notes.md",
+            "content": "# Notes",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"

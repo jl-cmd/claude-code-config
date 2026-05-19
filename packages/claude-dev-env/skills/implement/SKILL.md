@@ -29,10 +29,10 @@ Carry out the following prompt against the spec resolved below.
 
 ### How to write notes
 
-Run `scripts/append_note.py` to append each entry. The script creates `implementation-notes.html` with the four sections on first run, then inserts a new `<li>` under the requested section. HTML-escapes `--about` and `--note` automatically.
+Run `${CLAUDE_SKILL_DIR}/scripts/append_note.py` to append each entry. The script creates `implementation-notes.html` with the four sections on first run, then inserts a new `<li>` under the requested section. HTML-escapes `--about` and `--note` automatically. `${CLAUDE_SKILL_DIR}` is host-substituted by Claude Code at runtime so the bundled CLI is found regardless of the current working directory.
 
 ```
-python scripts/append_note.py \
+python "${CLAUDE_SKILL_DIR}/scripts/append_note.py" \
   --section decisions \
   --about "Storage location" \
   --note "Wrote notes next to the spec because the spec path was provided." \

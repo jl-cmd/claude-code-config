@@ -118,6 +118,31 @@ def test_should_raise_when_closing_ul_is_missing() -> None:
         append_note_module._insert_entry(truncated_section, "decisions", entry)
 
 
+def test_should_not_borrow_closing_ul_from_a_later_section() -> None:
+    malformed_first_with_intact_second = (
+        '<section id="decisions">\n'
+        '    <h2>Design decisions</h2>\n'
+        '    <ul>\n'
+        '  </section>\n'
+        '  <section id="deviations">\n'
+        '    <h2>Deviations</h2>\n'
+        '    <ul></ul>\n'
+        '  </section>\n'
+    )
+    entry = append_note_module._render_entry("x", "y")
+
+    with pytest.raises(RuntimeError, match="missing its closing </ul>"):
+        append_note_module._insert_entry(malformed_first_with_intact_second, "decisions", entry)
+
+
+def test_should_raise_when_closing_section_is_missing() -> None:
+    section_without_close = '<section id="decisions">\n    <h2>Design decisions</h2>\n    <ul></ul>\n'
+    entry = append_note_module._render_entry("x", "y")
+
+    with pytest.raises(RuntimeError, match="missing its closing </section>"):
+        append_note_module._insert_entry(section_without_close, "decisions", entry)
+
+
 def test_should_append_through_cli_against_real_file(tmp_path: Path) -> None:
     target = tmp_path / "notes.html"
     script_path = _SCRIPTS_DIRECTORY / "append_note.py"

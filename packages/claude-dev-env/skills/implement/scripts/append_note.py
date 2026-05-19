@@ -54,6 +54,7 @@ def _render_entry(about: str, note: str) -> str:
 
 def _insert_entry(document: str, slug: str, entry: str) -> str:
     open_marker = f'<section id="{slug}">'
+    section_close_marker = "</section>"
     close_marker = "</ul>"
     section_start = document.find(open_marker)
     if section_start == -1:
@@ -62,7 +63,13 @@ def _insert_entry(document: str, slug: str, entry: str) -> str:
             f"edited by hand. Restore the four <section id=...> blocks or "
             f"delete the file so it can be regenerated."
         )
-    close_at = document.find(close_marker, section_start)
+    section_end = document.find(section_close_marker, section_start)
+    if section_end == -1:
+        raise RuntimeError(
+            f"section '{slug}' is missing its closing </section> — the file "
+            f"may have been edited by hand."
+        )
+    close_at = document.find(close_marker, section_start, section_end)
     if close_at == -1:
         raise RuntimeError(
             f"section '{slug}' is missing its closing </ul> — the file may "

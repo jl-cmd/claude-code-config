@@ -16,13 +16,13 @@ import html
 import sys
 from pathlib import Path
 
-from config.notes_constants import ALL_SECTIONS_BY_SLUG, DEFAULT_NOTES_FILENAME
+from config.notes_constants import DEFAULT_NOTES_FILENAME, HEADING_BY_SLUG
 
 
 def _build_skeleton() -> str:
     section_blocks = "\n".join(
-        f'  <section id="{slug}">\n    <h2>{heading}</h2>\n    <ul></ul>\n  </section>'
-        for slug, heading in ALL_SECTIONS_BY_SLUG.items()
+        f'  <section id="{each_slug}">\n    <h2>{each_heading}</h2>\n    <ul></ul>\n  </section>'
+        for each_slug, each_heading in HEADING_BY_SLUG.items()
     )
     return (
         "<!doctype html>\n"
@@ -49,7 +49,7 @@ def _ensure_file(target: Path) -> str:
 
 
 def _render_entry(about: str, note: str) -> str:
-    return f"      <li><strong>{html.escape(about)}:</strong> {html.escape(note)}</li>"
+    return f"<li><strong>{html.escape(about)}:</strong> {html.escape(note)}</li>"
 
 
 def _insert_entry(document: str, slug: str, entry: str) -> str:
@@ -62,23 +62,27 @@ def _insert_entry(document: str, slug: str, entry: str) -> str:
             f"edited by hand. Restore the four <section id=...> blocks or "
             f"delete the file so it can be regenerated."
         )
-    insert_at = document.find(close_marker, section_start)
-    if insert_at == -1:
+    close_at = document.find(close_marker, section_start)
+    if close_at == -1:
         raise RuntimeError(
             f"section '{slug}' is missing its closing </ul> — the file may "
             f"have been edited by hand."
         )
-    return document[:insert_at] + entry + "\n    " + document[insert_at:]
+    boundary = close_at
+    while boundary > 0 and document[boundary - 1] in (" ", "\n"):
+        boundary -= 1
+    new_line = f"\n      {entry}"
+    return document[:boundary] + new_line + "\n    " + document[close_at:]
 
 
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Append an entry to implementation-notes.html.",
+        description=f"Append an entry to {DEFAULT_NOTES_FILENAME}.",
     )
     parser.add_argument(
         "--section",
         required=True,
-        choices=sorted(ALL_SECTIONS_BY_SLUG.keys()),
+        choices=sorted(HEADING_BY_SLUG.keys()),
         help="Which section to append under.",
     )
     parser.add_argument(

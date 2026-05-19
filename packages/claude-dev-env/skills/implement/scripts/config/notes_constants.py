@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-ALL_SECTIONS_BY_SLUG: dict[str, str] = {
+HEADING_BY_SLUG: dict[str, str] = {
     "decisions": "Design decisions",
     "deviations": "Deviations",
     "tradeoffs": "Tradeoffs",

@@ -22,8 +22,12 @@ locate ``config`` packages from a UNC ``sys.path`` entry. The Y:-form entry
 gets pushed to a later index by subsequent inserts, making
 ``from config.<submodule> import ...`` fail.
 
-This autouse fixture restores both invariants once at session start,
-before any test module loads:
+This autouse fixture restores both invariants once per pytest session,
+immediately before the first test executes (after collection and module
+imports have completed; session-scoped fixtures run after import, not
+before, so test-module-level ``import`` of pr-converge scripts is
+isolated by each module's own ``_load_module()`` helper rather than by
+this fixture):
   1. evict every ``config`` and ``config.*`` entry from ``sys.modules``
   2. prepend the drive-letter (``.absolute()``) form of the pr-converge
      directory to ``sys.path`` so package resolution always has a

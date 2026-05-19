@@ -197,3 +197,110 @@ def test_private_helpers_recognize_dirty_new_header_body() -> None:
 def test_private_helpers_reject_non_bugteam_body() -> None:
     assert check_convergence._is_bugteam_review(NON_BUGTEAM_BODY) is False
     assert check_convergence._is_clean_bugteam_review(NON_BUGTEAM_BODY) is False
+
+
+CLEAN_LEGACY_BUGTEAM_BODY = (
+    "## /bugteam loop 1 audit: 0 P0 / 0 P1 / 0 P2 → clean"
+)
+DIRTY_LEGACY_BUGTEAM_BODY = (
+    "## /bugteam loop 1 audit: 1 P0 / 0 P1 / 0 P2 → dirty"
+)
+
+
+def test_private_helpers_recognize_clean_legacy_header_body() -> None:
+    assert check_convergence._is_bugteam_review(CLEAN_LEGACY_BUGTEAM_BODY) is True
+    assert check_convergence._is_clean_bugteam_review(CLEAN_LEGACY_BUGTEAM_BODY) is True
+
+
+def test_private_helpers_recognize_dirty_legacy_header_body() -> None:
+    assert check_convergence._is_bugteam_review(DIRTY_LEGACY_BUGTEAM_BODY) is True
+    assert check_convergence._is_clean_bugteam_review(DIRTY_LEGACY_BUGTEAM_BODY) is False
+
+
+def should_bypass_bugbot_gates_when_bugbot_down_is_true(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    all_invocation_names: list[str] = []
+
+    def stub_get_pr_head_sha(*, owner: str, repo: str, number: int) -> str:
+        all_invocation_names.append("_get_pr_head_sha")
+        return CURRENT_HEAD_SHA
+
+    def stub_check_bugbot_should_not_be_called(
+        *, owner: str, repo: str, sha: str
+    ) -> tuple[bool, str]:
+        all_invocation_names.append("_check_bugbot")
+        raise AssertionError("_check_bugbot must not be invoked when bugbot_down=True")
+
+    def stub_check_bugbot_not_dirty_should_not_be_called(
+        *, owner: str, repo: str, number: int, head_sha: str
+    ) -> tuple[bool, str]:
+        all_invocation_names.append("_check_bugbot_not_dirty")
+        raise AssertionError(
+            "_check_bugbot_not_dirty must not be invoked when bugbot_down=True"
+        )
+
+    def stub_check_bugteam_clean(
+        *, owner: str, repo: str, number: int, head_sha: str
+    ) -> tuple[bool, str]:
+        all_invocation_names.append("_check_bugteam_clean")
+        return True, "stub passing"
+
+    def stub_check_bot_review(
+        *,
+        owner: str,
+        repo: str,
+        number: int,
+        head_sha: str,
+        login_substring: str,
+        clean_states: tuple[str, ...],
+        dirty_states: tuple[str, ...],
+        label: str,
+    ) -> tuple[bool, str]:
+        all_invocation_names.append("_check_bot_review")
+        return True, "stub passing"
+
+    def stub_count_unresolved_bot_threads(
+        *, owner: str, repo: str, number: int
+    ) -> tuple[bool, str]:
+        all_invocation_names.append("_count_unresolved_bot_threads")
+        return True, "stub passing"
+
+    def stub_get_mergeable(
+        *, owner: str, repo: str, number: int
+    ) -> tuple[bool, str]:
+        all_invocation_names.append("_get_mergeable")
+        return True, "stub passing"
+
+    def stub_check_no_pending_reviews(
+        *, owner: str, repo: str, number: int
+    ) -> tuple[bool, str]:
+        all_invocation_names.append("_check_no_pending_reviews")
+        return True, "stub passing"
+
+    monkeypatch.setattr(check_convergence, "_get_pr_head_sha", stub_get_pr_head_sha)
+    monkeypatch.setattr(check_convergence, "_check_bugbot", stub_check_bugbot_should_not_be_called)
+    monkeypatch.setattr(
+        check_convergence,
+        "_check_bugbot_not_dirty",
+        stub_check_bugbot_not_dirty_should_not_be_called,
+    )
+    monkeypatch.setattr(check_convergence, "_check_bugteam_clean", stub_check_bugteam_clean)
+    monkeypatch.setattr(check_convergence, "_check_bot_review", stub_check_bot_review)
+    monkeypatch.setattr(
+        check_convergence, "_count_unresolved_bot_threads", stub_count_unresolved_bot_threads
+    )
+    monkeypatch.setattr(check_convergence, "_get_mergeable", stub_get_mergeable)
+    monkeypatch.setattr(
+        check_convergence, "_check_no_pending_reviews", stub_check_no_pending_reviews
+    )
+
+    exit_code = check_convergence.check_all(
+        owner="o", repo="r", number=1, bugbot_down=True
+    )
+    captured_stdout = capsys.readouterr().out
+
+    assert "_check_bugbot" not in all_invocation_names
+    assert "_check_bugbot_not_dirty" not in all_invocation_names
+    assert "bypassed (bugbot_down)" in captured_stdout
+    assert exit_code == 0

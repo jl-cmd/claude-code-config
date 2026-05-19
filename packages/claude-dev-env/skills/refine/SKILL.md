@@ -20,7 +20,7 @@ Walk a half-formed plan to a complete, audited implementation spec — research 
 - **Match before fresh.** If the fan-out surfaces existing plans on the same topic, ask the user which to refine or whether to start fresh. Skipping this step duplicates work the user already started.
 - **Standalone.** Do not invoke `/anthropic-plan` or `/prompt-generator`. The user picks the slash command for the moment; this skill does not chain.
 - **Conversation-context fallback needs confirmation.** When no draft and no topic argument are present, the active conversation is the source. Confirm the inferred topic with one AskUserQuestion before fan-out so the wrong topic does not drive twenty minutes of research.
-- **Audit cycle is mandatory.** After the plan is written, spawn `code-quality-agent` to audit it; spawn `clean-coder` to fix flagged findings; re-audit; loop. Skip only when the user explicitly opts out for the current run.
+- **Audit cycle is mandatory.** After the plan is written, spawn `general-purpose` with the plan-quality rubric to audit it; spawn `clean-coder` to fix flagged findings; re-audit; loop. Skip only when the user explicitly opts out for the current run. Do not use `code-quality-agent` — its rubric targets source code, not markdown plans.
 - **Verbatim notes instruction.** Every clean-coder iteration receives the exact `<notes_instruction>` block in §8 unchanged. The notes file is how the user reconstructs what the fixer did to the spec.
 - **`implementation-notes.html` is append-only across iterations.** The notes file lives at `Research/<topic>/<slug>-implementation-notes.html`. Each iteration appends one `<section>` block — never overwrites earlier iterations.
 - **Cap at 10 audit iterations.** If the plan still fails audit after 10 rounds, halt and surface open findings. Do not raise the cap without user direction.
@@ -145,11 +145,17 @@ Write the file via `mcp__obsidian__write_note` to the confirmed vault path. The 
 
 ### 7. Initial audit
 
-Spawn `code-quality-agent` (`subagent_type: code-quality-agent`, foreground) with:
+Spawn `general-purpose` (`subagent_type: general-purpose`, foreground) with:
 
 - The plan file path in the vault
-- A prompt instructing the agent to audit the plan against its standard rubric — applying its severity classification to plan content (clarity, completeness, internal consistency, ambiguous language, missing decisions, contradictions, and anything that would block a downstream implementer)
+- The plan-quality rubric — the agent audits markdown plan content (not source code) against these categories:
+  - **Clarity** — every step is uniquely interpretable; no vague verbs ("handle", "process", "manage") or undefined terms
+  - **Completeness** — Goal, Non-goals, Current state, Implementation, Decisions log, Risks, and Acceptance are all populated with concrete content (not placeholders)
+  - **Internal consistency** — no contradictions between sections; no references to files, agents, or commands that contradict another section
+  - **Ambiguity** — no parked open questions where a decision is required for implementation to begin
+  - **Implementer-readiness** — a downstream implementer can act on each step without back-and-forth (file paths named, agents named, change concrete)
 - A required return shape: structured findings as `severity (P0/P1/P2) | location | violation`, plus an explicit `CLEAN` verdict when no findings remain
+- An explicit instruction NOT to apply code-review rubrics (CODE_RULES categories A–K, API contracts, resource cleanup, etc.) — the audit target is a markdown plan, not source code
 
 If the verdict is `CLEAN`: skip step 8 and proceed to step 10.
 
@@ -165,7 +171,7 @@ For each iteration `N` from 1 to 10:
    - The path to `Research/<topic>/<slug>-implementation-notes.html`
    - The verbatim `<notes_instruction>` block below
 2. Clean-coder rewrites the plan in place in the vault (`mcp__obsidian__patch_note` or `mcp__obsidian__write_note`) addressing the findings, and appends one new `<section>` to the notes file with iteration number, timestamp, and the four bullet groups.
-3. Re-spawn `code-quality-agent` against the rewritten plan with the same audit prompt as step 7.
+3. Re-spawn `general-purpose` against the rewritten plan with the same audit prompt as step 7 (plan-quality rubric, not code rubric).
 4. If the verdict is `CLEAN`: exit the loop and proceed to step 10.
 5. If findings remain and `N < 10`: continue the loop with the new findings.
 6. If `N == 10` and findings remain: proceed to step 9.

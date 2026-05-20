@@ -90,7 +90,7 @@ def _isolate_pr_converge_sys_path_for_outside_collection() -> None:
 
 def _collector_path_is_outside_pr_converge(collector_path: Path) -> bool:
     try:
-        collector_path.relative_to(PR_CONVERGE_DIRECTORY)
+        collector_path.absolute().relative_to(PR_CONVERGE_DIRECTORY)
     except ValueError:
         return True
     return False

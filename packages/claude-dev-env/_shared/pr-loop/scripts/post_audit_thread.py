@@ -32,11 +32,7 @@ import urllib.request
 from pathlib import Path
 from typing import NoReturn
 
-sys.modules.pop("config", None)
-if str(Path(__file__).absolute().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).absolute().parent))
-
-from config.post_audit_thread_constants import (
+from pr_loop_shared_constants.post_audit_thread_constants import (
     ALL_GH_API_COMMAND_PARTS,
     ALL_GH_API_USER_COMMAND_PARTS,
     ALL_GH_AUTH_STATUS_COMMAND_PARTS,

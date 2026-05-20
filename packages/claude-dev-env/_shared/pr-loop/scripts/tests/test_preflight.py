@@ -31,7 +31,7 @@ def _load_preflight_module() -> ModuleType:
 
 preflight = _load_preflight_module()
 
-from config.preflight_constants import (  # noqa: E402
+from pr_loop_shared_constants.preflight_constants import (  # noqa: E402
     PYTEST_INI_FILENAME,
     PYTEST_NO_TESTS_COLLECTED_EXIT_CODE,
 )

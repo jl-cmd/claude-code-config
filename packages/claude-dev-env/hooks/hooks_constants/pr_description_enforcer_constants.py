@@ -43,7 +43,10 @@ SELF_CLOSING_REFERENCE_MESSAGE_SUFFIX: str = (
     " as a self-closing keyword (Fixes/Closes/Resolves) -- remove the self-reference"
 )
 
-SELF_REFERENCE_PATTERN_TEMPLATE: str = r"\b(?:Fixes|Closes|Resolves)\s+#{pr_number}\b"
+SELF_REFERENCE_PATTERN_TEMPLATE: str = (
+    r"\b(?:Close|Closes|Closed|Fix|Fixes|Fixed|Resolve|Resolves|Resolved)"
+    r"\s+#{pr_number}\b"
+)
 
 THIS_PR_OPENING_PATTERN: re.Pattern[str] = re.compile(
     r"^\s*(?:#[^\n]*\n\s*)*This PR\s+(?:adds|fixes|updates|does|is|was|will|removes|tightens|ports|refactors)\b",

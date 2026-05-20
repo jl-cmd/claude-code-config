@@ -148,6 +148,22 @@ def test_module_internal_header_constants_are_not_publicly_exported() -> None:
         )
 
 
+def test_self_reference_pattern_covers_all_nine_github_closing_keywords() -> None:
+    """GitHub recognizes nine closing keywords: close/closes/closed,
+    fix/fixes/fixed, resolve/resolves/resolved. The self-reference template
+    must enumerate all nine so no variant bypasses the self-closing block."""
+    pattern_source = constants_module.SELF_REFERENCE_PATTERN_TEMPLATE
+    for each_keyword in (
+        "Close", "Closes", "Closed",
+        "Fix", "Fixes", "Fixed",
+        "Resolve", "Resolves", "Resolved",
+    ):
+        assert each_keyword in pattern_source, (
+            f"SELF_REFERENCE_PATTERN_TEMPLATE must enumerate `{each_keyword}` "
+            f"to catch every GitHub closing-keyword variant; got: {pattern_source!r}"
+        )
+
+
 def test_body_shape_string_literals_are_named_constants() -> None:
     """The three PR-body shape names (`trivial`, `standard`, `heavy`) are used
     by both `_compute_pr_body_shape` (return values) and `validate_pr_body`

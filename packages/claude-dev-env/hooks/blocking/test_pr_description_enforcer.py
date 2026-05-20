@@ -640,6 +640,49 @@ def test_validate_blocks_lowercase_self_closing_fixes_reference() -> None:
     ), f"lowercase fixes self-reference must trip the block; got {violations!r}"
 
 
+def test_validate_blocks_self_closing_fix_singular_reference() -> None:
+    """GitHub recognizes nine closing keywords (close/closes/closed,
+    fix/fixes/fixed, resolve/resolves/resolved). The bare-stem variants
+    `Fix #N`, `Close #N`, `Resolve #N` close the PR on merge just like the
+    plural forms, so the enforcer must catch every variant."""
+    body = (
+        "Adds a timestamp check to prevent background data pulls from overwriting "
+        "recent local edits.\n\nFix #467.\n"
+    )
+    violations = validate_pr_body(body, pr_number=467)
+    assert any(
+        "self" in each_violation.lower() or "own pr" in each_violation.lower()
+        for each_violation in violations
+    ), f"`Fix #<own-PR>` self-reference must trip the block; got {violations!r}"
+
+
+def test_validate_blocks_self_closing_closed_past_tense_reference() -> None:
+    """`Closed #<own-PR>` (past tense) closes the PR on merge; the enforcer
+    must catch every closing-keyword variant including past tense."""
+    body = (
+        "Adds a timestamp check to prevent background data pulls from overwriting "
+        "recent local edits.\n\nClosed #467.\n"
+    )
+    violations = validate_pr_body(body, pr_number=467)
+    assert any(
+        "self" in each_violation.lower() or "own pr" in each_violation.lower()
+        for each_violation in violations
+    ), f"`Closed #<own-PR>` self-reference must trip the block; got {violations!r}"
+
+
+def test_validate_blocks_self_closing_resolved_past_tense_reference() -> None:
+    """`Resolved #<own-PR>` closes the PR on merge."""
+    body = (
+        "Adds a timestamp check to prevent background data pulls from overwriting "
+        "recent local edits.\n\nResolved #467.\n"
+    )
+    violations = validate_pr_body(body, pr_number=467)
+    assert any(
+        "self" in each_violation.lower() or "own pr" in each_violation.lower()
+        for each_violation in violations
+    ), f"`Resolved #<own-PR>` self-reference must trip the block; got {violations!r}"
+
+
 def test_validate_blocks_uppercase_self_closing_closes_reference() -> None:
     """All-caps `CLOSES #<own-PR>` also auto-closes on GitHub; the enforcer must
     catch every case variant the same way GitHub does."""

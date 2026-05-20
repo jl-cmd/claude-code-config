@@ -315,3 +315,50 @@ def test_blocks_md_with_curly_braces_in_path():
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_passes_home_session_log_directory():
+    home_directory = os.path.expanduser("~")
+    session_log_path = os.path.join(home_directory, "SessionLog", "decisions", "note.md")
+    result = _run_hook(
+        "Write",
+        {"file_path": session_log_path, "content": "# Note"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_home_claude_plans_directory():
+    home_directory = os.path.expanduser("~")
+    plans_path = os.path.join(home_directory, ".claude", "plans", "plan.md")
+    result = _run_hook(
+        "Write",
+        {"file_path": plans_path, "content": "# Plan"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_blocks_home_directory_other_md_file():
+    home_directory = os.path.expanduser("~")
+    other_path = os.path.join(home_directory, "docs", "guide.md")
+    result = _run_hook(
+        "Write",
+        {"file_path": other_path, "content": "# Guide"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_exempt_home_relative_directories_is_module_constant():
+    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_dir not in sys.path:
+        sys.path.insert(0, hook_dir)
+
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+
+    assert hasattr(blocker_module, "_exempt_home_relative_directories")
+    assert ".claude/plans" in blocker_module._exempt_home_relative_directories
+    assert "SessionLog" in blocker_module._exempt_home_relative_directories

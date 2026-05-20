@@ -35,7 +35,6 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     BLOCKQUOTE_MARKER_PATTERN,
     BOLD_PAIR_PATTERN,
     BULLET_MARKER_PATTERN,
-    CEREMONY_HEADER_PATTERN,
     DEFAULT_READABILITY_THRESHOLDS,
     FENCED_CODE_BLOCK_PATTERN,
     FLESCH_BASE_SCORE,
@@ -162,10 +161,17 @@ def _resolve_body_file_value(raw_value_token: str) -> str | None:
         return None
 
 
-def _resolve_body_string_value(raw_value_token: str) -> str:
+def _resolve_body_string_value(raw_value_token: str) -> str | None:
+    """Return the literal body string, or None when the value is an
+    unresolvable shell variable.
+
+    Distinguishing the two cases lets `main()` skip enforcement only for
+    unauditable bodies; a literal `--body ""` still returns `""` and flows
+    into `validate_pr_body` so the substantive-prose check blocks it.
+    """
     stripped_value = _strip_surrounding_quotes(raw_value_token)
     if _is_unresolvable_shell_value(stripped_value):
-        return ""
+        return None
     return stripped_value
 
 
@@ -792,9 +798,9 @@ def validate_pr_body(body: str, pr_number: int | None = None) -> list[str]:
             )
 
     first_line_text = _first_non_empty_line(body)
-    opens_with_ceremony_header = bool(CEREMONY_HEADER_PATTERN.match(first_line_text))
+    opens_with_any_header = bool(HEADING_LINE_PATTERN.match(first_line_text))
     body_is_trivial_sized = substantive_chars < TRIVIAL_BODY_CHAR_THRESHOLD
-    if opens_with_ceremony_header and body_is_trivial_sized:
+    if opens_with_any_header and body_is_trivial_sized:
         violations.append(
             "Trivial PR body opens with a ceremony header -- drop the header "
             "and write the one-sentence body directly"
@@ -934,9 +940,6 @@ def main() -> None:
     body = extract_body_from_command(command)
 
     if body is None:
-        sys.exit(0)
-
-    if not body:
         sys.exit(0)
 
     extracted_pr_number = None

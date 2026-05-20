@@ -43,11 +43,6 @@ SELF_CLOSING_REFERENCE_MESSAGE_SUFFIX: str = (
     " as a self-closing keyword (Fixes/Closes/Resolves) -- remove the self-reference"
 )
 
-CEREMONY_HEADER_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*##\s+(Summary|Why|Overview|Description|Intro|TL;DR)\b",
-    re.IGNORECASE | re.MULTILINE,
-)
-
 SELF_REFERENCE_PATTERN_TEMPLATE: str = r"\b(?:Fixes|Closes|Resolves)\s+#{pr_number}\b"
 
 THIS_PR_OPENING_PATTERN: re.Pattern[str] = re.compile(
@@ -109,7 +104,6 @@ __all__ = [
     "BLOCKQUOTE_MARKER_PATTERN",
     "BOLD_PAIR_PATTERN",
     "BULLET_MARKER_PATTERN",
-    "CEREMONY_HEADER_PATTERN",
     "DEFAULT_READABILITY_THRESHOLDS",
     "FENCED_CODE_BLOCK_PATTERN",
     "FLESCH_BASE_SCORE",

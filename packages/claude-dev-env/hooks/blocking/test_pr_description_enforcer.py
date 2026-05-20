@@ -126,10 +126,13 @@ def test_extract_body_from_body_equals_single_quote_form() -> None:
     assert extract_body_from_command(command) == "Some body text here."
 
 
-def test_extract_body_equals_shell_var_returns_empty() -> None:
-    """Shell variable like --body=$bodyText cannot be resolved at hook time -- approve safely."""
+def test_extract_body_equals_shell_var_returns_none() -> None:
+    """Shell variable like --body=$bodyText cannot be resolved at hook time -- the
+    extractor must signal this with None (unauditable), not empty string. An
+    empty-string return value is reserved for a literal `--body ""` which should
+    still be validated and blocked by the substantive-prose check."""
     command = 'gh pr create --title "T" --body=$bodyText'
-    assert extract_body_from_command(command) == ""
+    assert extract_body_from_command(command) is None
 
 
 def test_extract_short_flag_equals_form() -> None:
@@ -137,10 +140,23 @@ def test_extract_short_flag_equals_form() -> None:
     assert extract_body_from_command(command) == "Some body text here."
 
 
-def test_extract_short_flag_shell_var_returns_empty() -> None:
-    """Shell variable like -b=$var cannot be resolved at hook time -- approve safely."""
+def test_extract_short_flag_shell_var_returns_none() -> None:
+    """Short-flag shell variable like -b=$var cannot be resolved at hook time --
+    the extractor returns None (unauditable). Literal -b="" still returns ""."""
     command = 'gh pr create --title "T" -b=$bodyVar'
-    assert extract_body_from_command(command) == ""
+    assert extract_body_from_command(command) is None
+
+
+def test_validate_blocks_literal_empty_body(readability_state_paths) -> None:
+    """A literal `gh pr create --body ""` must NOT skip enforcement. Empty-body
+    extraction returns "" (distinct from shell-var's None), so the validator
+    runs and blocks via the substantive-prose check. Conflating the two
+    previously allowed `--body ""` to bypass validation entirely."""
+    violations = validate_pr_body("")
+    assert violations, (
+        "Empty PR body must produce at least one violation (typically substantive "
+        f"prose); got an empty list, which would let `--body \"\"` bypass enforcement."
+    )
 
 
 def test_validate_passes_anthropic_standard_body() -> None:
@@ -457,11 +473,6 @@ def test_scan_raw_tokens_does_not_false_match_body_in_title_value(tmp_path: path
     assert result == VALID_BODY
 
 
-def test_extract_body_returns_none_for_unclosed_quote_value_final() -> None:
-    result = extract_body_from_command("gh pr create --title T --body='unclosed")
-    assert result is None
-
-
 @pytest.fixture
 def readability_state_paths(tmp_path, monkeypatch):
     """Redirect the three readability state files to per-test temp paths and disable readability."""
@@ -559,6 +570,30 @@ def test_validate_trivial_body_blocks_summary_header(readability_state_paths) ->
         "ceremony" in each_violation.lower() or "trivial" in each_violation.lower()
         for each_violation in violations
     )
+
+
+def test_validate_trivial_body_blocks_test_plan_header(readability_state_paths) -> None:
+    """A Trivial-sized body that opens with `## Test plan` must trip the
+    ceremony-on-Trivial block. The guide says Trivial bodies have zero headers,
+    so the enforcer must catch every heading variant — not just the six
+    `Summary|Why|Overview|Description|Intro|TL;DR` originally enumerated."""
+    body = "## Test plan\n\nPin Bun to 1.3.14."
+    violations = validate_pr_body(body)
+    assert any(
+        "ceremony" in each_violation.lower() or "trivial" in each_violation.lower()
+        for each_violation in violations
+    ), f"Trivial body opening with `## Test plan` must trip ceremony block; got {violations!r}"
+
+
+def test_validate_trivial_body_blocks_h1_header(readability_state_paths) -> None:
+    """A Trivial-sized body opening with an `# Overview` h1 must also block, since
+    Trivial shape allows zero structural headers of any level."""
+    body = "# Overview\n\nPin Bun to 1.3.14."
+    violations = validate_pr_body(body)
+    assert any(
+        "ceremony" in each_violation.lower() or "trivial" in each_violation.lower()
+        for each_violation in violations
+    ), f"Trivial body opening with h1 must trip ceremony block; got {violations!r}"
 
 
 def test_validate_standard_body_allows_summary_header(readability_state_paths) -> None:

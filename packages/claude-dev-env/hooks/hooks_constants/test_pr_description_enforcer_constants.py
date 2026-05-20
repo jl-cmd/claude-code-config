@@ -148,6 +148,17 @@ def test_module_internal_header_constants_are_not_publicly_exported() -> None:
         )
 
 
+def test_ceremony_header_pattern_is_removed() -> None:
+    """`CEREMONY_HEADER_PATTERN` is replaced by the broader `HEADING_LINE_PATTERN`
+    check in the Trivial-ceremony violation; the constant must not linger as a
+    dead export to drift back into use."""
+    assert not hasattr(constants_module, "CEREMONY_HEADER_PATTERN"), (
+        "CEREMONY_HEADER_PATTERN must be deleted; the ceremony-on-Trivial check "
+        "now uses HEADING_LINE_PATTERN to cover every heading level."
+    )
+    assert "CEREMONY_HEADER_PATTERN" not in constants_module.__all__
+
+
 def test_flesch_formula_coefficients_are_named_constants() -> None:
     """The Flesch Reading Ease formula coefficients (206.835, 1.015, 84.6) and
     the perfect-score default (100.0) must live as named UPPER_SNAKE constants

@@ -529,3 +529,37 @@ def test_blocks_ordinary_docs_md_file():
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_passes_relative_path_from_home_cwd():
+    home_directory = os.path.expanduser("~")
+    payload = json.dumps(
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "SessionLog/decisions/note.md",
+                "content": "# Note",
+            },
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=home_directory,
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_canonicalized_home_path():
+    canonical_home = os.path.realpath(os.path.expanduser("~"))
+    canonical_path = os.path.join(canonical_home, "SessionLog", "canonical-note.md")
+    result = _run_hook(
+        "Write",
+        {"file_path": canonical_path, "content": "# Canonical"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""

@@ -38,9 +38,12 @@ def _is_exempt_path(file_path: str) -> bool:
         return True
     if _has_plugin_directory_segment(lower_normalized):
         return True
-    if _is_under_exempt_home_directory(lower_normalized):
+    canonical_lower_path = (
+        os.path.realpath(expanded_path).replace("\\", "/").lower()
+    )
+    if _is_under_exempt_home_directory(canonical_lower_path):
         return True
-    if _is_under_system_temp_directory(lower_normalized):
+    if _is_under_system_temp_directory(canonical_lower_path):
         return True
     if _is_under_plugin_root_marker(normalized):
         return True
@@ -79,7 +82,12 @@ def _is_under_plugin_root_marker(normalized_path: str) -> bool:
 
 
 def _is_under_exempt_home_directory(lower_normalized_path: str) -> bool:
-    home_directory = os.path.expanduser("~").replace("\\", "/").rstrip("/").lower()
+    home_directory = (
+        os.path.realpath(os.path.expanduser("~"))
+        .replace("\\", "/")
+        .rstrip("/")
+        .lower()
+    )
     if not home_directory:
         return False
     for each_relative_directory in _exempt_home_relative_directories:
@@ -90,7 +98,12 @@ def _is_under_exempt_home_directory(lower_normalized_path: str) -> bool:
 
 
 def _is_under_system_temp_directory(lower_normalized_path: str) -> bool:
-    temp_directory = tempfile.gettempdir().replace("\\", "/").rstrip("/").lower()
+    temp_directory = (
+        os.path.realpath(tempfile.gettempdir())
+        .replace("\\", "/")
+        .rstrip("/")
+        .lower()
+    )
     if not temp_directory:
         return False
     return lower_normalized_path.startswith(f"{temp_directory}/")

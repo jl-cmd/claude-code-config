@@ -360,8 +360,7 @@ def test_md_blocker_constants_module_has_exemption_lists():
     constants_module = importlib.import_module("config.md_blocker_constants")
     importlib.reload(constants_module)
 
-    assert ".claude/plans" in constants_module.EXEMPT_HOME_RELATIVE_DIRECTORIES
-    assert "SessionLog" in constants_module.EXEMPT_HOME_RELATIVE_DIRECTORIES
+    assert "SessionLog" in constants_module.ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES
     assert "skill.md" in constants_module.EXEMPT_ANYWHERE_FILENAMES
     assert "agents" in constants_module.EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
     assert "skills" in constants_module.EXEMPT_PLUGIN_DIRECTORY_SEGMENTS

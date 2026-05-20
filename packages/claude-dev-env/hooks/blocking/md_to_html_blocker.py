@@ -27,7 +27,7 @@ if _blocking_directory not in sys.path:
 
 from config.md_blocker_constants import (
     EXEMPT_ANYWHERE_FILENAMES,
-    EXEMPT_HOME_RELATIVE_DIRECTORIES,
+    ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES,
     EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
     PLUGIN_ROOT_MARKER_DIRECTORY_NAME,
     REPO_ROOT_MARKER_NAME,
@@ -102,7 +102,7 @@ def _is_under_plugin_root_marker(normalized_path: str) -> bool:
 
 
 def _is_under_exempt_home_directory(lower_normalized_path: str) -> bool:
-    exempt_home_relative_directories = EXEMPT_HOME_RELATIVE_DIRECTORIES
+    exempt_home_relative_directories = ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES
     home_directory = (
         os.path.realpath(os.path.expanduser("~"))
         .replace("\\", "/")
@@ -168,7 +168,7 @@ def _block_system_message() -> str:
         ".md files are blocked in this project — generate a self-contained .html "
         f"file instead. See {_html_effectiveness_url} for "
         "design patterns and examples. Exemptions: .claude/ and .claude-plugin/ "
-        "infrastructure, SKILL.md anywhere, agents//skills//commands/ trees, "
+        "infrastructure, SKILL.md anywhere, agents/, skills/, commands/ trees, "
         "files under a .claude-plugin/ root, README.md/CHANGELOG.md at any "
         "repo root, ~/.claude/plans/, ~/SessionLog/, and the OS temp directory."
     )

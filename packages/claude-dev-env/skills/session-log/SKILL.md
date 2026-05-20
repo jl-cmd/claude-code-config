@@ -35,7 +35,8 @@ The session designer reads the matching gallery file, then designs the report in
 - **`gh` must be authenticated.** Auto-publish runs `gh gist create`. If `gh auth status` is failing, the hook surfaces the error to stderr and exits 0 (does not block the Write). Surface that message; the local vault HTML is still the canonical artifact, so the remaining steps still run.
 - **Vault paths sit outside `.claude/`.** Headless vault paths (e.g., `$OBSIDIAN_VAULT_PATH`) resolve outside the project tree. The `md_to_html_blocker` PreToolUse hook rejects Write/Edit on `.md` files outside `.claude/` directories — session reports use HTML, which the hook ignores.
 - **State-description-blocker applies to the report copy.** Sessions describe current state. Skip historical and comparative language — full trigger set at `~/.claude/rules/no-historical-clutter.md`.
-- **`write_existing_file_blocker` rejects Write on existing paths.** Use Write only when creating a fresh session report; use Edit for the vault-context append in step 3 and the gist-URL injection in step 4.
+- **`write_existing_file_blocker` rejects Write on existing paths.** Use Write only when creating a fresh session report; use Edit for the vault-context append in step 3.
+- **Each Write/Edit of the marked HTML creates a fresh gist with a new ID.** `gist_upload.py` calls `gh gist create` with no lookup of any prior gist, so step 3's Edit produces a different gist URL than step 2's Write. Quote the URLs from the FINAL publish (the one that fires after step 3's Edit) to the user; never embed a step-2 URL inside the HTML that step 3 then re-publishes.
 - **Obsidian frontmatter index is HTML-blind.** Obsidian's native YAML-frontmatter parser reads only `.md` files. HTML files do not appear in Obsidian's frontmatter index. Search by content still works; search by `type: session-report` does not.
 
 ## Backend Detection (run before Step 1)
@@ -102,11 +103,11 @@ The marker triggers the PostToolUse hook on Write — the hook uploads the file 
 
 Beyond those four requirements, design the shape that fits. A convergence loop session reads naturally as an incident timeline (`12-incident-report.html`); a feature build reads as a PR writeup (`17-pr-writeup.html`); a research session reads as a feature explainer (`14-research-feature-explainer.html`). Read the matching gallery entry for typography, palette, spatial idioms — adapt, do not copy.
 
-**Write the file** via the Write tool to the vault path. Create the project directory via `mkdir -p` if it does not exist. The auto-publish hook fires after the Write completes and prints the gist + preview URLs to stderr. Capture both.
+**Write the file** via the Write tool to the vault path. Create the project directory via `mkdir -p` if it does not exist. The auto-publish hook fires after the Write completes and prints a gist + preview URL pair to stderr. Step 3's Edit triggers the hook again and prints a fresh pair — the step-3 pair is the canonical one to quote to the user, since the step-2 gist becomes orphaned the moment step 3 republishes.
 
 **If the Write fails**, output the HTML content in the conversation so the user can copy it manually. Skip steps 3–4 and continue at step 5.
 
-## Step 3: Vault Context Tracking + Gist URL Injection
+## Step 3: Vault Context Tracking
 
 This step runs automatically after step 2.
 
@@ -116,19 +117,18 @@ Review the conversation history for any use of these vault MCP tools (excluding 
 - `mcp__obsidian__read_note`
 - `mcp__obsidian__read_multiple_notes`
 
-Edit the vault HTML to append two facts — vault-context status and the gist preview URL printed by the hook in step 2 — into whatever section the report designer placed for notes / metadata / references. If the report has no such section, append a fresh `<h2>Notes</h2>` block before `</body>`:
+Edit the vault HTML to append one fact — vault-context status — into whatever section the report designer placed for notes / metadata / references. If the report has no such section, append a fresh `<h2>Notes</h2>` block before `</body>`:
 
 ```html
 <h2>Notes</h2>
 <ul>
   <li><strong>Vault context:</strong> Retrieved ([list of note paths]) | Not retrieved</li>
-  <li><strong>Published as:</strong> <a href="[preview URL from step 2]">gist preview</a></li>
 </ul>
 ```
 
-If the report already has a notes / references section, use Edit to insert the two `<li>` lines before its closing `</ul>`.
+If the report already has a notes / references section, use Edit to insert the `<li>` line before its closing `</ul>`.
 
-A re-publish does not rewrite the injected URL. If the user explicitly asks for a re-publish, overwrite the entry.
+The gist URL stays out of the HTML body on purpose: each Edit re-fires the auto-publish hook and produces a brand-new gist ID, so any URL embedded in the file becomes stale the instant the next Edit lands. The canonical gist + preview URL is the pair printed to stderr by the step-3 Edit's auto-publish run. Quote that pair to the user when announcing the report.
 
 ## Step 4: Decision Extraction
 
@@ -184,8 +184,8 @@ The primary outcome comes from the session title resolved in step 1.
 - [ ] Frontmatter HTML comment present at top of `<body>`
 - [ ] Opening section answers "what shipped / why / impact" for a cold reader
 - [ ] Self-contained HTML (inline styles, no external refs)
-- [ ] Auto-publish hook printed gist + preview URLs to tool output
-- [ ] Vault-context line + gist preview URL appended via Edit (step 3)
+- [ ] Auto-publish hook printed gist + preview URLs to tool output (step 2 and step 3 each fire one publish)
+- [ ] Vault-context line appended via Edit (step 3); step-3 publish's URL pair quoted to the user
 - [ ] Decision extraction surfaced any unrecorded items
 - [ ] Session tidy reported anomalies or stayed silent
 - [ ] `/rename` command copied to clipboard via `clip.exe`

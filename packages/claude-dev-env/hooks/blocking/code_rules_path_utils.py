@@ -11,24 +11,14 @@ the canonical implementation lives here.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
+hooks_root_directory = str(Path(__file__).resolve().parent.parent)
+if hooks_root_directory not in sys.path:
+    sys.path.insert(0, hooks_root_directory)
 
-ALL_CONFIG_DIRECTORY_NAMES = frozenset(
-    {
-        "config",
-        "hooks_constants",
-        "git_hooks_constants",
-        "pr_loop_shared_constants",
-        "skills_pr_loop_constants",
-        "pr_converge_skill_constants",
-        "pr_converge_scripts_constants",
-        "bugteam_scripts_constants",
-        "doc_gist_scripts_constants",
-        "implement_scripts_constants",
-        "dev_env_scripts_constants",
-    }
-)
+from hooks_constants.code_rules_path_utils_constants import ALL_CONFIG_DIRECTORY_NAMES  # noqa: E402
 
 
 def is_config_file(file_path: str) -> bool:
@@ -43,8 +33,6 @@ def is_config_file(file_path: str) -> bool:
     """
     normalized = file_path.replace("\\", "/").lower()
     if normalized.endswith("/settings.py") or normalized == "settings.py":
-        return True
-    if normalized.endswith("/code_rules_path_utils.py"):
         return True
     path_parts = Path(normalized).parts
     return any(directory_segment in ALL_CONFIG_DIRECTORY_NAMES for directory_segment in path_parts[:-1])

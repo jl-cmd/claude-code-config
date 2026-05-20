@@ -24,10 +24,10 @@ if _blocking_directory not in sys.path:
     sys.path.insert(0, _blocking_directory)
 
 from config.md_blocker_constants import (  # noqa: E402
+    ALL_EXEMPT_ANYWHERE_FILENAMES,
     ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES,
+    ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
     ALL_EXEMPT_ROOT_FILENAMES,
-    EXEMPT_ANYWHERE_FILENAMES,
-    EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
     PLUGIN_ROOT_MARKER_DIRECTORY_NAME,
     REPO_ROOT_MARKER_NAME,
 )
@@ -38,8 +38,8 @@ def is_exempt_path(file_path: str) -> bool:
 
     Exemption sources, in order of evaluation:
     - Any segment under `.claude/` or `.claude-plugin/` (case-insensitive)
-    - Basename in `EXEMPT_ANYWHERE_FILENAMES` (e.g. SKILL.md)
-    - Path segment in `EXEMPT_PLUGIN_DIRECTORY_SEGMENTS` (agents/skills/commands)
+    - Basename in `ALL_EXEMPT_ANYWHERE_FILENAMES` (e.g. SKILL.md)
+    - Path segment in `ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS` (agents/skills/commands)
     - Canonical path under a home-relative exempt directory
       (`ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES`)
     - Canonical path under the OS temp directory
@@ -61,7 +61,7 @@ def is_exempt_path(file_path: str) -> bool:
     if "/.claude-plugin/" in lower_normalized or lower_normalized.startswith(".claude-plugin/"):
         return True
     basename = os.path.basename(normalized)
-    if basename.lower() in EXEMPT_ANYWHERE_FILENAMES:
+    if basename.lower() in ALL_EXEMPT_ANYWHERE_FILENAMES:
         return True
     if _has_plugin_directory_segment(lower_normalized):
         return True
@@ -83,7 +83,7 @@ def is_exempt_path(file_path: str) -> bool:
 
 
 def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:
-    for each_directory_segment in EXEMPT_PLUGIN_DIRECTORY_SEGMENTS:
+    for each_directory_segment in ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS:
         segment_marker = f"/{each_directory_segment}/"
         if segment_marker in lower_normalized_path:
             return True

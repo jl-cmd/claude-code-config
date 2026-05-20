@@ -18,7 +18,7 @@ while _bugteam_scripts_directory in sys.path:
 if _bugteam_scripts_directory not in sys.path:
     sys.path.insert(0, _bugteam_scripts_directory)
 
-from config.bugteam_preflight_constants import (
+from bugteam_scripts_constants.bugteam_preflight_constants import (
     ALL_DISCOVERY_IGNORE_DIRECTORIES,
     ALL_GIT_CONFIG_HOOKS_PATH_ARGUMENTS,
     ALL_PRE_COMMIT_ARGUMENTS,

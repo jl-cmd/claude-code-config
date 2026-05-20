@@ -17,7 +17,7 @@ from _claude_permissions_common import (
     path_contains_glob_metacharacters,
     save_settings,
 )
-from config.claude_permissions_common_constants import DEFAULT_SETTINGS_FILE_MODE
+from bugteam_scripts_constants.claude_permissions_common_constants import DEFAULT_SETTINGS_FILE_MODE
 import grant_project_claude_permissions as grant_module
 import revoke_project_claude_permissions as revoke_module
 

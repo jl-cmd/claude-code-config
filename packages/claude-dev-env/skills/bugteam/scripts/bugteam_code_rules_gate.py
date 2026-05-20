@@ -21,7 +21,7 @@ for each_cached_module_name in [
         each_cached_module_name
     )
 
-from config.bugteam_code_rules_gate_constants import (
+from bugteam_scripts_constants.bugteam_code_rules_gate_constants import (
     ALL_CODE_FILE_EXTENSIONS,
     ALL_COLUMN_MAGIC_FALSE_VALUES,
     ALL_GIT_DIFF_CACHED_ARGS,

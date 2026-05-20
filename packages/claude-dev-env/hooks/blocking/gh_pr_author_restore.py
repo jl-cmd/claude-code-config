@@ -31,7 +31,11 @@ import json
 import sys
 from pathlib import Path
 
-from _gh_pr_author_swap_utils import (
+hooks_parent_directory = str(Path(__file__).resolve().parent.parent)
+if hooks_parent_directory not in sys.path:
+    sys.path.insert(0, hooks_parent_directory)
+
+from _gh_pr_author_swap_utils import (  # noqa: E402
     _command_invokes_gh_pr_create_in_stripped,
     _delete_state_file,
     _preprocess_command_for_matching,
@@ -41,7 +45,7 @@ from _gh_pr_author_swap_utils import (
     _switch_gh_account,
     _write_line,
 )
-from hooks_constants.gh_pr_author_swap_constants import BASH_TOOL_NAME
+from hooks_constants.gh_pr_author_swap_constants import BASH_TOOL_NAME  # noqa: E402
 
 
 def main() -> None:

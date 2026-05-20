@@ -29,15 +29,18 @@ import tempfile
 import time
 from pathlib import Path
 
+hooks_parent_directory = str(Path(__file__).resolve().parent.parent)
+if hooks_parent_directory not in sys.path:
+    sys.path.insert(0, hooks_parent_directory)
 
-from _gh_pr_author_swap_utils import (
+from _gh_pr_author_swap_utils import (  # noqa: E402
     _delete_state_file,
     _lstat_indicates_attacker_planted,
     _read_original_account,
     _switch_gh_account,
     _write_line,
 )
-from hooks_constants.gh_pr_author_swap_constants import (
+from hooks_constants.gh_pr_author_swap_constants import (  # noqa: E402
     REQUIRED_ACCOUNT_ENV_VAR,
     STATE_FILE_PREFIX,
     STATE_FILE_STALE_AGE_SECONDS,

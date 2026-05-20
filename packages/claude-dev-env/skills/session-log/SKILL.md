@@ -105,7 +105,7 @@ Beyond those four requirements, design the shape that fits. A convergence loop s
 
 **Write the file** via the Write tool to the vault path. Create the project directory via `mkdir -p` if it does not exist. The auto-publish hook fires after the Write completes and prints a gist + preview URL pair to stderr. Step 3's Edit triggers the hook again and prints a fresh pair — the step-3 pair is the canonical one to quote to the user, since the step-2 gist becomes orphaned the moment step 3 republishes.
 
-**If the Write fails**, output the HTML content in the conversation so the user can copy it manually. Skip steps 3–4 and continue at step 5.
+**If the Write fails**, output the HTML content in the conversation so the user can copy it manually. Skip step 3 and continue at step 4.
 
 ## Step 3: Vault Context Tracking
 

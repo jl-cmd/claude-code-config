@@ -22,7 +22,7 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.messages import USER_FACING_NOTICE
+from hooks_constants.messages import USER_FACING_NOTICE
 
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

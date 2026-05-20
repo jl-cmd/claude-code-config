@@ -25,15 +25,15 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.dynamic_stderr_handler import DynamicStderrHandler
-from config.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin
-from config.path_rewriter_constants import (
+from hooks_constants.dynamic_stderr_handler import DynamicStderrHandler
+from hooks_constants.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin
+from hooks_constants.path_rewriter_constants import (
     BASH_TOOL_NAME,
     HOOK_EVENT_NAME,
     PERMISSION_ALLOW,
     PLACEHOLDER_TOKEN_PATTERN,
 )
-from config.project_paths_reader import load_registry
+from hooks_constants.project_paths_reader import load_registry
 
 _ES_EXE_TRIGGER_PATTERN = re.compile(
     r"(?i)(?<![\w.])(?:Everything[/\\])?es\.exe(?![\w.])",

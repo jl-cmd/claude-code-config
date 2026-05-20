@@ -14,6 +14,23 @@ from __future__ import annotations
 from pathlib import Path
 
 
+ALL_CONFIG_DIRECTORY_NAMES = frozenset(
+    {
+        "config",
+        "hooks_constants",
+        "git_hooks_constants",
+        "pr_loop_shared_constants",
+        "skills_pr_loop_constants",
+        "pr_converge_skill_constants",
+        "pr_converge_scripts_constants",
+        "bugteam_scripts_constants",
+        "doc_gist_scripts_constants",
+        "implement_scripts_constants",
+        "dev_env_scripts_constants",
+    }
+)
+
+
 def is_config_file(file_path: str) -> bool:
     """Return True when the path points to a config file.
 
@@ -28,4 +45,4 @@ def is_config_file(file_path: str) -> bool:
     if normalized.endswith("/settings.py") or normalized == "settings.py":
         return True
     path_parts = Path(normalized).parts
-    return "config" in path_parts[:-1]
+    return any(directory_segment in ALL_CONFIG_DIRECTORY_NAMES for directory_segment in path_parts[:-1])

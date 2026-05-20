@@ -27,8 +27,8 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin
-from config.windows_rmtree_blocker_constants import PYTHON_FILE_EXTENSION
+from hooks_constants.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin
+from hooks_constants.windows_rmtree_blocker_constants import PYTHON_FILE_EXTENSION
 
 
 def payload_contains_unsafe_rmtree(payload_text: str) -> bool:

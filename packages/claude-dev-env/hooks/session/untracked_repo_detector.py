@@ -25,13 +25,13 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.dynamic_stderr_handler import DynamicStderrHandler
-from config.project_paths_reader import (
+from hooks_constants.dynamic_stderr_handler import DynamicStderrHandler
+from hooks_constants.project_paths_reader import (
     load_registry,
     registry_contains_path,
     registry_file_path,
 )
-from config.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME
+from hooks_constants.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME
 
 
 _logger = logging.getLogger("untracked_repo_detector")

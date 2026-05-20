@@ -30,7 +30,7 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.pr_description_enforcer_constants import (
+from hooks_constants.pr_description_enforcer_constants import (
     BLOCKQUOTE_MARKER_PATTERN,
     BOLD_PAIR_PATTERN,
     BULLET_MARKER_PATTERN,

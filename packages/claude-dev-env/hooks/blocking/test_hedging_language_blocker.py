@@ -16,7 +16,7 @@ if _HOOKS_DIR not in sys.path:
 if _HOOKS_ROOT not in sys.path:
     sys.path.insert(0, _HOOKS_ROOT)
 import hedging_language_blocker
-from config.messages import USER_FACING_NOTICE
+from hooks_constants.messages import USER_FACING_NOTICE
 
 RESEARCH_MODE_SKILL_BODY_MARKER = "Three anti-hallucination constraints are ALWAYS active."
 HEDGING_MESSAGE = "This is likely correct."

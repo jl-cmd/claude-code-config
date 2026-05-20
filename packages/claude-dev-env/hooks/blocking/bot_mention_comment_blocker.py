@@ -20,7 +20,7 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.bot_mention_comment_blocker_constants import (
+from hooks_constants.bot_mention_comment_blocker_constants import (
     COPILOT_MENTION_TOKEN,
     CORRECTIVE_MESSAGE_COPILOT,
     CORRECTIVE_MESSAGE_CURSOR,

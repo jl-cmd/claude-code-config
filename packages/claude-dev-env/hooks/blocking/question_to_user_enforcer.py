@@ -25,7 +25,7 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.messages import USER_FACING_ASKUSERQUESTION_NOTICE
+from hooks_constants.messages import USER_FACING_ASKUSERQUESTION_NOTICE
 
 
 def strip_code_and_quotes(text: str) -> str:

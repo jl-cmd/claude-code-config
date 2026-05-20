@@ -35,7 +35,7 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.pr_converge_bugteam_enforcer_constants import (
+from hooks_constants.pr_converge_bugteam_enforcer_constants import (
     BUGTEAM_SKILL_NAME,
     SKILL_TOOL_NAME,
     STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_HEAD,
@@ -45,7 +45,7 @@ from config.pr_converge_bugteam_enforcer_constants import (
     STATE_FILE_ATOMIC_WRITE_SUFFIX,
     STATE_FILE_JSON_INDENT_SPACES,
 )
-from config.pr_converge_bugteam_enforcer_state import (
+from hooks_constants.pr_converge_bugteam_enforcer_state import (
     load_state_dictionary,
     resolve_state_path,
 )

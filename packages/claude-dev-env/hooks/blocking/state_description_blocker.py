@@ -22,7 +22,7 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.state_description_blocker_constants import (
+from hooks_constants.state_description_blocker_constants import (
     ALL_BLOCK_COMMENT_EXTENSIONS,
     ALL_BLOCK_COMMENT_ONLY_EXTENSIONS,
     ALL_COMMENT_BEARING_EXTENSIONS,

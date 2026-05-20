@@ -30,18 +30,14 @@ import time
 from pathlib import Path
 
 
-_hooks_tree_path = str(Path(__file__).absolute().parent.parent)
-if _hooks_tree_path not in sys.path:
-    sys.path.insert(0, _hooks_tree_path)
-
-from _gh_pr_author_swap_utils import (  # noqa: E402  # sys.path shim above must run first
+from _gh_pr_author_swap_utils import (
     _delete_state_file,
     _lstat_indicates_attacker_planted,
     _read_original_account,
     _switch_gh_account,
     _write_line,
 )
-from config.gh_pr_author_swap_constants import (  # noqa: E402  # sys.path shim above must run first
+from hooks_constants.gh_pr_author_swap_constants import (
     REQUIRED_ACCOUNT_ENV_VAR,
     STATE_FILE_PREFIX,
     STATE_FILE_STALE_AGE_SECONDS,

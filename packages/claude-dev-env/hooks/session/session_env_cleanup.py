@@ -35,7 +35,7 @@ def _insert_hooks_tree_for_imports() -> None:
 
 _insert_hooks_tree_for_imports()
 
-from config.session_env_cleanup_constants import (
+from hooks_constants.session_env_cleanup_constants import (
     ALL_RMTREE_ONEXC_PYTHON_VERSION_PARTS,
     SESSION_ENV_DIRECTORY,
     SESSION_ID_PATTERN,

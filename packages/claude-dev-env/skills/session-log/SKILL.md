@@ -165,7 +165,7 @@ Scope: the current project's session folder only.
 
    If no issues are found, skip silently. Do not report "all clean."
 5. **Rollup check:** if the project has 5+ sessions and no `Summary.html` or `Summary.md`, mention it:
-   > "This project has [N] sessions and no summary. Run `/session-tidy` for a full rollup."
+   > "This project has [N] sessions and no summary. A rollup would help; `/session-tidy` is defined for the Markdown session format and may mis-audit or propose destructive renames against HTML sessions, so a manual rollup is the safe path."
 
 ## Step 6: Finalize
 

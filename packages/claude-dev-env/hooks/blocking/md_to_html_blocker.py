@@ -8,24 +8,30 @@ that markdown flattens. See https://thariqs.github.io/html-effectiveness/
 import json
 import os
 import sys
+from pathlib import Path
 from typing import TextIO
+
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.md_to_html_blocker_constants import (  # noqa: E402
+    ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES,
+    MINIMUM_SEGMENT_COUNT_TO_MATCH_INDICATOR,
+    WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH,
+)
 
 
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 _exempt_root_filenames = ("readme.md", "changelog.md")
-_claude_code_source_top_directories: frozenset[str] = frozenset(
-    {"agents", "docs", "skills", "rules", "system-prompts", "commands"}
-)
-_windows_drive_letter_segment_length: int = 2
-_minimum_segment_count_to_match_indicator: int = 4
 
 
 def _looks_like_absolute_path(file_path: str, first_segment: str) -> bool:
     if file_path.startswith("/") or file_path.startswith("\\"):
         return True
     if (
-        len(first_segment) == _windows_drive_letter_segment_length
+        len(first_segment) == WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH
         and first_segment[1] == ":"
         and first_segment[0].isalpha()
     ):
@@ -44,10 +50,10 @@ def _is_exempt_path(file_path: str) -> bool:
         starting_segment_index_options = list(range(len(all_segments)))
     for each_starting_index in starting_segment_index_options:
         if (
-            len(all_segments) >= each_starting_index + _minimum_segment_count_to_match_indicator
+            len(all_segments) >= each_starting_index + MINIMUM_SEGMENT_COUNT_TO_MATCH_INDICATOR
             and all_segments[each_starting_index] == "packages"
             and all_segments[each_starting_index + 1] == "claude-dev-env"
-            and all_segments[each_starting_index + 2] in _claude_code_source_top_directories
+            and all_segments[each_starting_index + 2] in ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES
         ):
             return True
     basename = os.path.basename(normalized)

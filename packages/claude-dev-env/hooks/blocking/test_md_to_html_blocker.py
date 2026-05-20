@@ -88,6 +88,26 @@ def test_blocks_uppercase_md_extension():
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_module_imports_top_directories_from_hooks_constants():
+    """The exempt-top-directories set must live in `hooks_constants/` rather
+    than as a file-global single-use constant in the blocker module. The
+    blocker imports the centralized constant; a regression that reintroduces
+    a local module-scope copy would fail this assertion."""
+    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_dir not in sys.path:
+        sys.path.insert(0, hook_dir)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+    assert hasattr(blocker_module, "ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES"), (
+        "Blocker module must import ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES from "
+        "hooks_constants/ (file-global single-use rule)."
+    )
+    assert not hasattr(blocker_module, "_claude_code_source_top_directories"), (
+        "Local _claude_code_source_top_directories must not be re-introduced; "
+        "use the imported constant from hooks_constants/ instead."
+    )
+
+
 def test_blocks_nested_packages_claude_dev_env_path():
     """`packages/claude-dev-env/` exemption is anchored to top-level use only;
     a nested directory like `notes/packages/claude-dev-env/docs/...` is NOT a

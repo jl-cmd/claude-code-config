@@ -148,6 +148,23 @@ def test_module_internal_header_constants_are_not_publicly_exported() -> None:
         )
 
 
+def test_readability_cli_flag_tokens_exposes_four_flags() -> None:
+    """ALL_READABILITY_CLI_FLAG_TOKENS centralises the four CLI flags the
+    dispatcher recognises (loosen/reset/disable/enable). Pinning the set keeps
+    main()'s dispatcher loop and the dispatcher itself in sync; adding a flag
+    requires updating both the constant and the dispatcher in the same commit."""
+    expected_tokens = frozenset(
+        {
+            "--readability-loosen",
+            "--readability-reset",
+            "--readability-disable",
+            "--readability-enable",
+        }
+    )
+    assert constants_module.ALL_READABILITY_CLI_FLAG_TOKENS == expected_tokens
+    assert "ALL_READABILITY_CLI_FLAG_TOKENS" in constants_module.__all__
+
+
 def test_ceremony_header_pattern_is_removed() -> None:
     """`CEREMONY_HEADER_PATTERN` is replaced by the broader `HEADING_LINE_PATTERN`
     check in the Trivial-ceremony violation; the constant must not linger as a

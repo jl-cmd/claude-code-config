@@ -31,6 +31,7 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     ALL_HEAVY_DETECTION_HEADERS,
     ALL_HEAVY_OPENING_HEADERS,
     ALL_HEAVY_TESTING_HEADERS,
+    ALL_READABILITY_CLI_FLAG_TOKENS,
     ATOMIC_WRITE_TEMP_SUFFIX,
     BLOCKQUOTE_MARKER_PATTERN,
     BOLD_PAIR_PATTERN,
@@ -502,17 +503,15 @@ def _set_readability_enabled(enabled: bool) -> None:
     _atomic_write_json(READABILITY_ENABLED_STATE_FILE, {"enabled": enabled})
 
 
-_vowel_set: frozenset[str] = frozenset("aeiouy")
-
-
 def _count_syllables_in_word(word: str) -> int:
+    all_vowel_characters: frozenset[str] = frozenset("aeiouy")
     cleaned_word = "".join(each_character for each_character in word.lower() if each_character.isalpha())
     if not cleaned_word:
         return 0
     syllable_count = 0
     is_previous_character_vowel = False
     for each_character in cleaned_word:
-        is_vowel = each_character in _vowel_set
+        is_vowel = each_character in all_vowel_characters
         if is_vowel and not is_previous_character_vowel:
             syllable_count += 1
         is_previous_character_vowel = is_vowel
@@ -521,14 +520,12 @@ def _count_syllables_in_word(word: str) -> int:
     return max(syllable_count, 1)
 
 
-_sentence_split_pattern: re.Pattern[str] = re.compile(r"[.!?]+\s+")
-
-
 def _split_sentences(text: str) -> list[str]:
+    sentence_split_pattern = re.compile(r"[.!?]+\s+")
     cleaned_text = text.strip()
     if not cleaned_text:
         return []
-    raw_pieces = _sentence_split_pattern.split(cleaned_text)
+    raw_pieces = sentence_split_pattern.split(cleaned_text)
     all_sentences = [each_piece.strip() for each_piece in raw_pieces if each_piece.strip()]
     return all_sentences
 
@@ -838,16 +835,6 @@ def validate_pr_body(body: str, pr_number: int | None = None) -> list[str]:
     return violations
 
 
-_all_cli_flag_tokens: frozenset[str] = frozenset(
-    {
-        "--readability-loosen",
-        "--readability-reset",
-        "--readability-disable",
-        "--readability-enable",
-    }
-)
-
-
 def _dispatch_cli_flag(
     flag_token: str,
     output_stream: TextIO,
@@ -908,7 +895,7 @@ def _command_carries_body_flag(command: str) -> bool:
 
 def main() -> None:
     for each_argv_token in sys.argv[1:]:
-        if each_argv_token in _all_cli_flag_tokens:
+        if each_argv_token in ALL_READABILITY_CLI_FLAG_TOKENS:
             _dispatch_cli_flag(
                 each_argv_token,
                 output_stream=sys.stdout,

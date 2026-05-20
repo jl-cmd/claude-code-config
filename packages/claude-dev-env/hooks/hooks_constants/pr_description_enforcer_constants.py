@@ -66,6 +66,15 @@ READABILITY_AVG_SENTENCE_WORDS_CEILING: int = 40
 READABILITY_FLESCH_LOOSEN_FACTOR: float = 0.9
 READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR: float = 10 / 9
 
+ALL_READABILITY_CLI_FLAG_TOKENS: frozenset[str] = frozenset(
+    {
+        "--readability-loosen",
+        "--readability-reset",
+        "--readability-disable",
+        "--readability-enable",
+    }
+)
+
 FLESCH_BASE_SCORE: float = 206.835
 FLESCH_WORDS_PER_SENTENCE_COEFFICIENT: float = 1.015
 FLESCH_SYLLABLES_PER_WORD_COEFFICIENT: float = 84.6
@@ -100,6 +109,7 @@ __all__ = [
     "ALL_HEAVY_DETECTION_HEADERS",
     "ALL_HEAVY_OPENING_HEADERS",
     "ALL_HEAVY_TESTING_HEADERS",
+    "ALL_READABILITY_CLI_FLAG_TOKENS",
     "ATOMIC_WRITE_TEMP_SUFFIX",
     "BLOCKQUOTE_MARKER_PATTERN",
     "BOLD_PAIR_PATTERN",

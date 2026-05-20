@@ -1236,6 +1236,19 @@ def test_readability_thresholds_reject_boolean_values(readability_state_paths_en
     assert thresholds.avg_sentence_words == hook_module.DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
 
 
+def test_single_use_helper_constants_are_inlined() -> None:
+    """`_vowel_set`, `_sentence_split_pattern`, and `_all_cli_flag_tokens` each
+    had exactly one consumer in production. The file-global-constants rule
+    requires either a second caller or a move out of module scope; inlining
+    into the single consumer is the chosen resolution. Pin that the three
+    names are no longer module attributes so they cannot drift back."""
+    for each_name in ("_vowel_set", "_sentence_split_pattern", "_all_cli_flag_tokens"):
+        assert not hasattr(hook_module, each_name), (
+            f"{each_name} must be inlined into its single consumer, not "
+            "carried as a file-global constant."
+        )
+
+
 def test_compute_flesch_reading_ease_uses_named_constants() -> None:
     """`_compute_flesch_reading_ease` must reference the named Flesch constants
     rather than embed the magic literals 206.835 / 1.015 / 84.6 / 100.0 inline.

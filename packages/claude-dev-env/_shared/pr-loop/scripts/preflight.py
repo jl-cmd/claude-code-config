@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 
 parent_directory = str(Path(__file__).resolve().parent)
+while parent_directory in sys.path:
+    sys.path.remove(parent_directory)
 if parent_directory not in sys.path:
     sys.path.insert(0, parent_directory)
 

@@ -44,5 +44,7 @@ def is_config_file(file_path: str) -> bool:
     normalized = file_path.replace("\\", "/").lower()
     if normalized.endswith("/settings.py") or normalized == "settings.py":
         return True
+    if normalized.endswith("/code_rules_path_utils.py"):
+        return True
     path_parts = Path(normalized).parts
     return any(directory_segment in ALL_CONFIG_DIRECTORY_NAMES for directory_segment in path_parts[:-1])

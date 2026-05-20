@@ -16,23 +16,15 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Callable, Generator
+from typing import Callable
 
 import pytest
 
 _SCRIPTS_DIRECTORY = Path(__file__).absolute().parent
 _PR_CONVERGE_DIRECTORY = _SCRIPTS_DIRECTORY.parent
 
-_ORIGINAL_SYS_PATH = list(sys.path)
-
 if str(_PR_CONVERGE_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(_PR_CONVERGE_DIRECTORY))
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _restore_sys_path_at_session_end() -> Generator[None, None, None]:
-    yield
-    sys.path[:] = _ORIGINAL_SYS_PATH
 
 
 def _load_module() -> ModuleType:
@@ -314,9 +306,19 @@ def should_bypass_bugbot_gates_when_bugbot_down_is_true(
     assert exit_code == 0
 
 
-def should_document_head_sha_systemexit_in_check_all_docstring() -> None:
-    check_all_docstring = check_convergence.check_all.__doc__
-    assert check_all_docstring is not None
-    assert "_get_pr_head_sha" in check_all_docstring
-    assert "SystemExit" in check_all_docstring
-    assert "EXIT_CODE_GH_ERROR" in check_all_docstring
+def should_document_head_sha_systemexit_in_check_all_docstring(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def stub_get_pr_head_sha_raising_systemexit(
+        *, owner: str, repo: str, number: int
+    ) -> str:
+        raise SystemExit(check_convergence.EXIT_CODE_GH_ERROR)
+
+    monkeypatch.setattr(
+        check_convergence, "_get_pr_head_sha", stub_get_pr_head_sha_raising_systemexit
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        check_convergence.check_all(owner="o", repo="r", number=1, bugbot_down=False)
+
+    assert exc_info.value.code == check_convergence.EXIT_CODE_GH_ERROR

@@ -306,7 +306,7 @@ def should_bypass_bugbot_gates_when_bugbot_down_is_true(
     assert exit_code == 0
 
 
-def should_document_head_sha_systemexit_in_check_all_docstring(
+def should_propagate_systemexit_from_get_pr_head_sha(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def stub_get_pr_head_sha_raising_systemexit(

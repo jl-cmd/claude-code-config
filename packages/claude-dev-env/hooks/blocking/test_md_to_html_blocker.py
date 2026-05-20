@@ -88,6 +88,22 @@ def test_blocks_uppercase_md_extension():
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_blocks_nested_packages_claude_dev_env_path():
+    """`packages/claude-dev-env/` exemption is anchored to top-level use only;
+    a nested directory like `notes/packages/claude-dev-env/docs/...` is NOT a
+    Claude Code source path and must still be blocked. Substring matching let
+    this bypass through; segment-anchored matching prevents it."""
+    result = _run_hook(
+        "Write",
+        {"file_path": "notes/packages/claude-dev-env/docs/guide.md", "content": "# Hello"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny", (
+        f"Nested fake claude-dev-env path must still be blocked; got {output!r}"
+    )
+
+
 def test_passes_html_file():
     result = _run_hook(
         "Write",

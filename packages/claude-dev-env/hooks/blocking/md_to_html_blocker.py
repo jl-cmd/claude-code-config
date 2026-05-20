@@ -14,14 +14,23 @@ from typing import TextIO
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 _exempt_root_filenames = ("readme.md", "changelog.md")
-_claude_code_source_segment_indicators: tuple[str, ...] = (
-    "/packages/claude-dev-env/agents/",
-    "/packages/claude-dev-env/docs/",
-    "/packages/claude-dev-env/skills/",
-    "/packages/claude-dev-env/rules/",
-    "/packages/claude-dev-env/system-prompts/",
-    "/packages/claude-dev-env/commands/",
+_claude_code_source_top_directories: frozenset[str] = frozenset(
+    {"agents", "docs", "skills", "rules", "system-prompts", "commands"}
 )
+_windows_drive_letter_segment_length: int = 2
+_minimum_segment_count_to_match_indicator: int = 4
+
+
+def _looks_like_absolute_path(file_path: str, first_segment: str) -> bool:
+    if file_path.startswith("/") or file_path.startswith("\\"):
+        return True
+    if (
+        len(first_segment) == _windows_drive_letter_segment_length
+        and first_segment[1] == ":"
+        and first_segment[0].isalpha()
+    ):
+        return True
+    return False
 
 
 def _is_exempt_path(file_path: str) -> bool:
@@ -29,9 +38,17 @@ def _is_exempt_path(file_path: str) -> bool:
     lower_normalized = normalized.lower()
     if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
         return True
-    padded_for_segment_match = lower_normalized if lower_normalized.startswith("/") else "/" + lower_normalized
-    for each_indicator in _claude_code_source_segment_indicators:
-        if each_indicator in padded_for_segment_match:
+    all_segments = [each_segment for each_segment in lower_normalized.split("/") if each_segment]
+    starting_segment_index_options: list[int] = [0]
+    if all_segments and _looks_like_absolute_path(file_path, all_segments[0]):
+        starting_segment_index_options = list(range(len(all_segments)))
+    for each_starting_index in starting_segment_index_options:
+        if (
+            len(all_segments) >= each_starting_index + _minimum_segment_count_to_match_indicator
+            and all_segments[each_starting_index] == "packages"
+            and all_segments[each_starting_index + 1] == "claude-dev-env"
+            and all_segments[each_starting_index + 2] in _claude_code_source_top_directories
+        ):
             return True
     basename = os.path.basename(normalized)
     if basename.lower() in _exempt_root_filenames:

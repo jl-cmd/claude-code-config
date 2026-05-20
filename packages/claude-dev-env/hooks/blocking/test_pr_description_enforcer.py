@@ -147,7 +147,7 @@ def test_extract_short_flag_shell_var_returns_none() -> None:
     assert extract_body_from_command(command) is None
 
 
-def test_validate_blocks_literal_empty_body(readability_state_paths) -> None:
+def test_validate_blocks_literal_empty_body() -> None:
     """A literal `gh pr create --body ""` must NOT skip enforcement. Empty-body
     extraction returns "" (distinct from shell-var's None), so the validator
     runs and blocks via the substantive-prose check. Conflating the two
@@ -473,19 +473,6 @@ def test_scan_raw_tokens_does_not_false_match_body_in_title_value(tmp_path: path
     assert result == VALID_BODY
 
 
-@pytest.fixture
-def readability_state_paths(tmp_path, monkeypatch):
-    """Redirect the three readability state files to per-test temp paths and disable readability."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
-    monkeypatch.setattr(hook_module, "_is_readability_enabled", lambda: False)
-    return strike_path, override_path, enabled_path
-
-
 def _build_heavy_body(opening_header: str, testing_header: str) -> str:
     intro_text = (
         "Adds shape-aware validation across the pr-description-enforcer pipeline. "
@@ -531,12 +518,12 @@ def test_compute_pr_body_shape_heavy() -> None:
     assert hook_module._compute_pr_body_shape(body) == "heavy"
 
 
-def test_validate_heavy_body_passes_with_problem_and_test_plan(readability_state_paths) -> None:
+def test_validate_heavy_body_passes_with_problem_and_test_plan() -> None:
     body = _build_heavy_body("## Problem", "## Test plan")
     assert validate_pr_body(body) == []
 
 
-def test_validate_heavy_body_blocks_when_testing_category_missing(readability_state_paths) -> None:
+def test_validate_heavy_body_blocks_when_testing_category_missing() -> None:
     """Heavy body containing two opening-category headers but no testing-category header is blocked."""
     intro_text = (
         "Adds shape-aware validation across the pr-description-enforcer pipeline. "
@@ -562,7 +549,7 @@ def test_validate_heavy_body_blocks_when_testing_category_missing(readability_st
     assert any("testing" in each_violation.lower() for each_violation in violations)
 
 
-def test_validate_trivial_body_blocks_summary_header(readability_state_paths) -> None:
+def test_validate_trivial_body_blocks_summary_header() -> None:
     """A Trivial-sized body that opens with `## Summary` is blocked as ceremony."""
     body = "## Summary\n\nPin Bun to 1.3.14."
     violations = validate_pr_body(body)
@@ -572,7 +559,7 @@ def test_validate_trivial_body_blocks_summary_header(readability_state_paths) ->
     )
 
 
-def test_validate_trivial_body_blocks_test_plan_header(readability_state_paths) -> None:
+def test_validate_trivial_body_blocks_test_plan_header() -> None:
     """A Trivial-sized body that opens with `## Test plan` must trip the
     ceremony-on-Trivial block. The guide says Trivial bodies have zero headers,
     so the enforcer must catch every heading variant — not just the six
@@ -585,7 +572,7 @@ def test_validate_trivial_body_blocks_test_plan_header(readability_state_paths) 
     ), f"Trivial body opening with `## Test plan` must trip ceremony block; got {violations!r}"
 
 
-def test_validate_trivial_body_blocks_h1_header(readability_state_paths) -> None:
+def test_validate_trivial_body_blocks_h1_header() -> None:
     """A Trivial-sized body opening with an `# Overview` h1 must also block, since
     Trivial shape allows zero structural headers of any level."""
     body = "# Overview\n\nPin Bun to 1.3.14."
@@ -596,7 +583,7 @@ def test_validate_trivial_body_blocks_h1_header(readability_state_paths) -> None
     ), f"Trivial body opening with h1 must trip ceremony block; got {violations!r}"
 
 
-def test_validate_standard_body_allows_summary_header(readability_state_paths) -> None:
+def test_validate_standard_body_allows_summary_header() -> None:
     """A Standard-sized body that opens with `## Summary` passes the ceremony check."""
     body = (
         "## Summary\n\n"
@@ -614,7 +601,7 @@ def test_validate_standard_body_allows_summary_header(readability_state_paths) -
     )
 
 
-def test_validate_blocks_self_closing_fixes_reference(readability_state_paths) -> None:
+def test_validate_blocks_self_closing_fixes_reference() -> None:
     body = (
         "Adds a timestamp check to prevent background data pulls from overwriting "
         "recent local edits.\n\nFixes #467.\n"
@@ -626,7 +613,7 @@ def test_validate_blocks_self_closing_fixes_reference(readability_state_paths) -
     )
 
 
-def test_validate_blocks_self_closing_resolves_reference(readability_state_paths) -> None:
+def test_validate_blocks_self_closing_resolves_reference() -> None:
     body = (
         "Adds a timestamp check to prevent background data pulls from overwriting "
         "recent local edits.\n\nResolves #467.\n"
@@ -638,7 +625,7 @@ def test_validate_blocks_self_closing_resolves_reference(readability_state_paths
     )
 
 
-def test_validate_blocks_lowercase_self_closing_fixes_reference(readability_state_paths) -> None:
+def test_validate_blocks_lowercase_self_closing_fixes_reference() -> None:
     """GitHub treats closing keywords (Fixes/Closes/Resolves) case-insensitively, so
     a body opening with `fixes #<own-PR>` (lowercase) auto-closes the PR on merge
     just like the capitalized form. The enforcer must catch both."""
@@ -653,7 +640,7 @@ def test_validate_blocks_lowercase_self_closing_fixes_reference(readability_stat
     ), f"lowercase fixes self-reference must trip the block; got {violations!r}"
 
 
-def test_validate_blocks_uppercase_self_closing_closes_reference(readability_state_paths) -> None:
+def test_validate_blocks_uppercase_self_closing_closes_reference() -> None:
     """All-caps `CLOSES #<own-PR>` also auto-closes on GitHub; the enforcer must
     catch every case variant the same way GitHub does."""
     body = (
@@ -667,7 +654,7 @@ def test_validate_blocks_uppercase_self_closing_closes_reference(readability_sta
     ), f"all-caps CLOSES self-reference must trip the block; got {violations!r}"
 
 
-def test_validate_allows_fixes_reference_to_different_pr(readability_state_paths) -> None:
+def test_validate_allows_fixes_reference_to_different_pr() -> None:
     body = (
         "Adds a timestamp check to prevent background data pulls from overwriting "
         "recent local edits.\n\nFixes #467.\n"
@@ -679,7 +666,7 @@ def test_validate_allows_fixes_reference_to_different_pr(readability_state_paths
     )
 
 
-def test_validate_blocks_this_pr_opening(readability_state_paths) -> None:
+def test_validate_blocks_this_pr_opening() -> None:
     body = (
         "This PR adds a timestamp check to prevent background data pulls from "
         "overwriting recent local edits. The pull engine compares the "
@@ -689,7 +676,7 @@ def test_validate_blocks_this_pr_opening(readability_state_paths) -> None:
     assert any("this pr" in each_violation.lower() for each_violation in violations)
 
 
-def test_validate_allows_imperative_opening(readability_state_paths) -> None:
+def test_validate_allows_imperative_opening() -> None:
     body = (
         "Adds a timestamp check to prevent background data pulls from "
         "overwriting recent local edits. The pull engine compares the "

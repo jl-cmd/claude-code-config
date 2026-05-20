@@ -9,7 +9,7 @@ import re as _re
 import sys
 from unittest.mock import patch
 
-import pytest as _pytest_for_autouse
+import pytest
 
 _HOOK_DIR = pathlib.Path(__file__).parent
 if str(_HOOK_DIR) not in sys.path:
@@ -29,7 +29,7 @@ extract_body_from_command = hook_module.extract_body_from_command
 validate_pr_body = hook_module.validate_pr_body
 
 
-@_pytest_for_autouse.fixture(autouse=True)
+@pytest.fixture(autouse=True)
 def _isolate_readability_state(tmp_path_factory, monkeypatch):
     """Redirect the three readability state files to per-test temp paths for every test.
 
@@ -463,9 +463,6 @@ def test_extract_body_returns_none_for_unclosed_quote_value_final() -> None:
     assert result is None
 
 
-import pytest
-
-
 @pytest.fixture
 def readability_state_paths(tmp_path, monkeypatch):
     """Redirect the three readability state files to per-test temp paths and disable readability."""
@@ -866,7 +863,7 @@ def test_dispatch_loosen_writes_success_to_output_stream(readability_state_paths
     """The loosen handler writes its success message to the supplied output stream."""
     output_stream = io.StringIO()
     error_stream = io.StringIO()
-    with _pytest_for_autouse.raises(SystemExit) as exit_info:
+    with pytest.raises(SystemExit) as exit_info:
         hook_module._dispatch_cli_flag(
             "--readability-loosen",
             output_stream=output_stream,
@@ -884,7 +881,7 @@ def test_dispatch_loosen_cap_writes_to_error_stream(readability_state_paths_enab
     override_path.write_text(json_lib.dumps({"loosens_used": hook_module.READABILITY_LOOSEN_CAP}))
     output_stream = io.StringIO()
     error_stream = io.StringIO()
-    with _pytest_for_autouse.raises(SystemExit) as exit_info:
+    with pytest.raises(SystemExit) as exit_info:
         hook_module._dispatch_cli_flag(
             "--readability-loosen",
             output_stream=output_stream,
@@ -908,7 +905,7 @@ def test_dispatch_loosen_floor_writes_to_error_stream(readability_state_paths_en
     override_path.write_text(json_lib.dumps(floor_payload))
     output_stream = io.StringIO()
     error_stream = io.StringIO()
-    with _pytest_for_autouse.raises(SystemExit) as exit_info:
+    with pytest.raises(SystemExit) as exit_info:
         hook_module._dispatch_cli_flag(
             "--readability-loosen",
             output_stream=output_stream,
@@ -923,7 +920,7 @@ def test_dispatch_reset_writes_success_to_output_stream(readability_state_paths_
     """The reset handler writes its success message to the supplied output stream."""
     output_stream = io.StringIO()
     error_stream = io.StringIO()
-    with _pytest_for_autouse.raises(SystemExit) as exit_info:
+    with pytest.raises(SystemExit) as exit_info:
         hook_module._dispatch_cli_flag(
             "--readability-reset",
             output_stream=output_stream,
@@ -938,7 +935,7 @@ def test_dispatch_disable_writes_success_to_output_stream(readability_state_path
     """The disable handler writes its success message to the supplied output stream."""
     output_stream = io.StringIO()
     error_stream = io.StringIO()
-    with _pytest_for_autouse.raises(SystemExit) as exit_info:
+    with pytest.raises(SystemExit) as exit_info:
         hook_module._dispatch_cli_flag(
             "--readability-disable",
             output_stream=output_stream,
@@ -953,7 +950,7 @@ def test_dispatch_enable_writes_success_to_output_stream(readability_state_paths
     """The enable handler writes its success message to the supplied output stream."""
     output_stream = io.StringIO()
     error_stream = io.StringIO()
-    with _pytest_for_autouse.raises(SystemExit) as exit_info:
+    with pytest.raises(SystemExit) as exit_info:
         hook_module._dispatch_cli_flag(
             "--readability-enable",
             output_stream=output_stream,
@@ -1203,6 +1200,17 @@ def test_readability_thresholds_reject_boolean_values(readability_state_paths_en
     assert thresholds.flesch_min == hook_module.DEFAULT_READABILITY_THRESHOLDS.flesch_min
     assert thresholds.max_sentence_words == hook_module.DEFAULT_READABILITY_THRESHOLDS.max_sentence_words
     assert thresholds.avg_sentence_words == hook_module.DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
+
+
+def test_iter_section_headers_docstring_matches_actual_pattern() -> None:
+    """`_iter_section_headers` uses `HEADING_LINE_PATTERN = ^#+`, so it returns
+    every ATX heading level (`#`, `##`, `###`...), not just `##`. The docstring
+    must describe that actual contract so callers cannot be misled."""
+    docstring = hook_module._iter_section_headers.__doc__ or ""
+    assert "every ATX heading" in docstring or "any heading level" in docstring, (
+        f"_iter_section_headers docstring must document that it matches every "
+        f"heading level (`HEADING_LINE_PATTERN` is `^#+`); got: {docstring!r}"
+    )
 
 
 def test_extract_readability_target_text_strips_fences_before_finding_header() -> None:

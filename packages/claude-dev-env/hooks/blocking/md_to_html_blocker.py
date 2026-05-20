@@ -59,7 +59,8 @@ def _block_context() -> str:
         f"{_html_effectiveness_url}\n"
         "Exceptions (.md still allowed):\n"
         "- Files inside .claude/ directories\n"
-        "- README.md and CHANGELOG.md at repo root"
+        "- README.md and CHANGELOG.md at repo root\n"
+        "- packages/claude-dev-env/{agents,docs,skills,rules,system-prompts,commands}/ source files"
     )
 
 
@@ -68,7 +69,8 @@ def _block_system_message() -> str:
         ".md files are blocked in this project — generate a self-contained .html "
         f"file instead. See {_html_effectiveness_url} for "
         "design patterns and examples. Exemptions: .claude/ infrastructure, "
-        "README.md, CHANGELOG.md at repo root."
+        "README.md, CHANGELOG.md at repo root, and "
+        "packages/claude-dev-env/{agents,docs,skills,rules,system-prompts,commands}/ source files."
     )
 
 

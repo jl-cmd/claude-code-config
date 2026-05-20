@@ -39,6 +39,25 @@ def test_exempt_root_filenames_are_module_constant():
     assert "changelog.md" in blocker_module._exempt_root_filenames
 
 
+def test_block_messages_mention_claude_dev_env_source_exemptions():
+    """The user-facing block context and system message must mention the
+    `packages/claude-dev-env/{agents,docs,skills,rules,system-prompts,commands}/`
+    exemption so contributors aren't misled when a `.md` write is denied elsewhere."""
+    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_dir not in sys.path:
+        sys.path.insert(0, hook_dir)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+
+    context_message = blocker_module._block_context()
+    system_message = blocker_module._block_system_message()
+    combined_messages = context_message + " " + system_message
+    assert "claude-dev-env" in combined_messages, (
+        "Block messages must mention claude-dev-env source-directory exemption; "
+        f"got context={context_message!r} system={system_message!r}"
+    )
+
+
 def test_blocks_write_md_file():
     result = _run_hook(
         "Write",

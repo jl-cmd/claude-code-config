@@ -32,8 +32,8 @@ The session designer reads the matching gallery file, then designs the report in
 ## Gotchas
 
 - **Doc-gist's auto-publish hook fires on Write/Edit of any HTML containing `<!-- @publish-as-gist -->`.** Session-log composes the HTML with the marker so auto-publish runs by default — sessions are intended for sharing with collaborators. The hook prints the gist + preview URLs to tool output; capture both.
-- **`gh` must be authenticated.** Auto-publish runs `gh gist create`. If `gh auth status` is failing, the hook surfaces the error to stderr and exits 0 (does not block the Write). Surface that message; the local vault HTML is still the canonical artifact, so the remaining steps still run.
-- **Vault paths sit outside `.claude/`.** Headless vault paths (e.g., `$OBSIDIAN_VAULT_PATH`) resolve outside the project tree. The `md_to_html_blocker` PreToolUse hook rejects Write/Edit on `.md` files outside `.claude/` directories — session reports use HTML, which the hook ignores.
+- **`gh` must be authenticated.** Auto-publish runs `gh gist create`. If `gh` is unauthenticated, `gh gist create` writes its error to stderr; the hook surfaces that message and exits 0 (does not block the Write). Surface the error to the user; the local vault HTML is still the canonical artifact, so the remaining steps still run.
+- **Vault paths sit outside `.claude/`.** Headless vault paths (e.g., `$OBSIDIAN_VAULT_PATH`) resolve outside the project tree. The `md_to_html_blocker` PreToolUse hook blocks `.md` writes unless the path is exempt — exemptions include any path containing `/.claude/` and README/CHANGELOG files at repo root. Session reports use HTML, which the hook ignores entirely.
 - **Sessions describe current state by convention.** The state_description_blocker hook does not scan .html, but the rule at `~/.claude/rules/no-historical-clutter.md` applies as a writing standard — skip historical and comparative language when composing the report; the rule file lists the full trigger set.
 - **`write_existing_file_blocker` rejects Write on existing paths.** Use Write only when creating a fresh session report; use Edit for the vault-context append in step 3.
 - **Each Write/Edit of the marked HTML creates a fresh gist with a new ID.** `gist_upload.py` calls `gh gist create` with no lookup of any prior gist, so step 3's Edit produces a different gist URL than step 2's Write. Quote the URLs from the FINAL publish (the one that fires after step 3's Edit) to the user; never embed a step-2 URL inside the HTML that step 3 then re-publishes.
@@ -118,7 +118,7 @@ Review the conversation history for any use of these vault MCP tools (excluding 
 - `mcp__obsidian__read_note`
 - `mcp__obsidian__read_multiple_notes`
 
-Edit the vault HTML via two Edit calls:
+Edit the vault HTML via two Edit calls (each Edit re-fires the auto-publish hook and creates a fresh gist; **the URL pair from the second/final Edit is canonical** — the first Edit's URLs are orphaned the moment the second Edit lands):
 
 1. Set the frontmatter `vault_context_retrieved` field to `true` when any of the three tools fired this session, `false` otherwise.
 2. Append one fact — vault-context status — into whatever section the report designer placed for notes / metadata / references. If the report has no such section, append a fresh `<h2>Notes</h2>` block before `</body>`:

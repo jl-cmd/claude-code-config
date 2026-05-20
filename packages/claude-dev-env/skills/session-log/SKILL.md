@@ -43,7 +43,7 @@ The session designer reads the matching gallery file, then designs the report in
 
 Determine which storage backend is available. First success wins.
 
-1. **Headless vault** — Bash `ob --version` to verify the obsidian-headless CLI is installed. Check `OBSIDIAN_VAULT_PATH` env var or `~/.claude/vault/` for a vault directory. If both resolve, set `backend = "headless"`.
+1. **Headless vault** — Bash `ob --version` to verify the obsidian-headless CLI is installed. Check `OBSIDIAN_VAULT_PATH` env var or `~/.claude/vault/` for a vault directory. When the CLI check succeeds AND at least one of those paths resolves to a vault directory, set `backend = "headless"`.
 2. **Local vault** — fall back to `~/.claude/vault/`. Create `~/.claude/vault/sessions` via `mkdir -p` if missing. Set `backend = "local"`.
 
 **Session-number detection:** Bash `ls` the project's session folder, parse filenames matching `[N]. *.html` or `[N]. *.md` to preserve sequence across the format migration. Highest N + 1. New project → start at 1.

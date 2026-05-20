@@ -335,9 +335,16 @@ def _count_substantive_prose_chars(body: str) -> int:
 
 
 def _iter_section_headers(body: str) -> list[str]:
-    """Return the list of `## Header` lines in the body, preserving canonical form."""
+    """Return the list of `## Header` lines in the body, preserving canonical form.
+
+    Fenced code blocks are stripped first so example markdown nested inside ``` fences
+    (a PR body that demonstrates the Heavy shape, for instance) is not counted as a
+    structural header. This keeps the shape classifier and Heavy required-header check
+    aligned with `_strip_markdown_ceremony`, which already strips fences before measuring.
+    """
+    body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub("", body)
     all_headers: list[str] = []
-    for each_match in HEADING_LINE_PATTERN.finditer(body):
+    for each_match in HEADING_LINE_PATTERN.finditer(body_without_fences):
         header_text = each_match.group(0).strip()
         all_headers.append(header_text)
     return all_headers

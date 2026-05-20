@@ -946,11 +946,6 @@ def test_shape_classifier_uses_substantive_chars_not_raw_length() -> None:
     assert hook_module._compute_pr_body_shape(tiny_prose_with_large_code_fence) == "trivial"
 
 
-def _build_short_failing_body() -> str:
-    """A body short enough to trigger the substantive-prose violation."""
-    return "Too short."
-
-
 def _build_main_hook_input(command: str) -> dict[str, object]:
     return {"tool_name": "Bash", "tool_input": {"command": command}}
 
@@ -1118,6 +1113,36 @@ def test_main_blocks_gh_pr_edit_short_body_file_equals_form(tmp_path) -> None:
     command = f'gh pr edit 123 -F={body_file}'
     decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))
     assert "deny" in decision_output
+
+
+def test_iter_section_headers_ignores_headings_inside_fenced_code_blocks() -> None:
+    """Headings nested inside ``` ... ``` fences are example content, not body headers.
+    The shape classifier and the Heavy required-header check must agree with the markdown
+    stripper -- the body of this very test demonstrates the regression."""
+    body = (
+        "Intro paragraph that does not classify the body.\n\n"
+        "```\n"
+        "## Problem\n"
+        "## Test plan\n"
+        "```\n"
+    )
+    headers = hook_module._iter_section_headers(body)
+    assert headers == [], f"Expected zero headers (fenced content), got {headers}"
+    assert hook_module._compute_pr_body_shape(body) != "heavy", (
+        "Body with only fenced example headers must not classify as heavy"
+    )
+    assert hook_module._body_contains_any_header(
+        body, hook_module.ALL_HEAVY_OPENING_HEADERS
+    ) is False, "Heavy opening-header check must not see fenced example content"
+
+
+def test_build_short_failing_body_helper_is_removed() -> None:
+    """The unused test helper `_build_short_failing_body` had zero call sites and
+    must not be re-introduced."""
+    test_module = sys.modules[__name__]
+    assert not hasattr(test_module, "_build_short_failing_body"), (
+        "_build_short_failing_body was re-introduced; it has no callers in this test file."
+    )
 
 
 @pytest.fixture

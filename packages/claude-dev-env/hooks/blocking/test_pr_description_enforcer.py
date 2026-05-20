@@ -1236,6 +1236,13 @@ def test_single_use_helper_constants_are_inlined() -> None:
         )
 
 
+def test_compute_pr_body_shape_uses_named_shape_constants() -> None:
+    """`_compute_pr_body_shape` returns the centralised shape names rather than
+    inline string literals. Confirm the constants flow through end-to-end."""
+    trivial_body = "Bump bun to 1.3.14."
+    assert hook_module._compute_pr_body_shape(trivial_body) == hook_module.TRIVIAL_SHAPE
+
+
 def test_compute_flesch_reading_ease_uses_named_constants() -> None:
     """`_compute_flesch_reading_ease` must reference the named Flesch constants
     rather than embed the magic literals 206.835 / 1.015 / 84.6 / 100.0 inline.

@@ -46,6 +46,7 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     HEADING_LINE_PATTERN,
     HEAVY_DETECTION_HEADER_COUNT_MIN,
     HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION,
+    HEAVY_SHAPE,
     INLINE_CODE_PATTERN,
     LINK_TEXT_PATTERN,
     MINIMUM_SUBSTANTIVE_PROSE_CHARS,
@@ -64,8 +65,10 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     SELF_CLOSING_REFERENCE_MESSAGE_PREFIX,
     SELF_CLOSING_REFERENCE_MESSAGE_SUFFIX,
     SELF_REFERENCE_PATTERN_TEMPLATE,
+    STANDARD_SHAPE,
     THIS_PR_OPENING_PATTERN,
     TRIVIAL_BODY_CHAR_THRESHOLD,
+    TRIVIAL_SHAPE,
     WHITESPACE_RUN_PATTERN,
 )
 
@@ -379,7 +382,7 @@ def _compute_pr_body_shape(body: str) -> str:
     header_count = len(all_headers)
 
     if substantive_length < TRIVIAL_BODY_CHAR_THRESHOLD and header_count == 0:
-        return "trivial"
+        return TRIVIAL_SHAPE
 
     if substantive_length >= HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION:
         matching_heavy_headers = sum(
@@ -387,9 +390,9 @@ def _compute_pr_body_shape(body: str) -> str:
             if any(each_header.lower().startswith(known.lower()) for known in ALL_HEAVY_DETECTION_HEADERS)
         )
         if matching_heavy_headers >= HEAVY_DETECTION_HEADER_COUNT_MIN:
-            return "heavy"
+            return HEAVY_SHAPE
 
-    return "standard"
+    return STANDARD_SHAPE
 
 
 def _body_contains_any_header(body: str, all_candidate_headers: frozenset[str]) -> bool:
@@ -782,7 +785,7 @@ def validate_pr_body(body: str, pr_number: int | None = None) -> list[str]:
 
     body_shape = _compute_pr_body_shape(body)
 
-    if body_shape == "heavy":
+    if body_shape == HEAVY_SHAPE:
         if not _body_contains_any_header(body, ALL_HEAVY_OPENING_HEADERS):
             violations.append(
                 f"Heavy PR body missing required opening header -- add one of "

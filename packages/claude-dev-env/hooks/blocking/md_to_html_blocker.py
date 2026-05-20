@@ -17,7 +17,9 @@ if _hooks_dir not in sys.path:
 
 from hooks_constants.md_to_html_blocker_constants import (  # noqa: E402
     ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES,
+    CLAUDE_DEV_ENV_REPO_NAME_SEGMENT,
     MINIMUM_SEGMENT_COUNT_TO_MATCH_INDICATOR,
+    PACKAGES_TOP_LEVEL_SEGMENT,
     WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH,
 )
 
@@ -51,8 +53,8 @@ def _is_exempt_path(file_path: str) -> bool:
     for each_starting_index in starting_segment_index_options:
         if (
             len(all_segments) >= each_starting_index + MINIMUM_SEGMENT_COUNT_TO_MATCH_INDICATOR
-            and all_segments[each_starting_index] == "packages"
-            and all_segments[each_starting_index + 1] == "claude-dev-env"
+            and all_segments[each_starting_index] == PACKAGES_TOP_LEVEL_SEGMENT
+            and all_segments[each_starting_index + 1] == CLAUDE_DEV_ENV_REPO_NAME_SEGMENT
             and all_segments[each_starting_index + 2] in ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES
         ):
             return True

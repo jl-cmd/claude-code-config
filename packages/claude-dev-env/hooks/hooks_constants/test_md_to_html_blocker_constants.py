@@ -12,6 +12,18 @@ if str(_HOOKS_ROOT) not in sys.path:
 from hooks_constants import md_to_html_blocker_constants as constants_module
 
 
+def test_indicator_path_segments_are_named_constants() -> None:
+    """The two leading segments of the Claude Code source indicator
+    (`packages/claude-dev-env`) must live as named constants so
+    `_is_exempt_path` references symbols, not inline literals. Bugbot flagged
+    these as magic strings even though the third segment was already a named
+    constant; align all three."""
+    assert constants_module.PACKAGES_TOP_LEVEL_SEGMENT == "packages"
+    assert constants_module.CLAUDE_DEV_ENV_REPO_NAME_SEGMENT == "claude-dev-env"
+    for each_name in ("PACKAGES_TOP_LEVEL_SEGMENT", "CLAUDE_DEV_ENV_REPO_NAME_SEGMENT"):
+        assert each_name in constants_module.__all__
+
+
 def test_claude_code_source_top_directories_enumerates_six_canonical_dirs() -> None:
     """The exempt top-level directory set must match the six canonical Claude
     Code source directories (agents, docs, skills, rules, system-prompts,

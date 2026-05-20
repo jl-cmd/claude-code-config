@@ -148,6 +148,19 @@ def test_module_internal_header_constants_are_not_publicly_exported() -> None:
         )
 
 
+def test_body_shape_string_literals_are_named_constants() -> None:
+    """The three PR-body shape names (`trivial`, `standard`, `heavy`) are used
+    by both `_compute_pr_body_shape` (return values) and `validate_pr_body`
+    (string comparisons). Bugbot flagged the inline literals as cross-function
+    magic strings. Pin the canonical names in `hooks_constants/` so a typo in
+    either site cannot silently misclassify shape."""
+    assert constants_module.TRIVIAL_SHAPE == "trivial"
+    assert constants_module.STANDARD_SHAPE == "standard"
+    assert constants_module.HEAVY_SHAPE == "heavy"
+    for each_name in ("TRIVIAL_SHAPE", "STANDARD_SHAPE", "HEAVY_SHAPE"):
+        assert each_name in constants_module.__all__
+
+
 def test_readability_cli_flag_tokens_exposes_four_flags() -> None:
     """ALL_READABILITY_CLI_FLAG_TOKENS centralises the four CLI flags the
     dispatcher recognises (loosen/reset/disable/enable). Pinning the set keeps

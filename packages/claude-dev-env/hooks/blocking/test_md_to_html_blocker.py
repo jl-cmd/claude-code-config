@@ -88,6 +88,19 @@ def test_blocks_uppercase_md_extension():
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_module_imports_path_segments_from_hooks_constants():
+    """The blocker pulls the two leading path segments (`packages` and
+    `claude-dev-env`) through the centralised hooks_constants module rather
+    than inlining them as raw string literals."""
+    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_dir not in sys.path:
+        sys.path.insert(0, hook_dir)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+    assert blocker_module.PACKAGES_TOP_LEVEL_SEGMENT == "packages"
+    assert blocker_module.CLAUDE_DEV_ENV_REPO_NAME_SEGMENT == "claude-dev-env"
+
+
 def test_module_imports_top_directories_from_hooks_constants():
     """The exempt-top-directories set must live in `hooks_constants/` rather
     than as a file-global single-use constant in the blocker module. The

@@ -65,12 +65,13 @@ def is_exempt_path(file_path: str) -> bool:
         return True
     if _has_plugin_directory_segment(lower_normalized):
         return True
-    canonical_lower_path = os.path.realpath(expanded_path).replace("\\", "/").lower()
+    canonical_normalized_path = os.path.realpath(expanded_path).replace("\\", "/")
+    canonical_lower_path = canonical_normalized_path.lower()
     if _is_under_exempt_home_directory(canonical_lower_path):
         return True
     if _is_under_system_temp_directory(canonical_lower_path):
         return True
-    if _is_under_plugin_root_marker(normalized):
+    if _is_under_plugin_root_marker(canonical_normalized_path):
         return True
     if basename.lower() in ALL_EXEMPT_ROOT_FILENAMES:
         directory = os.path.dirname(normalized)

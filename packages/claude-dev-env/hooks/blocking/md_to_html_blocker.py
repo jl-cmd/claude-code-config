@@ -27,12 +27,9 @@ from md_path_exemptions import is_exempt_path  # noqa: E402
 from md_path_exemptions import _is_repo_root_directory  # noqa: E402,F401
 from md_path_exemptions import _is_under_plugin_root_marker  # noqa: E402,F401
 
-from config.md_blocker_constants import ALL_EXEMPT_ROOT_FILENAMES  # noqa: E402
-
 
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
-_exempt_root_filenames = ALL_EXEMPT_ROOT_FILENAMES
 
 
 def _is_exempt_path(file_path: str) -> bool:

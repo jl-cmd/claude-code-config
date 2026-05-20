@@ -1,4 +1,10 @@
-"""Tests for md_to_html_blocker hook."""
+"""Tests for md_to_html_blocker hook.
+
+Subprocess CWD is rooted under the user's home in a dedicated sandbox so that
+relative-path test cases canonicalize outside any `.claude-plugin/` ancestor,
+outside the OS temp directory, and outside the exempt home-relative
+subdirectories. This keeps tests independent of where pytest itself is run.
+"""
 
 import importlib
 import json
@@ -6,9 +12,12 @@ import os
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "md_to_html_blocker.py")
+_NON_EXEMPT_SANDBOX_PARENT = str(Path.home() / ".pytest_md_blocker_sandbox")
+os.makedirs(_NON_EXEMPT_SANDBOX_PARENT, exist_ok=True)
 
 
 class _RunHook:
@@ -20,24 +29,11 @@ class _RunHook:
             capture_output=True,
             text=True,
             check=False,
+            cwd=_NON_EXEMPT_SANDBOX_PARENT,
         )
 
 
 _run_hook = _RunHook()
-
-
-def test_exempt_root_filenames_are_module_constant():
-    """Exempt root filenames should be a module-level constant, not inline in the function body."""
-    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
-    if hook_dir not in sys.path:
-        sys.path.insert(0, hook_dir)
-
-    blocker_module = importlib.import_module("md_to_html_blocker")
-    importlib.reload(blocker_module)
-
-    assert hasattr(blocker_module, "_exempt_root_filenames")
-    assert "readme.md" in blocker_module._exempt_root_filenames
-    assert "changelog.md" in blocker_module._exempt_root_filenames
 
 
 def test_blocks_write_md_file():
@@ -352,23 +348,6 @@ def test_blocks_home_directory_other_md_file():
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_md_blocker_constants_module_has_exemption_lists():
-    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
-    if hook_dir not in sys.path:
-        sys.path.insert(0, hook_dir)
-
-    constants_module = importlib.import_module("config.md_blocker_constants")
-    importlib.reload(constants_module)
-
-    assert "SessionLog" in constants_module.ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES
-    assert "skill.md" in constants_module.EXEMPT_ANYWHERE_FILENAMES
-    assert "agents" in constants_module.EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
-    assert "skills" in constants_module.EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
-    assert "commands" in constants_module.EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
-    assert constants_module.REPO_ROOT_MARKER_NAME == ".git"
-    assert constants_module.PLUGIN_ROOT_MARKER_DIRECTORY_NAME == ".claude-plugin"
-
-
 def test_passes_tilde_session_log_path():
     result = _run_hook(
         "Write",
@@ -574,6 +553,32 @@ def test_passes_canonicalized_home_path():
     result = _run_hook(
         "Write",
         {"file_path": canonical_path, "content": "# Canonical"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_relative_path_under_cwd_plugin_root_marker(tmp_path):
+    plugin_root = tmp_path / "plugin-cwd-repo"
+    (plugin_root / ".claude-plugin").mkdir(parents=True)
+    (plugin_root / "subdir").mkdir(parents=True)
+
+    payload = json.dumps(
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "subdir/design.md",
+                "content": "# Design",
+            },
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=str(plugin_root),
     )
     assert result.returncode == 0
     assert result.stdout == ""

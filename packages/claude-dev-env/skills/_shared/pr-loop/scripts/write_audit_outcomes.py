@@ -19,7 +19,7 @@ if str(_self_dir) not in sys.path:
 from _cli_utils import require_file
 from _path_resolver import outcome_xml_path
 from _xml_utils import emit_pretty_xml
-from config.path_resolver_constants import ALL_FINDING_BODY_ELEMENT_KEYS
+from skills_pr_loop_constants.path_resolver_constants import ALL_FINDING_BODY_ELEMENT_KEYS
 
 
 def build_audit_xml(

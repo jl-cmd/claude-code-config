@@ -6,13 +6,17 @@ Enforces the "describe current state only" rule — no "instead of", "previously
 describe what IS, not what WAS or what CHANGED.
 """
 
-import io
 import json
 import os
 import sys
 from pathlib import Path
+from typing import TextIO
 
-from hooks_constants.state_description_blocker_constants import (
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.state_description_blocker_constants import (  # noqa: E402
     ALL_BLOCK_COMMENT_EXTENSIONS,
     ALL_BLOCK_COMMENT_ONLY_EXTENSIONS,
     ALL_COMMENT_BEARING_EXTENSIONS,
@@ -223,7 +227,7 @@ def main() -> None:
     sys.exit(0)
 
 
-def _emit_hook_result(all_hook_data: dict, output_stream: io.TextIOBase) -> None:
+def _emit_hook_result(all_hook_data: dict, output_stream: TextIO) -> None:
     """Write the hook result JSON to the given output stream."""
     output_stream.write(json.dumps(all_hook_data) + "\n")
     output_stream.flush()

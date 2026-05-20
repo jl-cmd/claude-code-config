@@ -10,7 +10,11 @@ import json
 import sys
 from pathlib import Path
 
-from hooks_constants.bot_mention_comment_blocker_constants import (
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.bot_mention_comment_blocker_constants import (  # noqa: E402
     COPILOT_MENTION_TOKEN,
     CORRECTIVE_MESSAGE_COPILOT,
     CORRECTIVE_MESSAGE_CURSOR,

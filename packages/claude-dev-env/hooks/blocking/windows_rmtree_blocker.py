@@ -17,8 +17,12 @@ import re
 import sys
 from pathlib import Path
 
-from hooks_constants.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin
-from hooks_constants.windows_rmtree_blocker_constants import PYTHON_FILE_EXTENSION
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin  # noqa: E402
+from hooks_constants.windows_rmtree_blocker_constants import PYTHON_FILE_EXTENSION  # noqa: E402
 
 
 def payload_contains_unsafe_rmtree(payload_text: str) -> bool:

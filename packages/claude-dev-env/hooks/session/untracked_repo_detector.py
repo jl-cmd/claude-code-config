@@ -15,13 +15,17 @@ import os
 import sys
 from pathlib import Path
 
-from hooks_constants.dynamic_stderr_handler import DynamicStderrHandler
-from hooks_constants.project_paths_reader import (
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.dynamic_stderr_handler import DynamicStderrHandler  # noqa: E402
+from hooks_constants.project_paths_reader import (  # noqa: E402
     load_registry,
     registry_contains_path,
     registry_file_path,
 )
-from hooks_constants.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME
+from hooks_constants.setup_project_paths_constants import GIT_DIRECTORY_SEGMENT_NAME  # noqa: E402
 
 
 _logger = logging.getLogger("untracked_repo_detector")

@@ -25,7 +25,11 @@ import tempfile
 from pathlib import Path
 from typing import TextIO
 
-from hooks_constants.pr_converge_bugteam_enforcer_constants import (
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.pr_converge_bugteam_enforcer_constants import (  # noqa: E402
     BUGTEAM_SKILL_NAME,
     SKILL_TOOL_NAME,
     STATE_FIELD_BUGTEAM_SKILL_INVOKED_AT_HEAD,
@@ -35,7 +39,7 @@ from hooks_constants.pr_converge_bugteam_enforcer_constants import (
     STATE_FILE_ATOMIC_WRITE_SUFFIX,
     STATE_FILE_JSON_INDENT_SPACES,
 )
-from hooks_constants.pr_converge_bugteam_enforcer_state import (
+from hooks_constants.pr_converge_bugteam_enforcer_state import (  # noqa: E402
     load_state_dictionary,
     resolve_state_path,
 )

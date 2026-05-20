@@ -25,7 +25,11 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-from hooks_constants.pr_converge_bugteam_enforcer_constants import (
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.pr_converge_bugteam_enforcer_constants import (  # noqa: E402
     AGENT_TOOL_NAME,
     ALL_AUDIT_PROMPT_SUBSTRINGS,
     BUGTEAM_PHASE,
@@ -37,7 +41,7 @@ from hooks_constants.pr_converge_bugteam_enforcer_constants import (
     STATE_FIELD_PHASE,
     STATE_FIELD_TICK_COUNT,
 )
-from hooks_constants.pr_converge_bugteam_enforcer_state import (
+from hooks_constants.pr_converge_bugteam_enforcer_state import (  # noqa: E402
     load_state_dictionary,
     resolve_state_path,
 )

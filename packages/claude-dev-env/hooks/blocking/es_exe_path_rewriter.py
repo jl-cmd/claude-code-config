@@ -15,15 +15,19 @@ import re
 import sys
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
-from hooks_constants.dynamic_stderr_handler import DynamicStderrHandler
-from hooks_constants.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin
-from hooks_constants.path_rewriter_constants import (
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.dynamic_stderr_handler import DynamicStderrHandler  # noqa: E402
+from hooks_constants.pre_tool_use_stdin import read_hook_input_dictionary_from_stdin  # noqa: E402
+from hooks_constants.path_rewriter_constants import (  # noqa: E402
     BASH_TOOL_NAME,
     HOOK_EVENT_NAME,
     PERMISSION_ALLOW,
     PLACEHOLDER_TOKEN_PATTERN,
 )
-from hooks_constants.project_paths_reader import load_registry
+from hooks_constants.project_paths_reader import load_registry  # noqa: E402
 
 _ES_EXE_TRIGGER_PATTERN = re.compile(
     r"(?i)(?<![\w.])(?:Everything[/\\])?es\.exe(?![\w.])",

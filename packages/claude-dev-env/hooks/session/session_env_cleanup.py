@@ -25,7 +25,11 @@ import time
 from pathlib import Path
 from typing import Callable
 
-from hooks_constants.session_env_cleanup_constants import (
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.session_env_cleanup_constants import (  # noqa: E402
     ALL_RMTREE_ONEXC_PYTHON_VERSION_PARTS,
     SESSION_ENV_DIRECTORY,
     SESSION_ID_PATTERN,

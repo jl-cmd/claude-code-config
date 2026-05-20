@@ -15,7 +15,11 @@ import re
 import sys
 from pathlib import Path
 
-from hooks_constants.messages import USER_FACING_ASKUSERQUESTION_NOTICE
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.messages import USER_FACING_ASKUSERQUESTION_NOTICE  # noqa: E402
 
 
 def strip_code_and_quotes(text: str) -> str:

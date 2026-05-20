@@ -5,6 +5,7 @@ import io
 import json as json_lib
 import json
 import pathlib
+import re as _re
 import sys
 from unittest.mock import patch
 
@@ -795,6 +796,52 @@ def test_loosen_avg_sentence_ceiling_cap_errors(tmp_path, monkeypatch) -> None:
     override_path.parent.mkdir(parents=True, exist_ok=True)
     override_path.write_text(json_lib.dumps(payload))
     assert hook_module._apply_readability_loosen() == "ceiling_reached"
+
+
+def test_strip_leading_hash_lines_helper_is_removed() -> None:
+    """The unused leading-hash stripper must not exist as a module attribute."""
+    assert not hasattr(hook_module, "_strip_leading_hash_lines")
+
+
+def test_strip_markdown_ceremony_returns_stripped_prose() -> None:
+    """The shared markdown stripper removes fences, inline code, blockquotes,
+    headings, bullets, bold, emphasis, and Markdown link targets, leaving the
+    underlying prose intact."""
+    body = "\n".join(
+        [
+            "# Heading text",
+            "> blockquoted content",
+            "- bullet content",
+            "**bold body**",
+            "*emphasized body*",
+            "[link label](https://example.com)",
+            "`inline code body`",
+            "```",
+            "fenced code body",
+            "```",
+            "plain prose line",
+        ]
+    )
+    stripped = hook_module._strip_markdown_ceremony(body)
+    assert "Heading text" not in stripped
+    assert "blockquoted content" in stripped
+    assert "bullet content" in stripped
+    assert "bold body" in stripped
+    assert "emphasized body" in stripped
+    assert "link label" in stripped
+    assert "plain prose line" in stripped
+    assert "inline code body" not in stripped
+    assert "fenced code body" not in stripped
+    assert "https://example.com" not in stripped
+
+
+def test_strip_markdown_ceremony_used_by_substantive_prose_count() -> None:
+    """_count_substantive_prose_chars is consistent with the shared stripper:
+    its returned count matches len of the whitespace-collapsed stripped body."""
+    body = "# Heading\n\nA single paragraph of prose with **bold** and `code` words."
+    stripped = hook_module._strip_markdown_ceremony(body)
+    collapsed = _re.sub(r"\s+", " ", stripped).strip()
+    assert hook_module._count_substantive_prose_chars(body) == len(collapsed)
 
 
 def test_threshold_override_file_widens_max_sentence_words(tmp_path, monkeypatch) -> None:

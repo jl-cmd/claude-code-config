@@ -303,23 +303,32 @@ def extract_body_from_command(
     return scan_outcome
 
 
-def _count_substantive_prose_chars(body: str) -> int:
-    """Return the count of prose characters after stripping Markdown ceremony.
+def _strip_markdown_ceremony(body: str) -> str:
+    """Return the body with Markdown ceremony stripped to leave underlying prose.
 
     Removes fenced code, inline code, heading lines, blockquote markers,
     bullet list markers, bold/emphasis markers, and Markdown link targets.
+    Whitespace is preserved so callers can collapse or measure it as needed.
+    """
+    body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub("", body)
+    body_without_inline_code = INLINE_CODE_PATTERN.sub("", body_without_fences)
+    body_without_blockquotes = BLOCKQUOTE_MARKER_PATTERN.sub("", body_without_inline_code)
+    body_without_headings = HEADING_LINE_PATTERN.sub("", body_without_blockquotes)
+    body_without_bullets = BULLET_MARKER_PATTERN.sub("", body_without_headings)
+    body_without_bold = BOLD_PAIR_PATTERN.sub(r"\1", body_without_bullets)
+    body_without_emphasis = body_without_bold.replace("*", "")
+    body_without_links = LINK_TEXT_PATTERN.sub(r"\1", body_without_emphasis)
+    return body_without_links
+
+
+def _count_substantive_prose_chars(body: str) -> int:
+    """Return the count of prose characters after stripping Markdown ceremony.
+
     Collapses internal whitespace so a body of only headers and bullets --
     no real WHY paragraph -- registers as effectively empty.
     """
-    body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub('', body)
-    body_without_inline_code = INLINE_CODE_PATTERN.sub('', body_without_fences)
-    body_without_blockquotes = BLOCKQUOTE_MARKER_PATTERN.sub('', body_without_inline_code)
-    body_without_headings = HEADING_LINE_PATTERN.sub('', body_without_blockquotes)
-    body_without_bullets = BULLET_MARKER_PATTERN.sub('', body_without_headings)
-    body_without_bold = BOLD_PAIR_PATTERN.sub(r'\1', body_without_bullets)
-    body_without_emphasis = body_without_bold.replace('*', '')
-    body_without_links = LINK_TEXT_PATTERN.sub(r'\1', body_without_emphasis)
-    body_collapsed = WHITESPACE_RUN_PATTERN.sub(' ', body_without_links).strip()
+    stripped_body = _strip_markdown_ceremony(body)
+    body_collapsed = WHITESPACE_RUN_PATTERN.sub(' ', stripped_body).strip()
     return len(body_collapsed)
 
 
@@ -373,21 +382,6 @@ def _matches_self_closing_reference(body: str, pr_number: int) -> bool:
     pattern_source = SELF_REFERENCE_PATTERN_TEMPLATE.format(pr_number=pr_number)
     compiled_pattern = re.compile(pattern_source)
     return compiled_pattern.search(body) is not None
-
-
-def _strip_leading_hash_lines(body: str) -> str:
-    body_lines = body.splitlines()
-    skip_index = 0
-    while skip_index < len(body_lines):
-        each_line = body_lines[skip_index]
-        if each_line.strip().startswith("#"):
-            skip_index += 1
-            continue
-        if not each_line.strip():
-            skip_index += 1
-            continue
-        break
-    return "\n".join(body_lines[skip_index:])
 
 
 def _opens_with_this_pr_phrase(body: str) -> bool:
@@ -496,18 +490,6 @@ def _count_syllables_in_word(word: str) -> int:
 _sentence_split_pattern: re.Pattern[str] = re.compile(r"[.!?]+\s+")
 
 
-def _strip_markdown_ceremony_for_metrics(body: str) -> str:
-    body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub("", body)
-    body_without_inline_code = INLINE_CODE_PATTERN.sub("", body_without_fences)
-    body_without_blockquotes = BLOCKQUOTE_MARKER_PATTERN.sub("", body_without_inline_code)
-    body_without_headings = HEADING_LINE_PATTERN.sub("", body_without_blockquotes)
-    body_without_bullets = BULLET_MARKER_PATTERN.sub("", body_without_headings)
-    body_without_bold = BOLD_PAIR_PATTERN.sub(r"\1", body_without_bullets)
-    body_without_emphasis = body_without_bold.replace("*", "")
-    body_without_links = LINK_TEXT_PATTERN.sub(r"\1", body_without_emphasis)
-    return body_without_links
-
-
 def _split_sentences(text: str) -> list[str]:
     cleaned_text = text.strip()
     if not cleaned_text:
@@ -563,7 +545,7 @@ def _extract_readability_target_text(body: str) -> str:
             first_body_section = remainder
 
     combined_text = f"{intro_paragraph}\n\n{first_body_section}"
-    return _strip_markdown_ceremony_for_metrics(combined_text)
+    return _strip_markdown_ceremony(combined_text)
 
 
 def _evaluate_readability_metrics(

@@ -1091,6 +1091,35 @@ def test_extract_pr_number_skips_body_equals_form() -> None:
     assert hook_module._extract_pr_number_from_command(command) == 472
 
 
+def test_command_carries_body_flag_short_b_equals_form() -> None:
+    """`-b=value` short form must be detected by the pre-filter; previous version only
+    checked the space-separated `-b ` substring and silently bypassed the equals form."""
+    assert hook_module._command_carries_body_flag('gh pr edit 123 -b="x"') is True
+
+
+def test_command_carries_body_flag_short_F_equals_form() -> None:
+    """`-F=path` short form must be detected by the pre-filter."""
+    assert hook_module._command_carries_body_flag('gh pr edit 123 -F=body.md') is True
+
+
+def test_main_blocks_gh_pr_edit_short_body_equals_form() -> None:
+    """gh pr edit 123 -b="short" must be caught -- the -b= equals form was bypassing
+    the pre-filter and silently approving short bodies."""
+    command = 'gh pr edit 123 -b="Too short."'
+    decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))
+    assert "deny" in decision_output
+    assert "substantive prose" in decision_output.lower()
+
+
+def test_main_blocks_gh_pr_edit_short_body_file_equals_form(tmp_path) -> None:
+    """gh pr edit 123 -F=body.md must be caught -- the -F= equals form was bypassing the pre-filter."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Too short.")
+    command = f'gh pr edit 123 -F={body_file}'
+    decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))
+    assert "deny" in decision_output
+
+
 @pytest.fixture
 def readability_state_paths_enabled(tmp_path, monkeypatch):
     """Redirect the three readability state files to per-test temp paths while keeping

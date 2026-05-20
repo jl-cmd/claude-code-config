@@ -82,7 +82,9 @@ _non_body_value_flag_equals_prefixes: tuple[str, ...] = tuple(
     sorted(
         (
             prefix for prefix in all_value_flag_equals_prefixes
-            if not prefix.startswith("--body") and not prefix.startswith("-b=")
+            if not prefix.startswith("--body")
+            and not prefix.startswith("-b=")
+            and not prefix.startswith("-F=")
         ),
         key=len,
         reverse=True,
@@ -866,8 +868,10 @@ def _command_carries_body_flag(command: str) -> bool:
     return (
         "--body" in command
         or " -b " in command
+        or " -b=" in command
         or "--body-file" in command
         or " -F " in command
+        or " -F=" in command
     )
 
 

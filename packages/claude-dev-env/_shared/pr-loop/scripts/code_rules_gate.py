@@ -7,7 +7,11 @@ import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-from pr_loop_shared_constants.code_rules_gate_constants import (
+parent_directory = str(Path(__file__).resolve().parent)
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
+
+from pr_loop_shared_constants.code_rules_gate_constants import (  # noqa: E402
     ALL_CODE_FILE_EXTENSIONS,
     ALL_GIT_DIFF_CACHED_NAME_ONLY_NULL_TERMINATED_COMMAND,
     ALL_GIT_DIFF_NAME_ONLY_NULL_TERMINATED_COMMAND_PREFIX,

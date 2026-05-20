@@ -3,7 +3,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pr_loop_shared_constants.fix_hookspath_constants import (
+parent_directory = str(Path(__file__).resolve().parent)
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
+
+from pr_loop_shared_constants.fix_hookspath_constants import (  # noqa: E402
     ALL_CANONICAL_HOOKS_DIRECTORY_COMPONENTS,
     ALL_GIT_GLOBAL_GET_CORE_HOOKS_PATH_COMMAND,
     ALL_HOME_ENV_VAR_NAMES,
@@ -11,7 +15,7 @@ from pr_loop_shared_constants.fix_hookspath_constants import (
     PREFLIGHT_NO_PYTEST_FLAG,
     PREFLIGHT_REPO_ROOT_FLAG,
 )
-from pr_loop_shared_constants.preflight_constants import GIT_DIRECTORY_NAME
+from pr_loop_shared_constants.preflight_constants import GIT_DIRECTORY_NAME  # noqa: E402
 
 
 def resolve_canonical_hooks_directory(

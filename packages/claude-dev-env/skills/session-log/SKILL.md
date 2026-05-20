@@ -152,7 +152,7 @@ Scope: the current project's session folder only.
    - **Frontmatter completeness:** HTML comment block at top of `<body>` contains `type`, `project`, `session`, `date`, `status`, `blocked`, `vault_context_retrieved`, `tags`
    - **Status coherence:** `status: completed` with `blocked: true` is contradictory. `status: in-progress` or `status: blocked` on sessions older than 7 days is stale.
 3. **Auto-fix minor issues** via Edit:
-   - Missing frontmatter fields that can be inferred (e.g., `blocked: false` when status is `completed`)
+   - Missing frontmatter fields that can be inferred (e.g., `blocked: false` when status is `completed`; `vault_context_retrieved: false` when the field is absent, since the field defaults to false in pre-existing sessions)
    - `type` field set to a wrong value (correct to `session-report`)
 
    Each Edit on a marked HTML file re-fires doc-gist's auto-publish hook and produces a fresh gist + preview URL pair on stderr — the prior gist URL becomes orphaned. Surface a `Session [N] republished — new preview: <url>` line per Edit so the user can update any prior shares.

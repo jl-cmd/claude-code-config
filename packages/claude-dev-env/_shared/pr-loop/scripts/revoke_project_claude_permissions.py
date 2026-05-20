@@ -10,7 +10,11 @@ autoMode sections so repeated grant/revoke cycles leave no dead structure.
 import sys
 from pathlib import Path
 
-from _claude_permissions_common import (
+parent_directory = str(Path(__file__).resolve().parent)
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
+
+from _claude_permissions_common import (  # noqa: E402
     build_agent_config_deny_rules,
     build_permission_rules,
     exit_with_error,

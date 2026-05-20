@@ -10,7 +10,7 @@ import tempfile
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "hedging_language_blocker.py")
 _HOOKS_DIR = os.path.dirname(HOOK_SCRIPT_PATH)
 _HOOKS_ROOT = os.path.join(_HOOKS_DIR, "..")
-_HOOK_CONFIG_DIR = os.path.join(_HOOKS_ROOT, "config")
+_HOOK_CONFIG_DIR = os.path.join(_HOOKS_ROOT, "hooks_constants")
 if _HOOKS_DIR not in sys.path:
     sys.path.insert(0, _HOOKS_DIR)
 if _HOOKS_ROOT not in sys.path:

@@ -8,8 +8,8 @@ _script_directory = str(Path(__file__).resolve().parent)
 if _script_directory not in sys.path:
     sys.path.insert(0, _script_directory)
 
-import _claude_permissions_common as common_module
-from _claude_permissions_common import (
+import _bugteam_permissions_common as common_module
+from _bugteam_permissions_common import (
     build_permission_rule,
     get_current_project_path,
     path_contains_glob_metacharacters,

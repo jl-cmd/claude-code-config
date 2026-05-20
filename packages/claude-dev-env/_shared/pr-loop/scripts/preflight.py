@@ -4,7 +4,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pr_loop_shared_constants.fix_hookspath_constants import HOOKS_PATH_VERIFICATION_SUFFIX
+parent_directory = str(Path(__file__).resolve().parent)
+if parent_directory not in sys.path:
+    sys.path.insert(0, parent_directory)
+
+from pr_loop_shared_constants.fix_hookspath_constants import HOOKS_PATH_VERIFICATION_SUFFIX  # noqa: E402
 from pr_loop_shared_constants.preflight_constants import (
     ALL_GIT_CONFIG_GET_CORE_HOOKS_PATH_SUBCOMMAND,
     ALL_GIT_DIFF_NAME_ONLY_SUBCOMMAND,

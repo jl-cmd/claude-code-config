@@ -104,7 +104,7 @@ The marker triggers the PostToolUse hook after Write or Edit — the hook scans 
 
 Beyond those four requirements, design the shape that fits. A convergence loop session reads naturally as an incident timeline (`12-incident-report.html`); a feature build reads as a PR writeup (`17-pr-writeup.html`); a research session reads as a feature explainer (`14-research-feature-explainer.html`). Read the matching gallery entry for typography, palette, spatial idioms — adapt, do not copy.
 
-**Write the file** via the Write tool to the vault path. Create the project directory via `mkdir -p` if it does not exist. The auto-publish hook fires after the Write completes and prints a gist + preview URL pair to stderr. Step 3's Edit triggers the hook again and prints a fresh pair — the step-3 pair is the canonical one to quote to the user, since the step-2 gist becomes orphaned the moment step 3 republishes.
+**Write the file** via the Write tool to the vault path. Create the project directory via `mkdir -p` if it does not exist. The auto-publish hook fires after the Write completes and prints a gist + preview URL pair to stderr. Step 3's Edit triggers the hook again and prints a fresh pair. Always quote the URL pair from the **most recent auto-publish run for the session being created** — for the just-created session that is step 3's pair (the step-2 gist becomes orphaned the moment step 3 republishes). Step 5's tidy auto-fix Edits on OLDER session files produce separate URL pairs for those older sessions; Step 5 surfaces them per-Edit and they do not affect the current session's canonical URL.
 
 **If the Write fails**, output the HTML content in the conversation so the user can copy it manually. Skip step 3 and continue at step 4.
 
@@ -186,7 +186,7 @@ The primary outcome comes from the session title resolved in step 1.
 ## Run-and-report checklist
 
 - [ ] Backend detected and announced
-- [ ] Session number resolved from `[N]. *.html` files
+- [ ] Session number resolved from `[N]. *.html` and `[N]. *.md` files (both parsed to preserve sequence across the format migration)
 - [ ] HTML composed via doc-gist's shape principles (gallery-anchored)
 - [ ] `<!-- @publish-as-gist -->` marker present somewhere in the HTML
 - [ ] Frontmatter HTML comment present at top of `<body>`

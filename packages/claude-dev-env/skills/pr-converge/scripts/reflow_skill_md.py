@@ -13,17 +13,6 @@ import sys
 import textwrap
 from pathlib import Path
 
-script_directory = str(Path(__file__).resolve().parent)
-
-while script_directory in sys.path:
-    sys.path.remove(script_directory)
-if script_directory not in sys.path:
-    sys.path.insert(0, script_directory)
-
-from evict_cached_config_modules import evict_cached_config_modules
-
-evict_cached_config_modules()
-
 from pr_converge_scripts_constants.reflow_skill_md_constants import (
     BASH_CONTINUATION_MARKER_WIDTH,
     BULLET_LIST_ITEM_PATTERN as BULLET_RE,

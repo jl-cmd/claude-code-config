@@ -1145,6 +1145,26 @@ def test_build_short_failing_body_helper_is_removed() -> None:
     )
 
 
+def test_extract_readability_target_text_strips_fences_before_finding_header() -> None:
+    """`_extract_readability_target_text` must strip fenced code blocks before
+    searching for the first structural header. Otherwise a fenced example like
+    ```\\n## Problem\\n``` is matched as the first header and the intro / section
+    boundaries collapse to bogus values."""
+    body = (
+        "Intro paragraph that should be the intro for readability analysis.\n\n"
+        "```\n## Problem\n```\n\n"
+        "## RealHeader\n\n"
+        "Real first-section prose for readability measurement.\n"
+    )
+    target_text = hook_module._extract_readability_target_text(body)
+    assert "Intro paragraph" in target_text, (
+        f"Intro paragraph must survive; got {target_text!r}"
+    )
+    assert "Real first-section prose" in target_text, (
+        f"First real section prose must follow; got {target_text!r}"
+    )
+
+
 @pytest.fixture
 def readability_state_paths_enabled(tmp_path, monkeypatch):
     """Redirect the three readability state files to per-test temp paths while keeping

@@ -534,7 +534,8 @@ def _compute_flesch_reading_ease(text: str) -> float:
 
 def _extract_readability_target_text(body: str) -> str:
     intro_paragraph = ""
-    body_after_strip = body.lstrip()
+    body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub("", body)
+    body_after_strip = body_without_fences.lstrip()
     blank_line_position = body_after_strip.find("\n\n")
     header_position_match = HEADING_LINE_PATTERN.search(body_after_strip)
     header_position = header_position_match.start() if header_position_match else -1

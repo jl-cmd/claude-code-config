@@ -118,7 +118,7 @@ Review the conversation history for any use of these vault MCP tools (excluding 
 - `mcp__obsidian__read_note`
 - `mcp__obsidian__read_multiple_notes`
 
-Edit the vault HTML to do two things in the same Edit pass:
+Edit the vault HTML via two Edit calls:
 
 1. Set the frontmatter `vault_context_retrieved` field to `true` when any of the three tools fired this session, `false` otherwise.
 2. Append one fact — vault-context status — into whatever section the report designer placed for notes / metadata / references. If the report has no such section, append a fresh `<h2>Notes</h2>` block before `</body>`:

@@ -6,9 +6,7 @@ that markdown flattens. See https://thariqs.github.io/html-effectiveness/
 """
 
 import json
-import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import TextIO
 
@@ -25,115 +23,20 @@ while _blocking_directory in sys.path:
 if _blocking_directory not in sys.path:
     sys.path.insert(0, _blocking_directory)
 
-from config.md_blocker_constants import (
-    EXEMPT_ANYWHERE_FILENAMES,
-    ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES,
-    EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
-    PLUGIN_ROOT_MARKER_DIRECTORY_NAME,
-    REPO_ROOT_MARKER_NAME,
-)
+from md_path_exemptions import is_exempt_path  # noqa: E402
+from md_path_exemptions import _is_repo_root_directory  # noqa: E402,F401
+from md_path_exemptions import _is_under_plugin_root_marker  # noqa: E402,F401
+
+from config.md_blocker_constants import ALL_EXEMPT_ROOT_FILENAMES  # noqa: E402
 
 
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
-_exempt_root_filenames = ("readme.md", "changelog.md")
+_exempt_root_filenames = ALL_EXEMPT_ROOT_FILENAMES
 
 
 def _is_exempt_path(file_path: str) -> bool:
-    expanded_path = os.path.expanduser(file_path)
-    normalized = os.path.normpath(expanded_path).replace("\\", "/")
-    lower_normalized = normalized.lower()
-    if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
-        return True
-    if (
-        "/.claude-plugin/" in lower_normalized
-        or lower_normalized.startswith(".claude-plugin/")
-    ):
-        return True
-    basename = os.path.basename(normalized)
-    exempt_anywhere_filenames = EXEMPT_ANYWHERE_FILENAMES
-    if basename.lower() in exempt_anywhere_filenames:
-        return True
-    if _has_plugin_directory_segment(lower_normalized):
-        return True
-    canonical_lower_path = (
-        os.path.realpath(expanded_path).replace("\\", "/").lower()
-    )
-    if _is_under_exempt_home_directory(canonical_lower_path):
-        return True
-    if _is_under_system_temp_directory(canonical_lower_path):
-        return True
-    if _is_under_plugin_root_marker(normalized):
-        return True
-    if basename.lower() in _exempt_root_filenames:
-        directory = os.path.dirname(normalized)
-        if directory in ("", "."):
-            return True
-        if _is_repo_root_directory(directory):
-            return True
-    return False
-
-
-def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:
-    exempt_plugin_directory_segments = EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
-    for each_directory_segment in exempt_plugin_directory_segments:
-        segment_marker = f"/{each_directory_segment}/"
-        if segment_marker in lower_normalized_path:
-            return True
-        if lower_normalized_path.startswith(f"{each_directory_segment}/"):
-            return True
-    return False
-
-
-def _is_under_plugin_root_marker(normalized_path: str) -> bool:
-    plugin_root_marker_directory_name = PLUGIN_ROOT_MARKER_DIRECTORY_NAME
-    directory = os.path.dirname(normalized_path)
-    visited_directories: set[str] = set()
-    while directory and directory not in visited_directories:
-        visited_directories.add(directory)
-        marker_path = os.path.join(directory, plugin_root_marker_directory_name)
-        if os.path.isdir(marker_path):
-            return True
-        parent_directory = os.path.dirname(directory)
-        if parent_directory == directory:
-            break
-        directory = parent_directory
-    return False
-
-
-def _is_under_exempt_home_directory(lower_normalized_path: str) -> bool:
-    exempt_home_relative_directories = ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES
-    home_directory = (
-        os.path.realpath(os.path.expanduser("~"))
-        .replace("\\", "/")
-        .rstrip("/")
-        .lower()
-    )
-    if not home_directory:
-        return False
-    for each_relative_directory in exempt_home_relative_directories:
-        exempt_directory = f"{home_directory}/{each_relative_directory.lower()}"
-        if lower_normalized_path.startswith(f"{exempt_directory}/"):
-            return True
-    return False
-
-
-def _is_under_system_temp_directory(lower_normalized_path: str) -> bool:
-    temp_directory = (
-        os.path.realpath(tempfile.gettempdir())
-        .replace("\\", "/")
-        .rstrip("/")
-        .lower()
-    )
-    if not temp_directory:
-        return False
-    return lower_normalized_path.startswith(f"{temp_directory}/")
-
-
-def _is_repo_root_directory(directory_path: str) -> bool:
-    repo_root_marker_name = REPO_ROOT_MARKER_NAME
-    git_marker_path = os.path.join(directory_path, repo_root_marker_name)
-    return os.path.exists(git_marker_path)
+    return is_exempt_path(file_path)
 
 
 def _block_reason(file_path: str) -> str:

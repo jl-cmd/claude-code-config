@@ -22,6 +22,10 @@ _hook_dir = str(Path(__file__).absolute().parent.parent)
 if _hook_dir not in sys.path:
     sys.path.insert(0, _hook_dir)
 
+_blocking_dir = str(Path(__file__).absolute().parent.parent / "blocking")
+if _blocking_dir not in sys.path:
+    sys.path.insert(0, _blocking_dir)
+
 from hooks_constants.html_companion_constants import (  # noqa: E402
     BLOCKED_URL_SCHEMES,
     CSS_ACCENT_COLOR,
@@ -41,18 +45,11 @@ from hooks_constants.html_companion_constants import (  # noqa: E402
     CSS_TABLE_WIDTH,
     CSS_TH_WEIGHT,
 )
+from md_path_exemptions import is_exempt_path  # noqa: E402
 
 
 def _is_exempt_path(file_path: str) -> bool:
-    normalized = file_path.replace("\\", "/")
-    if "/.claude/" in normalized or normalized.startswith(".claude/"):
-        return True
-    if normalized.startswith("./"):
-        normalized = normalized[2:]
-    stripped = normalized.lstrip("/")
-    if "/" not in stripped:
-        return stripped.lower() in ("readme.md", "changelog.md")
-    return False
+    return is_exempt_path(file_path)
 
 
 def _md_to_html(markdown_text: str) -> str:

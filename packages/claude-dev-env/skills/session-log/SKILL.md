@@ -88,13 +88,13 @@ Every session report carries this metadata block verbatim so vault search and th
 
 Design the artifact for **this session's character**, drawing on the doc-gist gallery patterns listed above. The report must answer for a cold reader, from the H2 headers alone, three questions: *what shipped*, *why it matters*, *what impact it had*. Process narration (commit-by-commit walks, agent gotchas, retry counts) belongs at the end, not in the opening sections.
 
-**Required in `<head>`:** the auto-publish marker.
+**Required somewhere in the HTML (commonly in `<head>`):** the auto-publish marker.
 
 ```html
 <!-- @publish-as-gist -->
 ```
 
-The marker triggers the PostToolUse hook on Write — the hook uploads the file to a secret gist and prints the gist + preview URLs to your tool output. The marker must be the literal comment text exactly; whitespace inside breaks it.
+The marker triggers the PostToolUse hook after Write or Edit — the hook scans the entire HTML for the literal sentinel string and uploads the file to a secret gist, then prints the gist + preview URLs to your tool output. The marker must be the literal comment text exactly; whitespace inside breaks it.
 
 **Required at the top of `<body>`:** the frontmatter HTML comment from step 1.
 
@@ -126,7 +126,9 @@ Edit the vault HTML via two Edit calls:
 ```html
 <h2>Notes</h2>
 <ul>
-  <li><strong>Vault context:</strong> Retrieved ([list of note paths]) | Not retrieved</li>
+  <!-- Pick exactly one of the two forms based on whether vault MCP tools fired this session: -->
+  <li><strong>Vault context:</strong> Retrieved ([list of note paths])</li>
+  <li><strong>Vault context:</strong> Not retrieved</li>
 </ul>
 ```
 
@@ -167,7 +169,7 @@ Scope: the current project's session folder only.
 
 ## Step 6: Finalize
 
-Copy a `/rename` command to the user's clipboard via Bash:
+Copy a `/rename` command to the user's clipboard via PowerShell:
 
 ```
 pwsh -NoProfile -Command "Set-Clipboard '/rename [Project] - [Primary Outcome]'"
@@ -186,7 +188,7 @@ The primary outcome comes from the session title resolved in step 1.
 - [ ] Backend detected and announced
 - [ ] Session number resolved from `[N]. *.html` files
 - [ ] HTML composed via doc-gist's shape principles (gallery-anchored)
-- [ ] `<!-- @publish-as-gist -->` marker present in `<head>`
+- [ ] `<!-- @publish-as-gist -->` marker present somewhere in the HTML
 - [ ] Frontmatter HTML comment present at top of `<body>`
 - [ ] Opening section answers "what shipped / why / impact" for a cold reader
 - [ ] Self-contained HTML (inline styles, no external refs)

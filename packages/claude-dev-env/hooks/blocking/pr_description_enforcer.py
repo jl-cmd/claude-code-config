@@ -395,7 +395,7 @@ def _first_non_empty_line(body: str) -> str:
 
 def _matches_self_closing_reference(body: str, pr_number: int) -> bool:
     pattern_source = SELF_REFERENCE_PATTERN_TEMPLATE.format(pr_number=pr_number)
-    compiled_pattern = re.compile(pattern_source)
+    compiled_pattern = re.compile(pattern_source, re.IGNORECASE)
     return compiled_pattern.search(body) is not None
 
 

@@ -607,6 +607,35 @@ def test_validate_blocks_self_closing_resolves_reference(readability_state_paths
     )
 
 
+def test_validate_blocks_lowercase_self_closing_fixes_reference(readability_state_paths) -> None:
+    """GitHub treats closing keywords (Fixes/Closes/Resolves) case-insensitively, so
+    a body opening with `fixes #<own-PR>` (lowercase) auto-closes the PR on merge
+    just like the capitalized form. The enforcer must catch both."""
+    body = (
+        "Adds a timestamp check to prevent background data pulls from overwriting "
+        "recent local edits.\n\nfixes #467.\n"
+    )
+    violations = validate_pr_body(body, pr_number=467)
+    assert any(
+        "self" in each_violation.lower() or "own pr" in each_violation.lower()
+        for each_violation in violations
+    ), f"lowercase fixes self-reference must trip the block; got {violations!r}"
+
+
+def test_validate_blocks_uppercase_self_closing_closes_reference(readability_state_paths) -> None:
+    """All-caps `CLOSES #<own-PR>` also auto-closes on GitHub; the enforcer must
+    catch every case variant the same way GitHub does."""
+    body = (
+        "Adds a timestamp check to prevent background data pulls from overwriting "
+        "recent local edits.\n\nCLOSES #467.\n"
+    )
+    violations = validate_pr_body(body, pr_number=467)
+    assert any(
+        "self" in each_violation.lower() or "own pr" in each_violation.lower()
+        for each_violation in violations
+    ), f"all-caps CLOSES self-reference must trip the block; got {violations!r}"
+
+
 def test_validate_allows_fixes_reference_to_different_pr(readability_state_paths) -> None:
     body = (
         "Adds a timestamp check to prevent background data pulls from overwriting "

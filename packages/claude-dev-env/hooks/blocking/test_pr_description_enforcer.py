@@ -1202,6 +1202,16 @@ def test_readability_thresholds_reject_boolean_values(readability_state_paths_en
     assert thresholds.avg_sentence_words == hook_module.DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
 
 
+def test_compute_flesch_reading_ease_uses_named_constants() -> None:
+    """`_compute_flesch_reading_ease` must reference the named Flesch constants
+    rather than embed the magic literals 206.835 / 1.015 / 84.6 / 100.0 inline.
+    Smoke-test the empty-input path returns the perfect-score default."""
+    perfect_score = hook_module._compute_flesch_reading_ease("")
+    assert perfect_score == hook_module.FLESCH_PERFECT_SCORE
+    perfect_score_no_words = hook_module._compute_flesch_reading_ease("   ")
+    assert perfect_score_no_words == hook_module.FLESCH_PERFECT_SCORE
+
+
 def test_iter_section_headers_docstring_matches_actual_pattern() -> None:
     """`_iter_section_headers` uses `HEADING_LINE_PATTERN = ^#+`, so it returns
     every ATX heading level (`#`, `##`, `###`...), not just `##`. The docstring

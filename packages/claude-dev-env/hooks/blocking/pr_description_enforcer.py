@@ -38,6 +38,10 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     CEREMONY_HEADER_PATTERN,
     DEFAULT_READABILITY_THRESHOLDS,
     FENCED_CODE_BLOCK_PATTERN,
+    FLESCH_BASE_SCORE,
+    FLESCH_PERFECT_SCORE,
+    FLESCH_SYLLABLES_PER_WORD_COEFFICIENT,
+    FLESCH_WORDS_PER_SENTENCE_COEFFICIENT,
     GH_PR_COMMAND_MIN_TOKEN_COUNT,
     HEADING_LINE_PATTERN,
     HEAVY_DETECTION_HEADER_COUNT_MIN,
@@ -526,7 +530,7 @@ def _split_sentences(text: str) -> list[str]:
 def _compute_flesch_reading_ease(text: str) -> float:
     all_sentences = _split_sentences(text)
     if not all_sentences:
-        return 100.0
+        return FLESCH_PERFECT_SCORE
     all_words: list[str] = []
     total_syllables = 0
     for each_sentence in all_sentences:
@@ -536,9 +540,13 @@ def _compute_flesch_reading_ease(text: str) -> float:
             total_syllables += _count_syllables_in_word(each_word)
     total_words = len(all_words)
     if total_words == 0:
-        return 100.0
+        return FLESCH_PERFECT_SCORE
     total_sentences = len(all_sentences)
-    return 206.835 - 1.015 * (total_words / total_sentences) - 84.6 * (total_syllables / total_words)
+    return (
+        FLESCH_BASE_SCORE
+        - FLESCH_WORDS_PER_SENTENCE_COEFFICIENT * (total_words / total_sentences)
+        - FLESCH_SYLLABLES_PER_WORD_COEFFICIENT * (total_syllables / total_words)
+    )
 
 
 def _extract_readability_target_text(body: str) -> str:

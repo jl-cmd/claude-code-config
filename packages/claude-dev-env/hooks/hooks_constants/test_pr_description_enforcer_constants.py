@@ -148,6 +148,26 @@ def test_module_internal_header_constants_are_not_publicly_exported() -> None:
         )
 
 
+def test_flesch_formula_coefficients_are_named_constants() -> None:
+    """The Flesch Reading Ease formula coefficients (206.835, 1.015, 84.6) and
+    the perfect-score default (100.0) must live as named UPPER_SNAKE constants
+    in `hooks_constants/pr_description_enforcer_constants.py` so the production
+    function body has zero magic numeric literals."""
+    assert constants_module.FLESCH_BASE_SCORE == 206.835
+    assert constants_module.FLESCH_WORDS_PER_SENTENCE_COEFFICIENT == 1.015
+    assert constants_module.FLESCH_SYLLABLES_PER_WORD_COEFFICIENT == 84.6
+    assert constants_module.FLESCH_PERFECT_SCORE == 100.0
+    for each_name in (
+        "FLESCH_BASE_SCORE",
+        "FLESCH_WORDS_PER_SENTENCE_COEFFICIENT",
+        "FLESCH_SYLLABLES_PER_WORD_COEFFICIENT",
+        "FLESCH_PERFECT_SCORE",
+    ):
+        assert each_name in constants_module.__all__, (
+            f"{each_name} must appear in __all__ so the enforcer can import it."
+        )
+
+
 def test_all_heavy_testing_headers_enumerates_five_canonical_forms() -> None:
     """The frozenset ALL_HEAVY_TESTING_HEADERS drives the violation message that
     tells the writer which headers satisfy the heavy-shape testing-category

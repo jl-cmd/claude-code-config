@@ -31,10 +31,10 @@ The session designer reads the matching gallery file, then designs the report in
 
 ## Gotchas
 
-- **Doc-gist's auto-publish hook fires on Write/Edit of any HTML containing `<!-- @publish-as-gist -->`.** Session-log composes the HTML with the marker — auto-publish is the default for sessions per the durable preference. The hook prints the gist + preview URLs to tool output; capture both.
+- **Doc-gist's auto-publish hook fires on Write/Edit of any HTML containing `<!-- @publish-as-gist -->`.** Session-log composes the HTML with the marker so auto-publish runs by default — sessions are intended for sharing with collaborators. The hook prints the gist + preview URLs to tool output; capture both.
 - **`gh` must be authenticated.** Auto-publish runs `gh gist create`. If `gh auth status` is failing, the hook surfaces the error to stderr and exits 0 (does not block the Write). Surface that message; the local vault HTML is still the canonical artifact, so the remaining steps still run.
 - **Vault paths sit outside `.claude/`.** Headless vault paths (e.g., `$OBSIDIAN_VAULT_PATH`) resolve outside the project tree. The `md_to_html_blocker` PreToolUse hook rejects Write/Edit on `.md` files outside `.claude/` directories — session reports use HTML, which the hook ignores.
-- **State-description-blocker applies to the report copy.** Sessions describe current state. Skip historical and comparative language — full trigger set at `~/.claude/rules/no-historical-clutter.md`.
+- **Sessions describe current state by convention.** The state_description_blocker hook does not scan .html, but the rule at `~/.claude/rules/no-historical-clutter.md` applies as a writing standard — skip historical and comparative language when composing the report; the rule file lists the full trigger set.
 - **`write_existing_file_blocker` rejects Write on existing paths.** Use Write only when creating a fresh session report; use Edit for the vault-context append in step 3.
 - **Each Write/Edit of the marked HTML creates a fresh gist with a new ID.** `gist_upload.py` calls `gh gist create` with no lookup of any prior gist, so step 3's Edit produces a different gist URL than step 2's Write. Quote the URLs from the FINAL publish (the one that fires after step 3's Edit) to the user; never embed a step-2 URL inside the HTML that step 3 then re-publishes.
 - **Obsidian frontmatter index is HTML-blind.** Obsidian's native YAML-frontmatter parser reads only `.md` files. HTML files do not appear in Obsidian's frontmatter index. Search by content still works; search by `type: session-report` does not.
@@ -52,7 +52,7 @@ Determine which storage backend is available. First success wins.
 - headless: `$OBSIDIAN_VAULT_PATH/sessions/[Project]/[N]. [Title].html` (falls back to `~/.claude/vault/` when the env var is unset)
 - local: `~/.claude/vault/sessions/[Project]/[N]. [Title].html`
 
-Announce the backend: "Using headless vault at [path]." or "Using local vault at ~/.claude/vault/. Run `/obsidian-check` for upgrade options."
+Announce the backend: "Using headless vault at [path]." or "Using local vault at ~/.claude/vault/. Install obsidian-headless and set $env:OBSIDIAN_VAULT_PATH to enable sync."
 
 ---
 
@@ -77,6 +77,7 @@ session: [N]
 date: [YYYY-MM-DD]
 status: completed|in-progress|blocked
 blocked: true|false
+vault_context_retrieved: true|false
 tags: [session, [project-tag], [topic-tags]]
 -->
 ```
@@ -117,7 +118,10 @@ Review the conversation history for any use of these vault MCP tools (excluding 
 - `mcp__obsidian__read_note`
 - `mcp__obsidian__read_multiple_notes`
 
-Edit the vault HTML to append one fact — vault-context status — into whatever section the report designer placed for notes / metadata / references. If the report has no such section, append a fresh `<h2>Notes</h2>` block before `</body>`:
+Edit the vault HTML to do two things in the same Edit pass:
+
+1. Set the frontmatter `vault_context_retrieved` field to `true` when any of the three tools fired this session, `false` otherwise.
+2. Append one fact — vault-context status — into whatever section the report designer placed for notes / metadata / references. If the report has no such section, append a fresh `<h2>Notes</h2>` block before `</body>`:
 
 ```html
 <h2>Notes</h2>
@@ -145,11 +149,13 @@ Scope: the current project's session folder only.
 1. **List files** in the project's vault session folder via Bash `ls`.
 2. **Quick audit** each `.html` file for:
    - **Naming convention:** must match `[N]. [Title].html`
-   - **Frontmatter completeness:** HTML comment block at top of `<body>` contains `type`, `project`, `session`, `date`, `status`, `blocked`, `tags`
+   - **Frontmatter completeness:** HTML comment block at top of `<body>` contains `type`, `project`, `session`, `date`, `status`, `blocked`, `vault_context_retrieved`, `tags`
    - **Status coherence:** `status: completed` with `blocked: true` is contradictory. `status: in-progress` or `status: blocked` on sessions older than 7 days is stale.
-3. **Auto-fix minor issues silently** via Edit:
+3. **Auto-fix minor issues** via Edit:
    - Missing frontmatter fields that can be inferred (e.g., `blocked: false` when status is `completed`)
    - `type` field set to a wrong value (correct to `session-report`)
+
+   Each Edit on a marked HTML file re-fires doc-gist's auto-publish hook and produces a fresh gist + preview URL pair on stderr — the prior gist URL becomes orphaned. Surface a `Session [N] republished — new preview: <url>` line per Edit so the user can update any prior shares.
 4. **Report issues that need user input:**
    - Files with wrong naming convention (propose new name)
    - Stale statuses (propose update to `completed` or ask)
@@ -164,7 +170,7 @@ Scope: the current project's session folder only.
 Copy a `/rename` command to the user's clipboard via Bash:
 
 ```
-printf '%s' "/rename [Project] - [Primary Outcome]" | clip.exe
+pwsh -NoProfile -Command "Set-Clipboard '/rename [Project] - [Primary Outcome]'"
 ```
 
 Then tell the user:
@@ -184,11 +190,11 @@ The primary outcome comes from the session title resolved in step 1.
 - [ ] Frontmatter HTML comment present at top of `<body>`
 - [ ] Opening section answers "what shipped / why / impact" for a cold reader
 - [ ] Self-contained HTML (inline styles, no external refs)
-- [ ] Auto-publish hook printed gist + preview URLs to tool output (step 2 and step 3 each fire one publish)
+- [ ] Auto-publish URLs captured from step 2 and step 3 (or HTML emitted to chat when step 2 Write failed)
 - [ ] Vault-context line appended via Edit (step 3); step-3 publish's URL pair quoted to the user
 - [ ] Decision extraction surfaced any unrecorded items
 - [ ] Session tidy reported anomalies or stayed silent
-- [ ] `/rename` command copied to clipboard via `clip.exe`
+- [ ] `/rename` command copied to clipboard via `pwsh Set-Clipboard`
 
 ## Folder map
 

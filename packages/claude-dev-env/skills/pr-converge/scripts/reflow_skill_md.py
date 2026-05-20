@@ -24,7 +24,7 @@ from evict_cached_config_modules import evict_cached_config_modules
 
 evict_cached_config_modules()
 
-from config.reflow_skill_md_constants import (
+from pr_converge_scripts_constants.reflow_skill_md_constants import (
     BASH_CONTINUATION_MARKER_WIDTH,
     BULLET_LIST_ITEM_PATTERN as BULLET_RE,
     MARKDOWN_REFERENCE_DEFINITION_PATTERN as REF_DEF_RE,

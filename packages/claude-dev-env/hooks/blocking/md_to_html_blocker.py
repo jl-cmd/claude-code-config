@@ -24,8 +24,6 @@ if _blocking_directory not in sys.path:
     sys.path.insert(0, _blocking_directory)
 
 from md_path_exemptions import is_exempt_path  # noqa: E402
-from md_path_exemptions import _is_repo_root_directory  # noqa: E402,F401
-from md_path_exemptions import _is_under_plugin_root_marker  # noqa: E402,F401
 
 
 _markdown_extension = ".md"

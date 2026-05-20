@@ -393,14 +393,14 @@ def test_is_repo_root_directory_detects_git_subdirectory(tmp_path):
     hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
     if hook_directory not in sys.path:
         sys.path.insert(0, hook_directory)
-    blocker_module = importlib.import_module("md_to_html_blocker")
-    importlib.reload(blocker_module)
+    exemptions_module = importlib.import_module("md_path_exemptions")
+    importlib.reload(exemptions_module)
 
-    assert blocker_module._is_repo_root_directory(str(repo_root)) is True
+    assert exemptions_module._is_repo_root_directory(str(repo_root)) is True
 
     non_repo_directory = tmp_path / "not-a-repo"
     non_repo_directory.mkdir()
-    assert blocker_module._is_repo_root_directory(str(non_repo_directory)) is False
+    assert exemptions_module._is_repo_root_directory(str(non_repo_directory)) is False
 
 
 def test_is_repo_root_directory_detects_git_file_for_worktree(tmp_path):
@@ -412,10 +412,10 @@ def test_is_repo_root_directory_detects_git_file_for_worktree(tmp_path):
     hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
     if hook_directory not in sys.path:
         sys.path.insert(0, hook_directory)
-    blocker_module = importlib.import_module("md_to_html_blocker")
-    importlib.reload(blocker_module)
+    exemptions_module = importlib.import_module("md_path_exemptions")
+    importlib.reload(exemptions_module)
 
-    assert blocker_module._is_repo_root_directory(str(worktree_root)) is True
+    assert exemptions_module._is_repo_root_directory(str(worktree_root)) is True
 
 
 def test_passes_dot_claude_plugin_directory():
@@ -502,16 +502,16 @@ def test_is_under_plugin_root_marker_finds_ancestor_directory(tmp_path):
     hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
     if hook_directory not in sys.path:
         sys.path.insert(0, hook_directory)
-    blocker_module = importlib.import_module("md_to_html_blocker")
-    importlib.reload(blocker_module)
+    exemptions_module = importlib.import_module("md_path_exemptions")
+    importlib.reload(exemptions_module)
 
     normalized = str(nested_md_path).replace("\\", "/")
-    assert blocker_module._is_under_plugin_root_marker(normalized) is True
+    assert exemptions_module._is_under_plugin_root_marker(normalized) is True
 
     no_marker_path = tmp_path / "ordinary" / "lib" / "notes" / "design.md"
     no_marker_path.parent.mkdir(parents=True)
     no_marker_normalized = str(no_marker_path).replace("\\", "/")
-    assert blocker_module._is_under_plugin_root_marker(no_marker_normalized) is False
+    assert exemptions_module._is_under_plugin_root_marker(no_marker_normalized) is False
 
 
 def test_blocks_ordinary_docs_md_file():

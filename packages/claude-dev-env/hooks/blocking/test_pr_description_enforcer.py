@@ -652,13 +652,7 @@ def _readability_failing_body() -> str:
     )
 
 
-def test_readability_strike_one_emits_metric_violation(tmp_path, monkeypatch) -> None:
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+def test_readability_strike_one_emits_metric_violation(readability_state_paths_enabled) -> None:
     body = _readability_failing_body()
     violations = validate_pr_body(body)
     assert any(
@@ -671,13 +665,7 @@ def test_readability_strike_one_emits_metric_violation(tmp_path, monkeypatch) ->
     assert hook_module._read_strike_count() == 1
 
 
-def test_readability_strike_two_still_metric_violation(tmp_path, monkeypatch) -> None:
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+def test_readability_strike_two_still_metric_violation(readability_state_paths_enabled) -> None:
     body = _readability_failing_body()
     validate_pr_body(body)
     violations = validate_pr_body(body)
@@ -685,13 +673,7 @@ def test_readability_strike_two_still_metric_violation(tmp_path, monkeypatch) ->
     assert not any("--readability-loosen" in each_violation for each_violation in violations)
 
 
-def test_readability_strike_three_fires_escape_hatch(tmp_path, monkeypatch) -> None:
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+def test_readability_strike_three_fires_escape_hatch(readability_state_paths_enabled) -> None:
     body = _readability_failing_body()
     validate_pr_body(body)
     validate_pr_body(body)
@@ -727,13 +709,7 @@ def test_extract_pr_number_does_not_pick_up_number_in_title() -> None:
     assert hook_module._extract_pr_number_from_command(command) == 467
 
 
-def test_loosen_cap_errors_on_fourth_invocation(tmp_path, monkeypatch) -> None:
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+def test_loosen_cap_errors_on_fourth_invocation(readability_state_paths_enabled) -> None:
     assert hook_module._apply_readability_loosen() == "ok"
     assert hook_module._apply_readability_loosen() == "ok"
     assert hook_module._apply_readability_loosen() == "ok"
@@ -741,13 +717,8 @@ def test_loosen_cap_errors_on_fourth_invocation(tmp_path, monkeypatch) -> None:
     assert fourth_outcome == "cap_reached"
 
 
-def test_loosen_flesch_floor_cap_errors(tmp_path, monkeypatch) -> None:
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+def test_loosen_flesch_floor_cap_errors(readability_state_paths_enabled) -> None:
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     floor_value = hook_module.READABILITY_MIN_FLESCH_FLOOR
     payload = {
         "flesch_min": floor_value,
@@ -760,13 +731,8 @@ def test_loosen_flesch_floor_cap_errors(tmp_path, monkeypatch) -> None:
     assert hook_module._apply_readability_loosen() == "floor_reached"
 
 
-def test_loosen_max_sentence_ceiling_cap_errors(tmp_path, monkeypatch) -> None:
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+def test_loosen_max_sentence_ceiling_cap_errors(readability_state_paths_enabled) -> None:
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     ceiling_value = hook_module.READABILITY_MAX_SENTENCE_WORDS_CEILING
     payload = {
         "flesch_min": 50,
@@ -779,13 +745,8 @@ def test_loosen_max_sentence_ceiling_cap_errors(tmp_path, monkeypatch) -> None:
     assert hook_module._apply_readability_loosen() == "ceiling_reached"
 
 
-def test_loosen_avg_sentence_ceiling_cap_errors(tmp_path, monkeypatch) -> None:
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+def test_loosen_avg_sentence_ceiling_cap_errors(readability_state_paths_enabled) -> None:
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     ceiling_value = hook_module.READABILITY_AVG_SENTENCE_WORDS_CEILING
     payload = {
         "flesch_min": 50,
@@ -844,14 +805,9 @@ def test_strip_markdown_ceremony_used_by_substantive_prose_count() -> None:
     assert hook_module._count_substantive_prose_chars(body) == len(collapsed)
 
 
-def test_threshold_override_file_widens_max_sentence_words(tmp_path, monkeypatch) -> None:
+def test_threshold_override_file_widens_max_sentence_words(readability_state_paths_enabled) -> None:
     """When max_sentence_words override is 50, the loaded thresholds reflect that value."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     payload = {
         "flesch_min": 30,
         "max_sentence_words": 50,
@@ -866,14 +822,9 @@ def test_threshold_override_file_widens_max_sentence_words(tmp_path, monkeypatch
     assert thresholds.avg_sentence_words == 40
 
 
-def test_loosen_writes_expected_scaled_thresholds(tmp_path, monkeypatch) -> None:
+def test_loosen_writes_expected_scaled_thresholds(readability_state_paths_enabled) -> None:
     """First loosen invocation scales flesch by 0.9 and sentence widths by 10/9."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     assert hook_module._apply_readability_loosen() == "ok"
     written_payload = json_lib.loads(override_path.read_text())
     assert written_payload["flesch_min"] == 45
@@ -882,14 +833,8 @@ def test_loosen_writes_expected_scaled_thresholds(tmp_path, monkeypatch) -> None
     assert written_payload["loosens_used"] == 1
 
 
-def test_dispatch_loosen_writes_success_to_output_stream(tmp_path, monkeypatch) -> None:
+def test_dispatch_loosen_writes_success_to_output_stream(readability_state_paths_enabled) -> None:
     """The loosen handler writes its success message to the supplied output stream."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
     output_stream = io.StringIO()
     error_stream = io.StringIO()
     with _pytest_for_autouse.raises(SystemExit) as exit_info:
@@ -903,14 +848,9 @@ def test_dispatch_loosen_writes_success_to_output_stream(tmp_path, monkeypatch) 
     assert error_stream.getvalue() == ""
 
 
-def test_dispatch_loosen_cap_writes_to_error_stream(tmp_path, monkeypatch) -> None:
+def test_dispatch_loosen_cap_writes_to_error_stream(readability_state_paths_enabled) -> None:
     """When the loosen cap is hit, the handler writes the corrective message to error stream."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     override_path.parent.mkdir(parents=True, exist_ok=True)
     override_path.write_text(json_lib.dumps({"loosens_used": hook_module.READABILITY_LOOSEN_CAP}))
     output_stream = io.StringIO()
@@ -926,14 +866,9 @@ def test_dispatch_loosen_cap_writes_to_error_stream(tmp_path, monkeypatch) -> No
     assert output_stream.getvalue() == ""
 
 
-def test_dispatch_loosen_floor_writes_to_error_stream(tmp_path, monkeypatch) -> None:
+def test_dispatch_loosen_floor_writes_to_error_stream(readability_state_paths_enabled) -> None:
     """When the floor is reached, the handler writes the corrective message to error stream."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     floor_payload = {
         "flesch_min": hook_module.READABILITY_MIN_FLESCH_FLOOR,
         "max_sentence_words": 30,
@@ -955,14 +890,8 @@ def test_dispatch_loosen_floor_writes_to_error_stream(tmp_path, monkeypatch) -> 
     assert output_stream.getvalue() == ""
 
 
-def test_dispatch_reset_writes_success_to_output_stream(tmp_path, monkeypatch) -> None:
+def test_dispatch_reset_writes_success_to_output_stream(readability_state_paths_enabled) -> None:
     """The reset handler writes its success message to the supplied output stream."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
     output_stream = io.StringIO()
     error_stream = io.StringIO()
     with _pytest_for_autouse.raises(SystemExit) as exit_info:
@@ -976,14 +905,8 @@ def test_dispatch_reset_writes_success_to_output_stream(tmp_path, monkeypatch) -
     assert error_stream.getvalue() == ""
 
 
-def test_dispatch_disable_writes_success_to_output_stream(tmp_path, monkeypatch) -> None:
+def test_dispatch_disable_writes_success_to_output_stream(readability_state_paths_enabled) -> None:
     """The disable handler writes its success message to the supplied output stream."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
     output_stream = io.StringIO()
     error_stream = io.StringIO()
     with _pytest_for_autouse.raises(SystemExit) as exit_info:
@@ -997,14 +920,8 @@ def test_dispatch_disable_writes_success_to_output_stream(tmp_path, monkeypatch)
     assert error_stream.getvalue() == ""
 
 
-def test_dispatch_enable_writes_success_to_output_stream(tmp_path, monkeypatch) -> None:
+def test_dispatch_enable_writes_success_to_output_stream(readability_state_paths_enabled) -> None:
     """The enable handler writes its success message to the supplied output stream."""
-    strike_path = tmp_path / "strikes.json"
-    override_path = tmp_path / "overrides.json"
-    enabled_path = tmp_path / "enabled.json"
-    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
-    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
-    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
     output_stream = io.StringIO()
     error_stream = io.StringIO()
     with _pytest_for_autouse.raises(SystemExit) as exit_info:
@@ -1027,3 +944,135 @@ def test_shape_classifier_uses_substantive_chars_not_raw_length() -> None:
     assert len(tiny_prose_with_large_code_fence) >= hook_module.TRIVIAL_BODY_CHAR_THRESHOLD
     assert hook_module._count_substantive_prose_chars(tiny_prose_with_large_code_fence) < hook_module.TRIVIAL_BODY_CHAR_THRESHOLD
     assert hook_module._compute_pr_body_shape(tiny_prose_with_large_code_fence) == "trivial"
+
+
+def _build_short_failing_body() -> str:
+    """A body short enough to trigger the substantive-prose violation."""
+    return "Too short."
+
+
+def _build_main_hook_input(command: str) -> dict[str, object]:
+    return {"tool_name": "Bash", "tool_input": {"command": command}}
+
+
+def _run_main_and_capture_decision(hook_input: dict[str, object]) -> str:
+    captured_stdout = io.StringIO()
+    with patch("sys.stdin", io.StringIO(json.dumps(hook_input))):
+        with patch("sys.stdout", captured_stdout):
+            try:
+                hook_module.main()
+            except SystemExit:
+                pass
+    return captured_stdout.getvalue()
+
+
+def test_main_blocks_gh_pr_edit_short_body_flag(tmp_path) -> None:
+    """gh pr edit 123 -b "short" must be caught -- the short -b flag is a valid alias for --body."""
+    command = 'gh pr edit 123 -b "Too short."'
+    decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))
+    assert "deny" in decision_output
+    assert "substantive prose" in decision_output.lower()
+
+
+def test_main_blocks_gh_pr_edit_body_file_short_flag(tmp_path) -> None:
+    """gh pr edit 123 -F body.md must be caught -- -F is the short alias for --body-file."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Too short.")
+    command = f'gh pr edit 123 -F {body_file}'
+    decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))
+    assert "deny" in decision_output
+    assert "substantive prose" in decision_output.lower()
+
+
+def test_main_blocks_gh_pr_edit_body_file_long_flag(tmp_path) -> None:
+    """gh pr edit 123 --body-file body.md must also be caught (was missing from is_pr_edit detection)."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Too short.")
+    command = f'gh pr edit 123 --body-file {body_file}'
+    decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))
+    assert "deny" in decision_output
+
+
+def test_main_blocks_gh_pr_create_body_file_short_flag(tmp_path) -> None:
+    """gh pr create -F body.md must be caught -- -F is the short alias for --body-file."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Too short.")
+    command = f'gh pr create --title "T" -F {body_file}'
+    decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))
+    assert "deny" in decision_output
+
+
+def test_main_blocks_gh_pr_create_body_file_long_flag(tmp_path) -> None:
+    """gh pr create --body-file body.md must be caught -- was missing from is_pr_create detection."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text("Too short.")
+    command = f'gh pr create --title "T" --body-file {body_file}'
+    decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))
+    assert "deny" in decision_output
+
+
+def test_resolve_positional_pr_number_accepts_bare_integer() -> None:
+    assert hook_module._resolve_positional_pr_number("467") == 467
+
+
+def test_resolve_positional_pr_number_accepts_pr_url() -> None:
+    assert hook_module._resolve_positional_pr_number("https://github.com/o/r/pull/467") == 467
+
+
+def test_resolve_positional_pr_number_rejects_non_pr_url() -> None:
+    assert hook_module._resolve_positional_pr_number("https://github.com/o/r/issues/467") is None
+
+
+def test_resolve_positional_pr_number_rejects_shell_variable() -> None:
+    assert hook_module._resolve_positional_pr_number("$PR_NUMBER") is None
+
+
+def test_extract_pr_number_skips_repo_value_flag() -> None:
+    """gh pr edit --repo owner/r 467 --body "x" must return 467 -- the --repo value must be skipped."""
+    command = 'gh pr edit --repo owner/r 467 --body "x"'
+    assert hook_module._extract_pr_number_from_command(command) == 467
+
+
+def test_extract_pr_number_from_pr_url_positional() -> None:
+    """gh pr edit https://github.com/o/r/pull/467 --body "x" must return 467 -- URL form is valid."""
+    command = 'gh pr edit https://github.com/o/r/pull/467 --body "x"'
+    assert hook_module._extract_pr_number_from_command(command) == 467
+
+
+def test_extract_pr_number_from_pr_url_after_repo_flag() -> None:
+    """Combined: --repo flag plus URL positional must still resolve to the URL's PR number."""
+    command = 'gh pr edit --repo owner/r https://github.com/o/r/pull/999 --body "x"'
+    assert hook_module._extract_pr_number_from_command(command) == 999
+
+
+def test_extract_pr_number_skips_repo_equals_form() -> None:
+    """gh pr edit --repo=owner/r 467 --body "x" must return 467 -- the equals-form must also be handled."""
+    command = 'gh pr edit --repo=owner/r 467 --body "x"'
+    assert hook_module._extract_pr_number_from_command(command) == 467
+
+
+def test_extract_pr_number_from_pr_url_with_trailing_query_string() -> None:
+    """A PR URL with a `?diff=split` or other trailing query/fragment must still resolve.
+    The trailing group `(?:[/?#].*)?` in the URL regex is what makes this work."""
+    command = 'gh pr edit https://github.com/o/r/pull/467?diff=split --body "x"'
+    assert hook_module._extract_pr_number_from_command(command) == 467
+
+
+@pytest.fixture
+def readability_state_paths_enabled(tmp_path, monkeypatch):
+    """Redirect the three readability state files to per-test temp paths while keeping
+    readability enabled. The autouse `_isolate_readability_state` fixture disables
+    readability by default for unrelated tests; tests exercising strike-counter or
+    dispatch behavior need it ON, so this fixture re-points the three state paths
+    WITHOUT stubbing _is_readability_enabled.
+
+    Returns:
+        Tuple of (strike_path, override_path, enabled_path).
+    """
+    strike_path = tmp_path / "strikes.json"
+    override_path = tmp_path / "overrides.json"
+    enabled_path = tmp_path / "enabled.json"
+    monkeypatch.setattr(hook_module, "READABILITY_STATE_FILE", strike_path)
+    monkeypatch.setattr(hook_module, "READABILITY_THRESHOLD_OVERRIDE_FILE", override_path)
+    monkeypatch.setattr(hook_module, "READABILITY_ENABLED_STATE_FILE", enabled_path)
+    return strike_path, override_path, enabled_path

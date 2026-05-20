@@ -50,7 +50,7 @@ Adds a syllable-counted Flesch reading score to the PR description enforcer. Bod
 ### Heavy
 
 - **Criterion.** Diff > 500 lines, or a cross-cutting bug fix that touches multiple subsystems.
-- **Body.** At least one of `## Problem` or `## Summary`. At least one of `## Test plan`, `## Testing`, or `## Tests`. Plus any additional Anthropic headers the change earns.
+- **Body.** At least one of `## Problem` or `## Summary`. At least one of `## Test plan`, `## Testing`, `## Tests`, `## Verification`, or `## Validation`. Plus any additional Anthropic headers the change earns.
 - **Hook enforcement.** Missing either required category triggers a Heavy-required-headers block message naming the absent category.
 
 Example:

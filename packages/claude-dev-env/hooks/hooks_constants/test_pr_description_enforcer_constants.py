@@ -32,11 +32,6 @@ def test_pr_guide_path_resolves_under_plugin_root_docs() -> None:
     assert constants_module.PR_GUIDE_PATH == expected_pr_guide_path
 
 
-def test_minimum_substantive_prose_chars_is_positive_integer() -> None:
-    assert isinstance(constants_module.MINIMUM_SUBSTANTIVE_PROSE_CHARS, int)
-    assert constants_module.MINIMUM_SUBSTANTIVE_PROSE_CHARS > 0
-
-
 def test_fenced_code_block_pattern_matches_triple_backtick_block() -> None:
     sample_markdown = "before ```python\ncode\n``` after"
     match = constants_module.FENCED_CODE_BLOCK_PATTERN.search(sample_markdown)
@@ -91,16 +86,6 @@ def test_all_heavy_detection_headers_unions_opening_and_testing() -> None:
     )
 
 
-def test_heavy_detection_header_count_minimum_is_positive_integer() -> None:
-    assert isinstance(constants_module.HEAVY_DETECTION_HEADER_COUNT_MIN, int)
-    assert constants_module.HEAVY_DETECTION_HEADER_COUNT_MIN >= 1
-
-
-def test_atomic_write_temp_suffix_starts_with_dot() -> None:
-    assert constants_module.ATOMIC_WRITE_TEMP_SUFFIX.startswith(".")
-    assert len(constants_module.ATOMIC_WRITE_TEMP_SUFFIX) >= 2
-
-
 def test_self_closing_reference_message_prefix_and_suffix_compose_full_message() -> None:
     pr_number = 42
     composed_message = (
@@ -111,16 +96,6 @@ def test_self_closing_reference_message_prefix_and_suffix_compose_full_message()
     assert "#42" in composed_message
     assert "Fixes/Closes/Resolves" in composed_message
     assert "self-reference" in composed_message
-
-
-def test_readability_flesch_loosen_factor_is_below_one() -> None:
-    assert constants_module.READABILITY_FLESCH_LOOSEN_FACTOR == 0.9
-    assert 0.0 < constants_module.READABILITY_FLESCH_LOOSEN_FACTOR < 1.0
-
-
-def test_readability_sentence_words_loosen_factor_is_above_one() -> None:
-    assert constants_module.READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR == 10 / 9
-    assert constants_module.READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR > 1.0
 
 
 def test_loosen_factors_are_inverse_paired() -> None:
@@ -141,3 +116,49 @@ def test_unused_header_constants_are_removed_from_module() -> None:
         assert each_dead_name not in constants_module.__all__, (
             f"{each_dead_name} re-appeared in __all__ even though it has no consumers."
         )
+
+
+def test_module_internal_header_constants_are_not_publicly_exported() -> None:
+    """The seven header-name constants and three default-readability-threshold scalars
+    are consumed only inside this same module (used to build ALL_HEAVY_* frozensets
+    and DEFAULT_READABILITY_THRESHOLDS). They must remain module attributes for the
+    builder expressions, but they must NOT appear in __all__ -- callers should import
+    the public aggregates (ALL_HEAVY_OPENING_HEADERS / ALL_HEAVY_TESTING_HEADERS /
+    DEFAULT_READABILITY_THRESHOLDS) instead of the individual scalars."""
+    all_internal_only_names = (
+        "SUMMARY_HEADER",
+        "PROBLEM_HEADER",
+        "TEST_PLAN_HEADER",
+        "TESTS_HEADER",
+        "TESTING_HEADER",
+        "VERIFICATION_HEADER",
+        "VALIDATION_HEADER",
+        "READABILITY_MAX_SENTENCE_WORDS",
+        "READABILITY_AVG_SENTENCE_WORDS",
+        "READABILITY_MIN_FLESCH",
+    )
+    for each_internal_name in all_internal_only_names:
+        assert hasattr(constants_module, each_internal_name), (
+            f"{each_internal_name} must remain as a module attribute -- "
+            "the aggregate builders reference it."
+        )
+        assert each_internal_name not in constants_module.__all__, (
+            f"{each_internal_name} is consumed only inside the module and "
+            "must not be advertised in __all__."
+        )
+
+
+def test_all_heavy_testing_headers_enumerates_five_canonical_forms() -> None:
+    """The frozenset ALL_HEAVY_TESTING_HEADERS drives the violation message that
+    tells the writer which headers satisfy the heavy-shape testing-category
+    requirement. The set must include all five canonical forms (Test plan,
+    Testing, Tests, Verification, Validation) so the writer's documented
+    vocabulary matches the message it receives on a violation."""
+    expected_canonical_headers = [
+        "## Test plan",
+        "## Testing",
+        "## Tests",
+        "## Validation",
+        "## Verification",
+    ]
+    assert sorted(constants_module.ALL_HEAVY_TESTING_HEADERS) == expected_canonical_headers

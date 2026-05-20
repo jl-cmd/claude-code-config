@@ -645,7 +645,44 @@ def _apply_readability_reset() -> None:
     _atomic_write_json(READABILITY_THRESHOLD_OVERRIDE_FILE, {"loosens_used": 0})
 
 
+def _resolve_positional_pr_number(token: str) -> int | None:
+    """Return the PR number named by a positional token, or None if it is not one.
+
+    Accepts either a bare integer literal or a GitHub PR URL whose final path
+    segment is ``/pull/<number>``. The token may carry surrounding quotes;
+    unresolvable shell variables are rejected.
+    """
+    stripped_candidate = _strip_surrounding_quotes(token)
+    if _is_unresolvable_shell_value(stripped_candidate):
+        return None
+    url_match = re.match(
+        r"^https?://[^/]+/[^/]+/[^/]+/pull/(\d+)(?:[/?#].*)?$",
+        stripped_candidate,
+    )
+    if url_match is not None:
+        try:
+            return int(url_match.group(1))
+        except ValueError:
+            return None
+    try:
+        return int(stripped_candidate)
+    except ValueError:
+        return None
+
+
 def _extract_pr_number_from_command(command: str) -> int | None:
+    """Return the PR number positional argument from a `gh pr edit|comment` command.
+
+    Skips value-taking non-body flags (and their value tokens) so that ``--repo owner/r``
+    pairs do not consume the trailing PR number. Accepts both a bare integer literal
+    and a GitHub PR URL (``https://github.com/o/r/pull/<n>``) in the positional slot.
+
+    Args:
+        command: The raw shell command captured by the hook.
+
+    Returns:
+        The PR number when one positional value (integer or URL) is present, else None.
+    """
     logical_line = get_logical_first_line(command)
     if not logical_line:
         return None
@@ -660,16 +697,24 @@ def _extract_pr_number_from_command(command: str) -> int | None:
     subcommand_token = all_tokens[2]
     if subcommand_token not in {"edit", "comment"}:
         return None
-    for each_token in all_tokens[3:]:
-        if _is_flag_shaped_token(each_token):
-            return None
-        stripped_candidate = _strip_surrounding_quotes(each_token)
-        if _is_unresolvable_shell_value(stripped_candidate):
-            return None
-        try:
-            return int(stripped_candidate)
-        except ValueError:
-            return None
+    token_index = GH_PR_COMMAND_MIN_TOKEN_COUNT
+    while token_index < len(all_tokens):
+        current_token = all_tokens[token_index]
+        if _match_non_body_value_flag_equals_prefix(current_token) is not None:
+            token_index += 1
+            continue
+        if current_token in _non_body_value_flags:
+            token_index += 1
+            if token_index < len(all_tokens):
+                token_index += 1
+            continue
+        if _is_flag_shaped_token(current_token):
+            token_index += 1
+            continue
+        resolved_pr_number = _resolve_positional_pr_number(current_token)
+        if resolved_pr_number is not None:
+            return resolved_pr_number
+        return None
     return None
 
 
@@ -791,6 +836,28 @@ def _dispatch_cli_flag(
         sys.exit(0)
 
 
+def _command_carries_body_flag(command: str) -> bool:
+    """Return True when the command string carries any body or body-file flag.
+
+    Detects the four canonical forms accepted by ``gh pr {create,edit,comment}``:
+    ``--body``, ``-b ``, ``--body-file``, and ``-F ``. The trailing space on the
+    short flags guards against false positives where the literal substring appears
+    inside a longer token (e.g. ``-base``, ``-Foo``).
+
+    Args:
+        command: The raw shell command captured by the hook.
+
+    Returns:
+        True if any documented body or body-file flag appears in the command.
+    """
+    return (
+        "--body" in command
+        or " -b " in command
+        or "--body-file" in command
+        or " -F " in command
+    )
+
+
 def main() -> None:
     for each_argv_token in sys.argv[1:]:
         if each_argv_token in _all_cli_flag_tokens:
@@ -814,14 +881,10 @@ def main() -> None:
     if not command:
         sys.exit(0)
 
-    is_pr_create = "gh pr create" in command and ("--body" in command or "-b " in command)
-    is_pr_edit = "gh pr edit" in command and "--body" in command
-    is_pr_comment = "gh pr comment" in command and (
-        "--body" in command
-        or "-b " in command
-        or "--body-file" in command
-        or "-F " in command
-    )
+    has_any_body_flag = _command_carries_body_flag(command)
+    is_pr_create = "gh pr create" in command and has_any_body_flag
+    is_pr_edit = "gh pr edit" in command and has_any_body_flag
+    is_pr_comment = "gh pr comment" in command and has_any_body_flag
 
     if not (is_pr_create or is_pr_edit or is_pr_comment):
         sys.exit(0)

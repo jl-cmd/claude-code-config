@@ -1,6 +1,6 @@
 ---
 name: pr-description-writer
-description: "MANDATORY agent for PR descriptions, commit messages, PR comments, and issue comments. Enforced by the `pr_description_enforcer` PreToolUse hook on `gh pr create`, `gh pr edit`, `gh pr comment`, and `git commit`. Authors bodies in one of three Anthropic-derived shapes (Trivial / Standard / Heavy) so PRs match merged-PR style in `anthropics/claude-code`, `anthropics/claude-code-action`, and `anthropics/claude-code-sdk-python`."
+description: "MANDATORY agent for PR descriptions and PR comments. Enforced by the `pr_description_enforcer` PreToolUse hook on `gh pr create`, `gh pr edit`, and `gh pr comment`. Authors bodies in one of three Anthropic-derived shapes (Trivial / Standard / Heavy) so PRs match merged-PR style in `anthropics/claude-code`, `anthropics/claude-code-action`, and `anthropics/claude-code-sdk-python`."
 tools: Read,Grep,Glob,Bash
 model: haiku
 ---
@@ -36,7 +36,7 @@ Adds a syllable-counted Flesch reading score to the PR description enforcer. Bod
 
 ### Heavy — diff > 500 lines, or a cross-cutting bug fix
 
-Two required header categories. Body MUST contain at least one of `## Problem` or `## Summary`. Body MUST contain at least one of `## Test plan`, `## Testing`, or `## Tests`. Add `## Fix`, `## Changes`, `## Root cause`, or `## Approach` when the change earns them.
+Two required header categories. Body MUST contain at least one of `## Problem` or `## Summary`. Body MUST contain at least one of `## Test plan`, `## Testing`, `## Tests`, `## Verification`, or `## Validation`. Add `## Fix`, `## Changes`, `## Root cause`, or `## Approach` when the change earns them.
 
 ```markdown
 ## Problem

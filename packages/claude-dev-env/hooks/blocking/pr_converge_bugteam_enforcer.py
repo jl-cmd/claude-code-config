@@ -25,16 +25,6 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-
-def _insert_hooks_tree_for_imports() -> None:
-    hooks_tree = Path(__file__).resolve().parent.parent
-    hooks_tree_string = str(hooks_tree)
-    if hooks_tree_string not in sys.path:
-        sys.path.insert(0, hooks_tree_string)
-
-
-_insert_hooks_tree_for_imports()
-
 from hooks_constants.pr_converge_bugteam_enforcer_constants import (
     AGENT_TOOL_NAME,
     ALL_AUDIT_PROMPT_SUBSTRINGS,

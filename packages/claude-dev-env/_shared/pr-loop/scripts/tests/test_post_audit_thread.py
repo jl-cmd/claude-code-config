@@ -36,7 +36,6 @@ from typing import Any
 THIS_FILE_DIRECTORY = Path(__file__).resolve().parent
 SCRIPT_DIRECTORY = THIS_FILE_DIRECTORY.parent
 
-sys.modules.pop("config", None)
 if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 

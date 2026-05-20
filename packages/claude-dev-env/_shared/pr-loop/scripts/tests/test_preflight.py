@@ -204,16 +204,19 @@ def test_should_exit_nonzero_when_subprocess_run_raises_os_error(
 
 
 def test_preflight_uses_shared_hooks_path_suffix_constant() -> None:
-    """Preflight's expected suffix must come from config.fix_hookspath_constants
-    so the canonical hooks directory is defined in exactly one place."""
+    """Preflight's expected suffix must come from
+    pr_loop_shared_constants.fix_hookspath_constants so the canonical hooks
+    directory is defined in exactly one place."""
     scripts_directory = str(Path(__file__).parent.parent.resolve())
     if scripts_directory not in sys.path:
         sys.path.insert(0, scripts_directory)
     constants_module_path = (
-        Path(__file__).parent.parent / "config" / "fix_hookspath_constants.py"
+        Path(__file__).parent.parent
+        / "pr_loop_shared_constants"
+        / "fix_hookspath_constants.py"
     )
     constants_specification = importlib.util.spec_from_file_location(
-        "config.fix_hookspath_constants",
+        "pr_loop_shared_constants.fix_hookspath_constants",
         constants_module_path,
     )
     assert constants_specification is not None
@@ -234,15 +237,18 @@ def test_preflight_skip_uses_shared_env_var_constant(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The preflight skip env-var name must come from config/preflight_constants.py."""
+    """The preflight skip env-var name must come from
+    pr_loop_shared_constants/preflight_constants.py."""
     scripts_directory = str(Path(__file__).parent.parent.resolve())
     if scripts_directory not in sys.path:
         sys.path.insert(0, scripts_directory)
     constants_module_path = (
-        Path(__file__).parent.parent / "config" / "preflight_constants.py"
+        Path(__file__).parent.parent
+        / "pr_loop_shared_constants"
+        / "preflight_constants.py"
     )
     constants_specification = importlib.util.spec_from_file_location(
-        "config.preflight_constants",
+        "pr_loop_shared_constants.preflight_constants",
         constants_module_path,
     )
     assert constants_specification is not None
@@ -306,8 +312,9 @@ def test_preflight_does_not_import_unused_repository_root_marker_constant() -> N
 
 def test_pytest_no_tests_collected_helper_returns_named_constant() -> None:
     """The pytest "no tests collected" exit code must be sourced from the
-    named constant in config/preflight_constants.py rather than the bare
-    literal 5 inside the function body (CODE_RULES magic-values rule)."""
+    named constant in pr_loop_shared_constants/preflight_constants.py rather
+    than the bare literal 5 inside the function body (CODE_RULES magic-values
+    rule)."""
     assert preflight._pytest_exit_code_no_tests_collected() == (
         PYTEST_NO_TESTS_COLLECTED_EXIT_CODE
     )

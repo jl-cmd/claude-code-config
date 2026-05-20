@@ -1,7 +1,5 @@
-import importlib
 import sys
 from pathlib import Path
-from types import ModuleType
 from unittest.mock import patch
 
 import pytest
@@ -140,64 +138,3 @@ def test_is_valid_project_root_exported_from_consumer_modules(
     assert revoke_module.is_valid_project_root(bare_directory) is False
 
 
-def _reload_with_stale_config_cache(module_name: str) -> ModuleType:
-    fake_submodule_name = "config.claude_permissions_common_constants"
-    fake_parent_name = "config"
-    sentinel_module_a = ModuleType(fake_parent_name)
-    sentinel_module_b = ModuleType(fake_submodule_name)
-    sys.modules[fake_parent_name] = sentinel_module_a
-    sys.modules[fake_submodule_name] = sentinel_module_b
-    try:
-        target_module = sys.modules.get(module_name)
-        if target_module is None:
-            target_module = importlib.import_module(module_name)
-        else:
-            target_module = importlib.reload(target_module)
-    finally:
-        sys.modules.pop(fake_parent_name, None)
-        sys.modules.pop(fake_submodule_name, None)
-    return target_module
-
-
-def test_grant_module_import_evicts_cached_config_submodules(
-    tmp_path: Path,
-) -> None:
-    """grant_project_claude_permissions must evict cached `config.*` on import.
-
-    Regression for loop1-2: without a defensive cache pop above sys.path.insert,
-    a cached `config` package shadows scripts/config/ and the from-import raises.
-    Calls the rebound `is_valid_project_root` to confirm the real implementation
-    survived the cache eviction (a stale shadow would either raise on import or
-    bind a placeholder that returns the wrong value).
-    """
-    reloaded_module = _reload_with_stale_config_cache(
-        "grant_project_claude_permissions"
-    )
-    real_project_root = tmp_path / "project_root"
-    (real_project_root / ".claude").mkdir(parents=True)
-    bare_directory = tmp_path / "no_claude_marker"
-    bare_directory.mkdir()
-    assert reloaded_module.is_valid_project_root(real_project_root) is True
-    assert reloaded_module.is_valid_project_root(bare_directory) is False
-
-
-def test_revoke_module_import_evicts_cached_config_submodules(
-    tmp_path: Path,
-) -> None:
-    """revoke_project_claude_permissions must evict cached `config.*` on import.
-
-    Regression for loop1-3: without a defensive cache pop above sys.path.insert,
-    a cached `config` package shadows scripts/config/ and the from-import raises.
-    Calls the rebound `is_valid_project_root` to confirm the real implementation
-    survived the cache eviction (a stale shadow would either raise on import or
-    bind a placeholder that returns the wrong value).
-    """
-    reloaded_module = _reload_with_stale_config_cache(
-        "revoke_project_claude_permissions"
-    )
-    real_project_root = tmp_path / "project_root"
-    (real_project_root / ".claude").mkdir(parents=True)
-    bare_directory = tmp_path / "no_claude_marker"
-    bare_directory.mkdir()
-    assert reloaded_module.is_valid_project_root(real_project_root) is True
-    assert reloaded_module.is_valid_project_root(bare_directory) is False

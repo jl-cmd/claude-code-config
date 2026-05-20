@@ -10,16 +10,6 @@ import json
 import sys
 from pathlib import Path
 
-
-def _insert_hooks_tree_for_imports() -> None:
-    hooks_tree = Path(__file__).resolve().parent.parent
-    hooks_tree_string = str(hooks_tree)
-    if hooks_tree_string not in sys.path:
-        sys.path.insert(0, hooks_tree_string)
-
-
-_insert_hooks_tree_for_imports()
-
 from hooks_constants.bot_mention_comment_blocker_constants import (
     COPILOT_MENTION_TOKEN,
     CORRECTIVE_MESSAGE_COPILOT,

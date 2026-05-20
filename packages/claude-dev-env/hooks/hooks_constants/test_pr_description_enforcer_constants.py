@@ -127,3 +127,17 @@ def test_loosen_factors_are_inverse_paired() -> None:
     flesch_factor = constants_module.READABILITY_FLESCH_LOOSEN_FACTOR
     sentence_factor = constants_module.READABILITY_SENTENCE_WORDS_LOOSEN_FACTOR
     assert flesch_factor * sentence_factor == pytest.approx(1.0)
+
+
+def test_unused_header_constants_are_removed_from_module() -> None:
+    """The four header constants FIX_HEADER, CHANGES_HEADER, APPROACH_HEADER,
+    and ROOT_CAUSE_HEADER were dead exports with no call sites and must not be
+    re-introduced as either module attributes or __all__ entries."""
+    for each_dead_name in ("FIX_HEADER", "CHANGES_HEADER", "APPROACH_HEADER", "ROOT_CAUSE_HEADER"):
+        assert not hasattr(constants_module, each_dead_name), (
+            f"{each_dead_name} was re-introduced; the four header constants "
+            "had zero call sites and were deleted."
+        )
+        assert each_dead_name not in constants_module.__all__, (
+            f"{each_dead_name} re-appeared in __all__ even though it has no consumers."
+        )

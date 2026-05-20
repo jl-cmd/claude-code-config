@@ -342,15 +342,21 @@ def _iter_section_headers(body: str) -> list[str]:
 
 
 def _compute_pr_body_shape(body: str) -> str:
-    """Classify a PR body as `trivial`, `standard`, or `heavy` from content alone."""
-    body_length = len(body)
+    """Classify a PR body as `trivial`, `standard`, or `heavy` from content alone.
+
+    Uses substantive prose chars (post-Markdown-strip) rather than raw length so the
+    classifier and the ceremony-on-Trivial check both measure the same metric against
+    TRIVIAL_BODY_CHAR_THRESHOLD; otherwise a body can be classified Standard by shape
+    while simultaneously being flagged as Trivial-sized by the ceremony check.
+    """
+    substantive_length = _count_substantive_prose_chars(body)
     all_headers = _iter_section_headers(body)
     header_count = len(all_headers)
 
-    if body_length < TRIVIAL_BODY_CHAR_THRESHOLD and header_count == 0:
+    if substantive_length < TRIVIAL_BODY_CHAR_THRESHOLD and header_count == 0:
         return "trivial"
 
-    if body_length >= HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION:
+    if substantive_length >= HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION:
         matching_heavy_headers = sum(
             1 for each_header in all_headers
             if any(each_header.lower().startswith(known.lower()) for known in ALL_HEAVY_DETECTION_HEADERS)

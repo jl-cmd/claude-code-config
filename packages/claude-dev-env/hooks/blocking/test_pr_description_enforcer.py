@@ -1016,3 +1016,14 @@ def test_dispatch_enable_writes_success_to_output_stream(tmp_path, monkeypatch) 
     assert exit_info.value.code == 0
     assert "readability check enabled\n" == output_stream.getvalue()
     assert error_stream.getvalue() == ""
+
+
+def test_shape_classifier_uses_substantive_chars_not_raw_length() -> None:
+    """Shape classifier and ceremony-on-Trivial check must agree on the metric used
+    against TRIVIAL_BODY_CHAR_THRESHOLD. A body whose raw length passes the
+    threshold but whose substantive prose does not (e.g. tiny prose with a large
+    fenced code block) is genuinely Trivial in shape -- not Standard."""
+    tiny_prose_with_large_code_fence = "Done.\n\n```\n" + ("x" * 300) + "\n```"
+    assert len(tiny_prose_with_large_code_fence) >= hook_module.TRIVIAL_BODY_CHAR_THRESHOLD
+    assert hook_module._count_substantive_prose_chars(tiny_prose_with_large_code_fence) < hook_module.TRIVIAL_BODY_CHAR_THRESHOLD
+    assert hook_module._compute_pr_body_shape(tiny_prose_with_large_code_fence) == "trivial"

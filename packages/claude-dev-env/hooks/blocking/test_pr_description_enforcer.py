@@ -2,7 +2,6 @@
 
 import importlib.util
 import io
-import json as json_lib
 import json
 import pathlib
 import re as _re
@@ -753,7 +752,7 @@ def test_loosen_flesch_floor_cap_errors(readability_state_paths_enabled) -> None
         "loosens_used": 0,
     }
     override_path.parent.mkdir(parents=True, exist_ok=True)
-    override_path.write_text(json_lib.dumps(payload))
+    override_path.write_text(json.dumps(payload))
     assert hook_module._apply_readability_loosen() == "floor_reached"
 
 
@@ -767,7 +766,7 @@ def test_loosen_max_sentence_ceiling_cap_errors(readability_state_paths_enabled)
         "loosens_used": 0,
     }
     override_path.parent.mkdir(parents=True, exist_ok=True)
-    override_path.write_text(json_lib.dumps(payload))
+    override_path.write_text(json.dumps(payload))
     assert hook_module._apply_readability_loosen() == "ceiling_reached"
 
 
@@ -781,7 +780,7 @@ def test_loosen_avg_sentence_ceiling_cap_errors(readability_state_paths_enabled)
         "loosens_used": 0,
     }
     override_path.parent.mkdir(parents=True, exist_ok=True)
-    override_path.write_text(json_lib.dumps(payload))
+    override_path.write_text(json.dumps(payload))
     assert hook_module._apply_readability_loosen() == "ceiling_reached"
 
 
@@ -841,7 +840,7 @@ def test_threshold_override_file_widens_max_sentence_words(readability_state_pat
         "loosens_used": 0,
     }
     override_path.parent.mkdir(parents=True, exist_ok=True)
-    override_path.write_text(json_lib.dumps(payload))
+    override_path.write_text(json.dumps(payload))
     thresholds = hook_module._load_readability_thresholds()
     assert thresholds.max_sentence_words == 50
     assert thresholds.flesch_min == 30
@@ -852,7 +851,7 @@ def test_loosen_writes_expected_scaled_thresholds(readability_state_paths_enable
     """First loosen invocation scales flesch by 0.9 and sentence widths by 10/9."""
     _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     assert hook_module._apply_readability_loosen() == "ok"
-    written_payload = json_lib.loads(override_path.read_text())
+    written_payload = json.loads(override_path.read_text())
     assert written_payload["flesch_min"] == 45
     assert written_payload["max_sentence_words"] == 32
     assert written_payload["avg_sentence_words"] == 20
@@ -878,7 +877,7 @@ def test_dispatch_loosen_cap_writes_to_error_stream(readability_state_paths_enab
     """When the loosen cap is hit, the handler writes the corrective message to error stream."""
     _strike_path, override_path, _enabled_path = readability_state_paths_enabled
     override_path.parent.mkdir(parents=True, exist_ok=True)
-    override_path.write_text(json_lib.dumps({"loosens_used": hook_module.READABILITY_LOOSEN_CAP}))
+    override_path.write_text(json.dumps({"loosens_used": hook_module.READABILITY_LOOSEN_CAP}))
     output_stream = io.StringIO()
     error_stream = io.StringIO()
     with pytest.raises(SystemExit) as exit_info:
@@ -902,7 +901,7 @@ def test_dispatch_loosen_floor_writes_to_error_stream(readability_state_paths_en
         "loosens_used": 0,
     }
     override_path.parent.mkdir(parents=True, exist_ok=True)
-    override_path.write_text(json_lib.dumps(floor_payload))
+    override_path.write_text(json.dumps(floor_payload))
     output_stream = io.StringIO()
     error_stream = io.StringIO()
     with pytest.raises(SystemExit) as exit_info:

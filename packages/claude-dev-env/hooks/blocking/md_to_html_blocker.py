@@ -8,6 +8,7 @@ that markdown flattens. See https://thariqs.github.io/html-effectiveness/
 import json
 import os
 import sys
+import tempfile
 from typing import TextIO
 
 
@@ -15,19 +16,25 @@ _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 _exempt_root_filenames = ("readme.md", "changelog.md")
 _exempt_home_relative_directories = (".claude/plans", "SessionLog")
+_repo_root_marker_name = ".git"
 
 
 def _is_exempt_path(file_path: str) -> bool:
-    normalized = os.path.normpath(file_path).replace("\\", "/")
+    expanded_path = os.path.expanduser(file_path)
+    normalized = os.path.normpath(expanded_path).replace("\\", "/")
     lower_normalized = normalized.lower()
     if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
         return True
     if _is_under_exempt_home_directory(lower_normalized):
         return True
+    if _is_under_system_temp_directory(lower_normalized):
+        return True
     basename = os.path.basename(normalized)
     if basename.lower() in _exempt_root_filenames:
         directory = os.path.dirname(normalized)
         if directory in ("", "."):
+            return True
+        if _is_repo_root_directory(directory):
             return True
     return False
 
@@ -41,6 +48,18 @@ def _is_under_exempt_home_directory(lower_normalized_path: str) -> bool:
         if lower_normalized_path.startswith(f"{exempt_directory}/"):
             return True
     return False
+
+
+def _is_under_system_temp_directory(lower_normalized_path: str) -> bool:
+    temp_directory = tempfile.gettempdir().replace("\\", "/").rstrip("/").lower()
+    if not temp_directory:
+        return False
+    return lower_normalized_path.startswith(f"{temp_directory}/")
+
+
+def _is_repo_root_directory(directory_path: str) -> bool:
+    git_marker_path = os.path.join(directory_path, _repo_root_marker_name)
+    return os.path.exists(git_marker_path)
 
 
 def _block_reason(file_path: str) -> str:
@@ -61,8 +80,9 @@ def _block_context() -> str:
         f"{_html_effectiveness_url}\n"
         "Exceptions (.md still allowed):\n"
         "- Files inside .claude/ directories\n"
-        "- README.md and CHANGELOG.md at repo root\n"
-        "- Files under ~/.claude/plans/ and ~/SessionLog/"
+        "- README.md and CHANGELOG.md at any repo root\n"
+        "- Files under ~/.claude/plans/ and ~/SessionLog/\n"
+        "- Files under the OS temp directory"
     )
 
 
@@ -71,7 +91,8 @@ def _block_system_message() -> str:
         ".md files are blocked in this project — generate a self-contained .html "
         f"file instead. See {_html_effectiveness_url} for "
         "design patterns and examples. Exemptions: .claude/ infrastructure, "
-        "README.md, CHANGELOG.md at repo root, ~/.claude/plans/, ~/SessionLog/."
+        "README.md/CHANGELOG.md at any repo root, ~/.claude/plans/, "
+        "~/SessionLog/, and the OS temp directory."
     )
 
 

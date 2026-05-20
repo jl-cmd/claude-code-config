@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "md_to_html_blocker.py")
@@ -362,3 +363,63 @@ def test_exempt_home_relative_directories_is_module_constant():
     assert hasattr(blocker_module, "_exempt_home_relative_directories")
     assert ".claude/plans" in blocker_module._exempt_home_relative_directories
     assert "SessionLog" in blocker_module._exempt_home_relative_directories
+
+
+def test_passes_tilde_session_log_path():
+    result = _run_hook(
+        "Write",
+        {"file_path": "~/SessionLog/decisions/note.md", "content": "# Note"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_tilde_claude_plans_path():
+    result = _run_hook(
+        "Write",
+        {"file_path": "~/.claude/plans/plan.md", "content": "# Plan"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_blocks_tilde_other_home_md_file():
+    result = _run_hook(
+        "Write",
+        {"file_path": "~/docs/guide.md", "content": "# Guide"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_passes_system_temp_directory():
+    temp_md_path = os.path.join(tempfile.gettempdir(), "bugteam-scratch", "pr-body.md")
+    result = _run_hook(
+        "Write",
+        {"file_path": temp_md_path, "content": "# Scratch"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_absolute_path_readme_at_repo_root(tmp_path):
+    (tmp_path / ".git").mkdir()
+    readme_path = tmp_path / "README.md"
+    result = _run_hook(
+        "Write",
+        {"file_path": str(readme_path), "content": "# README"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_absolute_path_changelog_at_repo_root(tmp_path):
+    (tmp_path / ".git").mkdir()
+    changelog_path = tmp_path / "CHANGELOG.md"
+    result = _run_hook(
+        "Write",
+        {"file_path": str(changelog_path), "content": "# Changelog"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""

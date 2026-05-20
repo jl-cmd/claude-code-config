@@ -15,8 +15,11 @@ from typing import TextIO
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 _exempt_root_filenames = ("readme.md", "changelog.md")
+_exempt_anywhere_filenames = ("skill.md",)
+_exempt_plugin_directory_segments = ("agents", "skills", "commands")
 _exempt_home_relative_directories = (".claude/plans", "SessionLog")
 _repo_root_marker_name = ".git"
+_plugin_root_marker_directory_name = ".claude-plugin"
 
 
 def _is_exempt_path(file_path: str) -> bool:
@@ -25,17 +28,53 @@ def _is_exempt_path(file_path: str) -> bool:
     lower_normalized = normalized.lower()
     if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
         return True
+    if (
+        "/.claude-plugin/" in lower_normalized
+        or lower_normalized.startswith(".claude-plugin/")
+    ):
+        return True
+    basename = os.path.basename(normalized)
+    if basename.lower() in _exempt_anywhere_filenames:
+        return True
+    if _has_plugin_directory_segment(lower_normalized):
+        return True
     if _is_under_exempt_home_directory(lower_normalized):
         return True
     if _is_under_system_temp_directory(lower_normalized):
         return True
-    basename = os.path.basename(normalized)
+    if _is_under_plugin_root_marker(normalized):
+        return True
     if basename.lower() in _exempt_root_filenames:
         directory = os.path.dirname(normalized)
         if directory in ("", "."):
             return True
         if _is_repo_root_directory(directory):
             return True
+    return False
+
+
+def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:
+    for each_directory_segment in _exempt_plugin_directory_segments:
+        segment_marker = f"/{each_directory_segment}/"
+        if segment_marker in lower_normalized_path:
+            return True
+        if lower_normalized_path.startswith(f"{each_directory_segment}/"):
+            return True
+    return False
+
+
+def _is_under_plugin_root_marker(normalized_path: str) -> bool:
+    directory = os.path.dirname(normalized_path)
+    visited_directories: set[str] = set()
+    while directory and directory not in visited_directories:
+        visited_directories.add(directory)
+        marker_path = os.path.join(directory, _plugin_root_marker_directory_name)
+        if os.path.isdir(marker_path):
+            return True
+        parent_directory = os.path.dirname(directory)
+        if parent_directory == directory:
+            break
+        directory = parent_directory
     return False
 
 
@@ -79,7 +118,10 @@ def _block_context() -> str:
         "Reference for HTML effectiveness patterns:\n"
         f"{_html_effectiveness_url}\n"
         "Exceptions (.md still allowed):\n"
-        "- Files inside .claude/ directories\n"
+        "- Files inside .claude/ or .claude-plugin/ directories\n"
+        "- SKILL.md anywhere\n"
+        "- Files under agents/, skills/, or commands/ directories\n"
+        "- Files under any directory whose ancestor contains .claude-plugin/\n"
         "- README.md and CHANGELOG.md at any repo root\n"
         "- Files under ~/.claude/plans/ and ~/SessionLog/\n"
         "- Files under the OS temp directory"
@@ -90,9 +132,10 @@ def _block_system_message() -> str:
     return (
         ".md files are blocked in this project — generate a self-contained .html "
         f"file instead. See {_html_effectiveness_url} for "
-        "design patterns and examples. Exemptions: .claude/ infrastructure, "
-        "README.md/CHANGELOG.md at any repo root, ~/.claude/plans/, "
-        "~/SessionLog/, and the OS temp directory."
+        "design patterns and examples. Exemptions: .claude/ and .claude-plugin/ "
+        "infrastructure, SKILL.md anywhere, agents//skills//commands/ trees, "
+        "files under a .claude-plugin/ root, README.md/CHANGELOG.md at any "
+        "repo root, ~/.claude/plans/, ~/SessionLog/, and the OS temp directory."
     )
 
 

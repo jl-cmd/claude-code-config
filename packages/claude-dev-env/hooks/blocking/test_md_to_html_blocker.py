@@ -423,3 +423,109 @@ def test_passes_absolute_path_changelog_at_repo_root(tmp_path):
     )
     assert result.returncode == 0
     assert result.stdout == ""
+
+
+def test_passes_dot_claude_plugin_directory():
+    result = _run_hook(
+        "Write",
+        {"file_path": ".claude-plugin/manifest.md", "content": "# Manifest"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_nested_dot_claude_plugin_directory():
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "Y:/repo/.claude-plugin/skills/foo/SKILL.md",
+            "content": "# Skill",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_skill_md_at_any_depth():
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/dev-env/skills/pr-converge/SKILL.md",
+            "content": "# Skill",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_skill_md_uppercase():
+    result = _run_hook(
+        "Write",
+        {"file_path": "any/path/SKILL.MD", "content": "# Skill"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_agents_directory_anywhere():
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/dev-env/agents/pr-description-writer.md",
+            "content": "# Agent",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_skills_reference_directory():
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/dev-env/skills/pr-converge/reference/per-tick.md",
+            "content": "# Reference",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_commands_directory_anywhere():
+    result = _run_hook(
+        "Write",
+        {"file_path": "commands/pyguide-health.md", "content": "# Command"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_is_under_plugin_root_marker_finds_ancestor_directory(tmp_path):
+    plugin_root = tmp_path / "plugin-repo"
+    (plugin_root / ".claude-plugin").mkdir(parents=True)
+    nested_md_path = plugin_root / "lib" / "notes" / "design.md"
+    nested_md_path.parent.mkdir(parents=True)
+
+    hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_directory not in sys.path:
+        sys.path.insert(0, hook_directory)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+
+    normalized = str(nested_md_path).replace("\\", "/")
+    assert blocker_module._is_under_plugin_root_marker(normalized) is True
+
+    no_marker_path = tmp_path / "ordinary" / "lib" / "notes" / "design.md"
+    no_marker_path.parent.mkdir(parents=True)
+    no_marker_normalized = str(no_marker_path).replace("\\", "/")
+    assert blocker_module._is_under_plugin_root_marker(no_marker_normalized) is False
+
+
+def test_blocks_ordinary_docs_md_file():
+    result = _run_hook(
+        "Write",
+        {"file_path": "docs/intro.md", "content": "# Intro"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"

@@ -100,6 +100,29 @@ class TestJsonFlag:
         assert "results" in parsed
         assert isinstance(parsed["results"], list)
 
+    def test_file_structure_validator_output_bounded_under_unrelated_cwd(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """File Structure validator anchors git to the hooks tree, not the caller cwd.
+
+        Regression for the defect where ``get_project_root`` ran
+        ``git rev-parse --show-toplevel`` without a ``cwd`` argument; under a
+        subprocess fallback cwd of ``%TEMP%``, git returned an unrelated repo
+        and the validator rglob'd tens of thousands of unrelated files,
+        producing megabytes of output and >100 s wall time.
+        """
+        monkeypatch.chdir(tmp_path)
+        completed_validation_run = run_validators_entrypoint_subprocess(["--json"])
+
+        parsed = json.loads(completed_validation_run.stdout.strip())
+        file_structure_results = [
+            each_validator_result
+            for each_validator_result in parsed["results"]
+            if each_validator_result["name"] == "File Structure"
+        ]
+        assert len(file_structure_results) == 1
+        assert len(file_structure_results[0]["output"]) < 10000
+
 
 class TestGroupViolationsByFile:
     def test_groups_violations_by_file_path(self) -> None:

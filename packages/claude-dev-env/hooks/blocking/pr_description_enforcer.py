@@ -427,7 +427,7 @@ def _read_json_or_default(target_path: Path, all_default_payload_fields: dict[st
 def _read_strike_count() -> int:
     payload = _read_json_or_default(READABILITY_STATE_FILE, {"strikes": 0})
     raw_count = payload.get("strikes", 0)
-    if isinstance(raw_count, int):
+    if isinstance(raw_count, int) and not isinstance(raw_count, bool):
         return raw_count
     return 0
 
@@ -435,7 +435,8 @@ def _read_strike_count() -> int:
 def _increment_strike_count() -> int:
     payload = _read_json_or_default(READABILITY_STATE_FILE, {"strikes": 0})
     raw_count = payload.get("strikes", 0)
-    new_count = (raw_count if isinstance(raw_count, int) else 0) + 1
+    starting_count = raw_count if isinstance(raw_count, int) and not isinstance(raw_count, bool) else 0
+    new_count = starting_count + 1
     _atomic_write_json(READABILITY_STATE_FILE, {"strikes": new_count})
     return new_count
 
@@ -453,9 +454,12 @@ def _load_readability_thresholds() -> ReadabilityThresholds:
     avg_sentence_value = payload.get(
         "avg_sentence_words", DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
     )
-    resolved_flesch = flesch_min_value if isinstance(flesch_min_value, int) else DEFAULT_READABILITY_THRESHOLDS.flesch_min
-    resolved_max = max_sentence_value if isinstance(max_sentence_value, int) else DEFAULT_READABILITY_THRESHOLDS.max_sentence_words
-    resolved_avg = avg_sentence_value if isinstance(avg_sentence_value, int) else DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
+    flesch_is_int = isinstance(flesch_min_value, int) and not isinstance(flesch_min_value, bool)
+    max_is_int = isinstance(max_sentence_value, int) and not isinstance(max_sentence_value, bool)
+    avg_is_int = isinstance(avg_sentence_value, int) and not isinstance(avg_sentence_value, bool)
+    resolved_flesch = flesch_min_value if flesch_is_int else DEFAULT_READABILITY_THRESHOLDS.flesch_min
+    resolved_max = max_sentence_value if max_is_int else DEFAULT_READABILITY_THRESHOLDS.max_sentence_words
+    resolved_avg = avg_sentence_value if avg_is_int else DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
     return ReadabilityThresholds(
         flesch_min=resolved_flesch,
         max_sentence_words=resolved_max,
@@ -466,7 +470,7 @@ def _load_readability_thresholds() -> ReadabilityThresholds:
 def _read_loosens_used() -> int:
     payload = _read_json_or_default(READABILITY_THRESHOLD_OVERRIDE_FILE, {})
     raw_count = payload.get("loosens_used", 0)
-    if isinstance(raw_count, int):
+    if isinstance(raw_count, int) and not isinstance(raw_count, bool):
         return raw_count
     return 0
 

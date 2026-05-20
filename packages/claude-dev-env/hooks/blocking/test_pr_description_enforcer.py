@@ -1145,6 +1145,37 @@ def test_build_short_failing_body_helper_is_removed() -> None:
     )
 
 
+def test_strike_count_rejects_boolean_value_as_strikes(readability_state_paths_enabled) -> None:
+    """A corrupted strikes.json with `{"strikes": true}` must not be silently
+    accepted as the integer 1. Python's `bool` is a subclass of `int`, so a bare
+    `isinstance(value, int)` guard lets a malformed payload disable strike
+    behavior without warning. The reader must explicitly exclude bool values."""
+    strike_path, _override_path, _enabled_path = readability_state_paths_enabled
+    strike_path.write_text('{"strikes": true}')
+    assert hook_module._read_strike_count() == 0
+
+
+def test_loosens_used_rejects_boolean_value(readability_state_paths_enabled) -> None:
+    """`{"loosens_used": true}` must read as the default 0, not coerce the bool
+    to 1 via the `isinstance(x, int)` quirk that accepts bool."""
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
+    override_path.write_text('{"loosens_used": true}')
+    assert hook_module._read_loosens_used() == 0
+
+
+def test_readability_thresholds_reject_boolean_values(readability_state_paths_enabled) -> None:
+    """A threshold field set to a boolean must fall back to the default integer,
+    not silently coerce True to 1 or False to 0 via Python's bool-is-int quirk."""
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
+    override_path.write_text(
+        '{"flesch_min": true, "max_sentence_words": false, "avg_sentence_words": true}'
+    )
+    thresholds = hook_module._load_readability_thresholds()
+    assert thresholds.flesch_min == hook_module.DEFAULT_READABILITY_THRESHOLDS.flesch_min
+    assert thresholds.max_sentence_words == hook_module.DEFAULT_READABILITY_THRESHOLDS.max_sentence_words
+    assert thresholds.avg_sentence_words == hook_module.DEFAULT_READABILITY_THRESHOLDS.avg_sentence_words
+
+
 def test_extract_readability_target_text_strips_fences_before_finding_header() -> None:
     """`_extract_readability_target_text` must strip fenced code blocks before
     searching for the first structural header. Otherwise a fenced example like

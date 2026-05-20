@@ -11,7 +11,7 @@ Several Python packages share the name ``config`` across this repo, including:
 This conftest addresses one specific collision pair: the
 ``skills/pr-converge/config/`` package vs. the ``hooks/config/`` package.
 When tests under this directory exercise pr-converge scripts that load
-``from config.constants import ...`` and another collected test module in
+``from pr_converge_skill_constants.constants import ...`` and another collected test module in
 the same pytest process imports a hook that loads
 ``from config.<hook_submodule> import ...``, the
 ``sys.modules['config']`` and ``sys.modules['config.<submodule>']`` cache

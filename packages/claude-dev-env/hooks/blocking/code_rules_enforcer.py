@@ -109,9 +109,11 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_SUBSCRIPT_ONLY_COLLECTION_TYPE_NAMES,
     DOTTED_SEGMENT_PATTERN,
     EACH_PREFIX,
+    ALL_EXEMPT_COMMENT_PREFIXES,
     FILE_GLOBAL_UPPER_SNAKE_PATTERN,
     ALL_HOOK_INFRASTRUCTURE_PATTERNS,
     ALL_IMPORT_STATEMENT_PREFIXES,
+    MAX_COMMENT_ISSUES,
     INLINE_COLLECTION_MIN_LENGTH,
     ALL_JAVASCRIPT_EXTENSIONS,
     LOGGING_FSTRING_PATTERN,
@@ -168,54 +170,30 @@ def is_spec_file(file_path: str) -> bool:
 
 
 def check_comments_python(content: str) -> list[str]:
-    """Check for comments in Python code."""
+    """Check for comments in Python code.
+
+    Uses ``tokenize.generate_tokens`` to find true ``COMMENT`` tokens.
+    Hash characters that appear inside string literals (hex color codes,
+    URL fragments, and the hash inside an f-string interpolation pattern)
+    are correctly skipped because the tokenizer recognizes them as parts
+    of string tokens rather than comment tokens.
+
+    When the tokenizer cannot parse the file (partial content during
+    Edit, invalid syntax), the check returns no findings rather than
+    falling back to a line-walker scan — false negatives on
+    syntactically-invalid drafts are preferable to false positives that
+    mis-classify string-interior hash characters as comments.
+    """
     issues = []
-    lines = content.split("\n")
-
-    for line_number, line in enumerate(lines, 1):
-        stripped = line.strip()
-
-        if not stripped:
+    for each_comment_token in _comment_tokens(content):
+        comment_string = each_comment_token.string
+        if comment_string.startswith(ALL_EXEMPT_COMMENT_PREFIXES):
             continue
-
-        if stripped.startswith("#!"):
-            continue
-
-        if stripped.startswith("# type:"):
-            continue
-
-        if stripped.startswith("# noqa"):
-            continue
-
-        if stripped.startswith("# pylint:"):
-            continue
-
-        if stripped.startswith("# pragma:"):
-            continue
-
-        if stripped.startswith(("# TODO", "# FIXME", "# HACK", "# XXX")):
-            continue
-
-        comment_index = line.find("#")
-        if comment_index != -1:
-            before_comment = line[:comment_index]
-            if not before_comment.strip().startswith(("'", '"')):
-                is_in_string = False
-                quote_char = None
-                for i, each_char in enumerate(before_comment):
-                    if each_char in ("'", '"') and (i == 0 or before_comment[i - 1] != "\\"):
-                        if not is_in_string:
-                            is_in_string = True
-                            quote_char = each_char
-                        elif each_char == quote_char:
-                            is_in_string = False
-
-                if not is_in_string:
-                    comment_text = line[comment_index + 1 :].strip()
-                    if comment_text and not comment_text.startswith(("type:", "noqa", "pylint:", "pragma:", "TODO", "FIXME", "HACK", "XXX")):
-                        issues.append(f"Line {line_number}: Comment found - refactor to self-documenting code")
-
-        if len(issues) >= 3:
+        line_number = each_comment_token.start[0]
+        issues.append(
+            f"Line {line_number}: Comment found - refactor to self-documenting code"
+        )
+        if len(issues) >= MAX_COMMENT_ISSUES:
             break
 
     return issues
@@ -271,31 +249,20 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
     lines = content.split("\n")
 
     if extension in ALL_PYTHON_EXTENSIONS:
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
+        for each_comment_token in _comment_tokens(content):
+            comment_string = each_comment_token.string
+            if comment_string.startswith(ALL_EXEMPT_COMMENT_PREFIXES):
                 continue
-            if stripped.startswith("#"):
-                if stripped.startswith(("#!", "# type:", "# noqa", "# pylint:", "# pragma:", "# TODO", "# FIXME", "# HACK", "# XXX")):
-                    continue
-                standalone_comments.add(stripped)
-            elif "#" in line:
-                comment_index = line.find("#")
-                before_comment = line[:comment_index]
-                if not before_comment.strip().startswith(("'", '"')):
-                    is_in_string = False
-                    quote_char = None
-                    for i, char in enumerate(before_comment):
-                        if char in ("'", '"') and (i == 0 or before_comment[i - 1] != "\\"):
-                            if not is_in_string:
-                                is_in_string = True
-                                quote_char = char
-                            elif char == quote_char:
-                                is_in_string = False
-                    if not is_in_string:
-                        comment_text = line[comment_index + 1 :].strip()
-                        if comment_text and not comment_text.startswith(("type:", "noqa", "pylint:", "pragma:", "TODO", "FIXME", "HACK", "XXX")):
-                            inline_comments.add(line[comment_index:].strip())
+            line_number = each_comment_token.start[0]
+            column_offset = each_comment_token.start[1]
+            source_line = lines[line_number - 1] if line_number - 1 < len(lines) else ""
+            text_before_comment = source_line[:column_offset]
+            is_standalone_comment = not text_before_comment.strip()
+            normalized_comment_text = comment_string.strip()
+            if is_standalone_comment:
+                standalone_comments.add(normalized_comment_text)
+            else:
+                inline_comments.add(normalized_comment_text)
 
     elif extension in ALL_JAVASCRIPT_EXTENSIONS:
         is_in_multiline = False

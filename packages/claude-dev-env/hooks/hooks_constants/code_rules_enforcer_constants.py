@@ -23,6 +23,18 @@ UPPER_SNAKE_CONSTANT_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 TYPE_CHECKING_BLOCK_PATTERN = re.compile(r"^(?P<indent>\s*)if\s+(typing\.)?TYPE_CHECKING\s*:\s*$")
 ALL_IMPORT_STATEMENT_PREFIXES: tuple[str, ...] = ("import ", "from ")
+ALL_EXEMPT_COMMENT_PREFIXES: tuple[str, ...] = (
+    "#!",
+    "# type:",
+    "# noqa",
+    "# pylint:",
+    "# pragma:",
+    "# TODO",
+    "# FIXME",
+    "# HACK",
+    "# XXX",
+)
+MAX_COMMENT_ISSUES = 3
 NOT_INSIDE_TYPE_CHECKING_BLOCK = -1
 FILE_GLOBAL_UPPER_SNAKE_PATTERN = re.compile(r"^_?[A-Z][A-Z0-9_]*$")
 

@@ -1058,6 +1058,39 @@ def test_extract_pr_number_from_pr_url_with_trailing_query_string() -> None:
     assert hook_module._extract_pr_number_from_command(command) == 467
 
 
+def test_extract_pr_number_skips_body_long_flag_value() -> None:
+    """gh pr edit --body "Fixes #999" 472 must return 472 -- the --body value must not
+    be treated as a positional argument. Without skipping body-flag values, the body
+    text would be parsed as the positional slot and PR-number extraction would fail."""
+    command = 'gh pr edit --body "Fixes #999" 472'
+    assert hook_module._extract_pr_number_from_command(command) == 472
+
+
+def test_extract_pr_number_skips_body_short_flag_value() -> None:
+    """gh pr edit -b 'Fixes #999' 472 must return 472 -- short -b alias must also skip its value."""
+    command = 'gh pr edit -b "Fixes #999" 472'
+    assert hook_module._extract_pr_number_from_command(command) == 472
+
+
+def test_extract_pr_number_skips_body_file_long_flag_value() -> None:
+    """gh pr edit --body-file body.md 472 must return 472 -- --body-file value must skip."""
+    command = 'gh pr edit --body-file body.md 472'
+    assert hook_module._extract_pr_number_from_command(command) == 472
+
+
+def test_extract_pr_number_skips_body_file_short_flag_value() -> None:
+    """gh pr edit -F body.md 472 must return 472 -- -F short alias must also skip its value."""
+    command = 'gh pr edit -F body.md 472'
+    assert hook_module._extract_pr_number_from_command(command) == 472
+
+
+def test_extract_pr_number_skips_body_equals_form() -> None:
+    """gh pr edit --body="Fixes #999" 472 must return 472 -- equals-form has the value
+    attached to the same token, so only the flag token itself should be skipped."""
+    command = 'gh pr edit --body="Fixes #999" 472'
+    assert hook_module._extract_pr_number_from_command(command) == 472
+
+
 @pytest.fixture
 def readability_state_paths_enabled(tmp_path, monkeypatch):
     """Redirect the three readability state files to per-test temp paths while keeping

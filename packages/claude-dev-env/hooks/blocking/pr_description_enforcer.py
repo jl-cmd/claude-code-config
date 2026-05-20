@@ -697,13 +697,26 @@ def _extract_pr_number_from_command(command: str) -> int | None:
     subcommand_token = all_tokens[2]
     if subcommand_token not in {"edit", "comment"}:
         return None
+    all_value_taking_bare_flags: frozenset[str] = (
+        _non_body_value_flags | all_body_flags | {body_file_flag, body_file_short_flag}
+    )
     token_index = GH_PR_COMMAND_MIN_TOKEN_COUNT
     while token_index < len(all_tokens):
         current_token = all_tokens[token_index]
-        if _match_non_body_value_flag_equals_prefix(current_token) is not None:
-            token_index += 1
+        matched_equals_prefix = (
+            _match_non_body_value_flag_equals_prefix(current_token)
+            or _match_body_flag_equals_prefix(current_token)
+            or _match_body_file_equals_prefix(current_token)
+        )
+        if matched_equals_prefix is not None:
+            first_value_token = current_token[len(matched_equals_prefix):]
+            remaining_raw_tokens = all_tokens[token_index + 1:]
+            extra_skip = count_extra_tokens_to_skip_for_split_quoted_value(
+                remaining_raw_tokens, first_value_token
+            ) or 0
+            token_index += 1 + extra_skip
             continue
-        if current_token in _non_body_value_flags:
+        if current_token in all_value_taking_bare_flags:
             token_index += 1
             if token_index < len(all_tokens):
                 token_index += 1

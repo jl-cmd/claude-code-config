@@ -352,17 +352,22 @@ def test_blocks_home_directory_other_md_file():
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_exempt_home_relative_directories_is_module_constant():
+def test_md_blocker_constants_module_has_exemption_lists():
     hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
     if hook_dir not in sys.path:
         sys.path.insert(0, hook_dir)
 
-    blocker_module = importlib.import_module("md_to_html_blocker")
-    importlib.reload(blocker_module)
+    constants_module = importlib.import_module("config.md_blocker_constants")
+    importlib.reload(constants_module)
 
-    assert hasattr(blocker_module, "_exempt_home_relative_directories")
-    assert ".claude/plans" in blocker_module._exempt_home_relative_directories
-    assert "SessionLog" in blocker_module._exempt_home_relative_directories
+    assert ".claude/plans" in constants_module.EXEMPT_HOME_RELATIVE_DIRECTORIES
+    assert "SessionLog" in constants_module.EXEMPT_HOME_RELATIVE_DIRECTORIES
+    assert "skill.md" in constants_module.EXEMPT_ANYWHERE_FILENAMES
+    assert "agents" in constants_module.EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
+    assert "skills" in constants_module.EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
+    assert "commands" in constants_module.EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
+    assert constants_module.REPO_ROOT_MARKER_NAME == ".git"
+    assert constants_module.PLUGIN_ROOT_MARKER_DIRECTORY_NAME == ".claude-plugin"
 
 
 def test_passes_tilde_session_log_path():
@@ -403,26 +408,36 @@ def test_passes_system_temp_directory():
     assert result.stdout == ""
 
 
-def test_passes_absolute_path_readme_at_repo_root(tmp_path):
-    (tmp_path / ".git").mkdir()
-    readme_path = tmp_path / "README.md"
-    result = _run_hook(
-        "Write",
-        {"file_path": str(readme_path), "content": "# README"},
-    )
-    assert result.returncode == 0
-    assert result.stdout == ""
+def test_is_repo_root_directory_detects_git_subdirectory(tmp_path):
+    repo_root = tmp_path / "repo"
+    (repo_root / ".git").mkdir(parents=True)
+
+    hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_directory not in sys.path:
+        sys.path.insert(0, hook_directory)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+
+    assert blocker_module._is_repo_root_directory(str(repo_root)) is True
+
+    non_repo_directory = tmp_path / "not-a-repo"
+    non_repo_directory.mkdir()
+    assert blocker_module._is_repo_root_directory(str(non_repo_directory)) is False
 
 
-def test_passes_absolute_path_changelog_at_repo_root(tmp_path):
-    (tmp_path / ".git").mkdir()
-    changelog_path = tmp_path / "CHANGELOG.md"
-    result = _run_hook(
-        "Write",
-        {"file_path": str(changelog_path), "content": "# Changelog"},
-    )
-    assert result.returncode == 0
-    assert result.stdout == ""
+def test_is_repo_root_directory_detects_git_file_for_worktree(tmp_path):
+    worktree_root = tmp_path / "worktree"
+    worktree_root.mkdir()
+    git_file = worktree_root / ".git"
+    git_file.write_text("gitdir: /some/other/path\n", encoding="utf-8")
+
+    hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_directory not in sys.path:
+        sys.path.insert(0, hook_directory)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+
+    assert blocker_module._is_repo_root_directory(str(worktree_root)) is True
 
 
 def test_passes_dot_claude_plugin_directory():

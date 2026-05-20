@@ -11,15 +11,18 @@ import sys
 import tempfile
 from typing import TextIO
 
+from config.md_blocker_constants import (
+    EXEMPT_ANYWHERE_FILENAMES,
+    EXEMPT_HOME_RELATIVE_DIRECTORIES,
+    EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
+    PLUGIN_ROOT_MARKER_DIRECTORY_NAME,
+    REPO_ROOT_MARKER_NAME,
+)
+
 
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 _exempt_root_filenames = ("readme.md", "changelog.md")
-_exempt_anywhere_filenames = ("skill.md",)
-_exempt_plugin_directory_segments = ("agents", "skills", "commands")
-_exempt_home_relative_directories = (".claude/plans", "SessionLog")
-_repo_root_marker_name = ".git"
-_plugin_root_marker_directory_name = ".claude-plugin"
 
 
 def _is_exempt_path(file_path: str) -> bool:
@@ -34,7 +37,8 @@ def _is_exempt_path(file_path: str) -> bool:
     ):
         return True
     basename = os.path.basename(normalized)
-    if basename.lower() in _exempt_anywhere_filenames:
+    exempt_anywhere_filenames = EXEMPT_ANYWHERE_FILENAMES
+    if basename.lower() in exempt_anywhere_filenames:
         return True
     if _has_plugin_directory_segment(lower_normalized):
         return True
@@ -57,7 +61,8 @@ def _is_exempt_path(file_path: str) -> bool:
 
 
 def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:
-    for each_directory_segment in _exempt_plugin_directory_segments:
+    exempt_plugin_directory_segments = EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
+    for each_directory_segment in exempt_plugin_directory_segments:
         segment_marker = f"/{each_directory_segment}/"
         if segment_marker in lower_normalized_path:
             return True
@@ -67,11 +72,12 @@ def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:
 
 
 def _is_under_plugin_root_marker(normalized_path: str) -> bool:
+    plugin_root_marker_directory_name = PLUGIN_ROOT_MARKER_DIRECTORY_NAME
     directory = os.path.dirname(normalized_path)
     visited_directories: set[str] = set()
     while directory and directory not in visited_directories:
         visited_directories.add(directory)
-        marker_path = os.path.join(directory, _plugin_root_marker_directory_name)
+        marker_path = os.path.join(directory, plugin_root_marker_directory_name)
         if os.path.isdir(marker_path):
             return True
         parent_directory = os.path.dirname(directory)
@@ -82,6 +88,7 @@ def _is_under_plugin_root_marker(normalized_path: str) -> bool:
 
 
 def _is_under_exempt_home_directory(lower_normalized_path: str) -> bool:
+    exempt_home_relative_directories = EXEMPT_HOME_RELATIVE_DIRECTORIES
     home_directory = (
         os.path.realpath(os.path.expanduser("~"))
         .replace("\\", "/")
@@ -90,7 +97,7 @@ def _is_under_exempt_home_directory(lower_normalized_path: str) -> bool:
     )
     if not home_directory:
         return False
-    for each_relative_directory in _exempt_home_relative_directories:
+    for each_relative_directory in exempt_home_relative_directories:
         exempt_directory = f"{home_directory}/{each_relative_directory.lower()}"
         if lower_normalized_path.startswith(f"{exempt_directory}/"):
             return True
@@ -110,7 +117,8 @@ def _is_under_system_temp_directory(lower_normalized_path: str) -> bool:
 
 
 def _is_repo_root_directory(directory_path: str) -> bool:
-    git_marker_path = os.path.join(directory_path, _repo_root_marker_name)
+    repo_root_marker_name = REPO_ROOT_MARKER_NAME
+    git_marker_path = os.path.join(directory_path, repo_root_marker_name)
     return os.path.exists(git_marker_path)
 
 

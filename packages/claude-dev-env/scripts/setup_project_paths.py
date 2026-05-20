@@ -18,8 +18,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from hooks_constants.project_paths_reader import registry_file_path
-from hooks_constants.setup_project_paths_constants import (
+_hooks_dir = str(Path(__file__).resolve().parent.parent / "hooks")
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
+
+from hooks_constants.project_paths_reader import registry_file_path  # noqa: E402
+from hooks_constants.setup_project_paths_constants import (  # noqa: E402
     ABORTED_NOTHING_WRITTEN_MESSAGE,
     CONFIRMATION_PROMPT_TEXT,
     ES_EXE_BINARY_NAME,

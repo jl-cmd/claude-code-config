@@ -1306,6 +1306,57 @@ def test_single_use_helper_constants_are_inlined() -> None:
         )
 
 
+def test_long_body_without_heavy_headers_still_classifies_heavy() -> None:
+    """The Heavy required-header check in `validate_pr_body` only runs when
+    `_compute_pr_body_shape` returns HEAVY. Previously the classifier required
+    BOTH length >= 500 chars AND >= 2 heavy detection headers, which meant a
+    long body missing the required headers entirely was classified Standard
+    and silently bypassed the missing-header enforcement. Length alone must
+    drive the HEAVY classification so the validator can enforce the rule."""
+    long_body_with_no_heavy_headers = (
+        "Refactors the request-pipeline batcher to coalesce idempotent calls "
+        "before the network round-trip. The change touches the dispatcher, the "
+        "retry loop, the error normalizer, and three downstream consumers. "
+        "Every test in the integration suite continues to pass without "
+        "modification because the public contract is unchanged.\n\n"
+        "The new coalescer reads a per-call digest, looks up an in-flight slot "
+        "indexed by that digest, and appends the caller's promise to the slot "
+        "instead of dispatching a duplicate request. Once the network response "
+        "arrives, every queued promise resolves with the same value. Error "
+        "responses propagate to every queued promise so retry logic stays "
+        "consistent with the prior contract.\n"
+    )
+    assert (
+        hook_module._count_substantive_prose_chars(long_body_with_no_heavy_headers)
+        >= hook_module.HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION
+    )
+    assert hook_module._compute_pr_body_shape(long_body_with_no_heavy_headers) == hook_module.HEAVY_SHAPE
+
+
+def test_validate_heavy_body_without_required_headers_blocks() -> None:
+    """End-to-end: a long body without `## Problem|Summary` or `## Test plan|...`
+    must trip the Heavy missing-header violation. Previously the classifier
+    bypassed Heavy classification because the body lacked the headers we were
+    trying to require — a circular self-bypass."""
+    long_body_missing_heavy_headers = (
+        "Refactors the request-pipeline batcher to coalesce idempotent calls "
+        "before the network round-trip. The change touches the dispatcher, the "
+        "retry loop, the error normalizer, and three downstream consumers. "
+        "Every test in the integration suite continues to pass without "
+        "modification because the public contract is unchanged.\n\n"
+        "The new coalescer reads a per-call digest, looks up an in-flight slot "
+        "indexed by that digest, and appends the caller's promise to the slot "
+        "instead of dispatching a duplicate request. Once the network response "
+        "arrives, every queued promise resolves with the same value. Error "
+        "responses propagate to every queued promise so retry logic stays "
+        "consistent with the prior contract.\n"
+    )
+    violations = validate_pr_body(long_body_missing_heavy_headers)
+    assert any("heavy" in each_violation.lower() for each_violation in violations), (
+        f"Long body missing Heavy headers must trip the required-header check; got {violations!r}"
+    )
+
+
 def test_compute_pr_body_shape_uses_named_shape_constants() -> None:
     """`_compute_pr_body_shape` returns the centralised shape names rather than
     inline string literals. Confirm the constants flow through end-to-end."""

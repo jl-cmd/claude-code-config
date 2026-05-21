@@ -28,7 +28,6 @@ from blocking._gh_body_arg_utils import (  # noqa: E402
 
 
 from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
-    ALL_HEAVY_DETECTION_HEADERS,
     ALL_HEAVY_OPENING_HEADERS,
     ALL_HEAVY_TESTING_HEADERS,
     ALL_READABILITY_CLI_FLAG_TOKENS,
@@ -44,7 +43,6 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     FLESCH_WORDS_PER_SENTENCE_COEFFICIENT,
     GH_PR_COMMAND_MIN_TOKEN_COUNT,
     HEADING_LINE_PATTERN,
-    HEAVY_DETECTION_HEADER_COUNT_MIN,
     HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION,
     HEAVY_SHAPE,
     INLINE_CODE_PATTERN,
@@ -378,19 +376,13 @@ def _compute_pr_body_shape(body: str) -> str:
     while simultaneously being flagged as Trivial-sized by the ceremony check.
     """
     substantive_length = _count_substantive_prose_chars(body)
-    all_headers = _iter_section_headers(body)
-    header_count = len(all_headers)
+    header_count = len(_iter_section_headers(body))
 
     if substantive_length < TRIVIAL_BODY_CHAR_THRESHOLD and header_count == 0:
         return TRIVIAL_SHAPE
 
     if substantive_length >= HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION:
-        matching_heavy_headers = sum(
-            1 for each_header in all_headers
-            if any(each_header.lower().startswith(known.lower()) for known in ALL_HEAVY_DETECTION_HEADERS)
-        )
-        if matching_heavy_headers >= HEAVY_DETECTION_HEADER_COUNT_MIN:
-            return HEAVY_SHAPE
+        return HEAVY_SHAPE
 
     return STANDARD_SHAPE
 

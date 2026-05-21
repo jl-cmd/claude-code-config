@@ -1115,6 +1115,49 @@ def _run_main_and_capture_decision(hook_input: dict[str, object]) -> str:
     return captured_stdout.getvalue()
 
 
+def test_body_contains_any_header_rejects_plural_extension() -> None:
+    """`_body_contains_any_header` must enforce a word boundary after the
+    canonical header text. `## Problems` (plural) extends the canonical
+    word and must NOT satisfy `## Problem`, otherwise the Heavy
+    required-header check is weaker than the documented contract."""
+    body_with_plural_extension = "## Problems\n\nDetails follow."
+    candidate_set = frozenset({"## Problem"})
+    assert not hook_module._body_contains_any_header(body_with_plural_extension, candidate_set), (
+        "`## Problems` must NOT satisfy `## Problem` (different header)"
+    )
+
+
+def test_body_contains_any_header_accepts_punctuation_suffix() -> None:
+    """The boundary rule must still accept canonical headers followed by
+    non-word punctuation: colon, em-dash, parenthesis, trailing whitespace.
+    Reviewers write `## Problem (context)` and `## Test plan: scope` —
+    these must continue to satisfy the canonical headers."""
+    candidate_set = frozenset({"## Problem"})
+    for each_body in [
+        "## Problem\n\nDetails.",
+        "## Problem:\n\nDetails.",
+        "## Problem (context)\n\nDetails.",
+        "## Problem — context\n\nDetails.",
+    ]:
+        assert hook_module._body_contains_any_header(each_body, candidate_set), (
+            f"`{each_body!r}` must satisfy `## Problem` (punctuation/space follows)"
+        )
+
+
+def test_body_contains_any_header_rejects_alphanumeric_suffix() -> None:
+    """`## Problem2`, `## ProblemX`, `## Problem_one` are different headers
+    and must not match `## Problem`."""
+    candidate_set = frozenset({"## Problem"})
+    for each_body in [
+        "## Problem2\n\nDetails.",
+        "## ProblemX\n\nDetails.",
+        "## Problem_one\n\nDetails.",
+    ]:
+        assert not hook_module._body_contains_any_header(each_body, candidate_set), (
+            f"`{each_body!r}` must NOT satisfy `## Problem` (alphanumeric continuation)"
+        )
+
+
 def test_read_strike_count_clamps_negative_to_zero(readability_state_paths_enabled) -> None:
     """A corrupted strike-count JSON state with a negative integer must not
     silently bypass escalation. Reads clamp to >= 0 so subsequent increments

@@ -396,8 +396,12 @@ def _body_contains_any_header(body: str, all_candidate_headers: frozenset[str]) 
     for each_candidate in all_candidate_headers:
         candidate_lower = each_candidate.lower()
         for each_present in body_headers_lower:
-            if each_present.startswith(candidate_lower):
+            if each_present == candidate_lower:
                 return True
+            if each_present.startswith(candidate_lower):
+                character_after_candidate = each_present[len(candidate_lower)]
+                if not (character_after_candidate.isalnum() or character_after_candidate == "_"):
+                    return True
     return False
 
 

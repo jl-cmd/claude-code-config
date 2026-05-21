@@ -593,12 +593,14 @@ def _evaluate_readability_metrics(
     if max_sentence_words > thresholds.max_sentence_words:
         all_metric_violations.append(
             f"Readability: longest sentence is {max_sentence_words} words "
-            f"(threshold {thresholds.max_sentence_words}); break long sentences"
+            f"(maximum {thresholds.max_sentence_words}); "
+            "split or rewrite the longest sentence"
         )
     if average_sentence_words > thresholds.avg_sentence_words:
         all_metric_violations.append(
             f"Readability: average sentence is {average_sentence_words:.1f} words "
-            f"(threshold {thresholds.avg_sentence_words}); shorten intro sentences"
+            f"(maximum {thresholds.avg_sentence_words}); "
+            "shorten or split your longest sentences"
         )
     flesch_score = _compute_flesch_reading_ease(target_text)
     if flesch_score < thresholds.flesch_min:

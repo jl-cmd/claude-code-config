@@ -1314,6 +1314,31 @@ def test_single_use_helper_constants_are_inlined() -> None:
         )
 
 
+def test_readability_violation_strings_match_agent_doc_format() -> None:
+    """The agent SKILL example shows the canonical readability message format
+    (`Readability: longest sentence is N words (maximum 28); split or rewrite
+    the longest sentence`). The hook's `_evaluate_readability_metrics` must
+    emit the same `maximum N` / `split or rewrite` wording so users see the
+    exact form documented in the agent file."""
+    text_with_long_sentence = (
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu "
+        "nu xi omicron pi rho sigma tau upsilon phi chi psi omega aleph "
+        "beth gimel daleth he waw zayin heth teth yodh kaph lamedh mem nun."
+    )
+    messages_via_eval = hook_module._evaluate_readability_metrics(
+        text_with_long_sentence, hook_module.DEFAULT_READABILITY_THRESHOLDS
+    )
+    joined_messages = "\n".join(messages_via_eval)
+    assert "(maximum" in joined_messages, (
+        f"Readability messages must use `maximum N` wording (matching agent doc); "
+        f"got: {joined_messages!r}"
+    )
+    assert "split or rewrite the longest sentence" in joined_messages, (
+        f"Longest-sentence message must end with `split or rewrite the longest sentence`; "
+        f"got: {joined_messages!r}"
+    )
+
+
 def test_long_body_without_heavy_headers_still_classifies_heavy() -> None:
     """The Heavy required-header check in `validate_pr_body` only runs when
     `_compute_pr_body_shape` returns HEAVY. Previously the classifier required

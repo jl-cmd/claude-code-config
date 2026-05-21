@@ -194,7 +194,7 @@ The primary outcome comes from the session title resolved in step 1.
 - [ ] Opening section answers "what shipped / why / impact" for a cold reader
 - [ ] Self-contained HTML (no relative-path asset refs; avoid external dependencies)
 - [ ] Auto-publish URLs captured from step 2 and step 3 (or HTML emitted to chat when step 2 Write failed)
-- [ ] Vault-context line appended via Edit (step 3); step-3 publish's URL pair quoted to the user
+- [ ] Vault-context line appended via Edit (step 3); URL pair from the most recent auto-publish run for the current session quoted to the user (typically the final Step-3 Edit, but the Step 5 republish takes over when Step 5 edits the current session)
 - [ ] Decision extraction surfaced any unrecorded items
 - [ ] Session tidy reported anomalies or stayed silent
 - [ ] `/rename` command copied to clipboard via `pwsh Set-Clipboard`

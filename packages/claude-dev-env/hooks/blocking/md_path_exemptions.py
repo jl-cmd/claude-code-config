@@ -7,7 +7,7 @@ This module is the single source of truth for that decision.
 
 import os
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 _hooks_directory = str(Path(__file__).resolve().parent.parent)
@@ -111,6 +111,27 @@ def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:
     return False
 
 
+def _is_absolute_path_cross_platform(file_path: str) -> bool:
+    """Detect absolute paths in both POSIX and Windows drive-letter forms.
+
+    ``os.path.isabs`` is platform-dependent: on Linux/macOS it classifies a
+    Windows drive-letter path like ``Y:\\repo\\foo`` as relative. The anchored
+    source-subdirectory exemption must scan every starting segment for
+    absolute paths regardless of host OS, so a path's absoluteness must be
+    decided cross-platform.
+
+    Args:
+        file_path: Tilde-expanded file path.
+
+    Returns:
+        True when the path is absolute under POSIX rules or carries a Windows
+        drive-letter root (``[A-Za-z]:[\\\\/]...``).
+    """
+    if os.path.isabs(file_path):
+        return True
+    return PureWindowsPath(file_path).is_absolute()
+
+
 def _is_under_claude_dev_env_source_subdirectory(
     expanded_file_path: str, lower_normalized_path: str
 ) -> bool:
@@ -140,7 +161,7 @@ def _is_under_claude_dev_env_source_subdirectory(
     ]
     if not all_segments:
         return False
-    if os.path.isabs(expanded_file_path):
+    if _is_absolute_path_cross_platform(expanded_file_path):
         starting_segment_index_options = list(range(len(all_segments)))
     else:
         starting_segment_index_options = [0]

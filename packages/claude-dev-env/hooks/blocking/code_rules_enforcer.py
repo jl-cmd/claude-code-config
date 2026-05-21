@@ -121,7 +121,9 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_PYTHON_EXTENSIONS,
     ALL_SELF_AND_CLS_PARAMETER_NAMES,
     ALL_TEST_PATH_PATTERNS,
+    TRIPLE_DOUBLE_QUOTE_DELIMITER,
     TRIPLE_QUOTE_PARITY_DIVISOR,
+    TRIPLE_SINGLE_QUOTE_DELIMITER,
     TYPE_CHECKING_BLOCK_PATTERN,
     ALL_UNION_TYPING_NAMES,
     UPPER_SNAKE_CONSTANT_PATTERN,
@@ -481,10 +483,10 @@ def _update_triple_quote_state_for_line(
         if line_text.count(current_delimiter) % TRIPLE_QUOTE_PARITY_DIVISOR == 1:
             return None
         return current_delimiter
-    if line_text.count('"""') % TRIPLE_QUOTE_PARITY_DIVISOR == 1:
-        return '"""'
-    if line_text.count("'''") % TRIPLE_QUOTE_PARITY_DIVISOR == 1:
-        return "'''"
+    if line_text.count(TRIPLE_DOUBLE_QUOTE_DELIMITER) % TRIPLE_QUOTE_PARITY_DIVISOR == 1:
+        return TRIPLE_DOUBLE_QUOTE_DELIMITER
+    if line_text.count(TRIPLE_SINGLE_QUOTE_DELIMITER) % TRIPLE_QUOTE_PARITY_DIVISOR == 1:
+        return TRIPLE_SINGLE_QUOTE_DELIMITER
     return None
 
 

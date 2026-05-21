@@ -1115,6 +1115,61 @@ def _run_main_and_capture_decision(hook_input: dict[str, object]) -> str:
     return captured_stdout.getvalue()
 
 
+def test_read_strike_count_clamps_negative_to_zero(readability_state_paths_enabled) -> None:
+    """A corrupted strike-count JSON state with a negative integer must not
+    silently bypass escalation. Reads clamp to >= 0 so subsequent increments
+    walk the strike threshold from a sane baseline."""
+    strike_path, _override_path, _enabled_path = readability_state_paths_enabled
+    strike_path.parent.mkdir(parents=True, exist_ok=True)
+    strike_path.write_text(json.dumps({"strikes": -5}))
+    assert hook_module._read_strike_count() == 0, (
+        "negative strikes must clamp to 0"
+    )
+
+
+def test_increment_strike_count_clamps_negative_starting_value(readability_state_paths_enabled) -> None:
+    """`_increment_strike_count` must not propagate a corrupted negative
+    starting value. The new count after one increment from a negative
+    baseline is exactly 1, not (negative + 1)."""
+    strike_path, _override_path, _enabled_path = readability_state_paths_enabled
+    strike_path.parent.mkdir(parents=True, exist_ok=True)
+    strike_path.write_text(json.dumps({"strikes": -3}))
+    new_count_after_increment = hook_module._increment_strike_count()
+    assert new_count_after_increment == 1, (
+        f"increment from negative starting value must clamp first; got {new_count_after_increment}"
+    )
+
+
+def test_read_loosens_used_clamps_negative_to_zero(readability_state_paths_enabled) -> None:
+    """A corrupted `loosens_used` JSON state with a negative integer must
+    not silently bypass the loosen cap. Reads clamp to >= 0 so the cap
+    check enforces the documented ceiling."""
+    _strike_path, override_path, _enabled_path = readability_state_paths_enabled
+    override_path.parent.mkdir(parents=True, exist_ok=True)
+    override_path.write_text(json.dumps({"loosens_used": -2}))
+    assert hook_module._read_loosens_used() == 0, (
+        "negative loosens_used must clamp to 0"
+    )
+
+
+def test_scan_raw_tokens_for_body_docstring_reflects_none_for_shell_vars() -> None:
+    """`_resolve_body_string_value` now returns `None` for unresolvable
+    shell-variable bodies. `_scan_raw_tokens_for_body`'s docstring must
+    reflect that contract so future maintainers do not treat `""` as the
+    shell-var sentinel; literal-empty bodies still flow into validation."""
+    source_text = inspect.getsource(hook_module._scan_raw_tokens_for_body)
+    assert "None" in source_text, (
+        f"docstring must mention None for shell-var case; got: {source_text!r}"
+    )
+    assert "shell var" in source_text.lower() or "shell-var" in source_text.lower(), (
+        f"docstring must reference shell variables; got: {source_text!r}"
+    )
+    assert "may be empty for shell vars/sentinels" not in source_text, (
+        "docstring must not claim `\"\"` represents shell-var bodies; that case now returns None. "
+        f"Source still contains the stale phrase: {source_text!r}"
+    )
+
+
 def test_stdlib_imports_form_one_isort_sorted_block() -> None:
     """Ruff's `I` (isort) rule treats a blank line as a section break, so
     `import shlex` sitting alone after a blank line would fail I001. Pin

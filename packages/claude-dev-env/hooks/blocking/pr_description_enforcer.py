@@ -214,8 +214,13 @@ def _scan_raw_tokens_for_body(all_raw_tokens: list[str]) -> str | None | bool:
     """Return the body value from a raw token list, or False if no body flag found.
 
     Returns False when no body/body-file flag is present (caller should continue).
-    Returns None when a body-file flag is present but malformed (no value follows).
-    Returns str for body string values (may be empty for shell vars/sentinels).
+    Returns None when a body-file flag is present but malformed (no value
+    follows), OR when the body value is an unresolvable shell variable (e.g.
+    `--body "$VAR"`) — in either case the body is unauditable and the caller
+    skips enforcement.
+    Returns str for resolved body string values. An empty string `""` is a
+    literal-empty body (e.g. `--body ""`) and must still flow into
+    `validate_pr_body` so the substantive-prose check blocks it.
     """
     token_index = 0
     while token_index < len(all_raw_tokens):
@@ -431,14 +436,15 @@ def _read_strike_count() -> int:
     payload = _read_json_or_default(READABILITY_STATE_FILE, {"strikes": 0})
     raw_count = payload.get("strikes", 0)
     if isinstance(raw_count, int) and not isinstance(raw_count, bool):
-        return raw_count
+        return max(raw_count, 0)
     return 0
 
 
 def _increment_strike_count() -> int:
     payload = _read_json_or_default(READABILITY_STATE_FILE, {"strikes": 0})
     raw_count = payload.get("strikes", 0)
-    starting_count = raw_count if isinstance(raw_count, int) and not isinstance(raw_count, bool) else 0
+    is_valid_integer = isinstance(raw_count, int) and not isinstance(raw_count, bool)
+    starting_count = max(raw_count, 0) if is_valid_integer else 0
     new_count = starting_count + 1
     _atomic_write_json(READABILITY_STATE_FILE, {"strikes": new_count})
     return new_count
@@ -474,7 +480,7 @@ def _read_loosens_used() -> int:
     payload = _read_json_or_default(READABILITY_THRESHOLD_OVERRIDE_FILE, {})
     raw_count = payload.get("loosens_used", 0)
     if isinstance(raw_count, int) and not isinstance(raw_count, bool):
-        return raw_count
+        return max(raw_count, 0)
     return 0
 
 

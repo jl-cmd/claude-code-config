@@ -34,6 +34,22 @@ ALL_EXEMPT_COMMENT_PREFIXES: tuple[str, ...] = (
     "# HACK",
     "# XXX",
 )
+ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES: tuple[str, ...] = (
+    "// @ts-",
+    "// eslint-",
+    "// prettier-",
+    "/// ",
+    "// TODO",
+    "// FIXME",
+    "// HACK",
+    "// XXX",
+)
+ALL_JAVASCRIPT_EXEMPT_INLINE_COMMENT_PREFIXES: tuple[str, ...] = (
+    "TODO",
+    "FIXME",
+    "HACK",
+    "XXX",
+)
 MAX_COMMENT_ISSUES = 3
 NOT_INSIDE_TYPE_CHECKING_BLOCK = -1
 FILE_GLOBAL_UPPER_SNAKE_PATTERN = re.compile(r"^_?[A-Z][A-Z0-9_]*$")

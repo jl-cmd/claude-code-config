@@ -110,6 +110,8 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     DOTTED_SEGMENT_PATTERN,
     EACH_PREFIX,
     ALL_EXEMPT_COMMENT_PREFIXES,
+    ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES,
+    ALL_JAVASCRIPT_EXEMPT_INLINE_COMMENT_PREFIXES,
     FILE_GLOBAL_UPPER_SNAKE_PATTERN,
     ALL_HOOK_INFRASTRUCTURE_PATTERNS,
     ALL_IMPORT_STATEMENT_PREFIXES,
@@ -223,10 +225,10 @@ def check_comments_javascript(content: str) -> list[str]:
             continue
 
         if stripped.startswith("//"):
-            if not stripped.startswith(("// @ts-", "// eslint-", "// prettier-", "/// ", "// TODO", "// FIXME", "// HACK", "// XXX")):
+            if not stripped.startswith(ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES):
                 issues.append(f"Line {each_line_number}: Comment found - refactor to self-documenting code")
 
-        if len(issues) >= 3:
+        if len(issues) >= MAX_COMMENT_ISSUES:
             break
 
     return issues
@@ -280,14 +282,14 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
                     standalone_comments.add(stripped)
                 continue
             if stripped.startswith("//"):
-                if not stripped.startswith(("// @ts-", "// eslint-", "// prettier-", "/// ", "// TODO", "// FIXME", "// HACK", "// XXX")):
+                if not stripped.startswith(ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES):
                     standalone_comments.add(stripped)
             elif "//" in line:
                 before_slash = line[:line.index("//")]
                 if before_slash.strip():
                     comment_start = stripped.index("//")
                     comment_text = stripped[comment_start + 2 :].strip()
-                    if not comment_text.startswith(("TODO", "FIXME", "HACK", "XXX")):
+                    if not comment_text.startswith(ALL_JAVASCRIPT_EXEMPT_INLINE_COMMENT_PREFIXES):
                         inline_comments.add(stripped[comment_start:])
 
     return inline_comments, standalone_comments

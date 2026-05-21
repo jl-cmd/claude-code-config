@@ -109,12 +109,18 @@ def test_all_list_is_alphabetically_sorted() -> None:
     inconsistencies Bugbot flagged."""
     actual_all_list = constants_module.__all__
     expected_sorted = sorted(actual_all_list)
-    assert actual_all_list == expected_sorted, (
-        "constants_module.__all__ must be alphabetically sorted; the first "
-        f"divergence is at index {next(i for i, (a, b) in enumerate(zip(actual_all_list, expected_sorted)) if a != b)}: "
-        f"got {actual_all_list[next(i for i, (a, b) in enumerate(zip(actual_all_list, expected_sorted)) if a != b)]!r}, "
-        f"expected {expected_sorted[next(i for i, (a, b) in enumerate(zip(actual_all_list, expected_sorted)) if a != b)]!r}"
-    )
+    if actual_all_list != expected_sorted:
+        first_divergence_index = next(
+            each_index
+            for each_index, (each_actual_value, each_expected_value) in enumerate(zip(actual_all_list, expected_sorted))
+            if each_actual_value != each_expected_value
+        )
+        raise AssertionError(
+            "constants_module.__all__ must be alphabetically sorted; "
+            f"the first divergence is at index {first_divergence_index}: "
+            f"got {actual_all_list[first_divergence_index]!r}, "
+            f"expected {expected_sorted[first_divergence_index]!r}"
+        )
 
 
 def test_dead_heavy_detection_constants_are_removed() -> None:

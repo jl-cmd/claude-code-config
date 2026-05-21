@@ -572,6 +572,16 @@ def test_validate_trivial_body_blocks_test_plan_header() -> None:
     ), f"Trivial body opening with `## Test plan` must trip ceremony block; got {violations!r}"
 
 
+def test_first_non_empty_line_helper_is_removed() -> None:
+    """`_first_non_empty_line` was the basis of the prior ceremony-on-Trivial
+    check, which now uses `_iter_section_headers`. The helper has no remaining
+    call sites; pin its removal so it cannot drift back as dead code."""
+    assert not hasattr(hook_module, "_first_non_empty_line"), (
+        "_first_non_empty_line must be removed; the ceremony-on-Trivial check "
+        "now reads through _iter_section_headers instead."
+    )
+
+
 def test_validate_trivial_body_blocks_test_plan_after_prose() -> None:
     """The doc promises "Zero `##` headers" on Trivial bodies. The earlier check
     only inspected the first non-empty line, so prose followed by `## Test plan`

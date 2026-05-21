@@ -405,13 +405,6 @@ def _body_contains_any_header(body: str, all_candidate_headers: frozenset[str]) 
     return False
 
 
-def _first_non_empty_line(body: str) -> str:
-    for each_line in body.splitlines():
-        if each_line.strip():
-            return each_line
-    return ""
-
-
 def _matches_self_closing_reference(body: str, pr_number: int) -> bool:
     pattern_source = SELF_REFERENCE_PATTERN_TEMPLATE.format(pr_number=pr_number)
     compiled_pattern = re.compile(pattern_source, re.IGNORECASE)

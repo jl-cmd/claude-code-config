@@ -82,7 +82,7 @@ The enforcer hook computes a Flesch Reading Ease score plus sentence-length metr
 | Average sentence | ≤ 18 words |
 | Flesch Reading Ease | ≥ 50 |
 
-The hook tracks a per-user strike counter at `~/.claude/state/pr_description_readability_strikes.json`. The first two readability failures emit a metric-specific block (e.g., `max sentence length 32 words exceeds 28`). The third triggering failure fires an escape-hatch message listing four recovery actions. The full action list lives in `PR_DESCRIPTION_GUIDE.md` under "Escape hatch".
+The hook tracks a per-user strike counter at `~/.claude/state/pr_description_readability_strikes.json`. The first two readability failures emit a metric-specific block (e.g., `Readability: longest sentence is 32 words (maximum 28); split or rewrite the longest sentence`). The third triggering failure fires an escape-hatch message listing four recovery actions. The full action list lives in `PR_DESCRIPTION_GUIDE.md` under "Escape hatch".
 
 Hit the targets on first attempt by writing short sentences in common Anglo-Saxon words. The average tracks the corpus median of 14.5.
 

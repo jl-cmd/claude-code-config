@@ -79,11 +79,18 @@ def test_whitespace_run_pattern_collapses_multiple_spaces() -> None:
     assert collapsed_text == "a b c d"
 
 
-def test_all_heavy_detection_headers_unions_opening_and_testing() -> None:
-    assert constants_module.ALL_HEAVY_DETECTION_HEADERS == (
-        constants_module.ALL_HEAVY_OPENING_HEADERS
-        | constants_module.ALL_HEAVY_TESTING_HEADERS
-    )
+def test_dead_heavy_detection_constants_are_removed() -> None:
+    """`ALL_HEAVY_DETECTION_HEADERS` and `HEAVY_DETECTION_HEADER_COUNT_MIN`
+    were remnants of the prior two-condition shape classifier (length AND
+    detection-header count). e137dee9 simplified the classifier to use length
+    alone, leaving both names as dead exports. Pin their removal so they
+    cannot drift back as misleading vestigial constants."""
+    for each_name in ("ALL_HEAVY_DETECTION_HEADERS", "HEAVY_DETECTION_HEADER_COUNT_MIN"):
+        assert not hasattr(constants_module, each_name), (
+            f"{each_name} must be deleted; the classifier now uses "
+            "HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION alone."
+        )
+        assert each_name not in constants_module.__all__
 
 
 def test_self_closing_reference_message_prefix_and_suffix_compose_full_message() -> None:

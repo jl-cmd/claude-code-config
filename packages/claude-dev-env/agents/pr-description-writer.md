@@ -61,7 +61,7 @@ Routes every `gh api .../reviews` and `.../comments` call through `--paginate --
 - Em-dashes — like these — work as parenthetical separators. 48% of corpus PRs use them.
 - Focus on WHY. The diff shows WHAT.
 - No code snippets in the description body. Reviewers read the diff for code.
-- No implementation-detail dumping. `Add a 5-second timeout` beats `Add `pullStartedAt: Date.now()` parameter to the `runPull()` callback`.
+- No implementation-detail dumping. `Add a 5-second timeout` beats ``Add `pullStartedAt: Date.now()` parameter to the `runPull()` callback``.
 - No filler. Strike `In this PR I have made the following changes:` and start with the action.
 
 ## Gotchas

@@ -30,10 +30,6 @@ _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 
 
-def _is_exempt_path(file_path: str) -> bool:
-    return is_exempt_path(file_path)
-
-
 def _block_reason(file_path: str) -> str:
     return (
         f"BLOCKED: Write/Edit to .md file '{file_path}' is not permitted. "
@@ -104,7 +100,7 @@ def main() -> None:
     if not file_path.lower().endswith(_markdown_extension):
         sys.exit(0)
 
-    if _is_exempt_path(file_path):
+    if is_exempt_path(file_path):
         sys.exit(0)
 
     block_payload = {

@@ -48,10 +48,6 @@ from hooks_constants.html_companion_constants import (  # noqa: E402
 from md_path_exemptions import is_exempt_path  # noqa: E402
 
 
-def _is_exempt_path(file_path: str) -> bool:
-    return is_exempt_path(file_path)
-
-
 def _md_to_html(markdown_text: str) -> str:
     text = markdown_text.strip()
     if not text:
@@ -327,7 +323,7 @@ def main() -> None:
     if not file_path or not file_path.lower().endswith(".md"):
         sys.exit(0)
 
-    if _is_exempt_path(file_path):
+    if is_exempt_path(file_path):
         sys.exit(0)
 
     if not os.path.exists(file_path):

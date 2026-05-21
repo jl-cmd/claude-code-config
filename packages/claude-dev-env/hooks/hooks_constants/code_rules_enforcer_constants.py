@@ -4,6 +4,13 @@ Extracted from code_rules_enforcer.py to satisfy the constants-location rule.
 """
 
 import re
+import tokenize
+
+ALL_PYTHON_TOKENIZE_FAILURE_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    tokenize.TokenError,
+    IndentationError,
+    SyntaxError,
+)
 
 ALL_PYTHON_EXTENSIONS = {".py"}
 ALL_JAVASCRIPT_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx"}

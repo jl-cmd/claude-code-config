@@ -112,6 +112,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_EXEMPT_PYTHON_COMMENT_BODIES,
     ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES,
     ALL_JAVASCRIPT_EXEMPT_INLINE_COMMENT_PREFIXES,
+    ALL_PYTHON_TOKENIZE_FAILURE_EXCEPTIONS,
     FILE_GLOBAL_UPPER_SNAKE_PATTERN,
     ALL_HOOK_INFRASTRUCTURE_PATTERNS,
     ALL_IMPORT_STATEMENT_PREFIXES,
@@ -710,28 +711,35 @@ def _find_any_annotation_lines(source: str) -> list[int]:
     return offending_line_numbers
 
 
-def _all_python_tokens_or_none(source: str) -> list[tokenize.TokenInfo] | None:
-    """Tokenize *source* and return the full token stream, or None on failure.
+def _python_tokens(source: str) -> Iterator[tokenize.TokenInfo]:
+    """Yield Python tokens from *source* one at a time.
 
-    Centralizes the ``tokenize.generate_tokens`` call and the
-    ``(TokenError, IndentationError, SyntaxError)`` catch tuple. Helpers
-    that need just the comment tokens (``_comment_tokens``) or the
-    classified comment sets (``_extract_python_comment_sets``) layer on
-    top of this single source-of-truth so a future change to the
-    exception set or the entry-point API lands in exactly one place.
+    Centralizes the ``tokenize.generate_tokens`` entry-point so a future
+    change to the API lands in exactly one place. Iteration may raise
+    any of ``ALL_PYTHON_TOKENIZE_FAILURE_EXCEPTIONS`` when the source is
+    not valid Python (mid-edit Edit fragments, unterminated strings,
+    mismatched indentation) — callers handle the exception according to
+    their own contract (silently stop, return an indeterminate flag, etc.).
+    """
+    yield from tokenize.generate_tokens(io.StringIO(source).readline)
+
+
+def _comment_tokens(source: str) -> Iterator[tokenize.TokenInfo]:
+    """Yield COMMENT tokens from *source* one at a time.
+
+    Streams from ``_python_tokens`` so consumers that early-exit (e.g.
+    ``check_comments_python`` caps at ``MAX_COMMENT_ISSUES``) avoid
+    materializing the entire token list. Silently stops on tokenize
+    failure so callers receive only valid comment tokens — no
+    indeterminate signal is exposed at this layer because the consumers
+    that need it (``_extract_python_comment_sets``) bypass this helper.
     """
     try:
-        return list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        return None
-
-
-def _comment_tokens(source: str) -> list[tokenize.TokenInfo]:
-    """Return COMMENT tokens from source, or an empty list when tokenization fails."""
-    all_tokens = _all_python_tokens_or_none(source)
-    if all_tokens is None:
-        return []
-    return [each_token for each_token in all_tokens if each_token.type == tokenize.COMMENT]
+        for each_token in _python_tokens(source):
+            if each_token.type == tokenize.COMMENT:
+                yield each_token
+    except ALL_PYTHON_TOKENIZE_FAILURE_EXCEPTIONS:
+        return
 
 
 def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
@@ -765,33 +773,33 @@ def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
 def _extract_python_comment_sets(content: str) -> tuple[set[str], set[str], bool]:
     """Return (inline_comments, standalone_comments, tokenize_succeeded).
 
-    Tokenizes *content* exactly once. A tokenize failure (mid-edit
-    fragment, syntax error) returns empty sets and ``False`` so callers
-    can treat the situation as indeterminate rather than as "no
-    comments present". Inline vs standalone is decided by inspecting
+    Streams *content* once via ``_python_tokens``. A tokenize failure
+    (mid-edit fragment, syntax error) returns empty sets and ``False``
+    so callers can treat the situation as indeterminate rather than as
+    "no comments present". Inline vs standalone is decided by inspecting
     the column offset of each ``COMMENT`` token against its source
     line: an all-whitespace prefix means standalone.
     """
     inline_comments: set[str] = set()
     standalone_comments: set[str] = set()
-    all_tokens = _all_python_tokens_or_none(content)
-    if all_tokens is None:
-        return inline_comments, standalone_comments, False
     lines = content.split("\n")
-    for each_token in all_tokens:
-        if each_token.type != tokenize.COMMENT:
-            continue
-        if _is_exempt_python_comment(each_token):
-            continue
-        line_number = each_token.start[0]
-        column_offset = each_token.start[1]
-        source_line = lines[line_number - 1] if line_number - 1 < len(lines) else ""
-        text_before_comment = source_line[:column_offset]
-        normalized_comment_text = each_token.string.strip()
-        if not text_before_comment.strip():
-            standalone_comments.add(normalized_comment_text)
-        else:
-            inline_comments.add(normalized_comment_text)
+    try:
+        for each_token in _python_tokens(content):
+            if each_token.type != tokenize.COMMENT:
+                continue
+            if _is_exempt_python_comment(each_token):
+                continue
+            line_number = each_token.start[0]
+            column_offset = each_token.start[1]
+            source_line = lines[line_number - 1] if line_number - 1 < len(lines) else ""
+            text_before_comment = source_line[:column_offset]
+            normalized_comment_text = each_token.string.strip()
+            if not text_before_comment.strip():
+                standalone_comments.add(normalized_comment_text)
+            else:
+                inline_comments.add(normalized_comment_text)
+    except ALL_PYTHON_TOKENIZE_FAILURE_EXCEPTIONS:
+        return set(), set(), False
     return inline_comments, standalone_comments, True
 
 

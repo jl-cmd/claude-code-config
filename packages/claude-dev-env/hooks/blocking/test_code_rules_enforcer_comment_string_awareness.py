@@ -157,3 +157,28 @@ def test_extract_should_not_classify_bare_hash_as_comment() -> None:
     inline, standalone = code_rules_enforcer.extract_comment_texts(content, "foo.py")
     assert standalone == set()
     assert inline == set()
+
+
+def test_python_check_should_exempt_true_shebang_on_line_one() -> None:
+    content = "#!/usr/bin/env python3\nx = 1\n"
+    issues = code_rules_enforcer.check_comments_python(content)
+    assert issues == []
+
+
+def test_python_check_should_flag_inline_shebang_lookalike() -> None:
+    content = "x = 1  #! hidden comment\n"
+    issues = code_rules_enforcer.check_comments_python(content)
+    assert len(issues) == 1
+
+
+def test_python_check_should_flag_shebang_on_later_standalone_line() -> None:
+    content = "x = 1\n#! not a real shebang\n"
+    issues = code_rules_enforcer.check_comments_python(content)
+    assert len(issues) == 1
+
+
+def test_extract_should_classify_inline_shebang_lookalike_as_inline_comment() -> None:
+    content = "x = 1  #! hidden\n"
+    inline, standalone = code_rules_enforcer.extract_comment_texts(content, "foo.py")
+    assert inline != set()
+    assert standalone == set()

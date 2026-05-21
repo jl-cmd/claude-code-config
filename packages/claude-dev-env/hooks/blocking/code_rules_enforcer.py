@@ -188,8 +188,7 @@ def check_comments_python(content: str) -> list[str]:
     """
     issues = []
     for each_comment_token in _comment_tokens(content):
-        comment_string = each_comment_token.string
-        if _is_exempt_python_comment(comment_string):
+        if _is_exempt_python_comment(each_comment_token):
             continue
         line_number = each_comment_token.start[0]
         issues.append(
@@ -735,18 +734,27 @@ def _comment_tokens(source: str) -> list[tokenize.TokenInfo]:
     return [each_token for each_token in all_tokens if each_token.type == tokenize.COMMENT]
 
 
-def _is_exempt_python_comment(comment_string: str) -> bool:
+def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
     """Return True for shebangs and tooling-directive comments.
 
-    Matches a leading hash-bang token (shebang) and any prefix listed
-    in ``ALL_EXEMPT_PYTHON_COMMENT_BODIES`` regardless of whether the
-    directive sits flush against the leading hash character or carries
-    one or more whitespace characters (space or tab) between the hash
-    and the directive body. The pre-tokenize implementation accepted
-    both forms via its line-slice-then-strip step; this helper
-    preserves that behavior on top of the tokenize-based scan.
+    The shebang exemption applies only when the comment token starts
+    at line 1, column 0 — matching the OS-level convention that a
+    shebang line is meaningful only as the first line of an executable
+    file. An inline shebang-lookalike later in the file (an
+    after-code occurrence on any line, or a standalone occurrence on
+    line 2 or later) is NOT a real shebang and remains subject to the
+    no-comments rule.
+
+    Matches any prefix listed in ``ALL_EXEMPT_PYTHON_COMMENT_BODIES``
+    regardless of whether the directive sits flush against the leading
+    hash character or carries one or more whitespace characters (space
+    or tab) between the hash and the directive body. The pre-tokenize
+    implementation accepted both forms via its line-slice-then-strip
+    step; this helper preserves that behavior on top of the
+    tokenize-based scan.
     """
-    if comment_string.startswith("#!"):
+    comment_string = comment_token.string
+    if comment_string.startswith("#!") and comment_token.start == (1, 0):
         return True
     directive_body = comment_string[1:].lstrip()
     if not directive_body:
@@ -773,14 +781,13 @@ def _extract_python_comment_sets(content: str) -> tuple[set[str], set[str], bool
     for each_token in all_tokens:
         if each_token.type != tokenize.COMMENT:
             continue
-        comment_string = each_token.string
-        if _is_exempt_python_comment(comment_string):
+        if _is_exempt_python_comment(each_token):
             continue
         line_number = each_token.start[0]
         column_offset = each_token.start[1]
         source_line = lines[line_number - 1] if line_number - 1 < len(lines) else ""
         text_before_comment = source_line[:column_offset]
-        normalized_comment_text = comment_string.strip()
+        normalized_comment_text = each_token.string.strip()
         if not text_before_comment.strip():
             standalone_comments.add(normalized_comment_text)
         else:

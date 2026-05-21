@@ -144,3 +144,16 @@ def test_extract_should_exempt_directive_without_space_after_hash() -> None:
     inline, standalone = code_rules_enforcer.extract_comment_texts(content, "foo.py")
     assert standalone == set()
     assert inline == set()
+
+
+def test_python_check_should_exempt_bare_hash_comment() -> None:
+    for each_content in ("#\n", "#  \n", "x = 1  #\n"):
+        issues = code_rules_enforcer.check_comments_python(each_content)
+        assert issues == [], f"expected exempt for bare hash in {each_content!r}"
+
+
+def test_extract_should_not_classify_bare_hash_as_comment() -> None:
+    content = "#\nx = 1  #\n"
+    inline, standalone = code_rules_enforcer.extract_comment_texts(content, "foo.py")
+    assert standalone == set()
+    assert inline == set()

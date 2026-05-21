@@ -749,6 +749,8 @@ def _is_exempt_python_comment(comment_string: str) -> bool:
     if comment_string.startswith("#!"):
         return True
     directive_body = comment_string[1:].lstrip()
+    if not directive_body:
+        return True
     return directive_body.startswith(ALL_EXEMPT_PYTHON_COMMENT_BODIES)
 
 

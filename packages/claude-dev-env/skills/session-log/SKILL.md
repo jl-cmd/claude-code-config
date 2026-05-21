@@ -104,9 +104,9 @@ The marker triggers the PostToolUse hook after Write or Edit — the hook scans 
 
 Beyond those four requirements, design the shape that fits. A convergence loop session reads naturally as an incident timeline (`12-incident-report.html`); a feature build reads as a PR writeup (`17-pr-writeup.html`); a research session reads as a feature explainer (`14-research-feature-explainer.html`). Read the matching gallery entry for typography, palette, spatial idioms — adapt, do not copy.
 
-**Write the file** via the Write tool to the vault path. Create the project directory via `mkdir -p` if it does not exist. The auto-publish hook fires after the Write completes and prints a gist + preview URL pair to stderr. Step 3's Edit triggers the hook again and prints a fresh pair. Always quote the URL pair from the **most recent auto-publish run for the session being created** — for the just-created session that is step 3's pair (the step-2 gist becomes orphaned the moment step 3 republishes). Note: Step 5's tidy audits every `.html` file in the project folder including the just-created session, so if Step 5's frontmatter auto-fix touches the current session, the Step 5 republish URL pair becomes the new canonical pair for that session (re-quote it to the user with a "Session republished — new preview: <url>" line). The Step 3 URL pair stays canonical only when Step 5 does not touch the current session.
+**Write the file** via the Write tool to the vault path. Create the project directory via `mkdir -p` if it does not exist. The auto-publish hook fires after the Write completes and prints a gist + preview URL pair to stderr. Step 3 performs **two Edit calls** and each one re-fires the hook with a fresh URL pair — only the URL pair from the second (final) Step-3 Edit is canonical for the just-created session (the step-2 pair and the first step-3 pair are orphaned the moment the next Edit lands). Always quote the URL pair from the **most recent auto-publish run for the session being created**. Note: Step 5's tidy audits every `.html` file in the project folder including the just-created session, so if Step 5's frontmatter auto-fix touches the current session, the Step 5 republish URL pair becomes the new canonical pair for that session (re-quote it to the user with a "Session republished — new preview: <url>" line). The second Step-3 Edit's URL pair stays canonical only when Step 5 does not touch the current session.
 
-**If the Write fails**, output the HTML content in the conversation so the user can copy it manually. Skip step 3 and continue at step 4.
+**If the Write fails**, output the HTML content in the conversation so the user can copy it manually. Before emitting the HTML to chat, resolve the `vault_context_retrieved` placeholder to `true` or `false` based on the same vault-MCP-tool scan that Step 3 would have run, and include the matching vault-context `<li>` line (Retrieved or Not retrieved) so the emitted HTML is a valid copy-paste artifact with complete frontmatter. Skip Step 3 and continue at step 4.
 
 ## Step 3: Vault Context Tracking
 
@@ -134,7 +134,7 @@ Edit the vault HTML via two Edit calls (each Edit re-fires the auto-publish hook
 
 If the report already has a notes / references section, use Edit to insert the `<li>` line before its closing `</ul>`.
 
-The gist URL stays out of the HTML body on purpose: each Edit re-fires the auto-publish hook and produces a brand-new gist ID, so any URL embedded in the file becomes stale the instant the next Edit lands. The canonical gist + preview URL is the pair printed to stderr by the step-3 Edit's auto-publish run. Quote that pair to the user when announcing the report.
+The gist URL stays out of the HTML body on purpose: each Edit re-fires the auto-publish hook and produces a brand-new gist ID, so any URL embedded in the file becomes stale the instant the next Edit lands. The canonical gist + preview URL is the pair printed to stderr by the **second (final) Step-3 Edit's** auto-publish run. Quote that pair to the user when announcing the report.
 
 ## Step 4: Decision Extraction
 

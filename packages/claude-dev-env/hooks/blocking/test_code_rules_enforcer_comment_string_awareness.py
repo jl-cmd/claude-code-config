@@ -97,3 +97,32 @@ def test_extract_should_distinguish_inline_from_standalone_in_same_file() -> Non
     assert "# inline real comment" in next(iter(inline))
     assert "# standalone first" in standalone
     assert "# standalone second" in standalone
+
+
+def test_check_comment_changes_skips_removal_when_new_python_un_parseable() -> None:
+    old_content = 'x = 1  # existing comment\n'
+    new_content = '"""unterminated multi-line string\n'
+    issues = code_rules_enforcer.check_comment_changes(old_content, new_content, "foo.py")
+    assert issues == []
+
+
+def test_check_comment_changes_skips_removal_when_old_python_un_parseable() -> None:
+    old_content = '"""unterminated multi-line string\n'
+    new_content = 'x = 1  # newly added comment\n'
+    issues = code_rules_enforcer.check_comment_changes(old_content, new_content, "foo.py")
+    assert issues == []
+
+
+def test_check_comment_changes_still_detects_removal_on_parseable_python() -> None:
+    old_content = 'x = 1  # existing comment\n'
+    new_content = 'x = 1\n'
+    issues = code_rules_enforcer.check_comment_changes(old_content, new_content, "foo.py")
+    assert any("Existing comment removed" in each_issue for each_issue in issues)
+
+
+def test_python_tokenize_succeeds_returns_true_for_valid_python() -> None:
+    assert code_rules_enforcer._python_tokenize_succeeds("x = 1\n") is True
+
+
+def test_python_tokenize_succeeds_returns_false_for_unterminated_string() -> None:
+    assert code_rules_enforcer._python_tokenize_succeeds('"""never closed\n') is False

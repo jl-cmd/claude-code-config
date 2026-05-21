@@ -299,8 +299,23 @@ def check_comment_changes(old_content: str, new_content: str, file_path: str) ->
     Inline comments (after code on same line): BLOCK when added.
     Standalone comment lines: NUDGE (print advisory) when added.
     Existing comments being removed: BLOCK (comment preservation principle).
+
+    When the file is Python and either *old_content* or *new_content* cannot
+    be tokenized (common for mid-edit Edit fragments), the comparison is
+    indeterminate: the per-side tokenize failure would empty one set and
+    misrepresent every comment on the other side as either added or
+    removed. The check returns no issues in that case — false negatives on
+    syntactically-invalid drafts are preferable to false positives that
+    flag legitimate comments as deleted.
     """
     issues: list[str] = []
+
+    extension = get_file_extension(file_path)
+    if extension in ALL_PYTHON_EXTENSIONS and not (
+        _python_tokenize_succeeds(old_content)
+        and _python_tokenize_succeeds(new_content)
+    ):
+        return issues
 
     old_inline, old_standalone = extract_comment_texts(old_content, file_path)
     new_inline, new_standalone = extract_comment_texts(new_content, file_path)
@@ -716,6 +731,20 @@ def _comment_tokens(source: str) -> list[tokenize.TokenInfo]:
         ]
     except (tokenize.TokenError, IndentationError, SyntaxError):
         return []
+
+
+def _python_tokenize_succeeds(source: str) -> bool:
+    """Return True when *source* can be fully tokenized as Python.
+
+    Used to gate diff-comparison checks (e.g. removed-comment detection)
+    against mid-edit fragments whose tokenize failure would otherwise
+    masquerade as "every comment was removed".
+    """
+    try:
+        list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return False
+    return True
 
 
 def _find_unjustified_type_ignore_lines(source: str) -> list[int]:

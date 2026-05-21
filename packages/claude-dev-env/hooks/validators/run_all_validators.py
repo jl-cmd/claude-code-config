@@ -295,22 +295,23 @@ def run_test_safety_checks(files: List[Path]) -> ValidatorResult:
 def get_project_root() -> Optional[Path]:
     """Get project root by finding git root.
 
-    Pins git's working tree to the hooks directory so the lookup is anchored
-    to this repo even when the caller's cwd has been redirected (for example,
-    when subprocesses fall back to a local temp cwd because the source tree
-    resolved to a UNC path). Without this, ``git rev-parse --show-toplevel``
-    walks up from the temp cwd and can return an unrelated git checkout
-    (e.g., the user's home), and validators that ``rglob`` from that root
-    end up walking tens of thousands of files outside the project.
+    Uses ``git -C <hooks_dir>`` to pin git's working tree to the hooks
+    directory without setting the subprocess cwd. On Windows, ``CreateProcess``
+    rejects some UNC working directories, so setting ``cwd=hooks_dir`` would
+    fail when ``hooks_dir`` resolves to a UNC path. The ``-C`` flag tells git
+    to operate as if started in that directory while the subprocess itself
+    inherits a normal cwd from the caller. Anchoring git to ``hooks_dir`` is
+    required so the lookup resolves to this repo even when the caller's cwd
+    points at an unrelated git checkout (e.g., the user's home), avoiding
+    validators that ``rglob`` over tens of thousands of unrelated files.
     """
-    result = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"],
+    completed_git_lookup = subprocess.run(
+        ["git", "-C", str(hooks_dir), "rev-parse", "--show-toplevel"],
         capture_output=True,
         text=True,
-        cwd=str(hooks_dir),
     )
-    if result.returncode == 0:
-        return Path(result.stdout.strip())
+    if completed_git_lookup.returncode == 0:
+        return Path(completed_git_lookup.stdout.strip())
     return None
 
 

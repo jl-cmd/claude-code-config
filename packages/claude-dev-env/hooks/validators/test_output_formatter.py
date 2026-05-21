@@ -14,6 +14,7 @@ from .output_formatter import (
     ViolationDict,
     ValidatorResultDict,
 )
+from . import run_all_validators
 from .run_all_validators import run_validators_entrypoint_subprocess
 
 
@@ -99,6 +100,27 @@ class TestJsonFlag:
         parsed = json.loads(output)
         assert "results" in parsed
         assert isinstance(parsed["results"], list)
+
+    def test_get_project_root_anchored_under_unrelated_cwd(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """``get_project_root`` anchors git to the hooks tree, not the caller cwd.
+
+        Regression for the defect where ``get_project_root`` ran
+        ``git rev-parse --show-toplevel`` without anchoring to the hooks
+        directory; under a subprocess fallback cwd outside this repo, git
+        returned an unrelated checkout and the File Structure validator
+        rglob'd tens of thousands of unrelated files. This test calls the
+        helper in-process from a non-git ``tmp_path`` to directly exercise
+        the anchoring behavior provided by ``git -C <hooks_dir>``.
+        """
+        monkeypatch.chdir(tmp_path)
+        resolved_project_root = run_all_validators.get_project_root()
+
+        assert resolved_project_root is not None
+        assert resolved_project_root != tmp_path
+        hooks_directory_resolved = run_all_validators.hooks_dir.resolve()
+        assert hooks_directory_resolved.is_relative_to(resolved_project_root.resolve())
 
     def test_file_structure_validator_output_bounded_under_unrelated_cwd(
         self, tmp_path, monkeypatch

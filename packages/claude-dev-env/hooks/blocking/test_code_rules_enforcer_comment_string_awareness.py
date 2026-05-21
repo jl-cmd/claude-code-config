@@ -120,9 +120,27 @@ def test_check_comment_changes_still_detects_removal_on_parseable_python() -> No
     assert any("Existing comment removed" in each_issue for each_issue in issues)
 
 
-def test_python_tokenize_succeeds_returns_true_for_valid_python() -> None:
-    assert code_rules_enforcer._python_tokenize_succeeds("x = 1\n") is True
+def test_python_check_should_exempt_directive_without_space_after_hash() -> None:
+    for each_directive in ("#noqa", "#type: ignore", "#pylint: disable", "#pragma: no cover"):
+        content = f"{each_directive}\n"
+        issues = code_rules_enforcer.check_comments_python(content)
+        assert issues == [], f"expected exempt for {each_directive!r}"
 
 
-def test_python_tokenize_succeeds_returns_false_for_unterminated_string() -> None:
-    assert code_rules_enforcer._python_tokenize_succeeds('"""never closed\n') is False
+def test_python_check_should_exempt_directive_with_tab_after_hash() -> None:
+    content = "#\tnoqa: F401\n"
+    issues = code_rules_enforcer.check_comments_python(content)
+    assert issues == []
+
+
+def test_python_check_should_still_flag_unrelated_no_space_comment() -> None:
+    content = "#realcomment text\n"
+    issues = code_rules_enforcer.check_comments_python(content)
+    assert len(issues) == 1
+
+
+def test_extract_should_exempt_directive_without_space_after_hash() -> None:
+    content = "#noqa\nx = 1\n"
+    inline, standalone = code_rules_enforcer.extract_comment_texts(content, "foo.py")
+    assert standalone == set()
+    assert inline == set()

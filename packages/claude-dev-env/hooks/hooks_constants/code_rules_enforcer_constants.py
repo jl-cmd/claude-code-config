@@ -23,16 +23,15 @@ UPPER_SNAKE_CONSTANT_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 TYPE_CHECKING_BLOCK_PATTERN = re.compile(r"^(?P<indent>\s*)if\s+(typing\.)?TYPE_CHECKING\s*:\s*$")
 ALL_IMPORT_STATEMENT_PREFIXES: tuple[str, ...] = ("import ", "from ")
-ALL_EXEMPT_COMMENT_PREFIXES: tuple[str, ...] = (
-    "#!",
-    "# type:",
-    "# noqa",
-    "# pylint:",
-    "# pragma:",
-    "# TODO",
-    "# FIXME",
-    "# HACK",
-    "# XXX",
+ALL_EXEMPT_PYTHON_COMMENT_BODIES: tuple[str, ...] = (
+    "type:",
+    "noqa",
+    "pylint:",
+    "pragma:",
+    "TODO",
+    "FIXME",
+    "HACK",
+    "XXX",
 )
 ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES: tuple[str, ...] = (
     "// @ts-",

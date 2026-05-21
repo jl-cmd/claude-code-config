@@ -109,7 +109,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_SUBSCRIPT_ONLY_COLLECTION_TYPE_NAMES,
     DOTTED_SEGMENT_PATTERN,
     EACH_PREFIX,
-    ALL_EXEMPT_COMMENT_PREFIXES,
+    ALL_EXEMPT_PYTHON_COMMENT_BODIES,
     ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES,
     ALL_JAVASCRIPT_EXEMPT_INLINE_COMMENT_PREFIXES,
     FILE_GLOBAL_UPPER_SNAKE_PATTERN,
@@ -189,7 +189,7 @@ def check_comments_python(content: str) -> list[str]:
     issues = []
     for each_comment_token in _comment_tokens(content):
         comment_string = each_comment_token.string
-        if comment_string.startswith(ALL_EXEMPT_COMMENT_PREFIXES):
+        if _is_exempt_python_comment(comment_string):
             continue
         line_number = each_comment_token.start[0]
         issues.append(
@@ -248,25 +248,13 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
     if not content:
         return inline_comments, standalone_comments
 
+    if extension in ALL_PYTHON_EXTENSIONS:
+        inline_comments, standalone_comments, _ = _extract_python_comment_sets(content)
+        return inline_comments, standalone_comments
+
     lines = content.split("\n")
 
-    if extension in ALL_PYTHON_EXTENSIONS:
-        for each_comment_token in _comment_tokens(content):
-            comment_string = each_comment_token.string
-            if comment_string.startswith(ALL_EXEMPT_COMMENT_PREFIXES):
-                continue
-            line_number = each_comment_token.start[0]
-            column_offset = each_comment_token.start[1]
-            source_line = lines[line_number - 1] if line_number - 1 < len(lines) else ""
-            text_before_comment = source_line[:column_offset]
-            is_standalone_comment = not text_before_comment.strip()
-            normalized_comment_text = comment_string.strip()
-            if is_standalone_comment:
-                standalone_comments.add(normalized_comment_text)
-            else:
-                inline_comments.add(normalized_comment_text)
-
-    elif extension in ALL_JAVASCRIPT_EXTENSIONS:
+    if extension in ALL_JAVASCRIPT_EXTENSIONS:
         is_in_multiline = False
         for line in lines:
             stripped = line.strip()
@@ -313,14 +301,14 @@ def check_comment_changes(old_content: str, new_content: str, file_path: str) ->
     issues: list[str] = []
 
     extension = get_file_extension(file_path)
-    if extension in ALL_PYTHON_EXTENSIONS and not (
-        _python_tokenize_succeeds(old_content)
-        and _python_tokenize_succeeds(new_content)
-    ):
-        return issues
-
-    old_inline, old_standalone = extract_comment_texts(old_content, file_path)
-    new_inline, new_standalone = extract_comment_texts(new_content, file_path)
+    if extension in ALL_PYTHON_EXTENSIONS:
+        old_inline, old_standalone, old_tokenize_ok = _extract_python_comment_sets(old_content)
+        new_inline, new_standalone, new_tokenize_ok = _extract_python_comment_sets(new_content)
+        if not (old_tokenize_ok and new_tokenize_ok):
+            return issues
+    else:
+        old_inline, old_standalone = extract_comment_texts(old_content, file_path)
+        new_inline, new_standalone = extract_comment_texts(new_content, file_path)
 
     added_inline = new_inline - old_inline
     if added_inline:
@@ -735,18 +723,58 @@ def _comment_tokens(source: str) -> list[tokenize.TokenInfo]:
         return []
 
 
-def _python_tokenize_succeeds(source: str) -> bool:
-    """Return True when *source* can be fully tokenized as Python.
+def _is_exempt_python_comment(comment_string: str) -> bool:
+    """Return True for shebangs and tooling-directive comments.
 
-    Used to gate diff-comparison checks (e.g. removed-comment detection)
-    against mid-edit fragments whose tokenize failure would otherwise
-    masquerade as "every comment was removed".
+    Matches a leading hash-bang token (shebang) and any prefix listed
+    in ``ALL_EXEMPT_PYTHON_COMMENT_BODIES`` regardless of whether the
+    directive sits flush against the leading hash character or carries
+    one or more whitespace characters (space or tab) between the hash
+    and the directive body. The pre-tokenize implementation accepted
+    both forms via its line-slice-then-strip step; this helper
+    preserves that behavior on top of the tokenize-based scan.
     """
+    if comment_string.startswith("#!"):
+        return True
+    directive_body = comment_string[1:].lstrip()
+    return directive_body.startswith(ALL_EXEMPT_PYTHON_COMMENT_BODIES)
+
+
+def _extract_python_comment_sets(content: str) -> tuple[set[str], set[str], bool]:
+    """Return (inline_comments, standalone_comments, tokenize_succeeded).
+
+    Tokenizes *content* exactly once. A tokenize failure (mid-edit
+    fragment, syntax error) returns empty sets and ``False`` so callers
+    can treat the situation as indeterminate rather than as "no
+    comments present". Inline vs standalone is decided by inspecting
+    the column offset of each ``COMMENT`` token against its source
+    line: an all-whitespace prefix means standalone.
+    """
+    inline_comments: set[str] = set()
+    standalone_comments: set[str] = set()
     try:
-        list(tokenize.generate_tokens(io.StringIO(source).readline))
+        comment_tokens = [
+            each_token
+            for each_token in tokenize.generate_tokens(io.StringIO(content).readline)
+            if each_token.type == tokenize.COMMENT
+        ]
     except (tokenize.TokenError, IndentationError, SyntaxError):
-        return False
-    return True
+        return inline_comments, standalone_comments, False
+    lines = content.split("\n")
+    for each_comment_token in comment_tokens:
+        comment_string = each_comment_token.string
+        if _is_exempt_python_comment(comment_string):
+            continue
+        line_number = each_comment_token.start[0]
+        column_offset = each_comment_token.start[1]
+        source_line = lines[line_number - 1] if line_number - 1 < len(lines) else ""
+        text_before_comment = source_line[:column_offset]
+        normalized_comment_text = comment_string.strip()
+        if not text_before_comment.strip():
+            standalone_comments.add(normalized_comment_text)
+        else:
+            inline_comments.add(normalized_comment_text)
+    return inline_comments, standalone_comments, True
 
 
 def _find_unjustified_type_ignore_lines(source: str) -> list[int]:

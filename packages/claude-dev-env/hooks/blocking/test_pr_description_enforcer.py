@@ -1115,6 +1115,39 @@ def _run_main_and_capture_decision(hook_input: dict[str, object]) -> str:
     return captured_stdout.getvalue()
 
 
+def test_stdlib_imports_form_one_isort_sorted_block() -> None:
+    """Ruff's `I` (isort) rule treats a blank line as a section break, so
+    `import shlex` sitting alone after a blank line would fail I001. Pin
+    that the stdlib imports at the head of `pr_description_enforcer.py`
+    sit in a single sorted block with no internal blank lines."""
+    enforcer_source = inspect.getsource(hook_module)
+    enforcer_lines = enforcer_source.splitlines()
+    leading_stdlib_lines: list[str] = []
+    for each_line in enforcer_lines:
+        if each_line.startswith("import ") or each_line.startswith("from "):
+            leading_stdlib_lines.append(each_line)
+            continue
+        if each_line.strip() == "":
+            if leading_stdlib_lines and leading_stdlib_lines[-1].startswith("from "):
+                break
+            if leading_stdlib_lines:
+                break
+        if not each_line.startswith("import ") and not each_line.startswith("from ") and each_line.strip() != "":
+            break
+    stdlib_import_names: list[str] = []
+    for each_import_line in leading_stdlib_lines:
+        if each_import_line.startswith("import "):
+            stdlib_import_names.append(each_import_line.split()[1])
+    assert "shlex" in stdlib_import_names, (
+        "`shlex` must appear in the leading stdlib import block; got: "
+        f"{stdlib_import_names!r}"
+    )
+    assert stdlib_import_names == sorted(stdlib_import_names), (
+        "Leading stdlib `import X` statements must be isort-sorted; got: "
+        f"{stdlib_import_names!r}"
+    )
+
+
 def test_command_carries_body_flag_detects_body_file() -> None:
     """`--body-file` detection must continue to work after the redundant
     explicit check is removed. The shorter `--body` substring still catches

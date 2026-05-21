@@ -2,11 +2,10 @@ import json
 import math
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 from typing import TextIO
-
-import shlex
 
 _hooks_dir = str(Path(__file__).resolve().parent.parent)
 if _hooks_dir not in sys.path:

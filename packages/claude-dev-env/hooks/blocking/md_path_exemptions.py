@@ -79,12 +79,19 @@ def is_exempt_path(file_path: str) -> bool:
     if _is_under_plugin_root_marker(canonical_normalized_path):
         return True
     if basename.lower() in ALL_EXEMPT_ROOT_FILENAMES:
-        directory = os.path.dirname(normalized)
-        if directory in ("", "."):
-            return True
-        if _is_repo_root_directory(directory):
+        absolute_directory = _resolve_absolute_directory(normalized)
+        if _is_repo_root_directory(absolute_directory):
             return True
     return False
+
+
+def _resolve_absolute_directory(normalized_path: str) -> str:
+    directory = os.path.dirname(normalized_path)
+    if not directory or directory == ".":
+        return os.getcwd()
+    if os.path.isabs(directory):
+        return directory
+    return os.path.abspath(directory)
 
 
 def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:

@@ -1,11 +1,15 @@
 """Tests for md_to_html_blocker hook.
 
-Subprocess CWD is rooted under the user's home in a dedicated sandbox so that
-relative-path test cases canonicalize outside any `.claude-plugin/` ancestor,
-outside the OS temp directory, and outside the exempt home-relative
-subdirectories. This keeps tests independent of where pytest itself is run.
+Subprocess CWD is rooted in a per-session sandbox created lazily by a
+session-scoped fixture so that relative-path test cases canonicalize outside
+any `.claude-plugin/` ancestor, outside the OS temp directory, and outside the
+exempt home-relative subdirectories. The sandbox is a real repo root (it
+carries a `.git` marker) so relative `README.md` / `CHANGELOG.md` writes
+exercise the repo-root exemption path. This keeps tests independent of where
+pytest itself is run.
 """
 
+import functools
 import importlib
 import json
 import os
@@ -20,8 +24,6 @@ import pytest
 
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "md_to_html_blocker.py")
-_NON_EXEMPT_SANDBOX_PARENT = str(Path.home() / ".pytest_md_blocker_sandbox")
-os.makedirs(_NON_EXEMPT_SANDBOX_PARENT, exist_ok=True)
 
 
 def _strip_read_only_and_retry(removal_function, target_path, *_exc_info):
@@ -44,10 +46,20 @@ def _force_rmtree(target_path: str) -> None:
         pass
 
 
+@functools.lru_cache(maxsize=1)
+def _get_sandbox_parent_directory() -> str:
+    sandbox_parent = tempfile.mkdtemp(prefix="pytest_md_blocker_", dir=str(Path.home()))
+    git_marker_path = os.path.join(sandbox_parent, ".git")
+    Path(git_marker_path).touch()
+    return sandbox_parent
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _cleanup_sandbox_parent_directory():
     yield
-    _force_rmtree(_NON_EXEMPT_SANDBOX_PARENT)
+    if _get_sandbox_parent_directory.cache_info().currsize:
+        _force_rmtree(_get_sandbox_parent_directory())
+        _get_sandbox_parent_directory.cache_clear()
 
 
 class _RunHook:
@@ -59,7 +71,7 @@ class _RunHook:
             capture_output=True,
             text=True,
             check=False,
-            cwd=_NON_EXEMPT_SANDBOX_PARENT,
+            cwd=_get_sandbox_parent_directory(),
         )
 
 
@@ -164,6 +176,29 @@ def test_blocks_changelog_not_at_root():
     result = _run_hook(
         "Write",
         {"file_path": "sub/CHANGELOG.md", "content": "# Log"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_blocks_relative_readme_when_cwd_is_not_repo_root():
+    sandbox_parent = _get_sandbox_parent_directory()
+    non_repo_cwd = os.path.join(sandbox_parent, "not-a-repo")
+    os.makedirs(non_repo_cwd, exist_ok=True)
+    payload = json.dumps(
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": "README.md", "content": "# README"},
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=non_repo_cwd,
     )
     assert result.returncode == 0
     output = json.loads(result.stdout)

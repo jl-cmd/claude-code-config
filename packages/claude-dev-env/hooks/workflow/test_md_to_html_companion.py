@@ -4,12 +4,14 @@ This test suite validates that the md-to-html companion hook correctly
 generates HTML from markdown input, handles edge cases, and produces
 valid HTML output.
 
-Sandbox parent is set to the user's home directory (not the OS temp directory)
-because the companion exempts paths under the OS temp dir to stay aligned with
-the blocker. Using a home-rooted sandbox keeps the test sandboxes outside that
-exemption so the companion fires as expected.
+Sandbox parent is created lazily by a session-scoped fixture rather than at
+module import time, so test collection has no side effect on the filesystem.
+The sandbox is rooted in a per-session unique directory created via
+`tempfile.mkdtemp` so the OS-temp exemption (which the companion shares with
+the blocker) does not silently skip the hook during tests.
 """
 
+import functools
 import json
 import os
 import shutil
@@ -23,8 +25,6 @@ import pytest
 
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "md_to_html_companion.py")
-_NON_TEMP_SANDBOX_PARENT = str(Path.home() / ".pytest_md_companion_sandbox")
-os.makedirs(_NON_TEMP_SANDBOX_PARENT, exist_ok=True)
 
 
 def _strip_read_only_and_retry(removal_function, target_path, *_exc_info):
@@ -47,10 +47,17 @@ def _force_rmtree(target_path: str) -> None:
         pass
 
 
+@functools.lru_cache(maxsize=1)
+def _get_sandbox_parent_directory() -> str:
+    return tempfile.mkdtemp(prefix="pytest_md_companion_", dir=str(Path.home()))
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _cleanup_sandbox_parent_directory():
     yield
-    _force_rmtree(_NON_TEMP_SANDBOX_PARENT)
+    if _get_sandbox_parent_directory.cache_info().currsize:
+        _force_rmtree(_get_sandbox_parent_directory())
+        _get_sandbox_parent_directory.cache_clear()
 
 
 def _make_sandbox() -> tempfile.TemporaryDirectory:
@@ -60,7 +67,7 @@ def _make_sandbox() -> tempfile.TemporaryDirectory:
     the default `tempfile.TemporaryDirectory()` would prevent the test hook
     invocation generating any HTML sidecar at all.
     """
-    return tempfile.TemporaryDirectory(dir=_NON_TEMP_SANDBOX_PARENT)
+    return tempfile.TemporaryDirectory(dir=_get_sandbox_parent_directory())
 
 
 class _RunHook:
@@ -324,6 +331,7 @@ def test_escapes_title_in_html_output():
 
 def test_skips_root_readme():
     with _make_sandbox() as tmp:
+        Path(tmp, ".git").touch()
         original_cwd = os.getcwd()
         try:
             os.chdir(tmp)
@@ -342,6 +350,7 @@ def test_skips_root_readme():
 
 def test_skips_root_changelog():
     with _make_sandbox() as tmp:
+        Path(tmp, ".git").touch()
         original_cwd = os.getcwd()
         try:
             os.chdir(tmp)

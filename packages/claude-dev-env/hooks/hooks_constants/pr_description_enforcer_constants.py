@@ -47,7 +47,7 @@ SELF_REFERENCE_PATTERN_TEMPLATE: str = (
 )
 
 THIS_PR_OPENING_PATTERN: re.Pattern[str] = re.compile(
-    r"^\s*(?:#[^\n]*\n\s*)*This PR\s+(?:adds|fixes|updates|does|is|was|will|removes|tightens|ports|refactors)\b",
+    r"^\s*(?:#[^\n]*\n\s*)*This PR\b",
     re.IGNORECASE,
 )
 

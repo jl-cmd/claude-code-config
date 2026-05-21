@@ -79,6 +79,29 @@ def test_whitespace_run_pattern_collapses_multiple_spaces() -> None:
     assert collapsed_text == "a b c d"
 
 
+def test_this_pr_opening_pattern_matches_any_verb() -> None:
+    """The guide says any `This PR ...` opening is a hard block. The pattern
+    must match regardless of the verb that follows, not a short allowlist."""
+    test_inputs = [
+        "This PR introduces a new feature.",
+        "This PR improves the algorithm.",
+        "This PR enables the cache.",
+        "This PR documents the contract.",
+        "This PR adds a check.",
+        "This PR fixes the bug.",
+    ]
+    for each_input in test_inputs:
+        assert constants_module.THIS_PR_OPENING_PATTERN.match(each_input), (
+            f"`{each_input}` must match THIS_PR_OPENING_PATTERN regardless of verb"
+        )
+
+
+def test_this_pr_opening_pattern_does_not_match_within_prose() -> None:
+    """The block applies to body openings, not mid-paragraph mentions."""
+    text_with_mid_mention = "Adds caching. This PR follows the playbook."
+    assert constants_module.THIS_PR_OPENING_PATTERN.match(text_with_mid_mention) is None
+
+
 def test_all_list_is_alphabetically_sorted() -> None:
     """`__all__` is the export surface; alphabetical order makes it easy to
     verify completeness, spot duplicates, and bisect missing entries. Pin

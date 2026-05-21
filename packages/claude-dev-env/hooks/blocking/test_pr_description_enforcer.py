@@ -746,6 +746,34 @@ def test_validate_blocks_this_pr_opening() -> None:
     assert any("this pr" in each_violation.lower() for each_violation in violations)
 
 
+def test_validate_blocks_this_pr_opening_with_non_allowlisted_verb() -> None:
+    """The guide describes any `This PR ...` opening as a hard block, but
+    `THIS_PR_OPENING_PATTERN` previously only matched a short allowlist of
+    verbs (adds|fixes|updates|does|is|was|will|removes|tightens|ports|refactors).
+    Variants like `This PR introduces`, `This PR improves`, `This PR enables`
+    slipped through and broke the documented contract. Catch any
+    `This PR` opening regardless of the following verb."""
+    body = (
+        "This PR introduces a multi-tier caching layer that wraps the existing "
+        "request pipeline and improves median latency on the hot path."
+    )
+    violations = validate_pr_body(body)
+    assert any("this pr" in each_violation.lower() for each_violation in violations), (
+        f"`This PR introduces` opening must trip the block regardless of verb; got {violations!r}"
+    )
+
+
+def test_validate_blocks_this_pr_opening_with_improves() -> None:
+    body = (
+        "This PR improves the request batching algorithm so the dispatcher "
+        "coalesces idempotent calls before the network round-trip."
+    )
+    violations = validate_pr_body(body)
+    assert any("this pr" in each_violation.lower() for each_violation in violations), (
+        f"`This PR improves` opening must trip the block; got {violations!r}"
+    )
+
+
 def test_validate_allows_imperative_opening() -> None:
     body = (
         "Adds a timestamp check to prevent background data pulls from "
@@ -1086,7 +1114,7 @@ def _run_main_and_capture_decision(hook_input: dict[str, object]) -> str:
     return captured_stdout.getvalue()
 
 
-def test_main_blocks_gh_pr_edit_short_body_flag(tmp_path) -> None:
+def test_main_blocks_gh_pr_edit_short_body_flag() -> None:
     """gh pr edit 123 -b "short" must be caught -- the short -b flag is a valid alias for --body."""
     command = 'gh pr edit 123 -b "Too short."'
     decision_output = _run_main_and_capture_decision(_build_main_hook_input(command))

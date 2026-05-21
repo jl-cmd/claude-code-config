@@ -861,10 +861,16 @@ def _dispatch_cli_flag(
 def _command_carries_body_flag(command: str) -> bool:
     """Return True when the command string carries any body or body-file flag.
 
-    Detects the four canonical forms accepted by ``gh pr {create,edit,comment}``:
-    ``--body``, ``-b ``, ``--body-file``, and ``-F ``. The trailing space on the
-    short flags guards against false positives where the literal substring appears
-    inside a longer token (e.g. ``-base``, ``-Foo``).
+    Detects the body/body-file forms accepted by ``gh pr {create,edit,comment}``:
+
+    - Long flags: ``--body``, ``--body-file`` (substring match — ``--body=`` and
+      ``--body-file=`` are matched implicitly).
+    - Short flags, space-separated: ``-b <value>``, ``-F <value>`` — matched as
+      `` -b `` and `` -F `` so the literal substring cannot collide with a
+      surrounding token (e.g. ``-base``, ``-Foo``).
+    - Short flags, equal-attached: ``-b=<value>``, ``-F=<value>`` — matched as
+      `` -b=`` and `` -F=`` for the same anti-collision reason. The test suite
+      relies on this detection path.
 
     Args:
         command: The raw shell command captured by the hook.

@@ -1,6 +1,7 @@
 """Unit tests for pr-description-enforcer PreToolUse hook."""
 
 import importlib.util
+import inspect
 import io
 import json
 import pathlib
@@ -1112,6 +1113,27 @@ def _run_main_and_capture_decision(hook_input: dict[str, object]) -> str:
             except SystemExit:
                 pass
     return captured_stdout.getvalue()
+
+
+def test_command_carries_body_flag_detects_body_file() -> None:
+    """`--body-file` detection must continue to work after the redundant
+    explicit check is removed. The shorter `--body` substring still catches
+    `--body-file` because `--body` is a prefix of `--body-file`."""
+    assert hook_module._command_carries_body_flag('gh pr create --body-file body.md')
+    assert hook_module._command_carries_body_flag('gh pr create --body-file=body.md')
+    assert hook_module._command_carries_body_flag('gh pr edit 1 -F body.md')
+    assert hook_module._command_carries_body_flag('gh pr edit 1 -F=body.md')
+
+
+def test_command_carries_body_flag_does_not_double_check_body_file() -> None:
+    """Pin that the function does NOT execute a redundant `--body-file in command`
+    check. `--body` is a substring of `--body-file`, so the longer form is
+    matched implicitly by the shorter check. Pin the source so the dead branch
+    cannot drift back."""
+    source_text = inspect.getsource(hook_module._command_carries_body_flag)
+    assert source_text.count('"--body-file"') == 0, (
+        f"`--body-file` substring check is redundant with `--body`; remove it. Source:\n{source_text}"
+    )
 
 
 def test_main_blocks_gh_pr_edit_short_body_flag() -> None:

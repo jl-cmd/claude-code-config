@@ -863,14 +863,16 @@ def _command_carries_body_flag(command: str) -> bool:
 
     Detects the body/body-file forms accepted by ``gh pr {create,edit,comment}``:
 
-    - Long flags: ``--body``, ``--body-file`` (substring match — ``--body=`` and
-      ``--body-file=`` are matched implicitly).
-    - Short flags, space-separated: ``-b <value>``, ``-F <value>`` — matched as
-      `` -b `` and `` -F `` so the literal substring cannot collide with a
+    - Long flags: a single ``"--body" in command`` substring check catches
+      every long form — ``--body``, ``--body=<value>``, ``--body-file``, and
+      ``--body-file=<value>`` — because ``--body`` is a prefix of
+      ``--body-file``. No separate ``--body-file`` check is needed.
+    - Short flags, space-separated: ``-b <value>``, ``-F <value>`` — matched
+      as `` -b `` and `` -F `` so the literal substring cannot collide with a
       surrounding token (e.g. ``-base``, ``-Foo``).
-    - Short flags, equal-attached: ``-b=<value>``, ``-F=<value>`` — matched as
-      `` -b=`` and `` -F=`` for the same anti-collision reason. The test suite
-      relies on this detection path.
+    - Short flags, equal-attached: ``-b=<value>``, ``-F=<value>`` — matched
+      as `` -b=`` and `` -F=`` for the same anti-collision reason. The test
+      suite relies on this detection path.
 
     Args:
         command: The raw shell command captured by the hook.
@@ -882,7 +884,6 @@ def _command_carries_body_flag(command: str) -> bool:
         "--body" in command
         or " -b " in command
         or " -b=" in command
-        or "--body-file" in command
         or " -F " in command
         or " -F=" in command
     )

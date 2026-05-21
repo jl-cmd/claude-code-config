@@ -7,7 +7,6 @@ This module is the single source of truth for that decision.
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -17,17 +16,21 @@ if _hooks_directory not in sys.path:
 
 from hooks_constants.md_to_html_blocker_constants import (  # noqa: E402
     ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES,
-    ALL_EXEMPT_ANYWHERE_FILENAMES,
-    ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES,
+    ALL_EXEMPT_ANYWHERE_FILENAMES_LOWER,
+    ALL_EXEMPT_HOME_DIRECTORY_PATH_PREFIXES,
     ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
-    ALL_EXEMPT_ROOT_FILENAMES,
+    ALL_EXEMPT_ROOT_FILENAMES_LOWER,
     CLAUDE_DEV_ENV_REPO_NAME_SEGMENT,
-    CLAUDE_DIRECTORY_NAME,
+    CLAUDE_DIRECTORY_PATH_PREFIX,
+    CLAUDE_DIRECTORY_SEGMENT_MARKER,
     MINIMUM_SEGMENT_COUNT_TO_MATCH_INDICATOR,
     PACKAGES_TOP_LEVEL_SEGMENT,
+    PLUGIN_DIRECTORY_PATH_PREFIX,
+    PLUGIN_DIRECTORY_SEGMENT_MARKER,
     PLUGIN_ROOT_MARKER_DIRECTORY_NAME,
     REPO_ROOT_MARKER_NAME,
-    WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH,
+    RESOLVED_HOME_DIRECTORY_LOWER,
+    RESOLVED_TEMP_DIRECTORY_PATH_PREFIX,
 )
 
 
@@ -57,18 +60,20 @@ def is_exempt_path(file_path: str) -> bool:
     expanded_path = os.path.expanduser(file_path)
     normalized = os.path.normpath(expanded_path).replace("\\", "/")
     lower_normalized = normalized.lower()
-    claude_directory_segment = f"/{CLAUDE_DIRECTORY_NAME}/"
-    claude_directory_prefix = f"{CLAUDE_DIRECTORY_NAME}/"
-    plugin_directory_segment = f"/{PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/"
-    plugin_directory_prefix = f"{PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/"
-    if claude_directory_segment in lower_normalized or lower_normalized.startswith(claude_directory_prefix):
+    if (
+        CLAUDE_DIRECTORY_SEGMENT_MARKER in lower_normalized
+        or lower_normalized.startswith(CLAUDE_DIRECTORY_PATH_PREFIX)
+    ):
         return True
-    if plugin_directory_segment in lower_normalized or lower_normalized.startswith(plugin_directory_prefix):
+    if (
+        PLUGIN_DIRECTORY_SEGMENT_MARKER in lower_normalized
+        or lower_normalized.startswith(PLUGIN_DIRECTORY_PATH_PREFIX)
+    ):
         return True
-    basename = os.path.basename(normalized)
-    if basename.lower() in ALL_EXEMPT_ANYWHERE_FILENAMES:
+    basename_lower = os.path.basename(normalized).lower()
+    if basename_lower in ALL_EXEMPT_ANYWHERE_FILENAMES_LOWER:
         return True
-    if _is_under_claude_dev_env_source_subdirectory(file_path, lower_normalized):
+    if _is_under_claude_dev_env_source_subdirectory(expanded_path, lower_normalized):
         return True
     if _has_plugin_directory_segment(lower_normalized):
         return True
@@ -76,11 +81,11 @@ def is_exempt_path(file_path: str) -> bool:
     canonical_lower_path = canonical_normalized_path.lower()
     if _is_under_exempt_home_directory(canonical_lower_path):
         return True
-    if _is_under_system_temp_directory(canonical_lower_path):
+    if canonical_lower_path.startswith(RESOLVED_TEMP_DIRECTORY_PATH_PREFIX):
         return True
     if _is_under_plugin_root_marker(canonical_normalized_path):
         return True
-    if basename.lower() in ALL_EXEMPT_ROOT_FILENAMES:
+    if basename_lower in ALL_EXEMPT_ROOT_FILENAMES_LOWER:
         absolute_directory = _resolve_absolute_directory(normalized)
         if _is_repo_root_directory(absolute_directory):
             return True
@@ -106,20 +111,8 @@ def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:
     return False
 
 
-def _looks_like_absolute_path(file_path: str, first_segment: str) -> bool:
-    if file_path.startswith("/") or file_path.startswith("\\"):
-        return True
-    if (
-        len(first_segment) == WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH
-        and first_segment[1] == ":"
-        and first_segment[0].isalpha()
-    ):
-        return True
-    return False
-
-
 def _is_under_claude_dev_env_source_subdirectory(
-    raw_file_path: str, lower_normalized_path: str
+    expanded_file_path: str, lower_normalized_path: str
 ) -> bool:
     """Anchored exemption for ``packages/claude-dev-env/<source-dir>/...``.
 
@@ -129,8 +122,9 @@ def _is_under_claude_dev_env_source_subdirectory(
     full three-segment anchor matches.
 
     Args:
-        raw_file_path: Original file path as received by the hook (used
-            only for absolute-path detection on the first segment).
+        expanded_file_path: Tilde-expanded file path; ``os.path.isabs`` on
+            this form classifies the path as absolute or relative on the
+            current platform.
         lower_normalized_path: Same path lowercased and with separators
             normalized to forward slashes.
 
@@ -146,9 +140,10 @@ def _is_under_claude_dev_env_source_subdirectory(
     ]
     if not all_segments:
         return False
-    starting_segment_index_options: list[int] = [0]
-    if _looks_like_absolute_path(raw_file_path, all_segments[0]):
+    if os.path.isabs(expanded_file_path):
         starting_segment_index_options = list(range(len(all_segments)))
+    else:
+        starting_segment_index_options = [0]
     for each_starting_index in starting_segment_index_options:
         if (
             len(all_segments) >= each_starting_index + MINIMUM_SEGMENT_COUNT_TO_MATCH_INDICATOR
@@ -176,23 +171,12 @@ def _is_under_plugin_root_marker(normalized_path: str) -> bool:
 
 
 def _is_under_exempt_home_directory(lower_normalized_path: str) -> bool:
-    home_directory = (
-        os.path.realpath(os.path.expanduser("~")).replace("\\", "/").rstrip("/").lower()
-    )
-    if not home_directory:
+    if not RESOLVED_HOME_DIRECTORY_LOWER:
         return False
-    for each_relative_directory in ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES:
-        exempt_directory = f"{home_directory}/{each_relative_directory.lower()}"
-        if lower_normalized_path.startswith(f"{exempt_directory}/"):
+    for each_exempt_path_prefix in ALL_EXEMPT_HOME_DIRECTORY_PATH_PREFIXES:
+        if lower_normalized_path.startswith(each_exempt_path_prefix):
             return True
     return False
-
-
-def _is_under_system_temp_directory(lower_normalized_path: str) -> bool:
-    temp_directory = os.path.realpath(tempfile.gettempdir()).replace("\\", "/").rstrip("/").lower()
-    if not temp_directory:
-        return False
-    return lower_normalized_path.startswith(f"{temp_directory}/")
 
 
 def _is_repo_root_directory(directory_path: str) -> bool:

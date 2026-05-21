@@ -36,35 +36,17 @@ _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
 _claude_dev_env_source_anchor = (
     f"{PACKAGES_TOP_LEVEL_SEGMENT}/{CLAUDE_DEV_ENV_REPO_NAME_SEGMENT}/"
 )
-
-
-def _format_filename_for_display(filename: str) -> str:
-    if filename.lower().endswith(_markdown_extension):
-        stem_length = len(filename) - len(_markdown_extension)
-        return filename[:stem_length].upper() + _markdown_extension
-    return filename
-
-
-def _exempt_anywhere_filenames_summary() -> str:
-    all_display_filenames = [
-        _format_filename_for_display(each_filename)
-        for each_filename in ALL_EXEMPT_ANYWHERE_FILENAMES
-    ]
-    return ", ".join(all_display_filenames)
-
-
-def _exempt_plugin_segments_summary() -> str:
-    return ", ".join(f"{each_segment}/" for each_segment in ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS)
-
-
-def _exempt_home_directories_summary() -> str:
-    return ", ".join(f"~/{each_directory}/" for each_directory in ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES)
-
-
-def _claude_dev_env_source_directories_summary() -> str:
-    all_directories_sorted = sorted(ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES)
-    formatted_directories = ",".join(all_directories_sorted)
-    return f"{_claude_dev_env_source_anchor}{{{formatted_directories}}}/"
+_exempt_anywhere_filenames_summary = ", ".join(ALL_EXEMPT_ANYWHERE_FILENAMES)
+_exempt_plugin_segments_summary = ", ".join(
+    f"{each_segment}/" for each_segment in ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
+)
+_exempt_home_directories_summary = ", ".join(
+    f"~/{each_directory}/" for each_directory in ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES
+)
+_claude_dev_env_source_directories_summary = (
+    f"{_claude_dev_env_source_anchor}"
+    f"{{{','.join(sorted(ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES))}}}/"
+)
 
 
 def _block_reason(file_path: str) -> str:
@@ -77,10 +59,6 @@ def _block_reason(file_path: str) -> str:
 
 
 def _block_context() -> str:
-    exempt_filenames_summary = _exempt_anywhere_filenames_summary()
-    plugin_segments_summary = _exempt_plugin_segments_summary()
-    home_directories_summary = _exempt_home_directories_summary()
-    claude_dev_env_source_summary = _claude_dev_env_source_directories_summary()
     return (
         "Generate a self-contained .html file instead of .md. "
         "Design freely — HTML can express spatial structure, interactivity, "
@@ -89,30 +67,26 @@ def _block_context() -> str:
         f"{_html_effectiveness_url}\n"
         "Exceptions (.md still allowed):\n"
         f"- Files inside {CLAUDE_DIRECTORY_NAME}/ or {PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/ directories\n"
-        f"- {exempt_filenames_summary} anywhere\n"
-        f"- Files under {plugin_segments_summary} directories\n"
-        f"- Files under {claude_dev_env_source_summary} source directories\n"
+        f"- {_exempt_anywhere_filenames_summary} anywhere\n"
+        f"- Files under {_exempt_plugin_segments_summary} directories\n"
+        f"- Files under {_claude_dev_env_source_directories_summary} source directories\n"
         f"- Files under any directory whose ancestor contains {PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/\n"
         "- README.md and CHANGELOG.md at any repo root\n"
-        f"- Files under {home_directories_summary}\n"
+        f"- Files under {_exempt_home_directories_summary}\n"
         "- Files under the OS temp directory"
     )
 
 
 def _block_system_message() -> str:
-    exempt_filenames_summary = _exempt_anywhere_filenames_summary()
-    plugin_segments_summary = _exempt_plugin_segments_summary()
-    home_directories_summary = _exempt_home_directories_summary()
-    claude_dev_env_source_summary = _claude_dev_env_source_directories_summary()
     return (
         ".md files are blocked in this project — generate a self-contained .html "
         f"file instead. See {_html_effectiveness_url} for "
         f"design patterns and examples. Exemptions: {CLAUDE_DIRECTORY_NAME}/ and "
         f"{PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/ infrastructure, "
-        f"{exempt_filenames_summary} anywhere, {plugin_segments_summary} trees, "
-        f"{claude_dev_env_source_summary} source trees, "
+        f"{_exempt_anywhere_filenames_summary} anywhere, {_exempt_plugin_segments_summary} trees, "
+        f"{_claude_dev_env_source_directories_summary} source trees, "
         f"files under a {PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/ root, "
-        f"README.md/CHANGELOG.md at any repo root, {home_directories_summary}, "
+        f"README.md/CHANGELOG.md at any repo root, {_exempt_home_directories_summary}, "
         "and the OS temp directory."
     )
 

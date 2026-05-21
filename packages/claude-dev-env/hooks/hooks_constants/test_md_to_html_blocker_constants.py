@@ -53,10 +53,10 @@ def test_minimum_segment_count_to_match_indicator_is_four() -> None:
 
 
 def test_exempt_anywhere_filenames_include_skill_md() -> None:
-    """`SKILL.md` files are exempt anywhere in the tree — Claude Code skills
-    load by .md basename, so the exemption is filename-based rather than
-    path-based."""
-    assert "skill.md" in constants_module.ALL_EXEMPT_ANYWHERE_FILENAMES
+    """`SKILL.md` files are exempt anywhere in the tree. The constant stores
+    the display-case spelling; the lookup at use sites lowercases the
+    candidate basename, so casing here documents the human-facing form."""
+    assert "SKILL.md" in constants_module.ALL_EXEMPT_ANYWHERE_FILENAMES
     assert "ALL_EXEMPT_ANYWHERE_FILENAMES" in constants_module.__all__
 
 
@@ -67,6 +67,20 @@ def test_exempt_plugin_directory_segments_match_claude_code_layout() -> None:
     expected_segments = ("agents", "skills", "commands")
     assert constants_module.ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS == expected_segments
     assert "ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS" in constants_module.__all__
+
+
+def test_exempt_plugin_segments_subset_of_claude_code_source_top_directories() -> None:
+    """ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS (matched anywhere in the path)
+    must be a subset of ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES (matched
+    only at the anchored claude-dev-env source root). If a future change
+    adds a segment to the anywhere list that is not in the anchored set,
+    the anywhere rule would let writes through that the anchored rule
+    would still block — surprising and asymmetric."""
+    anywhere_segments = set(constants_module.ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS)
+    anchored_source_directories = set(
+        constants_module.ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES
+    )
+    assert anywhere_segments.issubset(anchored_source_directories)
 
 
 def test_exempt_home_relative_directories_include_session_log() -> None:

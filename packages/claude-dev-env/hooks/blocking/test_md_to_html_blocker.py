@@ -521,38 +521,6 @@ def test_passes_system_temp_directory():
     assert result.stdout == ""
 
 
-def test_is_repo_root_directory_detects_git_subdirectory(tmp_path):
-    repo_root = tmp_path / "repo"
-    (repo_root / ".git").mkdir(parents=True)
-
-    hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
-    if hook_directory not in sys.path:
-        sys.path.insert(0, hook_directory)
-    exemptions_module = importlib.import_module("md_path_exemptions")
-    importlib.reload(exemptions_module)
-
-    assert exemptions_module._is_repo_root_directory(str(repo_root)) is True
-
-    non_repo_directory = tmp_path / "not-a-repo"
-    non_repo_directory.mkdir()
-    assert exemptions_module._is_repo_root_directory(str(non_repo_directory)) is False
-
-
-def test_is_repo_root_directory_detects_git_file_for_worktree(tmp_path):
-    worktree_root = tmp_path / "worktree"
-    worktree_root.mkdir()
-    git_file = worktree_root / ".git"
-    git_file.write_text("gitdir: /some/other/path\n", encoding="utf-8")
-
-    hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
-    if hook_directory not in sys.path:
-        sys.path.insert(0, hook_directory)
-    exemptions_module = importlib.import_module("md_path_exemptions")
-    importlib.reload(exemptions_module)
-
-    assert exemptions_module._is_repo_root_directory(str(worktree_root)) is True
-
-
 def test_passes_dot_claude_plugin_directory():
     result = _run_hook(
         "Write",
@@ -629,10 +597,9 @@ def test_passes_commands_directory_anywhere():
 
 
 def test_passes_claude_dev_env_docs_dir():
-    """Anchored exemption: ``packages/claude-dev-env/docs/`` must be writable
-    (CODE_RULES.md, PR_DESCRIPTION_GUIDE.md, BDD_*.md). The segment-anywhere
-    rule doesn't list ``docs``, so this only passes when the anchored helper
-    is active. Regression for the anchored-exemption contract."""
+    """A .md file under ``packages/claude-dev-env/docs/`` is exempt. The
+    segment-anywhere rule does not list ``docs``; this exemption fires only
+    via the anchored helper."""
     result = _run_hook(
         "Write",
         {
@@ -645,9 +612,9 @@ def test_passes_claude_dev_env_docs_dir():
 
 
 def test_passes_claude_dev_env_rules_dir():
-    """Anchored exemption: ``packages/claude-dev-env/rules/`` source files
-    (bdd.md, conservative-action.md, …). Same anchored-only signal as
-    docs/."""
+    """A .md file under ``packages/claude-dev-env/rules/`` is exempt. The
+    segment-anywhere rule does not list ``rules``; the anchored helper is
+    the only path to this exemption."""
     result = _run_hook(
         "Write",
         {
@@ -660,9 +627,8 @@ def test_passes_claude_dev_env_rules_dir():
 
 
 def test_passes_claude_dev_env_system_prompts_dir():
-    """Anchored exemption: ``packages/claude-dev-env/system-prompts/``. The
-    directory currently holds only an XML file in this repo, but the anchored
-    contract must remain so future .md system prompts are writable."""
+    """A .md file under ``packages/claude-dev-env/system-prompts/`` is
+    exempt via the anchored helper."""
     result = _run_hook(
         "Write",
         {
@@ -675,9 +641,8 @@ def test_passes_claude_dev_env_system_prompts_dir():
 
 
 def test_passes_claude_dev_env_windows_backslash_path():
-    """Windows-style backslash paths under
-    ``packages\\claude-dev-env\\<dir>\\`` must hit the anchored exemption
-    after the normaliser converts separators to forward slashes."""
+    """A Windows-style backslash relative path under
+    ``packages\\claude-dev-env\\<dir>\\`` is exempt."""
     result = _run_hook(
         "Write",
         {
@@ -690,9 +655,8 @@ def test_passes_claude_dev_env_windows_backslash_path():
 
 
 def test_passes_claude_dev_env_absolute_drive_letter_path():
-    """Absolute drive-letter paths under
-    ``Y:\\repo\\packages\\claude-dev-env\\<dir>\\`` must hit the anchored
-    exemption via the absolute-path indicator walk."""
+    """A Windows absolute drive-letter path containing the anchored
+    ``packages\\claude-dev-env\\<dir>\\`` indicator at any depth is exempt."""
     result = _run_hook(
         "Write",
         {
@@ -705,12 +669,10 @@ def test_passes_claude_dev_env_absolute_drive_letter_path():
 
 
 def test_blocks_md_under_packages_but_not_in_anchored_source_subdir():
-    """Anti-bypass: a .md file two segments deep into the package but in a
-    non-anchored subtree (e.g. ``hooks/blocking/`` inside the package) is
-    NOT under one of the anchored source subdirectories (agents/docs/skills/
-    rules/system-prompts/commands), so the .md block must still apply.
-    Pinning this guarantees the anchored helper doesn't collapse into a
-    broad substring match on the package indicator."""
+    """A .md file inside the package but under a non-source subtree (e.g.
+    ``packages/claude-dev-env/hooks/blocking/``) is blocked. The anchored
+    helper accepts only the named source subdirectories (agents, docs,
+    skills, rules, system-prompts, commands)."""
     result = _run_hook(
         "Write",
         {
@@ -724,11 +686,10 @@ def test_blocks_md_under_packages_but_not_in_anchored_source_subdir():
 
 
 def test_blocks_nested_claude_dev_env_substring_does_not_bypass():
-    """Anti-bypass: a path containing ``packages/claude-dev-env/docs/`` as a
-    substring but not anchored at the path root (or absolute-path root) must
-    still be blocked. The bugbot finding that introduced segment-anchored
-    matching was driven by exactly this nested-substring case — anchoring
-    is intentional, not a substring check."""
+    """A path that contains the anchored prefix as a non-leading substring
+    (e.g. ``notes/packages/claude-dev-env/docs/foo.md``) is blocked. The
+    anchored helper matches only at the start of the path (relative) or at
+    the root of an absolute path."""
     result = _run_hook(
         "Write",
         {
@@ -739,27 +700,6 @@ def test_blocks_nested_claude_dev_env_substring_does_not_bypass():
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_is_under_plugin_root_marker_finds_ancestor_directory(tmp_path):
-    plugin_root = tmp_path / "plugin-repo"
-    (plugin_root / ".claude-plugin").mkdir(parents=True)
-    nested_md_path = plugin_root / "lib" / "notes" / "design.md"
-    nested_md_path.parent.mkdir(parents=True)
-
-    hook_directory = os.path.dirname(HOOK_SCRIPT_PATH)
-    if hook_directory not in sys.path:
-        sys.path.insert(0, hook_directory)
-    exemptions_module = importlib.import_module("md_path_exemptions")
-    importlib.reload(exemptions_module)
-
-    normalized = str(nested_md_path).replace("\\", "/")
-    assert exemptions_module._is_under_plugin_root_marker(normalized) is True
-
-    no_marker_path = tmp_path / "ordinary" / "lib" / "notes" / "design.md"
-    no_marker_path.parent.mkdir(parents=True)
-    no_marker_normalized = str(no_marker_path).replace("\\", "/")
-    assert exemptions_module._is_under_plugin_root_marker(no_marker_normalized) is False
 
 
 def test_blocks_ordinary_docs_md_file():

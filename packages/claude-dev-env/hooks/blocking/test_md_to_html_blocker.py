@@ -78,6 +78,27 @@ class _RunHook:
 _run_hook = _RunHook()
 
 
+def test_block_messages_mention_claude_dev_env_source_exemptions():
+    """Block messages must surface the `packages/claude-dev-env/<dir>/` anchored
+    exemption so contributors aren't misled when a `.md` write is denied
+    elsewhere. Ensures docs/, rules/, and system-prompts/ source files
+    render as writable in the user-facing message."""
+    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_dir not in sys.path:
+        sys.path.insert(0, hook_dir)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+
+    context_message = blocker_module._block_context()
+    system_message = blocker_module._block_system_message()
+    combined_messages = context_message + " " + system_message
+    assert "claude-dev-env" in combined_messages, (
+        "Block messages must mention claude-dev-env source-directory exemption; "
+        f"got context={context_message!r} system={system_message!r}"
+    )
+
+
+
 def test_blocks_write_md_file():
     result = _run_hook(
         "Write",
@@ -106,6 +127,55 @@ def test_blocks_uppercase_md_extension():
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_module_imports_path_segments_from_hooks_constants():
+    """The blocker pulls the two leading path segments (`packages` and
+    `claude-dev-env`) through the centralised hooks_constants module rather
+    than inlining them as raw string literals."""
+    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_dir not in sys.path:
+        sys.path.insert(0, hook_dir)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+    assert blocker_module.PACKAGES_TOP_LEVEL_SEGMENT == "packages"
+    assert blocker_module.CLAUDE_DEV_ENV_REPO_NAME_SEGMENT == "claude-dev-env"
+
+
+def test_module_imports_top_directories_from_hooks_constants():
+    """The exempt-top-directories set must live in `hooks_constants/` rather
+    than as a file-global single-use constant in the blocker module. The
+    blocker imports the centralized constant; a regression that reintroduces
+    a local module-scope copy would fail this assertion."""
+    hook_dir = os.path.dirname(HOOK_SCRIPT_PATH)
+    if hook_dir not in sys.path:
+        sys.path.insert(0, hook_dir)
+    blocker_module = importlib.import_module("md_to_html_blocker")
+    importlib.reload(blocker_module)
+    assert hasattr(blocker_module, "ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES"), (
+        "Blocker module must import ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES from "
+        "hooks_constants/ (file-global single-use rule)."
+    )
+    assert not hasattr(blocker_module, "_claude_code_source_top_directories"), (
+        "Local _claude_code_source_top_directories must not be re-introduced; "
+        "use the imported constant from hooks_constants/ instead."
+    )
+
+
+def test_blocks_nested_packages_claude_dev_env_path():
+    """`packages/claude-dev-env/` exemption is anchored to top-level use only;
+    a nested directory like `notes/packages/claude-dev-env/docs/...` is NOT a
+    Claude Code source path and must still be blocked. Substring matching let
+    this bypass through; segment-anchored matching prevents it."""
+    result = _run_hook(
+        "Write",
+        {"file_path": "notes/packages/claude-dev-env/docs/guide.md", "content": "# Hello"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny", (
+        f"Nested fake claude-dev-env path must still be blocked; got {output!r}"
+    )
 
 
 def test_passes_html_file():
@@ -556,6 +626,119 @@ def test_passes_commands_directory_anywhere():
     )
     assert result.returncode == 0
     assert result.stdout == ""
+
+
+def test_passes_claude_dev_env_docs_dir():
+    """Anchored exemption: ``packages/claude-dev-env/docs/`` must be writable
+    (CODE_RULES.md, PR_DESCRIPTION_GUIDE.md, BDD_*.md). The segment-anywhere
+    rule doesn't list ``docs``, so this only passes when the anchored helper
+    is active. Regression for the anchored-exemption contract."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/docs/PR_DESCRIPTION_GUIDE.md",
+            "content": "# Guide",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_dev_env_rules_dir():
+    """Anchored exemption: ``packages/claude-dev-env/rules/`` source files
+    (bdd.md, conservative-action.md, …). Same anchored-only signal as
+    docs/."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/rules/my-rule.md",
+            "content": "# Rule",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_dev_env_system_prompts_dir():
+    """Anchored exemption: ``packages/claude-dev-env/system-prompts/``. The
+    directory currently holds only an XML file in this repo, but the anchored
+    contract must remain so future .md system prompts are writable."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/system-prompts/new-prompt.md",
+            "content": "# Prompt",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_dev_env_windows_backslash_path():
+    """Windows-style backslash paths under
+    ``packages\\claude-dev-env\\<dir>\\`` must hit the anchored exemption
+    after the normaliser converts separators to forward slashes."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages\\claude-dev-env\\docs\\windows-style.md",
+            "content": "# Guide",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_claude_dev_env_absolute_drive_letter_path():
+    """Absolute drive-letter paths under
+    ``Y:\\repo\\packages\\claude-dev-env\\<dir>\\`` must hit the anchored
+    exemption via the absolute-path indicator walk."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "Y:\\repo\\packages\\claude-dev-env\\docs\\drive-letter.md",
+            "content": "# Guide",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_blocks_md_under_packages_but_not_in_anchored_source_subdir():
+    """Anti-bypass: a .md file two segments deep into the package but in a
+    non-anchored subtree (e.g. ``hooks/blocking/`` inside the package) is
+    NOT under one of the anchored source subdirectories (agents/docs/skills/
+    rules/system-prompts/commands), so the .md block must still apply.
+    Pinning this guarantees the anchored helper doesn't collapse into a
+    broad substring match on the package indicator."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "packages/claude-dev-env/hooks/blocking/notes.md",
+            "content": "# Notes",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_blocks_nested_claude_dev_env_substring_does_not_bypass():
+    """Anti-bypass: a path containing ``packages/claude-dev-env/docs/`` as a
+    substring but not anchored at the path root (or absolute-path root) must
+    still be blocked. The bugbot finding that introduced segment-anchored
+    matching was driven by exactly this nested-substring case — anchoring
+    is intentional, not a substring check."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": "notes/packages/claude-dev-env/docs/foo.md",
+            "content": "# Notes",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 def test_is_under_plugin_root_marker_finds_ancestor_directory(tmp_path):

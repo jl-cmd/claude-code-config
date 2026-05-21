@@ -11,26 +11,23 @@ import tempfile
 from pathlib import Path
 
 
-for each_cached_module_name in [
-    each_module_key
-    for each_module_key in list(sys.modules)
-    if each_module_key == "config" or each_module_key.startswith("config.")
-]:
-    sys.modules.pop(each_cached_module_name, None)
-_blocking_directory = str(Path(__file__).resolve().parent)
-while _blocking_directory in sys.path:
-    sys.path.remove(_blocking_directory)
-if _blocking_directory not in sys.path:
-    sys.path.insert(0, _blocking_directory)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
-from config.md_blocker_constants import (  # noqa: E402
+from hooks_constants.md_to_html_blocker_constants import (  # noqa: E402
+    ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES,
     ALL_EXEMPT_ANYWHERE_FILENAMES,
     ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES,
     ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
     ALL_EXEMPT_ROOT_FILENAMES,
+    CLAUDE_DEV_ENV_REPO_NAME_SEGMENT,
     CLAUDE_DIRECTORY_NAME,
+    MINIMUM_SEGMENT_COUNT_TO_MATCH_INDICATOR,
+    PACKAGES_TOP_LEVEL_SEGMENT,
     PLUGIN_ROOT_MARKER_DIRECTORY_NAME,
     REPO_ROOT_MARKER_NAME,
+    WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH,
 )
 
 
@@ -40,6 +37,9 @@ def is_exempt_path(file_path: str) -> bool:
     Exemption sources, in order of evaluation:
     - Any segment under `.claude/` or `.claude-plugin/` (case-insensitive)
     - Basename in `ALL_EXEMPT_ANYWHERE_FILENAMES` (e.g. SKILL.md)
+    - Anchored under `packages/claude-dev-env/<one of
+      ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES>/...` (docs, rules,
+      system-prompts source files in this repo)
     - Path segment in `ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS` (agents/skills/commands)
     - Canonical path under a home-relative exempt directory
       (`ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES`)
@@ -67,6 +67,8 @@ def is_exempt_path(file_path: str) -> bool:
         return True
     basename = os.path.basename(normalized)
     if basename.lower() in ALL_EXEMPT_ANYWHERE_FILENAMES:
+        return True
+    if _is_under_claude_dev_env_source_subdirectory(file_path, lower_normalized):
         return True
     if _has_plugin_directory_segment(lower_normalized):
         return True
@@ -100,6 +102,60 @@ def _has_plugin_directory_segment(lower_normalized_path: str) -> bool:
         if segment_marker in lower_normalized_path:
             return True
         if lower_normalized_path.startswith(f"{each_directory_segment}/"):
+            return True
+    return False
+
+
+def _looks_like_absolute_path(file_path: str, first_segment: str) -> bool:
+    if file_path.startswith("/") or file_path.startswith("\\"):
+        return True
+    if (
+        len(first_segment) == WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH
+        and first_segment[1] == ":"
+        and first_segment[0].isalpha()
+    ):
+        return True
+    return False
+
+
+def _is_under_claude_dev_env_source_subdirectory(
+    raw_file_path: str, lower_normalized_path: str
+) -> bool:
+    """Anchored exemption for ``packages/claude-dev-env/<source-dir>/...``.
+
+    The match requires segment-anchored matching at the start of the path
+    (relative) or at the root of an absolute path. A nested path like
+    ``notes/packages/claude-dev-env/docs/foo.md`` is NOT exempt — only the
+    full three-segment anchor matches.
+
+    Args:
+        raw_file_path: Original file path as received by the hook (used
+            only for absolute-path detection on the first segment).
+        lower_normalized_path: Same path lowercased and with separators
+            normalized to forward slashes.
+
+    Returns:
+        True when the path is anchored under
+        ``packages/claude-dev-env/<one of
+        ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES>/``.
+    """
+    all_segments = [
+        each_segment
+        for each_segment in lower_normalized_path.split("/")
+        if each_segment
+    ]
+    if not all_segments:
+        return False
+    starting_segment_index_options: list[int] = [0]
+    if _looks_like_absolute_path(raw_file_path, all_segments[0]):
+        starting_segment_index_options = list(range(len(all_segments)))
+    for each_starting_index in starting_segment_index_options:
+        if (
+            len(all_segments) >= each_starting_index + MINIMUM_SEGMENT_COUNT_TO_MATCH_INDICATOR
+            and all_segments[each_starting_index] == PACKAGES_TOP_LEVEL_SEGMENT
+            and all_segments[each_starting_index + 1] == CLAUDE_DEV_ENV_REPO_NAME_SEGMENT
+            and all_segments[each_starting_index + 2] in ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES
+        ):
             return True
     return False
 

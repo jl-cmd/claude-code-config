@@ -572,6 +572,23 @@ def test_validate_trivial_body_blocks_test_plan_header() -> None:
     ), f"Trivial body opening with `## Test plan` must trip ceremony block; got {violations!r}"
 
 
+def test_validate_trivial_body_blocks_test_plan_after_prose() -> None:
+    """The doc promises "Zero `##` headers" on Trivial bodies. The earlier check
+    only inspected the first non-empty line, so prose followed by `## Test plan`
+    slipped through. Tighten the check to reject ANY heading in a Trivial-sized
+    body so the guide and the enforcer agree."""
+    body = (
+        "Pin Bun to 1.3.14.\n\n"
+        "## Test plan\n\n"
+        "- bun test\n"
+    )
+    violations = validate_pr_body(body)
+    assert any(
+        "ceremony" in each_violation.lower() or "trivial" in each_violation.lower()
+        for each_violation in violations
+    ), f"Trivial body with later `## Test plan` must trip the block; got {violations!r}"
+
+
 def test_validate_trivial_body_blocks_h1_header() -> None:
     """A Trivial-sized body opening with an `# Overview` h1 must also block, since
     Trivial shape allows zero structural headers of any level."""

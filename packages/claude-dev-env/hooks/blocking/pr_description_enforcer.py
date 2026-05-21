@@ -797,12 +797,11 @@ def validate_pr_body(body: str, pr_number: int | None = None) -> list[str]:
                 f"{sorted(ALL_HEAVY_TESTING_HEADERS)}"
             )
 
-    first_line_text = _first_non_empty_line(body)
-    opens_with_any_header = bool(HEADING_LINE_PATTERN.match(first_line_text))
+    body_has_any_header = len(_iter_section_headers(body)) > 0
     body_is_trivial_sized = substantive_chars < TRIVIAL_BODY_CHAR_THRESHOLD
-    if opens_with_any_header and body_is_trivial_sized:
+    if body_has_any_header and body_is_trivial_sized:
         violations.append(
-            "Trivial PR body opens with a ceremony header -- drop the header "
+            "Trivial PR body contains a ceremony header -- drop every header "
             "and write the one-sentence body directly"
         )
 

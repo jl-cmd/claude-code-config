@@ -122,18 +122,19 @@ class TestJsonFlag:
         hooks_directory_resolved = run_all_validators.hooks_dir.resolve()
         assert hooks_directory_resolved.is_relative_to(resolved_project_root.resolve())
 
-    def test_file_structure_validator_output_bounded_under_unrelated_cwd(
-        self, tmp_path, monkeypatch
-    ) -> None:
-        """File Structure validator anchors git to the hooks tree, not the caller cwd.
+    def test_file_structure_validator_output_is_bounded(self) -> None:
+        """File Structure validator output stays under 10 kB end-to-end.
 
-        Regression for the defect where ``get_project_root`` ran
-        ``git rev-parse --show-toplevel`` without a ``cwd`` argument; under a
-        subprocess fallback cwd of ``%TEMP%``, git returned an unrelated repo
-        and the validator rglob'd tens of thousands of unrelated files,
-        producing megabytes of output and >100 s wall time.
+        Smoke check that the validators entrypoint subprocess returns
+        bounded File Structure output (<10 kB). The unrelated-cwd
+        anchoring behavior itself is exercised in-process by
+        ``test_get_project_root_anchored_under_unrelated_cwd``; this
+        subprocess test verifies the integrated entrypoint stays within
+        a bounded output budget. ``run_validators_entrypoint_subprocess``
+        sets its own ``cwd`` via
+        ``_hooks_subprocess_working_directory_and_environment``, so the
+        subprocess cwd is fixed regardless of the test runner's cwd.
         """
-        monkeypatch.chdir(tmp_path)
         completed_validation_run = run_validators_entrypoint_subprocess(["--json"])
 
         parsed = json.loads(completed_validation_run.stdout.strip())

@@ -82,7 +82,7 @@ tags: [session, [project-tag], [topic-tags]]
 -->
 ```
 
-Every session report carries this metadata block verbatim so vault search and the tidy step in step 5 work.
+Every session report carries this metadata block verbatim so vault search and the tidy step in step 5 work. **Initial values for Step 2's Write:** substitute concrete values for every placeholder — for `vault_context_retrieved`, write the literal value `false` (the safe default before Step 3's vault-MCP-tool scan completes). Step 3 then Edits this to `true` if any of the three vault MCP tools fired this session.
 
 ## Step 2: Compose the HTML via doc-gist's shape principles
 

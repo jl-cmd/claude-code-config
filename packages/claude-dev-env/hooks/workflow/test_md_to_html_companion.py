@@ -12,15 +12,45 @@ exemption so the companion fires as expected.
 
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
+import pytest
+
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "md_to_html_companion.py")
 _NON_TEMP_SANDBOX_PARENT = str(Path.home() / ".pytest_md_companion_sandbox")
 os.makedirs(_NON_TEMP_SANDBOX_PARENT, exist_ok=True)
+
+
+def _strip_read_only_and_retry(removal_function, target_path, *_exc_info):
+    try:
+        os.chmod(target_path, stat.S_IWRITE)
+        removal_function(target_path)
+    except OSError:
+        pass
+
+
+def _force_rmtree(target_path: str) -> None:
+    handler_kw = (
+        {"onexc": _strip_read_only_and_retry}
+        if sys.version_info >= (3, 12)
+        else {"onerror": _strip_read_only_and_retry}
+    )
+    try:
+        shutil.rmtree(target_path, **handler_kw)
+    except OSError:
+        pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_sandbox_parent_directory():
+    yield
+    _force_rmtree(_NON_TEMP_SANDBOX_PARENT)
 
 
 def _make_sandbox() -> tempfile.TemporaryDirectory:
@@ -470,25 +500,23 @@ def test_blocks_javascript_url_scheme():
         assert "<a" not in html
 
 
-def test_companion_skips_home_session_log_directory():
-    home_directory = os.path.expanduser("~")
-    session_log_directory = os.path.join(home_directory, "SessionLog", "decisions")
-    os.makedirs(session_log_directory, exist_ok=True)
-    md_path = os.path.join(session_log_directory, "companion_exempt_test.md")
-    html_path = os.path.join(session_log_directory, "companion_exempt_test.html")
-    try:
-        with open(md_path, "w", encoding="utf-8") as f:
-            f.write("# Note")
-        result = _run_hook(
-            "Write",
-            {"file_path": md_path, "content": "# Note"},
-        )
-        assert result.returncode == 0
-        assert not os.path.exists(html_path)
-    finally:
-        for each_path in (md_path, html_path):
-            if os.path.exists(each_path):
-                os.remove(each_path)
+def test_companion_skips_home_session_log_directory(tmp_path, monkeypatch):
+    synthetic_home_directory = tmp_path / "synthetic_home"
+    synthetic_home_directory.mkdir()
+    monkeypatch.setenv("HOME", str(synthetic_home_directory))
+    monkeypatch.setenv("USERPROFILE", str(synthetic_home_directory))
+    session_log_directory = synthetic_home_directory / "SessionLog" / "decisions"
+    session_log_directory.mkdir(parents=True)
+    md_path = str(session_log_directory / "companion_exempt_test.md")
+    html_path = str(session_log_directory / "companion_exempt_test.html")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write("# Note")
+    result = _run_hook(
+        "Write",
+        {"file_path": md_path, "content": "# Note"},
+    )
+    assert result.returncode == 0
+    assert not os.path.exists(html_path)
 
 
 def test_companion_skips_skill_md_anywhere():

@@ -11,12 +11,6 @@ from pathlib import Path
 from typing import TextIO
 
 
-for each_cached_module_name in [
-    each_module_key
-    for each_module_key in list(sys.modules)
-    if each_module_key == "config" or each_module_key.startswith("config.")
-]:
-    sys.modules.pop(each_cached_module_name, None)
 _blocking_directory = str(Path(__file__).resolve().parent)
 while _blocking_directory in sys.path:
     sys.path.remove(_blocking_directory)

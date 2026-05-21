@@ -18,11 +18,11 @@ from urllib.parse import urlparse
 
 logging.basicConfig(stream=sys.stderr, level=logging.WARNING, format="%(message)s")
 
-_hook_dir = str(Path(__file__).absolute().parent.parent)
+_hook_dir = str(Path(__file__).resolve().parent.parent)
 if _hook_dir not in sys.path:
     sys.path.insert(0, _hook_dir)
 
-_blocking_dir = str(Path(__file__).absolute().parent.parent / "blocking")
+_blocking_dir = str(Path(__file__).resolve().parent.parent / "blocking")
 if _blocking_dir not in sys.path:
     sys.path.insert(0, _blocking_dir)
 

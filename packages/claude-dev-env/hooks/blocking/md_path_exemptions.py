@@ -28,6 +28,7 @@ from config.md_blocker_constants import (  # noqa: E402
     ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES,
     ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
     ALL_EXEMPT_ROOT_FILENAMES,
+    CLAUDE_DIRECTORY_NAME,
     PLUGIN_ROOT_MARKER_DIRECTORY_NAME,
     REPO_ROOT_MARKER_NAME,
 )
@@ -56,9 +57,13 @@ def is_exempt_path(file_path: str) -> bool:
     expanded_path = os.path.expanduser(file_path)
     normalized = os.path.normpath(expanded_path).replace("\\", "/")
     lower_normalized = normalized.lower()
-    if "/.claude/" in lower_normalized or lower_normalized.startswith(".claude/"):
+    claude_directory_segment = f"/{CLAUDE_DIRECTORY_NAME}/"
+    claude_directory_prefix = f"{CLAUDE_DIRECTORY_NAME}/"
+    plugin_directory_segment = f"/{PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/"
+    plugin_directory_prefix = f"{PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/"
+    if claude_directory_segment in lower_normalized or lower_normalized.startswith(claude_directory_prefix):
         return True
-    if "/.claude-plugin/" in lower_normalized or lower_normalized.startswith(".claude-plugin/"):
+    if plugin_directory_segment in lower_normalized or lower_normalized.startswith(plugin_directory_prefix):
         return True
     basename = os.path.basename(normalized)
     if basename.lower() in ALL_EXEMPT_ANYWHERE_FILENAMES:

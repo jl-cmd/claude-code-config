@@ -32,7 +32,7 @@ The session designer reads the matching gallery file, then designs the report in
 ## Gotchas
 
 - **Doc-gist's auto-publish hook fires on Write/Edit of any HTML containing `<!-- @publish-as-gist -->`.** Session-log composes the HTML with the marker so auto-publish runs by default — sessions are intended for sharing with collaborators. The hook prints the gist + preview URLs to tool output; capture both.
-- **`gh` must be authenticated.** Auto-publish runs `gh gist create`. If `gh` is unauthenticated, `gh gist create` writes its error to stderr; the hook surfaces that message and exits 0 (does not block the Write). Surface the error to the user; the local vault HTML is still the canonical artifact, so the remaining steps still run.
+- **`gh` must be authenticated.** Auto-publish runs `gh gist create`. If `gh` is unauthenticated, `gh gist create` writes its error message; `gist_upload.py` surfaces it from stderr when present and falls back to stdout when stderr is empty (so the error always appears somewhere in the tool result). The hook exits 0 (does not block the Write). Look at the full tool result, then surface the error to the user; the local vault HTML is still the canonical artifact, so the remaining steps still run.
 - **Vault paths sit outside `.claude/`.** Headless vault paths (e.g., `$OBSIDIAN_VAULT_PATH`) resolve outside the project tree. The `md_to_html_blocker` PreToolUse hook blocks `.md` writes unless the path is exempt — exemptions include any path containing `/.claude/` and README/CHANGELOG files at repo root. Session reports use HTML, which the hook ignores entirely.
 - **Sessions describe current state by convention.** The state_description_blocker hook does not scan .html, but the rule at `~/.claude/rules/no-historical-clutter.md` applies as a writing standard — skip historical and comparative language when composing the report; the rule file lists the full trigger set.
 - **`write_existing_file_blocker` rejects Write on existing paths.** Use Write only when creating a fresh session report; use Edit for the vault-context append in step 3.
@@ -113,7 +113,7 @@ Beyond those four requirements, design the shape that fits. A convergence loop s
 
 This step runs automatically after step 2.
 
-Review the conversation history for any use of these vault MCP tools (excluding this skill's own calls during step 2):
+Review the conversation history for any use of these vault MCP tools (look only at tool calls the session made before /session-log itself ran):
 
 - `mcp__obsidian__search_notes`
 - `mcp__obsidian__read_note`

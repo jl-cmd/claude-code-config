@@ -757,15 +757,23 @@ def test_validate_allows_imperative_opening() -> None:
 
 
 def _readability_failing_body() -> str:
-    """A body whose intro sentence dramatically exceeds the max-sentence-words threshold."""
+    """A Heavy-classified body whose intro sentence dramatically exceeds the
+    max-sentence-words threshold. Wraps the long sentence in `## Problem` and
+    `## Test plan` headers so the Heavy required-header check is satisfied
+    and only the readability violation fires; otherwise the missing-header
+    violations would inflate the result list and mask readability regressions
+    behind broad `any()` substring matches."""
     return (
-        "This change adds a multi-step coordination protocol that traverses the entire "
+        "## Problem\n\n"
+        "Adds a multi-step coordination protocol that traverses the entire "
         "request lifecycle through every middleware layer in the system, ensuring that "
         "downstream consumers observe a perfectly consistent ordering guarantee across "
         "all participating subsystems including the queueing component and the storage "
         "subsystem and the notification dispatch path that fans out to subscribers "
         "across every channel registered against the tenant scope including email and "
-        "push and webhook delivery surfaces simultaneously in one transactional unit."
+        "push and webhook delivery surfaces simultaneously in one transactional unit.\n\n"
+        "## Test plan\n\n"
+        "- `pytest packages/claude-dev-env/hooks/blocking/test_pr_description_enforcer.py`\n"
     )
 
 

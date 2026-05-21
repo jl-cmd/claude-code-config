@@ -79,6 +79,21 @@ def test_whitespace_run_pattern_collapses_multiple_spaces() -> None:
     assert collapsed_text == "a b c d"
 
 
+def test_all_list_is_alphabetically_sorted() -> None:
+    """`__all__` is the export surface; alphabetical order makes it easy to
+    verify completeness, spot duplicates, and bisect missing entries. Pin
+    sorted order so drift cannot reintroduce the H-before-G / appended-at-end
+    inconsistencies Bugbot flagged."""
+    actual_all_list = constants_module.__all__
+    expected_sorted = sorted(actual_all_list)
+    assert actual_all_list == expected_sorted, (
+        "constants_module.__all__ must be alphabetically sorted; the first "
+        f"divergence is at index {next(i for i, (a, b) in enumerate(zip(actual_all_list, expected_sorted)) if a != b)}: "
+        f"got {actual_all_list[next(i for i, (a, b) in enumerate(zip(actual_all_list, expected_sorted)) if a != b)]!r}, "
+        f"expected {expected_sorted[next(i for i, (a, b) in enumerate(zip(actual_all_list, expected_sorted)) if a != b)]!r}"
+    )
+
+
 def test_dead_heavy_detection_constants_are_removed() -> None:
     """`ALL_HEAVY_DETECTION_HEADERS` and `HEAVY_DETECTION_HEADER_COUNT_MIN`
     were remnants of the prior two-condition shape classifier (length AND

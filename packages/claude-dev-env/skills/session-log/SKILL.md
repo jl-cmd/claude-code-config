@@ -134,7 +134,7 @@ Edit the vault HTML via two Edit calls (each Edit re-fires the auto-publish hook
 
 If the report already has a notes / references section, use Edit to insert the `<li>` line before its closing `</ul>`.
 
-The gist URL stays out of the HTML body on purpose: each Edit re-fires the auto-publish hook and produces a brand-new gist ID, so any URL embedded in the file becomes stale the instant the next Edit lands. The canonical gist + preview URL is the pair printed to stderr by the **second (final) Step-3 Edit's** auto-publish run. Quote that pair to the user when announcing the report.
+The gist URL stays out of the HTML body on purpose: each Edit re-fires the auto-publish hook and produces a brand-new gist ID, so any URL embedded in the file becomes stale the instant the next Edit lands. The canonical gist + preview URL is the pair from **the most recent auto-publish run that touched the current session report** — typically the second (final) Step-3 Edit, but the Step 5 Edit takes over as canonical when Step 5's frontmatter auto-fix edits the current session (re-quote the Step 5 pair with a "Session [N] republished — new preview: <url>" line per the Step 2 guidance at line 107). Quote whichever pair is most recent when announcing the report.
 
 ## Step 4: Decision Extraction
 

@@ -18,10 +18,40 @@ if _blocking_directory not in sys.path:
     sys.path.insert(0, _blocking_directory)
 
 from md_path_exemptions import is_exempt_path  # noqa: E402
+from config.md_blocker_constants import (  # noqa: E402
+    ALL_EXEMPT_ANYWHERE_FILENAMES,
+    ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES,
+    ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS,
+    CLAUDE_DIRECTORY_NAME,
+    PLUGIN_ROOT_MARKER_DIRECTORY_NAME,
+)
 
 
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
+
+
+def _format_filename_for_display(filename: str) -> str:
+    if filename.lower().endswith(_markdown_extension):
+        stem_length = len(filename) - len(_markdown_extension)
+        return filename[:stem_length].upper() + _markdown_extension
+    return filename
+
+
+def _exempt_anywhere_filenames_summary() -> str:
+    all_display_filenames = [
+        _format_filename_for_display(each_filename)
+        for each_filename in ALL_EXEMPT_ANYWHERE_FILENAMES
+    ]
+    return ", ".join(all_display_filenames)
+
+
+def _exempt_plugin_segments_summary() -> str:
+    return ", ".join(f"{each_segment}/" for each_segment in ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS)
+
+
+def _exempt_home_directories_summary() -> str:
+    return ", ".join(f"~/{each_directory}/" for each_directory in ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES)
 
 
 def _block_reason(file_path: str) -> str:
@@ -34,6 +64,9 @@ def _block_reason(file_path: str) -> str:
 
 
 def _block_context() -> str:
+    exempt_filenames_summary = _exempt_anywhere_filenames_summary()
+    plugin_segments_summary = _exempt_plugin_segments_summary()
+    home_directories_summary = _exempt_home_directories_summary()
     return (
         "Generate a self-contained .html file instead of .md. "
         "Design freely — HTML can express spatial structure, interactivity, "
@@ -41,24 +74,29 @@ def _block_context() -> str:
         "Reference for HTML effectiveness patterns:\n"
         f"{_html_effectiveness_url}\n"
         "Exceptions (.md still allowed):\n"
-        "- Files inside .claude/ or .claude-plugin/ directories\n"
-        "- SKILL.md anywhere\n"
-        "- Files under agents/, skills/, or commands/ directories\n"
-        "- Files under any directory whose ancestor contains .claude-plugin/\n"
+        f"- Files inside {CLAUDE_DIRECTORY_NAME}/ or {PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/ directories\n"
+        f"- {exempt_filenames_summary} anywhere\n"
+        f"- Files under {plugin_segments_summary} directories\n"
+        f"- Files under any directory whose ancestor contains {PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/\n"
         "- README.md and CHANGELOG.md at any repo root\n"
-        "- Files under ~/.claude/plans/ and ~/SessionLog/\n"
+        f"- Files under {home_directories_summary}\n"
         "- Files under the OS temp directory"
     )
 
 
 def _block_system_message() -> str:
+    exempt_filenames_summary = _exempt_anywhere_filenames_summary()
+    plugin_segments_summary = _exempt_plugin_segments_summary()
+    home_directories_summary = _exempt_home_directories_summary()
     return (
         ".md files are blocked in this project — generate a self-contained .html "
         f"file instead. See {_html_effectiveness_url} for "
-        "design patterns and examples. Exemptions: .claude/ and .claude-plugin/ "
-        "infrastructure, SKILL.md anywhere, agents/, skills/, commands/ trees, "
-        "files under a .claude-plugin/ root, README.md/CHANGELOG.md at any "
-        "repo root, ~/.claude/plans/, ~/SessionLog/, and the OS temp directory."
+        f"design patterns and examples. Exemptions: {CLAUDE_DIRECTORY_NAME}/ and "
+        f"{PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/ infrastructure, "
+        f"{exempt_filenames_summary} anywhere, {plugin_segments_summary} trees, "
+        f"files under a {PLUGIN_ROOT_MARKER_DIRECTORY_NAME}/ root, "
+        f"README.md/CHANGELOG.md at any repo root, {home_directories_summary}, "
+        "and the OS temp directory."
     )
 
 

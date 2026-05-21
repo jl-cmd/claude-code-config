@@ -20,9 +20,10 @@ Key signals from the corpus:
 
 ### Trivial
 
-- **Criterion.** Diff ≤ 10 lines changed.
-- **Body.** 1–3 sentences of prose. Zero `##` headers.
-- **Forbidden.** `## Summary`, `## Test plan`, or any other ceremony header. Triggers the hook's ceremony-on-Trivial check.
+- **Guidance.** Diff ≤ 10 lines changed (the agent picks shape by diff size; the hook cannot see the diff).
+- **Hook enforcement.** Substantive prose under `TRIVIAL_BODY_CHAR_THRESHOLD` (200 chars). The hook blocks any ATX heading at any depth (`#`, `##`, `###`, ...) in a Trivial-sized body — the ceremony-on-Trivial check uses `HEADING_LINE_PATTERN`, not just `##`.
+- **Body.** 1–3 sentences of prose. Zero headings of any level.
+- **Forbidden.** Any heading (`# Anything`, `## Summary`, `### Detail`, ...). Triggers the hook's ceremony-on-Trivial check.
 
 Example:
 
@@ -32,7 +33,8 @@ Bump bun to 1.3.14. Picks up the bugfix for the runtime panic on empty stdin.
 
 ### Standard
 
-- **Criterion.** Diff 11–500 lines.
+- **Guidance.** Diff 11–500 lines (agent-side; hook infers shape from body length).
+- **Hook enforcement.** Substantive prose between `TRIVIAL_BODY_CHAR_THRESHOLD` (200) and `HEAVY_MIN_BODY_CHARS_FOR_CLASSIFICATION` (500). No required headers.
 - **Body.** Imperative-verb intro paragraph. Optional headers drawn from the Anthropic set.
 - **Optional headers.** `## Summary`, `## Problem`, `## Fix`, `## Changes`, `## Test plan`, `## Tests`, `## Testing`, `## Approach`, `## Root cause`.
 

@@ -711,16 +711,28 @@ def _find_any_annotation_lines(source: str) -> list[int]:
     return offending_line_numbers
 
 
+def _all_python_tokens_or_none(source: str) -> list[tokenize.TokenInfo] | None:
+    """Tokenize *source* and return the full token stream, or None on failure.
+
+    Centralizes the ``tokenize.generate_tokens`` call and the
+    ``(TokenError, IndentationError, SyntaxError)`` catch tuple. Helpers
+    that need just the comment tokens (``_comment_tokens``) or the
+    classified comment sets (``_extract_python_comment_sets``) layer on
+    top of this single source-of-truth so a future change to the
+    exception set or the entry-point API lands in exactly one place.
+    """
+    try:
+        return list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return None
+
+
 def _comment_tokens(source: str) -> list[tokenize.TokenInfo]:
     """Return COMMENT tokens from source, or an empty list when tokenization fails."""
-    try:
-        return [
-            each_token
-            for each_token in tokenize.generate_tokens(io.StringIO(source).readline)
-            if each_token.type == tokenize.COMMENT
-        ]
-    except (tokenize.TokenError, IndentationError, SyntaxError):
+    all_tokens = _all_python_tokens_or_none(source)
+    if all_tokens is None:
         return []
+    return [each_token for each_token in all_tokens if each_token.type == tokenize.COMMENT]
 
 
 def _is_exempt_python_comment(comment_string: str) -> bool:
@@ -752,21 +764,18 @@ def _extract_python_comment_sets(content: str) -> tuple[set[str], set[str], bool
     """
     inline_comments: set[str] = set()
     standalone_comments: set[str] = set()
-    try:
-        comment_tokens = [
-            each_token
-            for each_token in tokenize.generate_tokens(io.StringIO(content).readline)
-            if each_token.type == tokenize.COMMENT
-        ]
-    except (tokenize.TokenError, IndentationError, SyntaxError):
+    all_tokens = _all_python_tokens_or_none(content)
+    if all_tokens is None:
         return inline_comments, standalone_comments, False
     lines = content.split("\n")
-    for each_comment_token in comment_tokens:
-        comment_string = each_comment_token.string
+    for each_token in all_tokens:
+        if each_token.type != tokenize.COMMENT:
+            continue
+        comment_string = each_token.string
         if _is_exempt_python_comment(comment_string):
             continue
-        line_number = each_comment_token.start[0]
-        column_offset = each_comment_token.start[1]
+        line_number = each_token.start[0]
+        column_offset = each_token.start[1]
         source_line = lines[line_number - 1] if line_number - 1 < len(lines) else ""
         text_before_comment = source_line[:column_offset]
         normalized_comment_text = comment_string.strip()

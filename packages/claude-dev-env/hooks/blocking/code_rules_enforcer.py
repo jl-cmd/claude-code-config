@@ -401,8 +401,9 @@ def check_imports_at_top(content: str) -> list[str]:
 
     for line_number, each_line in enumerate(lines, 1):
         if active_triple_quote_delimiter is not None:
-            if each_line.count(active_triple_quote_delimiter) % TRIPLE_QUOTE_PARITY_DIVISOR == 1:
-                active_triple_quote_delimiter = None
+            active_triple_quote_delimiter = _update_triple_quote_state_for_line(
+                each_line, active_triple_quote_delimiter
+            )
             continue
 
         stripped = each_line.strip()

@@ -52,7 +52,7 @@ Determine which storage backend is available. First success wins.
 - headless: `$OBSIDIAN_VAULT_PATH/sessions/[Project]/[N]. [Title].html` (falls back to `~/.claude/vault/` when the env var is unset)
 - local: `~/.claude/vault/sessions/[Project]/[N]. [Title].html`
 
-Announce the backend: "Using headless vault at [path]." or "Using local vault at ~/.claude/vault/. Install obsidian-headless and set $env:OBSIDIAN_VAULT_PATH to enable sync."
+Announce the backend: "Using headless vault at [path]." or "Using local vault at ~/.claude/vault/. Install obsidian-headless and set the `OBSIDIAN_VAULT_PATH` environment variable (PowerShell: `$env:OBSIDIAN_VAULT_PATH = '<path>'`; POSIX shells: `export OBSIDIAN_VAULT_PATH=<path>`) to enable sync."
 
 ---
 
@@ -138,11 +138,11 @@ The gist URL stays out of the HTML body on purpose: each Edit re-fires the auto-
 
 ## Step 4: Decision Extraction
 
-Scan the conversation for decisions, gotchas, or architectural choices that were not already saved via `/remember` or to memory. For each one found, ask the user via `AskUserQuestion`:
+Scan the conversation for decisions, gotchas, or architectural choices that were not already saved via `/remember`. For each one found, ask the user via `AskUserQuestion`:
 
-> "I noticed this decision: [summary]. Save it to memory?"
+> "I noticed this decision: [summary]. Save it to the vault via `/remember`?"
 
-Only write decision notes the user confirms. If no unrecorded decisions are found, skip silently.
+Only invoke `/remember` for decisions the user confirms; `/remember` writes the decision as a vault note. If no unrecorded decisions are found, skip silently.
 
 ## Step 5: Session Tidy (Project Scope)
 
@@ -191,7 +191,7 @@ The primary outcome comes from the session title resolved in step 1.
 - [ ] `<!-- @publish-as-gist -->` marker present somewhere in the HTML
 - [ ] Frontmatter HTML comment present at top of `<body>`
 - [ ] Opening section answers "what shipped / why / impact" for a cold reader
-- [ ] Self-contained HTML (inline styles, no external refs)
+- [ ] Self-contained HTML (no relative-path asset refs; avoid external dependencies)
 - [ ] Auto-publish URLs captured from step 2 and step 3 (or HTML emitted to chat when step 2 Write failed)
 - [ ] Vault-context line appended via Edit (step 3); step-3 publish's URL pair quoted to the user
 - [ ] Decision extraction surfaced any unrecorded items

@@ -33,9 +33,6 @@ from md_path_exemptions import is_exempt_path  # noqa: E402
 
 _markdown_extension = ".md"
 _html_effectiveness_url = "https://thariqs.github.io/html-effectiveness/"
-_claude_dev_env_source_anchor = (
-    f"{PACKAGES_TOP_LEVEL_SEGMENT}/{CLAUDE_DEV_ENV_REPO_NAME_SEGMENT}/"
-)
 _exempt_anywhere_filenames_summary = ", ".join(ALL_EXEMPT_ANYWHERE_FILENAMES)
 _exempt_plugin_segments_summary = ", ".join(
     f"{each_segment}/" for each_segment in ALL_EXEMPT_PLUGIN_DIRECTORY_SEGMENTS
@@ -44,7 +41,7 @@ _exempt_home_directories_summary = ", ".join(
     f"~/{each_directory}/" for each_directory in ALL_EXEMPT_HOME_RELATIVE_DIRECTORIES
 )
 _claude_dev_env_source_directories_summary = (
-    f"{_claude_dev_env_source_anchor}"
+    f"{PACKAGES_TOP_LEVEL_SEGMENT}/{CLAUDE_DEV_ENV_REPO_NAME_SEGMENT}/"
     f"{{{','.join(sorted(ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES))}}}/"
 )
 

@@ -36,14 +36,6 @@ def test_claude_code_source_top_directories_enumerates_six_canonical_dirs() -> N
     assert "ALL_CLAUDE_CODE_SOURCE_TOP_DIRECTORIES" in constants_module.__all__
 
 
-def test_windows_drive_letter_segment_length_is_two() -> None:
-    """A Windows drive-letter segment is exactly 'X:' (length 2). The constant
-    documents that magic so the absolute-path detector reads as intent rather
-    than as an arbitrary numeric literal."""
-    assert constants_module.WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH == 2
-    assert "WINDOWS_DRIVE_LETTER_SEGMENT_LENGTH" in constants_module.__all__
-
-
 def test_minimum_segment_count_to_match_indicator_is_four() -> None:
     """Matching `packages/claude-dev-env/<dir>/<file>` requires at least 4
     consecutive path segments from the starting index. The constant documents

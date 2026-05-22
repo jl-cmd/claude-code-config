@@ -163,3 +163,13 @@ def test_should_flag_function_definition_with_data_word_in_name() -> None:
     source = "def fetch_data_table() -> None:\n    pass\n"
     issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
     assert any("fetch_data_table" in each_issue for each_issue in issues)
+
+
+def test_should_flag_with_as_binding_target_with_banned_word() -> None:
+    source = (
+        "def load_payload() -> str:\n"
+        "    with open('payload.json') as data_result:\n"
+        "        return data_result.read()\n"
+    )
+    issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
+    assert any("data_result" in each_issue for each_issue in issues)

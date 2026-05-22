@@ -120,7 +120,6 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_SUBSCRIPT_ONLY_COLLECTION_TYPE_NAMES,
     DOTTED_SEGMENT_PATTERN,
     EACH_PREFIX,
-    ALL_EXEMPT_PYTHON_COMMENT_BODIES,
     ALL_FREE_FORM_EXEMPT_COMMENT_BODIES,
     ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES,
     ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES,
@@ -834,10 +833,10 @@ def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
     line 2 or later) is NOT a real shebang and remains subject to the
     no-comments rule.
 
-    Matches any prefix listed in ``ALL_EXEMPT_PYTHON_COMMENT_BODIES``
-    regardless of whether the directive sits flush against the leading
-    hash character or carries one or more whitespace characters (space
-    or tab) between the hash and the directive body.
+    Matches any prefix listed in the token-anchored or free-form exempt-
+    comment-body sets regardless of whether the directive sits flush
+    against the leading hash character or carries one or more whitespace
+    characters (space or tab) between the hash and the directive body.
 
     Token-anchored markers (``noqa``, ``pylint:``, ``pragma:``) are
     exempt only when the comment carries no chained second comment. A
@@ -1388,6 +1387,9 @@ def _collect_banned_noun_word_bindings(
             record(each_node.target.id, each_node.target.lineno, each_node.target.col_offset)
         elif isinstance(each_node, ast.comprehension):
             for each_name_node in _collect_target_names(each_node.target):
+                record(each_name_node.id, each_name_node.lineno, each_name_node.col_offset)
+        elif isinstance(each_node, ast.withitem) and each_node.optional_vars is not None:
+            for each_name_node in _collect_target_names(each_node.optional_vars):
                 record(each_name_node.id, each_name_node.lineno, each_name_node.col_offset)
         elif isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             record(each_node.name, each_node.lineno, each_node.col_offset)

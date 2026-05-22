@@ -47,7 +47,9 @@ Render this exact shape, populating only the fields with concrete values:
 
 ```
 Preserve:
-- Branch: <name> | PR: #<number> | HEAD: <short-sha>
+- Branch: <name>
+- PR: #<number>
+- HEAD: <short-sha>
 - Worktree: <path>
 - In-flight: <one sentence>
 - Decisions: <bullet per decision>
@@ -78,11 +80,11 @@ Write the full `/compact <directive>` string to a temporary file via the
 Write tool, then copy the file contents to the clipboard with PowerShell:
 
 ```
-pwsh -NoProfile -Command "Get-Content -Path '<temp file path>' -Raw | Set-Clipboard"
+pwsh -NoProfile -Command "Get-Content -LiteralPath '<temp file path>' -Raw | Set-Clipboard"
 ```
 
-`Get-Content -Raw` reads the file as a single string and `Set-Clipboard`
-writes it verbatim. The intermediate file keeps the directive content out
+`Get-Content -LiteralPath … -Raw` reads the file as a single string with
+no wildcard expansion, and `Set-Clipboard` writes it verbatim. The intermediate file keeps the directive content out
 of any shell-parsing path: session text passes through `Get-Content`
 unmodified regardless of which characters it contains.
 
@@ -96,8 +98,9 @@ Print this confirmation line to the operator:
 > Copied `/compact …` to your clipboard. Paste it as your next prompt to
 > compact this conversation with focus.
 
-Then list the first three `Preserve:` bullets and the first `Drop:`
-bullet inline so the operator can spot-check before pasting.
+Then list up to the first three `Preserve:` bullets (or fewer when the
+directive omits fields) and the first `Drop:` bullet inline so the
+operator can spot-check before pasting.
 
 ---
 

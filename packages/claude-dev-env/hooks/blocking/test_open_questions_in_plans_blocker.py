@@ -688,3 +688,25 @@ def test_multiedit_missing_file_mixed_valid_invalid_includes_invalid_new_string(
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_edit_with_file_path_pointing_at_directory_does_not_crash(tmp_path):
+    """When `file_path` points at a directory (not a file), `_read_existing_file_text`
+    raises `IsADirectoryError` on `Path.read_text`. The hook must catch it like the
+    other narrow read failures and fall back to scanning the edit's `new_string`."""
+    plans_directory = tmp_path / ".claude" / "plans"
+    plans_directory.mkdir(parents=True, exist_ok=True)
+    directory_as_file_path = plans_directory / "looks-like-file.md"
+    directory_as_file_path.mkdir()
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(directory_as_file_path),
+            "old_string": "preamble",
+            "new_string": "## Open Questions\n- placeholder",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]

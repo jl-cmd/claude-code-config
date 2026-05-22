@@ -59,6 +59,7 @@ def _read_existing_file_text(file_path: str) -> str | None:
     """Return existing file contents, or None when the file is unreadable.
 
     Narrow exceptions only — FileNotFoundError covers the "first write" case,
+    IsADirectoryError covers payloads whose file_path points at a directory,
     PermissionError covers locked or inaccessible files, and UnicodeDecodeError
     covers binary contents that the markdown scan cannot reason about. Any
     other failure is left to propagate.

@@ -30,7 +30,7 @@ not already in context.
 |---|---|---|
 | `branch` | Active branch name | `git branch --show-current` |
 | `pr` | Active PR number, when one exists | `gh pr view --json number` |
-| `head` | First 7 chars of HEAD SHA | `git rev-parse --short HEAD` |
+| `head` | Short HEAD SHA (whatever `git rev-parse --short` outputs) | `git rev-parse --short HEAD` |
 | `worktree` | Absolute path to the working directory | `pwd` |
 | `in_flight` | One sentence describing what is being worked on right now | conversation |
 | `decisions` | Architectural choices, library picks, tradeoffs settled this session | conversation |
@@ -47,7 +47,7 @@ Render this exact shape, populating only the fields with concrete values:
 
 ```
 Preserve:
-- Branch: <name> | PR: #<number> | HEAD: <sha7>
+- Branch: <name> | PR: #<number> | HEAD: <short-sha>
 - Worktree: <path>
 - In-flight: <one sentence>
 - Decisions: <bullet per decision>
@@ -74,28 +74,30 @@ precision by eliminating superfluous content."
 
 ## Step 3 — Copy `/compact <directive>` to the clipboard
 
-Combine `/compact ` with the directive body, then pipe to PowerShell
-`Set-Clipboard` via a literal here-string:
+Write the full `/compact <directive>` string to a temporary file via the
+Write tool, then copy the file contents to the clipboard with PowerShell:
 
 ```
-pwsh -NoProfile -Command "@'
-/compact <directive body>
-'@ | Set-Clipboard"
+pwsh -NoProfile -Command "Get-Content -Path '<temp file path>' -Raw | Set-Clipboard"
 ```
 
-The `@'…'@` here-string passes the directive verbatim — single quotes,
-backticks, and `$` survive intact. The closing `'@` sits at column 0 with
-no leading whitespace.
+`Get-Content -Raw` reads the file as a single string and `Set-Clipboard`
+writes it verbatim. The intermediate file keeps the directive content out
+of any shell-parsing path: session text passes through `Get-Content`
+unmodified regardless of which characters it contains.
+
+A reasonable temp path under `$env:TEMP` (Windows) or `$TMPDIR` (POSIX)
+works; clean it up after the `Set-Clipboard` call returns.
 
 ## Step 4 — Hand off
 
-Output exactly:
+Print this confirmation line to the operator:
 
 > Copied `/compact …` to your clipboard. Paste it as your next prompt to
 > compact this conversation with focus.
 
-Show the first three `Preserve:` bullets and the first `Drop:` bullet
-inline so the operator can spot-check before pasting.
+Then list the first three `Preserve:` bullets and the first `Drop:`
+bullet inline so the operator can spot-check before pasting.
 
 ---
 
@@ -103,12 +105,6 @@ inline so the operator can spot-check before pasting.
 
 - `/compact [instructions]` — [Claude Code commands](https://code.claude.com/docs/en/commands)
 - Compaction strategy — [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
-
-## File index
-
-| File | Purpose |
-|------|---------|
-| `SKILL.md` | This hub — the entire skill. |
 
 ## Folder map
 

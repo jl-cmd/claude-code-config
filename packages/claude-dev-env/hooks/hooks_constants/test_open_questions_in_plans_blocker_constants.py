@@ -97,7 +97,12 @@ def test_inline_code_pattern_in_export_list() -> None:
     assert "INLINE_CODE_PATTERN" in constants_module.__all__
 
 
-def test_all_exports_enumerates_six_public_constants_in_sorted_order() -> None:
+def test_plan_file_encoding_is_utf8() -> None:
+    assert constants_module.PLAN_FILE_ENCODING == "utf-8"
+    assert "PLAN_FILE_ENCODING" in constants_module.__all__
+
+
+def test_all_exports_enumerates_seven_public_constants_in_sorted_order() -> None:
     expected_exports = [
         "CODE_FENCE_PATTERN",
         "INLINE_CODE_PATTERN",
@@ -105,5 +110,6 @@ def test_all_exports_enumerates_six_public_constants_in_sorted_order() -> None:
         "OPEN_QUESTIONS_HEADING_PATTERN",
         "PLANS_PATH_PREFIX",
         "PLANS_PATH_SEGMENT",
+        "PLAN_FILE_ENCODING",
     ]
     assert constants_module.__all__ == expected_exports

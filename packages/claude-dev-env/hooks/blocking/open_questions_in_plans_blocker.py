@@ -23,6 +23,7 @@ from hooks_constants.open_questions_in_plans_blocker_constants import (  # noqa:
     INLINE_CODE_PATTERN,
     MARKDOWN_EXTENSION,
     OPEN_QUESTIONS_HEADING_PATTERN,
+    PLAN_FILE_ENCODING,
     PLANS_PATH_PREFIX,
     PLANS_PATH_SEGMENT,
 )
@@ -54,22 +55,62 @@ def _content_has_open_questions(text: str) -> bool:
     return bool(OPEN_QUESTIONS_HEADING_PATTERN.search(_strip_code_regions(text)))
 
 
-def _extract_candidate_content(tool_name: str, tool_input: dict) -> str:
+def _read_existing_file_text(file_path: str) -> str | None:
+    """Return existing file contents, or None when the file is unreadable.
+
+    Narrow exceptions only — FileNotFoundError covers the "first write" case,
+    PermissionError covers locked or inaccessible files, and UnicodeDecodeError
+    covers binary contents that the markdown scan cannot reason about. Any
+    other failure is left to propagate.
+    """
+    try:
+        return Path(file_path).read_text(encoding=PLAN_FILE_ENCODING)
+    except (FileNotFoundError, IsADirectoryError, PermissionError, OSError, UnicodeDecodeError):
+        return None
+
+
+def _apply_edit_to_text(existing_text: str, old_string: str, new_string: str) -> str:
+    """Apply Claude Code's Edit semantics: replace the first occurrence only."""
+    return existing_text.replace(old_string, new_string, 1)
+
+
+def _post_edit_content_for_edit(existing_text: str | None, tool_input: dict) -> str:
+    old_string = tool_input.get("old_string", "")
+    new_string = tool_input.get("new_string", "")
+    safe_old = old_string if isinstance(old_string, str) else ""
+    safe_new = new_string if isinstance(new_string, str) else ""
+    if existing_text is None:
+        return safe_new
+    return _apply_edit_to_text(existing_text, safe_old, safe_new)
+
+
+def _post_edit_content_for_multiedit(existing_text: str | None, tool_input: dict) -> str:
+    all_edits = tool_input.get("edits", []) or []
+    accumulated_text = existing_text if existing_text is not None else ""
+    fallback_new_strings: list[str] = []
+    for each_edit in all_edits:
+        if not isinstance(each_edit, dict):
+            continue
+        old_string = each_edit.get("old_string", "")
+        new_string = each_edit.get("new_string", "")
+        safe_old = old_string if isinstance(old_string, str) else ""
+        safe_new = new_string if isinstance(new_string, str) else ""
+        accumulated_text = _apply_edit_to_text(accumulated_text, safe_old, safe_new)
+        fallback_new_strings.append(safe_new)
+    if existing_text is None:
+        return "\n".join(fallback_new_strings)
+    return accumulated_text
+
+
+def _extract_candidate_content(tool_name: str, tool_input: dict, file_path: str) -> str:
     if tool_name == "Write":
         content = tool_input.get("content", "")
         return content if isinstance(content, str) else ""
+    existing_text = _read_existing_file_text(file_path)
     if tool_name == "Edit":
-        new_string = tool_input.get("new_string", "")
-        return new_string if isinstance(new_string, str) else ""
+        return _post_edit_content_for_edit(existing_text, tool_input)
     if tool_name == "MultiEdit":
-        all_edits = tool_input.get("edits", []) or []
-        joined_new_strings: list[str] = []
-        for each_edit in all_edits:
-            if isinstance(each_edit, dict):
-                each_new_string = each_edit.get("new_string", "")
-                if isinstance(each_new_string, str):
-                    joined_new_strings.append(each_new_string)
-        return "\n".join(joined_new_strings)
+        return _post_edit_content_for_multiedit(existing_text, tool_input)
     return ""
 
 
@@ -139,7 +180,7 @@ def main() -> None:
     if not _is_inside_plans_directory(file_path):
         sys.exit(0)
 
-    candidate_content = _extract_candidate_content(tool_name, tool_input)
+    candidate_content = _extract_candidate_content(tool_name, tool_input, file_path)
     if not _content_has_open_questions(candidate_content):
         sys.exit(0)
 

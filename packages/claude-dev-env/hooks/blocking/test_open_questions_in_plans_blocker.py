@@ -363,3 +363,115 @@ def test_blocks_windows_style_plans_path():
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def _make_plan_file_on_disk(tmp_path, content: str):
+    plans_directory = tmp_path / ".claude" / "plans"
+    plans_directory.mkdir(parents=True, exist_ok=True)
+    plan_file = plans_directory / "existing-plan.md"
+    plan_file.write_text(content, encoding="utf-8")
+    return plan_file
+
+
+def test_blocks_edit_when_existing_file_has_open_questions_outside_edit_window(tmp_path):
+    """An Edit that touches unrelated text must STILL block when the file on disk
+    already contains an `## Open Questions` heading that the edit does not remove."""
+    existing_content = (
+        "## Context\nA plan.\n\n## Open Questions\n- Which auth provider?\n\n"
+        "## Approach\nDo the thing.\n"
+    )
+    plan_file = _make_plan_file_on_disk(tmp_path, existing_content)
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(plan_file),
+            "old_string": "## Approach\nDo the thing.",
+            "new_string": "## Approach\nDo the thing better.",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_blocks_multiedit_when_existing_file_has_open_questions_untouched_by_any_edit(tmp_path):
+    """A MultiEdit whose edits leave the existing `## Open Questions` section
+    on disk untouched must still block."""
+    existing_content = (
+        "# Plan\n\n## Open Questions\n- Which DB?\n\n## Steps\n- step one\n- step two\n"
+    )
+    plan_file = _make_plan_file_on_disk(tmp_path, existing_content)
+    result = _run_hook(
+        "MultiEdit",
+        {
+            "file_path": str(plan_file),
+            "edits": [
+                {"old_string": "step one", "new_string": "first step"},
+                {"old_string": "step two", "new_string": "second step"},
+            ],
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_passes_edit_that_removes_open_questions_from_existing_file(tmp_path):
+    """An Edit that replaces the existing `## Open Questions` section with a
+    resolved section must NOT block — the post-edit content has no heading."""
+    existing_content = (
+        "## Context\nA plan.\n\n## Open Questions\n- Which auth provider?\n\n"
+        "## Approach\nDo the thing.\n"
+    )
+    plan_file = _make_plan_file_on_disk(tmp_path, existing_content)
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(plan_file),
+            "old_string": "## Open Questions\n- Which auth provider?",
+            "new_string": "## Auth\nUse OAuth via the existing provider.",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_multiedit_that_removes_open_questions_from_existing_file(tmp_path):
+    """A MultiEdit whose edits collectively remove the existing `## Open Questions`
+    section must NOT block — the post-edit content has no heading."""
+    existing_content = (
+        "# Plan\n\n## Open Questions\n- Which DB?\n\n## Steps\n- step one\n"
+    )
+    plan_file = _make_plan_file_on_disk(tmp_path, existing_content)
+    result = _run_hook(
+        "MultiEdit",
+        {
+            "file_path": str(plan_file),
+            "edits": [
+                {"old_string": "## Open Questions\n- Which DB?", "new_string": "## DB\nPostgres"},
+                {"old_string": "step one", "new_string": "first step"},
+            ],
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_blocks_edit_when_file_missing_but_new_string_has_open_questions(tmp_path):
+    """When the target file does not exist on disk, the hook must fall back to
+    scanning `new_string` (preserves existing behavior for first-write edits)."""
+    plans_directory = tmp_path / ".claude" / "plans"
+    plans_directory.mkdir(parents=True, exist_ok=True)
+    missing_plan_file = plans_directory / "not-yet-saved.md"
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(missing_plan_file),
+            "old_string": "## Approach\nDo it.",
+            "new_string": "## Approach\nDo it.\n\n## Open Questions\n- foo",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"

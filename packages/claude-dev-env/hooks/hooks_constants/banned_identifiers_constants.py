@@ -53,6 +53,3 @@ BANNED_NOUN_WORD_MESSAGE_SUFFIX: str = (
 BANNED_IDENTIFIER_SKIP_ADVISORY: str = (
     "banned-identifier check skipped: file did not parse as Python"
 )
-BANNED_NOUN_WORD_SKIP_ADVISORY: str = (
-    "banned-noun-word check skipped: file did not parse as Python"
-)

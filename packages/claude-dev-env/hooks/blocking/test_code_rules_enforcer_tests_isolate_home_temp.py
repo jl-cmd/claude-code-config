@@ -151,6 +151,20 @@ def test_should_ignore_module_level_helpers_in_test_files() -> None:
     assert issues == []
 
 
+def test_should_ignore_helper_named_with_bare_test_prefix() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def testing_factory() -> Path:\n"
+        "    return Path.home()\n"
+        "def testify_connection() -> Path:\n"
+        "    return Path.home()\n"
+        "def testament_root() -> Path:\n"
+        "    return Path.home()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
 def test_should_handle_async_test_functions() -> None:
     source = (
         "from pathlib import Path\n"

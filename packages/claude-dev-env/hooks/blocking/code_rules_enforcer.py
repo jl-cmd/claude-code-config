@@ -2531,7 +2531,7 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
     for each_node in ast.walk(syntax_tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        if not (each_node.name.startswith("test") or each_node.name.startswith("should_")):
+        if not (each_node.name.startswith("test_") or each_node.name.startswith("should_")):
             continue
         if _function_uses_pytest_isolation_fixture(each_node):
             continue

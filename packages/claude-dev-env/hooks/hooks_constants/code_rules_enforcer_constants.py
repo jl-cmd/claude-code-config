@@ -95,14 +95,10 @@ INLINE_COLLECTION_MIN_LENGTH = 3
 ALL_CAPS_WITH_UNDERSCORE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
 DOTTED_SEGMENT_PATTERN = re.compile(r"^\.[a-z][a-z0-9_]*$")
 
-FUNCTION_LENGTH_ADVISORY_THRESHOLD: int = 30
 FUNCTION_LENGTH_BLOCKING_THRESHOLD: int = 60
 MAX_FUNCTION_LENGTH_BLOCKING_ISSUES: int = 5
 FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX: str = (
     "exceeds blocking threshold - split into helpers (see CODE_RULES §6.5)"
-)
-FUNCTION_LENGTH_ADVISORY_MESSAGE_SUFFIX: str = (
-    "exceeds advisory threshold - consider splitting (see CODE_RULES §6.5)"
 )
 
 ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES: frozenset[str] = frozenset({

@@ -30,16 +30,22 @@ UPPER_SNAKE_CONSTANT_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 TYPE_CHECKING_BLOCK_PATTERN = re.compile(r"^(?P<indent>\s*)if\s+(typing\.)?TYPE_CHECKING\s*:\s*$")
 ALL_IMPORT_STATEMENT_PREFIXES: tuple[str, ...] = ("import ", "from ")
-ALL_EXEMPT_PYTHON_COMMENT_BODIES: tuple[str, ...] = (
-    "type:",
+ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES: tuple[str, ...] = (
     "noqa",
     "pylint:",
     "pragma:",
+)
+ALL_FREE_FORM_EXEMPT_COMMENT_BODIES: tuple[str, ...] = (
+    "type:",
     "TODO",
     "FIXME",
     "HACK",
     "XXX",
 )
+ALL_EXEMPT_PYTHON_COMMENT_BODIES: tuple[str, ...] = (
+    ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES + ALL_FREE_FORM_EXEMPT_COMMENT_BODIES
+)
+CHAINED_INLINE_COMMENT_PATTERN = re.compile(r"\s#\s")
 ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES: tuple[str, ...] = (
     "// @ts-",
     "// eslint-",
@@ -88,3 +94,45 @@ BARE_EACH_TOKEN = "each"
 INLINE_COLLECTION_MIN_LENGTH = 3
 ALL_CAPS_WITH_UNDERSCORE_PATTERN = re.compile(r"^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$")
 DOTTED_SEGMENT_PATTERN = re.compile(r"^\.[a-z][a-z0-9_]*$")
+
+FUNCTION_LENGTH_ADVISORY_THRESHOLD: int = 30
+FUNCTION_LENGTH_BLOCKING_THRESHOLD: int = 60
+MAX_FUNCTION_LENGTH_BLOCKING_ISSUES: int = 5
+FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX: str = (
+    "exceeds blocking threshold - split into helpers (see CODE_RULES §6.5)"
+)
+FUNCTION_LENGTH_ADVISORY_MESSAGE_SUFFIX: str = (
+    "exceeds advisory threshold - consider splitting (see CODE_RULES §6.5)"
+)
+
+ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES: frozenset[str] = frozenset({
+    "tmp_path",
+    "tmp_path_factory",
+    "tmpdir",
+    "tmpdir_factory",
+    "monkeypatch",
+})
+ALL_HOME_DIRECTORY_ENV_VAR_NAMES: frozenset[str] = frozenset({
+    "HOME",
+    "USERPROFILE",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+})
+ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
+    "Path.home",
+    "pathlib.Path.home",
+    "os.path.expanduser",
+    "os.path.expandvars",
+    "tempfile.gettempdir",
+    "tempfile.gettempprefix",
+    "tempfile.mkstemp",
+    "tempfile.mkdtemp",
+})
+MAX_TEST_ISOLATION_ISSUES: int = 5
+TEST_ISOLATION_MESSAGE_SUFFIX: str = (
+    "must use tmp_path / monkeypatch isolation; calling real HOME or TMP "
+    "leaks across the suite (CODE_RULES — see audits 2026-05-22 Theme M)"
+)

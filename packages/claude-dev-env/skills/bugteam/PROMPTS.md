@@ -24,9 +24,9 @@ cd into `<worktree_path>` before any git or file operation.
 </scope>
 
 <bug_categories>
-  Investigate each of the eleven categories (A–K) explicitly. For each,
+  Investigate each of the fourteen categories (A–N) explicitly. For each,
   return either at least one finding OR a verified-clean entry with the
-  evidence used to clear it. A category is verified-clean only when one
+  evidence backing the verdict. A category is verified-clean only when one
   complete execution path through the changed code has been traced from
   entry to exit. Surface-level scanning is insufficient evidence. The
   evidence field must name (1) the specific function examined, (2) the
@@ -37,7 +37,7 @@ cd into `<worktree_path>` before any git or file operation.
   When evidence contains any of these phrases, the category is not
   verified-clean -- re-audit with a concrete trace.
 
-  Categories A–K (one-line summary; full rubric and sub-bucket decomposition
+  Categories A–N (one-line summary; full rubric and sub-bucket decomposition
   for each is in `$HOME/.claude/audit-rubrics/category_rubrics/`;
   ready-to-send Variant C prompts — each with a PR/repo-independent
   generalized skeleton above a `---` separator and a worked example against
@@ -58,6 +58,42 @@ cd into `<worktree_path>` before any git or file operation.
      site in unchanged code stays stale, producing contradictory behavior;
      the diff is internally consistent, the bug emerges only against unchanged
      code (canonical example: jl-cmd/claude-code-config PR #397 r3210166636)
+  L. Behavior-equivalence for refactors. When the PR rewrites an existing
+     function (especially an enforcement check, parser, or path classifier),
+     compare the rewrite's edge-case handling against the sibling implementation
+     at the same git commit base. Pin the historically-valid inputs in a
+     `KNOWN_GOOD_INPUTS` table and assert each still passes. Cited in audits:
+     ccc#479 F1 (`#noqa` no-space variant dropped after a tokenize-based
+     refactor); ccc#479 F4 (bare `#` lookalike misclassified after refactor);
+     ccc#479 F5 (inline `#!` lookalike misclassified); ccc#479 F6 (early-exit
+     invariant dropped); ccc#472 F44 (`startswith('## Problem')` too loose vs
+     the sibling regex shape).
+  M. Producer/consumer cardinality vs collection-type contract. For each new
+     function returning `list[X]`, `Sequence[X]`, or `Iterable[X]`, ask
+     whether the return can contain duplicates and whether any downstream
+     consumer treats the value as a set. Subprocess-stdout parsers must return
+     `frozenset[Path]` or `dict.fromkeys`-deduplicated `list[Path]`.
+     Functions whose consumer is itself an `extend(...)` into a list pass;
+     functions with explicit "duplicates preserved" docstring text pass.
+     Cited in audits: pa#143 F10 (`_extract_paths_from_everything_cli_stdout`
+     duplicates → `RuntimeError` — the only High-severity crash bug in the
+     audit set); pa#136 F30 / F32 (duplicate content_id rows submit twice;
+     writeback ignores content_id key).
+  N. Test-name claims a scenario the body does not enter. Tests named
+     `test_*_at_*`, `test_*_under_*`, `test_*_when_*`, and `test_*_with_*`
+     must, via monkeypatch / fixture inspection, demonstrate the named
+     condition is in effect when the system under test runs. Path-decision
+     functions (registered in `*_path_exemptions.py` / `is_*_path` /
+     `_resolve_*_path` modules) must ship with a parametric matrix of
+     canonical edge cases (empty string, single filename, tilde, UNC,
+     drive-letter, symlinked, `..`-containing, trailing-slash). Tests with
+     neutral names (`test_returns_empty_list_on_x`) are unaffected. Cited
+     in audits: ccc#476 F5 / F21 / F23 / F26 / F27 (cross-platform
+     scenarios never exercised under the claimed conditions); pa#135 F11 /
+     F15 (string-shape and integration tests that exercise only the no-op
+     branch); pa#136 F50 (`<substring> not in executed_sql` assertion that
+     cannot fail because the substring shape never matches the real
+     fragment).
 </bug_categories>
 
 <constraints>

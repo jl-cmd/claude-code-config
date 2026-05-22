@@ -1,0 +1,125 @@
+"""Tests for ``check_function_length``.
+
+Bodies at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60 lines) block the
+write (see CODE_RULES §6.5). Bodies below the threshold pass silently.
+
+Cited SYNTHESIS evidence: pa#143 F4, F9, F14 (three recurrences in one PR);
+pa#136 F20.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import pathlib
+import sys
+
+_HOOK_DIR = pathlib.Path(__file__).parent
+if str(_HOOK_DIR) not in sys.path:
+    sys.path.insert(0, str(_HOOK_DIR))
+
+hook_spec = importlib.util.spec_from_file_location(
+    "code_rules_enforcer",
+    _HOOK_DIR / "code_rules_enforcer.py",
+)
+assert hook_spec is not None
+assert hook_spec.loader is not None
+hook_module = importlib.util.module_from_spec(hook_spec)
+hook_spec.loader.exec_module(hook_module)
+check_function_length = hook_module.check_function_length
+
+PRODUCTION_FILE_PATH = "/project/src/long_module.py"
+TEST_FILE_PATH = "/project/src/test_long_module.py"
+MIGRATION_FILE_PATH = "/project/src/migrations/0001_initial.py"
+HOOK_INFRASTRUCTURE_PATH = "/packages/claude-dev-env/hooks/blocking/example.py"
+
+
+def _build_function_source(name: str, body_line_count: int) -> str:
+    body_lines = [
+        f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
+    ]
+    body_block = "\n".join(body_lines)
+    return f"def {name}() -> None:\n{body_block}\n"
+
+
+def test_should_not_flag_short_function() -> None:
+    source = _build_function_source("compact_helper", body_line_count=5)
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert issues == []
+
+
+def test_should_not_block_mid_band_function_under_blocking_threshold() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 5
+    source = _build_function_source("mid_helper", body_line_count=body_line_count)
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert issues == []
+
+
+def test_should_block_at_sixty_lines() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    source = _build_function_source("oversized_helper", body_line_count=body_line_count)
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert any("oversized_helper" in each_issue for each_issue in issues)
+    assert any("blocking" in each_issue.lower() for each_issue in issues)
+
+
+def test_should_handle_async_function_definitions() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    body_lines = [
+        f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
+    ]
+    source = "async def long_async_helper() -> None:\n" + "\n".join(body_lines) + "\n"
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert any("long_async_helper" in each_issue for each_issue in issues)
+
+
+def test_should_skip_test_files() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    source = _build_function_source("test_long_scenario", body_line_count=body_line_count)
+    issues = check_function_length(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_skip_migrations() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    source = _build_function_source("operation_body", body_line_count=body_line_count)
+    issues = check_function_length(source, MIGRATION_FILE_PATH)
+    assert issues == []
+
+
+def test_should_skip_hook_infrastructure() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    source = _build_function_source("hook_helper", body_line_count=body_line_count)
+    issues = check_function_length(source, HOOK_INFRASTRUCTURE_PATH)
+    assert issues == []
+
+
+def test_should_skip_when_source_does_not_parse() -> None:
+    source = "def broken(:\n"
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert issues == []
+
+
+def test_should_cap_blocking_issue_count_at_configured_maximum() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    body_lines = [
+        f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
+    ]
+    body_block = "\n".join(body_lines)
+    function_count = hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES + 3
+    chunks = [
+        f"def f_{each_index}() -> None:\n{body_block}\n" for each_index in range(function_count)
+    ]
+    source = "\n".join(chunks)
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert len(issues) == hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
+
+
+def test_should_block_nested_function_over_blocking_threshold() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    inner_body = "\n".join(
+        f"        inner_statement_{each_index} = {each_index}"
+        for each_index in range(body_line_count)
+    )
+    source = f"def outer() -> None:\n    def inner() -> None:\n{inner_body}\n"
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert any("inner" in each_issue for each_issue in issues)

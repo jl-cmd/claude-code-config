@@ -42,9 +42,13 @@ if _HOOKS_DIR not in sys.path:
 from code_rules_path_utils import is_config_file  # noqa: E402
 from hooks_constants.banned_identifiers_constants import (  # noqa: E402
     ALL_BANNED_IDENTIFIERS,
+    ALL_BANNED_NOUN_WORDS,
     BANNED_IDENTIFIER_MESSAGE_SUFFIX,
     BANNED_IDENTIFIER_SKIP_ADVISORY,
+    BANNED_NOUN_WORD_MESSAGE_SUFFIX,
+    CAMEL_CASE_WORD_PATTERN,
     MAX_BANNED_IDENTIFIER_ISSUES,
+    MAX_BANNED_NOUN_WORD_ISSUES,
 )
 from hooks_constants.hardcoded_user_path_constants import (  # noqa: E402
     HARDCODED_USER_PATH_GUIDANCE,
@@ -100,16 +104,25 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ADVISORY_LINE_THRESHOLD_SOFT,
     ALL_CODE_EXTENSIONS,
     ALL_CAPS_WITH_UNDERSCORE_PATTERN,
+    ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES,
+    ALL_HOME_DIRECTORY_ENV_VAR_NAMES,
+    ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
+    FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
+    FUNCTION_LENGTH_BLOCKING_THRESHOLD,
+    MAX_FUNCTION_LENGTH_BLOCKING_ISSUES,
     BARE_EACH_TOKEN,
     ALL_BOOLEAN_NAME_PREFIXES,
     ALL_BUILTIN_DICT_METHOD_NAMES,
     ALL_CLI_FILE_PATH_MARKERS,
+    CHAINED_INLINE_COMMENT_PATTERN,
     COLLECTION_BY_NAME_PATTERN,
     ALL_COLLECTION_TYPE_NAMES,
     ALL_SUBSCRIPT_ONLY_COLLECTION_TYPE_NAMES,
     DOTTED_SEGMENT_PATTERN,
     EACH_PREFIX,
     ALL_EXEMPT_PYTHON_COMMENT_BODIES,
+    ALL_FREE_FORM_EXEMPT_COMMENT_BODIES,
+    ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES,
     ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES,
     ALL_JAVASCRIPT_EXEMPT_INLINE_COMMENT_PREFIXES,
     ALL_PYTHON_TOKENIZE_FAILURE_EXCEPTIONS,
@@ -117,6 +130,8 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_HOOK_INFRASTRUCTURE_PATTERNS,
     ALL_IMPORT_STATEMENT_PREFIXES,
     MAX_COMMENT_ISSUES,
+    MAX_TEST_ISOLATION_ISSUES,
+    TEST_ISOLATION_MESSAGE_SUFFIX,
     INLINE_COLLECTION_MIN_LENGTH,
     ALL_JAVASCRIPT_EXTENSIONS,
     LOGGING_FSTRING_PATTERN,
@@ -822,10 +837,20 @@ def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
     Matches any prefix listed in ``ALL_EXEMPT_PYTHON_COMMENT_BODIES``
     regardless of whether the directive sits flush against the leading
     hash character or carries one or more whitespace characters (space
-    or tab) between the hash and the directive body. The pre-tokenize
-    implementation accepted both forms via its line-slice-then-strip
-    step; this helper preserves that behavior on top of the
-    tokenize-based scan.
+    or tab) between the hash and the directive body.
+
+    Token-anchored markers (``noqa``, ``pylint:``, ``pragma:``) are
+    exempt only when the comment carries no chained second comment. A
+    chained ``\\s#\\s`` sequence inside the comment body — for example
+    ``# noqa: F401  # imported for re-export`` — indicates a second
+    free-form inline comment piggybacking on the exempt marker; the
+    trailing prose is not itself an exempt directive and therefore
+    must not inherit exemption. Free-form markers (``type:``,
+    ``TODO``, ``FIXME``, ``HACK``, ``XXX``) accept any trailing prose:
+    ``# type:`` participates in the documented justification
+    convention enforced by ``check_type_escape_hatches`` (which
+    requires a trailing reason), and the TODO-family markers carry
+    annotation text by convention.
     """
     comment_string = comment_token.string
     if comment_string.startswith("#!") and comment_token.start == (1, 0):
@@ -833,7 +858,11 @@ def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
     directive_body = comment_string[1:].lstrip()
     if not directive_body:
         return True
-    return directive_body.startswith(ALL_EXEMPT_PYTHON_COMMENT_BODIES)
+    if directive_body.startswith(ALL_FREE_FORM_EXEMPT_COMMENT_BODIES):
+        return True
+    if not directive_body.startswith(ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES):
+        return False
+    return CHAINED_INLINE_COMMENT_PATTERN.search(directive_body) is None
 
 
 def _extract_python_comment_sets(content: str) -> tuple[set[str], set[str], bool]:
@@ -1264,6 +1293,161 @@ def check_banned_identifiers(content: str, file_path: str) -> list[str]:
         if len(issues) >= MAX_BANNED_IDENTIFIER_ISSUES:
             break
 
+    return issues
+
+
+def _identifier_word_parts(identifier: str) -> list[str]:
+    """Split an identifier into lowercase word parts.
+
+    Handles snake_case (split on ``_``), SCREAMING_SNAKE_CASE, and camelCase /
+    PascalCase (split on capital-letter boundaries). Returns a list of
+    lowercased word tokens for membership comparison against banned-noun
+    vocabularies.
+
+    Args:
+        identifier: A Python identifier (variable, parameter, class, or
+            function name).
+
+    Returns:
+        Word tokens in their original order, lowercased. Empty list when the
+        identifier carries no letter characters.
+    """
+    all_words: list[str] = []
+    for each_snake_segment in identifier.split("_"):
+        if not each_snake_segment:
+            continue
+        camel_pieces = CAMEL_CASE_WORD_PATTERN.findall(each_snake_segment)
+        if camel_pieces:
+            for each_piece in camel_pieces:
+                all_words.append(each_piece.lower())
+        else:
+            all_words.append(each_snake_segment.lower())
+    return all_words
+
+
+def _find_banned_noun_word(identifier: str) -> str | None:
+    """Return the first banned-noun word embedded in *identifier*, or None.
+
+    Args:
+        identifier: A Python identifier.
+
+    Returns:
+        The lowercased banned noun word that appears as a word part inside the
+        identifier (e.g., ``'result'`` for ``'HolidayPeakResult'``). Returns
+        ``None`` when no banned noun word is present.
+    """
+    for each_word in _identifier_word_parts(identifier):
+        if each_word in ALL_BANNED_NOUN_WORDS:
+            return each_word
+    return None
+
+
+def _is_dunder_name(identifier: str) -> bool:
+    return identifier.startswith("__") and identifier.endswith("__")
+
+
+def _collect_banned_noun_word_bindings(
+    parsed_tree: ast.AST,
+) -> list[tuple[str, int, int, str]]:
+    """Yield ``(identifier, lineno, col_offset, banned_word)`` for each binding.
+
+    Walks assignment targets, annotated assignments, function/method
+    parameters, function/method definitions, and class definitions. Skips
+    identifiers that already match ``ALL_BANNED_IDENTIFIERS`` exactly (those
+    are reported by ``check_banned_identifiers``) and dunder names.
+    """
+    flagged_bindings: list[tuple[str, int, int, str]] = []
+    seen_keys: set[tuple[str, int, int]] = set()
+
+    def record(name: str, lineno: int, col_offset: int) -> None:
+        if name in ALL_BANNED_IDENTIFIERS:
+            return
+        if _is_dunder_name(name):
+            return
+        banned_word = _find_banned_noun_word(name)
+        if banned_word is None:
+            return
+        key = (name, lineno, col_offset)
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        flagged_bindings.append((name, lineno, col_offset, banned_word))
+
+    for each_node in ast.walk(parsed_tree):
+        if isinstance(each_node, ast.Assign):
+            for each_target in each_node.targets:
+                for each_name_node in _collect_target_names(each_target):
+                    record(each_name_node.id, each_name_node.lineno, each_name_node.col_offset)
+        elif isinstance(each_node, ast.AnnAssign):
+            for each_name_node in _collect_target_names(each_node.target):
+                record(each_name_node.id, each_name_node.lineno, each_name_node.col_offset)
+        elif isinstance(each_node, (ast.For, ast.AsyncFor)):
+            for each_name_node in _collect_target_names(each_node.target):
+                record(each_name_node.id, each_name_node.lineno, each_name_node.col_offset)
+        elif isinstance(each_node, ast.NamedExpr) and isinstance(each_node.target, ast.Name):
+            record(each_node.target.id, each_node.target.lineno, each_node.target.col_offset)
+        elif isinstance(each_node, ast.comprehension):
+            for each_name_node in _collect_target_names(each_node.target):
+                record(each_name_node.id, each_name_node.lineno, each_name_node.col_offset)
+        elif isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            record(each_node.name, each_node.lineno, each_node.col_offset)
+            for each_arg in _collect_annotated_arguments(each_node):
+                if each_arg.arg in ALL_SELF_AND_CLS_PARAMETER_NAMES:
+                    continue
+                record(each_arg.arg, each_arg.lineno, each_arg.col_offset)
+        elif isinstance(each_node, ast.ClassDef):
+            record(each_node.name, each_node.lineno, each_node.col_offset)
+
+    flagged_bindings.sort(key=lambda binding: (binding[1], binding[2]))
+    return flagged_bindings
+
+
+def check_banned_noun_word_boundary(content: str, file_path: str) -> list[str]:
+    """Flag identifiers containing CODE_RULES §5 banned noun words.
+
+    Companion to ``check_banned_identifiers`` (exact-match cases only). This
+    check catches the wider pattern: a banned noun (``result``, ``data``,
+    ``output``, ``response``, ``value``, ``item``, ``temp``) appearing as a
+    snake_case word part or camelCase word part inside a longer identifier
+    (``canned_results``, ``HolidayPeakResult``, ``OUTPUT_DIR``,
+    ``cached_response``).
+
+    Skips test files, config files, hook infrastructure, workflow registries,
+    and migrations. Identifiers that exactly match ``ALL_BANNED_IDENTIFIERS``
+    are skipped because they are already reported by
+    ``check_banned_identifiers``.
+
+    Args:
+        content: The Python source to analyze.
+        file_path: The path of the file being checked (used for exemption
+            routing).
+
+    Returns:
+        A list of issue strings, each describing one offending binding. Capped
+        at ``MAX_BANNED_NOUN_WORD_ISSUES`` so a single file with many
+        violations does not flood the diagnostic payload.
+    """
+    if is_test_file(file_path) or is_hook_infrastructure(file_path):
+        return []
+    if is_config_file(file_path):
+        return []
+    if is_workflow_registry_file(file_path):
+        return []
+    if is_migration_file(file_path):
+        return []
+
+    try:
+        parsed_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    issues: list[str] = []
+    for each_name, each_lineno, _, each_word in _collect_banned_noun_word_bindings(parsed_tree):
+        issues.append(
+            f"Line {each_lineno}: Identifier {each_name!r} {BANNED_NOUN_WORD_MESSAGE_SUFFIX} (word: {each_word!r})"
+        )
+        if len(issues) >= MAX_BANNED_NOUN_WORD_ISSUES:
+            break
     return issues
 
 
@@ -2225,6 +2409,138 @@ def check_skip_decorators_in_tests(content: str, file_path: str) -> list[str]:
                     f" — tests must fail on missing deps"
                 )
 
+    return issues
+
+
+def _dotted_call_attribute_chain(call_node: ast.Call) -> str | None:
+    """Return the dotted name path of *call_node*'s callee, or None.
+
+    For ``pathlib.Path.home()`` returns ``"pathlib.Path.home"``; for
+    ``Path.home()`` returns ``"Path.home"``; for ``tempfile.gettempdir()``
+    returns ``"tempfile.gettempdir"``. Returns ``None`` when the call target
+    is not a pure attribute chain rooted at an ``ast.Name`` (for example,
+    ``obj.method()`` where ``obj`` is the result of another expression).
+    """
+    chain_parts: list[str] = []
+    walker: ast.expr = call_node.func
+    while isinstance(walker, ast.Attribute):
+        chain_parts.append(walker.attr)
+        walker = walker.value
+    if not isinstance(walker, ast.Name):
+        return None
+    chain_parts.append(walker.id)
+    chain_parts.reverse()
+    return ".".join(chain_parts)
+
+
+def _environ_key_string_from_call(call_node: ast.Call) -> str | None:
+    chain = _dotted_call_attribute_chain(call_node)
+    if chain not in {"os.getenv", "os.environ.get"}:
+        return None
+    if not call_node.args:
+        return None
+    first_argument = call_node.args[0]
+    if isinstance(first_argument, ast.Constant) and isinstance(first_argument.value, str):
+        return first_argument.value
+    return None
+
+
+def _environ_key_string_from_subscript(subscript_node: ast.Subscript) -> str | None:
+    if not (
+        isinstance(subscript_node.value, ast.Attribute)
+        and subscript_node.value.attr == "environ"
+        and isinstance(subscript_node.value.value, ast.Name)
+        and subscript_node.value.value.id == "os"
+    ):
+        return None
+    key_node = subscript_node.slice
+    if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
+        return key_node.value
+    return None
+
+
+def _detect_home_or_temp_probes_in_body(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[tuple[int, str]]:
+    """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*."""
+    probes: list[tuple[int, str]] = []
+    for each_descendant in ast.walk(function_node):
+        if each_descendant is function_node:
+            continue
+        if isinstance(each_descendant, ast.Call):
+            chain = _dotted_call_attribute_chain(each_descendant)
+            if chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
+                probes.append((each_descendant.lineno, f"{chain}()"))
+                continue
+            environ_key = _environ_key_string_from_call(each_descendant)
+            if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
+                probes.append((each_descendant.lineno, f"os env probe '{environ_key}'"))
+        elif isinstance(each_descendant, ast.Subscript):
+            environ_key = _environ_key_string_from_subscript(each_descendant)
+            if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
+                probes.append((each_descendant.lineno, f"os.environ['{environ_key}']"))
+    return probes
+
+
+def _function_uses_pytest_isolation_fixture(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    for each_argument in function_node.args.args:
+        if each_argument.arg in ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES:
+            return True
+    for each_argument in function_node.args.kwonlyargs:
+        if each_argument.arg in ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES:
+            return True
+    return False
+
+
+def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> list[str]:
+    """Flag test functions that probe HOME or TMP without pytest isolation.
+
+    Pattern class: tests that call ``Path.home()``, ``os.path.expanduser('~')``,
+    ``os.getenv('HOME'|'USERPROFILE'|'TMPDIR'|…)``, ``os.environ['HOME'|…]``, or
+    ``tempfile.gettempdir()`` outside of pytest's ``tmp_path`` / ``monkeypatch``
+    isolation context leak state across the suite and surface as environment-
+    coupled bugs (audit Theme M).
+
+    Test functions whose signatures take ``tmp_path``, ``tmp_path_factory``,
+    ``tmpdir``, ``tmpdir_factory``, or ``monkeypatch`` are treated as
+    intentionally isolated and pass. Module-level helpers and fixtures (any
+    function whose name does not start with ``test`` or ``should``) are out
+    of scope — only ``def test_*`` / ``async def test_*`` / ``def should_*``
+    functions are scanned.
+
+    Args:
+        content: The Python source to analyze.
+        file_path: The path of the file being checked. The check only fires
+            on test files.
+
+    Returns:
+        A list of issue strings naming each offending probe call. Capped at
+        ``MAX_TEST_ISOLATION_ISSUES``.
+    """
+    if not is_test_file(file_path):
+        return []
+
+    try:
+        syntax_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    issues: list[str] = []
+    for each_node in ast.walk(syntax_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not (each_node.name.startswith("test") or each_node.name.startswith("should_")):
+            continue
+        if _function_uses_pytest_isolation_fixture(each_node):
+            continue
+        for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(each_node):
+            issues.append(
+                f"Line {each_line}: Test {each_node.name!r} probes {each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"
+            )
+            if len(issues) >= MAX_TEST_ISOLATION_ISSUES:
+                return issues
     return issues
 
 
@@ -4046,6 +4362,58 @@ def check_return_annotations(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _function_definition_line_span(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> int:
+    end_lineno = getattr(function_node, "end_lineno", None) or function_node.lineno
+    return end_lineno - function_node.lineno + 1
+
+
+def check_function_length(content: str, file_path: str) -> list[str]:
+    """Flag functions whose definition span exceeds cognitive-load thresholds.
+
+    Bodies at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60 lines)
+    appear in the returned issues list and block the write at the gate
+    (see CODE_RULES §6.5 for the source rationale).
+
+    Exempt: test files (test bodies are sometimes long by necessity), Django
+    migrations (auto-generated), workflow registries (registry entries), and
+    hook infrastructure.
+
+    Args:
+        content: The Python source to analyze.
+        file_path: The path of the file being checked.
+
+    Returns:
+        Blocking issues only. Capped at
+        ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES``.
+    """
+    if is_test_file(file_path):
+        return []
+    if is_hook_infrastructure(file_path):
+        return []
+    if is_workflow_registry_file(file_path) or is_migration_file(file_path):
+        return []
+
+    try:
+        parsed_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    issues: list[str] = []
+    for each_node in ast.walk(parsed_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        line_span = _function_definition_line_span(each_node)
+        if line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:
+            issues.append(
+                f"Line {each_node.lineno}: function {each_node.name!r} is {line_span} lines - {FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX}"
+            )
+            if len(issues) >= MAX_FUNCTION_LENGTH_BLOCKING_ISSUES:
+                break
+    return issues
+
+
 def validate_content(
     content: str,
     file_path: str,
@@ -4083,6 +4451,7 @@ def validate_content(
         all_issues.extend(check_file_global_constants_use_count(content, file_path))
         all_issues.extend(check_type_escape_hatches(effective_content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))
+        all_issues.extend(check_banned_noun_word_boundary(content, file_path))
         all_issues.extend(check_banned_prefixes(effective_content, file_path))
         all_issues.extend(check_stub_implementations(effective_content, file_path))
         all_issues.extend(check_typed_dict_encode_decode(effective_content, file_path))
@@ -4093,6 +4462,7 @@ def validate_content(
         all_issues.extend(check_docstring_format(effective_content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
+        all_issues.extend(check_tests_use_isolated_filesystem_paths(content, file_path))
         all_issues.extend(check_existence_check_tests(content, file_path))
         all_issues.extend(check_constant_equality_tests(content, file_path))
         all_issues.extend(check_unused_optional_parameters(content, file_path))
@@ -4106,6 +4476,7 @@ def validate_content(
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))
+        all_issues.extend(check_function_length(content, file_path))
         all_issues.extend(check_loop_variable_naming(content, file_path))
         all_issues.extend(check_inline_literal_collections(content, file_path))
         all_issues.extend(check_inline_tuple_string_magic(content, file_path))

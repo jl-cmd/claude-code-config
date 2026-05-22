@@ -177,10 +177,10 @@ def test_main_staged_mode_blocks_when_staged_lines_introduce_violations(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    write_file(temporary_git_repository / "module.py", "first_value = 1\n")
+    write_file(temporary_git_repository / "module.py", "first_count = 1\n")
     commit_all_files(temporary_git_repository, "initial")
     staged_content_with_banned_identifier = (
-        "first_value = 1\n"
+        "first_count = 1\n"
         "def compute_total(operand):\n"
         "    result = operand + 1\n"
         "    return result\n"
@@ -201,10 +201,10 @@ def test_main_staged_mode_passes_when_no_staged_violations(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    write_file(temporary_git_repository / "module.py", "first_value = 1\n")
+    write_file(temporary_git_repository / "module.py", "first_count = 1\n")
     commit_all_files(temporary_git_repository, "initial")
     write_file(
-        temporary_git_repository / "module.py", "first_value = 1\nsecond_value = 2\n"
+        temporary_git_repository / "module.py", "first_count = 1\nsecond_count = 2\n"
     )
     stage_file(temporary_git_repository, "module.py")
 
@@ -218,7 +218,7 @@ def test_main_staged_mode_exits_zero_when_nothing_staged(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    write_file(temporary_git_repository / "module.py", "first_value = 1\n")
+    write_file(temporary_git_repository / "module.py", "first_count = 1\n")
     commit_all_files(temporary_git_repository, "initial")
 
     monkeypatch.chdir(temporary_git_repository)

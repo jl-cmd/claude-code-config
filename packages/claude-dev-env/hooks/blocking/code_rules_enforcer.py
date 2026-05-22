@@ -2506,9 +2506,9 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
     Test functions whose signatures take ``tmp_path``, ``tmp_path_factory``,
     ``tmpdir``, ``tmpdir_factory``, or ``monkeypatch`` are treated as
     intentionally isolated and pass. Module-level helpers and fixtures (any
-    function whose name does not start with ``test`` or ``should``) are out
-    of scope — only ``def test_*`` / ``async def test_*`` / ``def should_*``
-    functions are scanned.
+    function whose name does not start with ``test_`` or ``should_``) are
+    out of scope — only ``def test_*`` / ``async def test_*`` / ``def
+    should_*`` functions are scanned.
 
     Args:
         content: The Python source to analyze.
@@ -4372,9 +4372,10 @@ def _function_definition_line_span(
 def check_function_length(content: str, file_path: str) -> list[str]:
     """Flag functions whose definition span exceeds cognitive-load thresholds.
 
-    Bodies at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60 lines)
-    appear in the returned issues list and block the write at the gate
-    (see CODE_RULES §6.5 for the source rationale).
+    Function definition spans (signature line through last body statement,
+    inclusive) at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60
+    lines) appear in the returned issues list and block the write at the
+    gate (see CODE_RULES §6.5 for the source rationale).
 
     Exempt: test files (test bodies are sometimes long by necessity), Django
     migrations (auto-generated), workflow registries (registry entries), and

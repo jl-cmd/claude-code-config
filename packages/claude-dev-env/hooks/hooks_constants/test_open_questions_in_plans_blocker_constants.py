@@ -102,7 +102,16 @@ def test_plan_file_encoding_is_utf8() -> None:
     assert "PLAN_FILE_ENCODING" in constants_module.__all__
 
 
-def test_all_exports_enumerates_seven_public_constants_in_sorted_order() -> None:
+def test_unreadable_file_synthetic_content_triggers_heading_pattern() -> None:
+    """The synthetic content used when an existing plan file cannot be read must
+    contain a heading the open-questions regex matches. This guarantees the
+    downstream scan denies the write rather than silently passing."""
+    synthetic = constants_module.UNREADABLE_FILE_SYNTHETIC_CONTENT
+    assert constants_module.OPEN_QUESTIONS_HEADING_PATTERN.search(synthetic)
+    assert "UNREADABLE_FILE_SYNTHETIC_CONTENT" in constants_module.__all__
+
+
+def test_all_exports_enumerates_eight_public_constants_in_sorted_order() -> None:
     expected_exports = [
         "CODE_FENCE_PATTERN",
         "INLINE_CODE_PATTERN",
@@ -111,5 +120,6 @@ def test_all_exports_enumerates_seven_public_constants_in_sorted_order() -> None
         "PLANS_PATH_PREFIX",
         "PLANS_PATH_SEGMENT",
         "PLAN_FILE_ENCODING",
+        "UNREADABLE_FILE_SYNTHETIC_CONTENT",
     ]
     assert constants_module.__all__ == expected_exports

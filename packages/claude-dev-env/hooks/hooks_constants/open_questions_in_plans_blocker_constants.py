@@ -12,6 +12,8 @@ PLANS_PATH_PREFIX: str = ".claude/plans/"
 
 PLAN_FILE_ENCODING: str = "utf-8"
 
+UNREADABLE_FILE_SYNTHETIC_CONTENT: str = "## Open Questions\n"
+
 OPEN_QUESTIONS_HEADING_PATTERN: Pattern[str] = compile(
     r"^\s*(?:#{1,6}\s+|\*\*\s*|__\s*)open[\s_-]+questions(?:[^A-Za-z0-9]|$)",
     IGNORECASE | MULTILINE,
@@ -29,4 +31,5 @@ __all__ = [
     "PLANS_PATH_PREFIX",
     "PLANS_PATH_SEGMENT",
     "PLAN_FILE_ENCODING",
+    "UNREADABLE_FILE_SYNTHETIC_CONTENT",
 ]

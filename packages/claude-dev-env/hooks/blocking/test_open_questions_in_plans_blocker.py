@@ -710,3 +710,81 @@ def test_edit_with_file_path_pointing_at_directory_does_not_crash(tmp_path):
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_blocks_edit_when_existing_file_permission_denied_does_not_silently_pass(tmp_path):
+    """When an Edit targets an existing plan file but the disk read raises
+    `PermissionError`, the hook cannot prove the on-disk content is clean. It must
+    conservatively block rather than silently falling back to the missing-file
+    new_string scan — the file exists with an unknown payload that could still
+    contain `## Open Questions`.
+
+    Simulated via a sidecar Python stub that monkeypatches `Path.read_text` to
+    raise `PermissionError`, then runs the hook in-process via the same JSON
+    contract as the subprocess `_run_hook` helper.
+    """
+    plans_directory = tmp_path / ".claude" / "plans"
+    plans_directory.mkdir(parents=True, exist_ok=True)
+    plan_file = plans_directory / "unreadable.md"
+    plan_file.write_text("placeholder", encoding="utf-8")
+    stub_script = tmp_path / "run_with_permission_error.py"
+    stub_script.write_text(
+        "import json\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "\n"
+        f"sys.path.insert(0, {repr(os.path.dirname(HOOK_SCRIPT_PATH))})\n"
+        "original_read_text = Path.read_text\n"
+        "def _raise_permission_error(self, *args, **kwargs):\n"
+        "    raise PermissionError('simulated locked file')\n"
+        "Path.read_text = _raise_permission_error\n"
+        "\n"
+        "import open_questions_in_plans_blocker as hook_module\n"
+        "hook_module.main()\n",
+        encoding="utf-8",
+    )
+    payload = json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(plan_file),
+                "old_string": "preamble",
+                "new_string": "## Approach\nDo the thing better.",
+            },
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, str(stub_script)],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_blocks_edit_when_existing_file_unicode_decode_error_does_not_silently_pass(tmp_path):
+    """When an Edit targets an existing plan file whose bytes are not valid UTF-8,
+    `Path.read_text(encoding='utf-8')` raises `UnicodeDecodeError`. The hook cannot
+    reason about binary content, so it must conservatively block rather than
+    silently falling back to the missing-file new_string scan.
+    """
+    plans_directory = tmp_path / ".claude" / "plans"
+    plans_directory.mkdir(parents=True, exist_ok=True)
+    plan_file = plans_directory / "binary-content.md"
+    plan_file.write_bytes(b"\xff\xfe\xfd raw bytes that are not valid utf-8 \xff")
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(plan_file),
+            "old_string": "preamble",
+            "new_string": "## Approach\nDo the thing better.",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]

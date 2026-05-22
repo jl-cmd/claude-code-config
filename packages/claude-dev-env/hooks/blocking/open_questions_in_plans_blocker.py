@@ -26,6 +26,7 @@ from hooks_constants.open_questions_in_plans_blocker_constants import (  # noqa:
     PLAN_FILE_ENCODING,
     PLANS_PATH_PREFIX,
     PLANS_PATH_SEGMENT,
+    UNREADABLE_FILE_SYNTHETIC_CONTENT,
 )
 
 
@@ -55,19 +56,30 @@ def _content_has_open_questions(text: str) -> bool:
     return bool(OPEN_QUESTIONS_HEADING_PATTERN.search(_strip_code_regions(text)))
 
 
-def _read_existing_file_text(file_path: str) -> str | None:
-    """Return existing file contents, or None when the file is unreadable.
+def _read_plan_file_text_and_missing_flag(file_path: str) -> tuple[str | None, bool]:
+    """Return `(text, file_is_missing)` for the existing plan file on disk.
 
-    Narrow exceptions only — FileNotFoundError covers the "first write" case,
-    IsADirectoryError covers payloads whose file_path points at a directory,
-    PermissionError covers locked or inaccessible files, and UnicodeDecodeError
-    covers binary contents that the markdown scan cannot reason about. Any
-    other failure is left to propagate.
+    Three outcomes:
+      * `(text, False)` — file read successfully.
+      * `(None, True)` — file is missing (FileNotFoundError) or `file_path`
+        points at a directory (IsADirectoryError). Callers fall back to scanning
+        candidate `new_string` content for an Open Questions heading.
+      * `(None, False)` — file exists but is unreadable (PermissionError on a
+        locked file, UnicodeDecodeError on bytes the configured encoding cannot
+        decode). Callers cannot prove the on-disk content is clean and must
+        conservatively block.
+
+    Narrow exceptions only — any other failure is left to propagate.
     """
     try:
-        return Path(os.path.expanduser(file_path)).read_text(encoding=PLAN_FILE_ENCODING)
-    except (FileNotFoundError, IsADirectoryError, PermissionError, UnicodeDecodeError):
-        return None
+        return (
+            Path(os.path.expanduser(file_path)).read_text(encoding=PLAN_FILE_ENCODING),
+            False,
+        )
+    except (FileNotFoundError, IsADirectoryError):
+        return (None, True)
+    except (PermissionError, UnicodeDecodeError):
+        return (None, False)
 
 
 def _apply_edit_to_text(existing_text: str, old_string: str, new_string: str) -> str:
@@ -138,7 +150,9 @@ def _extract_candidate_content(tool_name: str, tool_input: dict, file_path: str)
     if tool_name == "Write":
         content = tool_input.get("content", "")
         return content if isinstance(content, str) else ""
-    existing_text = _read_existing_file_text(file_path)
+    existing_text, file_is_missing = _read_plan_file_text_and_missing_flag(file_path)
+    if existing_text is None and not file_is_missing:
+        return UNREADABLE_FILE_SYNTHETIC_CONTENT
     if tool_name == "Edit":
         return _post_edit_content_for_edit(existing_text, tool_input)
     if tool_name == "MultiEdit":
@@ -166,7 +180,7 @@ def _block_context() -> str:
         "Prefer one AskUserQuestion call that covers all open questions where possible.\n\n"
         "3. Re-write the plan. After the user confirms, remove the 'Open Questions' section "
         "entirely and fold the resolved answers into the relevant sections of the plan, then "
-        "retry the Write/Edit."
+        "retry the Write/Edit/MultiEdit."
     )
 
 

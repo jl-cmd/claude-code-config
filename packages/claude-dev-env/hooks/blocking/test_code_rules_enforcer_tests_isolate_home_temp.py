@@ -54,6 +54,17 @@ def test_should_allow_path_home_in_test_with_tmp_path_fixture() -> None:
     assert issues == []
 
 
+def test_should_allow_path_home_in_test_with_positional_only_fixture() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_writes_dotfile(tmp_path, /) -> None:\n"
+        "    home_dir = Path.home()\n"
+        "    (tmp_path / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
 def test_should_allow_path_home_in_test_with_monkeypatch_fixture() -> None:
     source = (
         "from pathlib import Path\n"

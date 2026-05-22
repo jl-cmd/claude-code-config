@@ -2487,6 +2487,9 @@ def _detect_home_or_temp_probes_in_body(
 def _function_uses_pytest_isolation_fixture(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
+    for each_argument in function_node.args.posonlyargs:
+        if each_argument.arg in ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES:
+            return True
     for each_argument in function_node.args.args:
         if each_argument.arg in ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES:
             return True

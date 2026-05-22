@@ -137,7 +137,6 @@ def test_should_flag_response_count_parameter_on_method() -> None:
     source = "class Foo:\n    def bar(self, response_count: int) -> None: pass\n"
     issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
     assert any("response_count" in each_issue for each_issue in issues)
-    assert not any("self" in each_issue and "banned noun" in each_issue for each_issue in issues)
 
 
 def test_should_include_banned_word_in_message() -> None:

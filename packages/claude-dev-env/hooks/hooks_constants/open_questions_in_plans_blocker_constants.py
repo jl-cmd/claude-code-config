@@ -16,7 +16,7 @@ OPEN_QUESTIONS_HEADING_PATTERN: Pattern[str] = compile(
 )
 
 CODE_FENCE_PATTERN: Pattern[str] = compile(r"```[\s\S]*?```")
-INLINE_CODE_PATTERN: Pattern[str] = compile(r"``[^`]+``|`[^`]+`")
+INLINE_CODE_PATTERN: Pattern[str] = compile(r"``[^`\n]+``|`[^`\n]+`")
 
 
 __all__ = [

@@ -150,6 +150,31 @@ def test_passes_open_questions_inside_inline_code():
     assert result.stdout == ""
 
 
+def test_blocks_open_questions_when_stray_backtick_precedes_real_heading():
+    """A stray unmatched backtick on an earlier line must not cause the inline-code
+    stripper to swallow the real `## Open Questions` heading further down. CommonMark
+    inline-code spans cannot cross newlines, so the heading still has to block.
+
+    Regression for `[^`]+` greedily matching across newlines and erasing the heading.
+    """
+    content_with_stray_backtick = (
+        "Some text with stray backtick `here.\n"
+        "\n"
+        "## Open Questions\n"
+        "- foo\n"
+        "\n"
+        "More `code` later.\n"
+    )
+    result = _run_hook(
+        "Write",
+        {"file_path": ".claude/plans/x.md", "content": content_with_stray_backtick},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_blocks_multiedit_with_open_questions_in_any_edit():
     result = _run_hook(
         "MultiEdit",

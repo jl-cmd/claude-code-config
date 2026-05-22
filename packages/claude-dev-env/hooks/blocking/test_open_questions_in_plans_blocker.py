@@ -516,3 +516,148 @@ def test_blocks_edit_when_file_missing_but_new_string_has_open_questions(tmp_pat
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_edit_with_empty_old_string_on_clean_existing_file_does_not_falsely_block(tmp_path):
+    """An Edit with empty `old_string` against an existing clean plan must not
+    synthesize a phantom prepended `new_string`. Without the guard,
+    `existing_text.replace('', new_string, 1)` prepends `new_string` to the
+    existing file content, fabricating an `## Open Questions` heading that the
+    real Edit tool would never actually produce — leading to a false deny.
+    """
+    clean_existing_content = "## Context\nA plan.\n\n## Approach\nDo the thing.\n"
+    plan_file = _make_plan_file_on_disk(tmp_path, clean_existing_content)
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(plan_file),
+            "old_string": "",
+            "new_string": "## Open Questions\n- placeholder",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_edit_with_non_string_old_string_on_existing_file_does_not_falsely_block(tmp_path):
+    """An Edit whose `old_string` is not a string (defensive against unexpected
+    payloads) must be treated as 'cannot reconstruct post-edit content' and
+    fall back to the unmodified existing content.
+    """
+    clean_existing_content = "## Context\nA plan.\n\n## Approach\nDo the thing.\n"
+    plan_file = _make_plan_file_on_disk(tmp_path, clean_existing_content)
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(plan_file),
+            "old_string": None,
+            "new_string": "## Open Questions\n- placeholder",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_edit_with_empty_old_string_still_blocks_when_existing_file_has_open_questions(tmp_path):
+    """When `old_string` is empty and the existing file already contains an
+    `## Open Questions` heading, the unmodified existing content still triggers
+    the block — the guard returns existing content as-is, not a fabrication.
+    """
+    existing_content = (
+        "## Context\nA plan.\n\n## Open Questions\n- Which auth provider?\n\n"
+        "## Approach\nDo the thing.\n"
+    )
+    plan_file = _make_plan_file_on_disk(tmp_path, existing_content)
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(plan_file),
+            "old_string": "",
+            "new_string": "## Approach\nDo the thing better.",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_edit_with_empty_old_string_on_missing_file_still_scans_new_string(tmp_path):
+    """When the file is missing and `old_string` is empty, preserve the existing
+    missing-file fallback: scan `new_string` for an Open Questions heading.
+    """
+    plans_directory = tmp_path / ".claude" / "plans"
+    plans_directory.mkdir(parents=True, exist_ok=True)
+    missing_plan_file = plans_directory / "not-yet-saved.md"
+    result = _run_hook(
+        "Edit",
+        {
+            "file_path": str(missing_plan_file),
+            "old_string": "",
+            "new_string": "## Approach\nDo it.\n\n## Open Questions\n- foo",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_multiedit_skips_edit_with_empty_old_string_on_existing_file(tmp_path):
+    """A MultiEdit whose first entry has an empty `old_string` (and a dangerous
+    `new_string` containing an Open Questions heading) must skip that entry —
+    not prepend the new_string into the existing content via `replace('', X, 1)`.
+    """
+    clean_existing_content = "## Context\nA plan.\n\nstep one\n"
+    plan_file = _make_plan_file_on_disk(tmp_path, clean_existing_content)
+    result = _run_hook(
+        "MultiEdit",
+        {
+            "file_path": str(plan_file),
+            "edits": [
+                {"old_string": "", "new_string": "## Open Questions\n- placeholder"},
+                {"old_string": "step one", "new_string": "first step"},
+            ],
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_multiedit_with_only_invalid_edits_on_existing_file_returns_existing_content(tmp_path):
+    """A MultiEdit whose every entry has an empty `old_string` must leave the
+    existing file content unchanged for the scan — no synthetic prepends.
+    """
+    clean_existing_content = "## Context\nA plan.\n\n## Approach\nDo the thing.\n"
+    plan_file = _make_plan_file_on_disk(tmp_path, clean_existing_content)
+    result = _run_hook(
+        "MultiEdit",
+        {
+            "file_path": str(plan_file),
+            "edits": [
+                {"old_string": "", "new_string": "## Open Questions\n- one"},
+                {"old_string": "", "new_string": "## Open Questions\n- two"},
+            ],
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_multiedit_with_only_invalid_edits_on_missing_file_still_scans_new_strings(tmp_path):
+    """When the file is missing and every entry has an empty `old_string`,
+    preserve the missing-file fallback: scan the joined `new_string` values.
+    """
+    plans_directory = tmp_path / ".claude" / "plans"
+    plans_directory.mkdir(parents=True, exist_ok=True)
+    missing_plan_file = plans_directory / "not-yet-saved.md"
+    result = _run_hook(
+        "MultiEdit",
+        {
+            "file_path": str(missing_plan_file),
+            "edits": [
+                {"old_string": "", "new_string": "## Open Questions\n- placeholder"},
+            ],
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"

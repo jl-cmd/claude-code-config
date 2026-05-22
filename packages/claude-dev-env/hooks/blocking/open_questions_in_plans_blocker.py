@@ -74,14 +74,26 @@ def _apply_edit_to_text(existing_text: str, old_string: str, new_string: str) ->
     return existing_text.replace(old_string, new_string, 1)
 
 
+def _is_valid_old_string(old_string: object) -> bool:
+    """Return True only when `old_string` is a non-empty string we can locate in the existing text.
+
+    Empty or non-string `old_string` cannot be replaced safely:
+    `existing_text.replace("", new, 1)` prepends `new` rather than performing
+    a real edit, which would fabricate post-edit content the real Edit tool
+    would never produce.
+    """
+    return isinstance(old_string, str) and old_string != ""
+
+
 def _post_edit_content_for_edit(existing_text: str | None, tool_input: dict) -> str:
     old_string = tool_input.get("old_string", "")
     new_string = tool_input.get("new_string", "")
-    safe_old = old_string if isinstance(old_string, str) else ""
     safe_new = new_string if isinstance(new_string, str) else ""
     if existing_text is None:
         return safe_new
-    return _apply_edit_to_text(existing_text, safe_old, safe_new)
+    if not _is_valid_old_string(old_string):
+        return existing_text
+    return _apply_edit_to_text(existing_text, old_string, safe_new)
 
 
 def _post_edit_content_for_multiedit(existing_text: str | None, tool_input: dict) -> str:
@@ -93,13 +105,30 @@ def _post_edit_content_for_multiedit(existing_text: str | None, tool_input: dict
             continue
         old_string = each_edit.get("old_string", "")
         new_string = each_edit.get("new_string", "")
-        safe_old = old_string if isinstance(old_string, str) else ""
+        if not _is_valid_old_string(old_string):
+            continue
         safe_new = new_string if isinstance(new_string, str) else ""
-        accumulated_text = _apply_edit_to_text(accumulated_text, safe_old, safe_new)
+        accumulated_text = _apply_edit_to_text(accumulated_text, old_string, safe_new)
         fallback_new_strings.append(safe_new)
     if existing_text is None:
-        return "\n".join(fallback_new_strings)
+        if fallback_new_strings:
+            return "\n".join(fallback_new_strings)
+        return _multiedit_missing_file_new_strings(all_edits)
     return accumulated_text
+
+
+def _multiedit_missing_file_new_strings(all_edits: list) -> str:
+    """When the file is missing AND every edit had an invalid `old_string`,
+    preserve the original missing-file fallback by scanning every `new_string`.
+    """
+    fallback_new_strings: list[str] = []
+    for each_edit in all_edits:
+        if not isinstance(each_edit, dict):
+            continue
+        new_string = each_edit.get("new_string", "")
+        safe_new = new_string if isinstance(new_string, str) else ""
+        fallback_new_strings.append(safe_new)
+    return "\n".join(fallback_new_strings)
 
 
 def _extract_candidate_content(tool_name: str, tool_input: dict, file_path: str) -> str:

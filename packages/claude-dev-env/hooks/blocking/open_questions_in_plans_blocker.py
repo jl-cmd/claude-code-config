@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse:Write|Edit hook — blocks plan files that still contain an "Open Questions" section.
+"""PreToolUse:Write|Edit|MultiEdit hook — blocks plan files that contain an "Open Questions" section.
 
 Plans under `~/.claude/plans/` (or any `.claude/plans/` directory) must not be
 written with an unresolved "Open Questions" section. When detected, the agent is
@@ -10,38 +10,48 @@ its interpretations via the AskUserQuestion tool in plain everyday language, and
 
 import json
 import os
-import re
 import sys
+from pathlib import Path
 from typing import TextIO
 
+_hooks_dir = str(Path(__file__).resolve().parent.parent)
+if _hooks_dir not in sys.path:
+    sys.path.insert(0, _hooks_dir)
 
-_markdown_extension = ".md"
-_plans_path_segment = "/.claude/plans/"
-_plans_path_prefix = ".claude/plans/"
-_open_questions_heading_pattern = re.compile(
-    r"^\s*(?:#{1,6}\s+|\*\*\s*|__\s*)open[\s_-]+questions\b",
-    re.IGNORECASE | re.MULTILINE,
+from hooks_constants.open_questions_in_plans_blocker_constants import (  # noqa: E402
+    CODE_FENCE_PATTERN,
+    INLINE_CODE_PATTERN,
+    MARKDOWN_EXTENSION,
+    OPEN_QUESTIONS_HEADING_PATTERN,
+    PLANS_PATH_PREFIX,
+    PLANS_PATH_SEGMENT,
 )
 
 
 def _is_markdown_file(file_path: str) -> bool:
-    return file_path.lower().endswith(_markdown_extension)
+    return file_path.lower().endswith(MARKDOWN_EXTENSION)
 
 
 def _is_inside_plans_directory(file_path: str) -> bool:
     expanded = os.path.expanduser(file_path)
     normalized = os.path.normpath(expanded).replace("\\", "/").lower()
-    if _plans_path_segment in normalized:
+    if PLANS_PATH_SEGMENT in normalized:
         return True
-    if normalized.startswith(_plans_path_prefix):
+    if normalized.startswith(PLANS_PATH_PREFIX):
         return True
     return False
+
+
+def _strip_code_regions(text: str) -> str:
+    """Remove fenced code blocks and inline code spans so quoted headings don't trigger the regex."""
+    without_fences = CODE_FENCE_PATTERN.sub("", text)
+    return INLINE_CODE_PATTERN.sub("", without_fences)
 
 
 def _content_has_open_questions(text: str) -> bool:
     if not text:
         return False
-    return bool(_open_questions_heading_pattern.search(text))
+    return bool(OPEN_QUESTIONS_HEADING_PATTERN.search(_strip_code_regions(text)))
 
 
 def _extract_candidate_content(tool_name: str, tool_input: dict) -> str:
@@ -51,6 +61,15 @@ def _extract_candidate_content(tool_name: str, tool_input: dict) -> str:
     if tool_name == "Edit":
         new_string = tool_input.get("new_string", "")
         return new_string if isinstance(new_string, str) else ""
+    if tool_name == "MultiEdit":
+        all_edits = tool_input.get("edits", []) or []
+        joined_new_strings: list[str] = []
+        for each_edit in all_edits:
+            if isinstance(each_edit, dict):
+                each_new_string = each_edit.get("new_string", "")
+                if isinstance(each_new_string, str):
+                    joined_new_strings.append(each_new_string)
+        return "\n".join(joined_new_strings)
     return ""
 
 
@@ -107,7 +126,7 @@ def main() -> None:
     if not isinstance(tool_input, dict):
         sys.exit(0)
 
-    if tool_name not in ("Write", "Edit"):
+    if tool_name not in ("Write", "Edit", "MultiEdit"):
         sys.exit(0)
 
     file_path = tool_input.get("file_path", "")

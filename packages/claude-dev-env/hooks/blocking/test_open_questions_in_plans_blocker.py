@@ -101,6 +101,109 @@ def test_blocks_bold_open_questions_heading():
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def test_blocks_underscore_bold_open_questions_heading():
+    """Canonical markdown underscore-bold `__Open Questions__` must block.
+
+    Regression for the `\b` bug between word characters `s` and `_`.
+    """
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": ".claude/plans/x.md",
+            "content": "__Open Questions__\n- foo\n",
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_passes_open_questions_inside_fenced_code_block():
+    """A heading quoted inside a fenced code block (e.g., rule docs showing what NOT to write) must NOT block."""
+    content = (
+        "## Context\n"
+        "Example of what plans should NOT contain:\n\n"
+        "```markdown\n"
+        "## Open Questions\n"
+        "- placeholder\n"
+        "```\n\n"
+        "## Approach\nDo the thing.\n"
+    )
+    result = _run_hook(
+        "Write",
+        {"file_path": ".claude/plans/x.md", "content": content},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_open_questions_inside_inline_code():
+    """A heading-shaped string inside inline code (`## Open Questions`) must NOT block."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": ".claude/plans/x.md",
+            "content": "Avoid sections like `## Open Questions` in plans.\n",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_blocks_multiedit_with_open_questions_in_any_edit():
+    result = _run_hook(
+        "MultiEdit",
+        {
+            "file_path": ".claude/plans/x.md",
+            "edits": [
+                {"old_string": "foo", "new_string": "bar"},
+                {"old_string": "baz", "new_string": "## Open Questions\n- new"},
+            ],
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_passes_multiedit_without_open_questions():
+    result = _run_hook(
+        "MultiEdit",
+        {
+            "file_path": ".claude/plans/x.md",
+            "edits": [
+                {"old_string": "foo", "new_string": "bar"},
+                {"old_string": "baz", "new_string": "qux"},
+            ],
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_openquestions_concatenated_word():
+    """`## OpenQuestions` (no separator) is a different word and must NOT block."""
+    result = _run_hook(
+        "Write",
+        {"file_path": ".claude/plans/x.md", "content": "## OpenQuestions\n- foo\n"},
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
+def test_passes_open_questionable_heading():
+    """`## Open Questionable Plans` is a different word and must NOT block."""
+    result = _run_hook(
+        "Write",
+        {
+            "file_path": ".claude/plans/x.md",
+            "content": "## Open Questionable Plans\n- foo\n",
+        },
+    )
+    assert result.returncode == 0
+    assert result.stdout == ""
+
+
 def test_passes_plan_without_open_questions():
     result = _run_hook(
         "Write",

@@ -37,14 +37,12 @@ cd into `<worktree_path>` before any git or file operation.
   When evidence contains any of these phrases, the category is not
   verified-clean -- re-audit with a concrete trace.
 
-  Categories A–N (one-line summary). For A–K, the full rubric and
-  sub-bucket decomposition live in
-  `$HOME/.claude/audit-rubrics/category_rubrics/`, with ready-to-send
-  Variant C prompts — each with a PR/repo-independent generalized
-  skeleton above a `---` separator and a worked example against an
-  authentic PR below — in `$HOME/.claude/audit-rubrics/prompts/`. L, M,
-  and N carry inline-only summaries here; their standalone rubric files
-  are tracked in issue #485:
+  Categories A–N (one-line summary; full rubric and sub-bucket
+  decomposition for each is in
+  `$HOME/.claude/audit-rubrics/category_rubrics/`; ready-to-send Variant
+  C prompts — each with a PR/repo-independent generalized skeleton above
+  a `---` separator and a worked example against an authentic PR below —
+  are in `$HOME/.claude/audit-rubrics/prompts/`):
 
   A. API contract verification (signatures, return types, async/await correctness)
   B. Selector / query / engine compatibility

@@ -458,6 +458,47 @@ def test_passes_multiedit_that_removes_open_questions_from_existing_file(tmp_pat
     assert result.stdout == ""
 
 
+def test_blocks_edit_when_existing_file_at_tilde_path_has_open_questions(tmp_path, monkeypatch):
+    """An Edit against a tilde-prefixed `~/.claude/plans/x.md` path must expand the
+    tilde before reading the existing file, matching the expansion already done in
+    `_is_inside_plans_directory`. Without the expansion, the disk read fails and the
+    hook silently falls back to scanning `new_string` — reintroducing the bug for the
+    canonical home-directory plans path.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    existing_content = (
+        "## Context\nA plan.\n\n## Open Questions\n- Which auth provider?\n\n"
+        "## Approach\nDo the thing.\n"
+    )
+    _make_plan_file_on_disk(tmp_path, existing_content)
+    real_plan_file = tmp_path / ".claude" / "plans" / "existing-plan.md"
+    tilde_plan_path = "~/.claude/plans/existing-plan.md"
+    payload = json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": tilde_plan_path,
+                "old_string": "## Approach\nDo the thing.",
+                "new_string": "## Approach\nDo the thing better.",
+            },
+        }
+    )
+    result = subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input=payload,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "HOME": str(tmp_path), "USERPROFILE": str(tmp_path)},
+    )
+    assert result.returncode == 0
+    assert real_plan_file.exists()
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
 def test_blocks_edit_when_file_missing_but_new_string_has_open_questions(tmp_path):
     """When the target file does not exist on disk, the hook must fall back to
     scanning `new_string` (preserves existing behavior for first-write edits)."""

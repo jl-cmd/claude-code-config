@@ -64,8 +64,8 @@ def _read_existing_file_text(file_path: str) -> str | None:
     other failure is left to propagate.
     """
     try:
-        return Path(file_path).read_text(encoding=PLAN_FILE_ENCODING)
-    except (FileNotFoundError, IsADirectoryError, PermissionError, OSError, UnicodeDecodeError):
+        return Path(os.path.expanduser(file_path)).read_text(encoding=PLAN_FILE_ENCODING)
+    except (FileNotFoundError, IsADirectoryError, PermissionError, UnicodeDecodeError):
         return None
 
 

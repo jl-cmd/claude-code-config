@@ -294,18 +294,6 @@
           }
         ]
       }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "manual|auto",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/lifecycle/precompact_state_preserver.py",
-            "timeout": 10
-          }
-        ]
-      }
     ]
   }
 }

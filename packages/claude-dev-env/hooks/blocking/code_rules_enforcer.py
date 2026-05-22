@@ -2464,23 +2464,32 @@ def _environ_key_string_from_subscript(subscript_node: ast.Subscript) -> str | N
 def _detect_home_or_temp_probes_in_body(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> list[tuple[int, str]]:
-    """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*."""
+    """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*.
+
+    Descent stops at FunctionDef, AsyncFunctionDef, ClassDef, and Lambda
+    boundaries so probes defined inside a nested helper (which may have
+    its own isolation contract) are not attributed to the enclosing test.
+    """
+    scope_boundary_types = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
     probes: list[tuple[int, str]] = []
-    for each_descendant in ast.walk(function_node):
-        if each_descendant is function_node:
-            continue
+    nodes_to_visit: list[ast.AST] = list(ast.iter_child_nodes(function_node))
+    while nodes_to_visit:
+        each_descendant = nodes_to_visit.pop()
         if isinstance(each_descendant, ast.Call):
             chain = _dotted_call_attribute_chain(each_descendant)
             if chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
                 probes.append((each_descendant.lineno, f"{chain}()"))
-                continue
-            environ_key = _environ_key_string_from_call(each_descendant)
-            if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
-                probes.append((each_descendant.lineno, f"os env probe '{environ_key}'"))
+            else:
+                environ_key = _environ_key_string_from_call(each_descendant)
+                if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
+                    probes.append((each_descendant.lineno, f"os env probe '{environ_key}'"))
         elif isinstance(each_descendant, ast.Subscript):
             environ_key = _environ_key_string_from_subscript(each_descendant)
             if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
                 probes.append((each_descendant.lineno, f"os.environ['{environ_key}']"))
+        if isinstance(each_descendant, scope_boundary_types):
+            continue
+        nodes_to_visit.extend(ast.iter_child_nodes(each_descendant))
     return probes
 
 

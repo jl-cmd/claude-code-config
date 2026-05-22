@@ -65,6 +65,42 @@ def test_should_allow_path_home_in_test_with_positional_only_fixture() -> None:
     assert issues == []
 
 
+def test_should_ignore_path_home_inside_nested_helper_function() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_writes_dotfile(tmp_path) -> None:\n"
+        "    def _nested_helper() -> Path:\n"
+        "        return Path.home()\n"
+        "    target = tmp_path / '.myapp'\n"
+        "    target.write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_ignore_path_home_inside_nested_lambda() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_makes_lambda(tmp_path) -> None:\n"
+        "    lookup_home = lambda: Path.home()\n"
+        "    (tmp_path / 'x').write_text('y')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_ignore_path_home_inside_nested_class_body() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_defines_inner_class(tmp_path) -> None:\n"
+        "    class Inner:\n"
+        "        root = Path.home()\n"
+        "    (tmp_path / 'x').write_text('y')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
 def test_should_allow_path_home_in_test_with_monkeypatch_fixture() -> None:
     source = (
         "from pathlib import Path\n"

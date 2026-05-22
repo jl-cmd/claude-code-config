@@ -133,7 +133,7 @@ def test_should_skip_when_source_does_not_parse() -> None:
     assert issues == []
 
 
-def test_should_not_flag_self_or_cls_parameter() -> None:
+def test_should_flag_response_count_parameter_on_method() -> None:
     source = "class Foo:\n    def bar(self, response_count: int) -> None: pass\n"
     issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
     assert any("response_count" in each_issue for each_issue in issues)

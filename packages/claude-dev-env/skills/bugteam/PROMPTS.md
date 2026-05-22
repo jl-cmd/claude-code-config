@@ -105,7 +105,7 @@ cd into `<worktree_path>` before any git or file operation.
 </constraints>
 
 <comment_posting>
-  Load all A–K rubrics from
+  Load all A–N rubrics from
   `$HOME/.claude/audit-rubrics/{category_rubrics,prompts}/`. The prompt file
   is a template for output shape, not a straitjacket — reorganize when the
   diff demands it. The diff supplies the findings; the rubric supplies the
@@ -116,7 +116,7 @@ cd into `<worktree_path>` before any git or file operation.
   done.
 
   <self_audit_checklist>
-    [ ] Walk all 11 categories (A–K), each with Shape A or Shape B
+    [ ] Walk all 14 categories (A–N), each with Shape A or Shape B
     [ ] Assign finding IDs (loop<L>-<K>)
     [ ] Capture excerpts, validate anchors, format finding bodies
     [ ] Build findings JSON, invoke post_audit_thread.py, capture html_url
@@ -124,7 +124,7 @@ cd into `<worktree_path>` before any git or file operation.
     [ ] Write outcome XML
   </self_audit_checklist>
 
-  1. Audit the diff against the 11 categories above. Buffer the findings
+  1. Audit the diff against the 14 categories above. Buffer the findings
      in memory; all posting happens at step 4 once anchors are validated.
   2. Assign each finding a stable finding_id of exactly the form `loop<L>-<K>`
      where <K> is 1-based within this loop.
@@ -255,7 +255,7 @@ attributes.
 </bugteam_audit>
 ```
 
-Verified-clean evidence per A–K category is surfaced in the agent's text-mode
+Verified-clean evidence per A–N category is surfaced in the agent's text-mode
 final report, not in this outcome XML (the writer accepts a flat findings list
 only).
 

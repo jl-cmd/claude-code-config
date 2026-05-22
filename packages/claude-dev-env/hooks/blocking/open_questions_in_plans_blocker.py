@@ -75,7 +75,7 @@ def _apply_edit_to_text(existing_text: str, old_string: str, new_string: str) ->
 
 
 def _is_valid_old_string(old_string: object) -> bool:
-    """Return True only when `old_string` is a non-empty string we can locate in the existing text.
+    """Return True when `old_string` is a non-empty string suitable for `str.replace`.
 
     Empty or non-string `old_string` cannot be replaced safely:
     `existing_text.replace("", new, 1)` prepends `new` rather than performing
@@ -98,8 +98,9 @@ def _post_edit_content_for_edit(existing_text: str | None, tool_input: dict) -> 
 
 def _post_edit_content_for_multiedit(existing_text: str | None, tool_input: dict) -> str:
     all_edits = tool_input.get("edits", []) or []
-    accumulated_text = existing_text if existing_text is not None else ""
-    fallback_new_strings: list[str] = []
+    if existing_text is None:
+        return _multiedit_missing_file_new_strings(all_edits)
+    accumulated_text = existing_text
     for each_edit in all_edits:
         if not isinstance(each_edit, dict):
             continue
@@ -109,17 +110,18 @@ def _post_edit_content_for_multiedit(existing_text: str | None, tool_input: dict
             continue
         safe_new = new_string if isinstance(new_string, str) else ""
         accumulated_text = _apply_edit_to_text(accumulated_text, old_string, safe_new)
-        fallback_new_strings.append(safe_new)
-    if existing_text is None:
-        if fallback_new_strings:
-            return "\n".join(fallback_new_strings)
-        return _multiedit_missing_file_new_strings(all_edits)
     return accumulated_text
 
 
 def _multiedit_missing_file_new_strings(all_edits: list) -> str:
-    """When the file is missing AND every edit had an invalid `old_string`,
-    preserve the original missing-file fallback by scanning every `new_string`.
+    """Join every edit's `new_string` for the missing-file scan.
+
+    When the target file does not exist on disk, the hook starts from an empty
+    base and concatenates candidate content from every edit — valid or invalid
+    `old_string` alike. The goal is over-blocking: any `Open Questions` heading
+    anywhere in the proposed payload must trigger the deny. The valid/invalid
+    `old_string` distinction only matters for the existing-file branch, where
+    `replace('', X, 1)` would fabricate a prepend.
     """
     fallback_new_strings: list[str] = []
     for each_edit in all_edits:

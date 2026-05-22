@@ -661,3 +661,30 @@ def test_multiedit_with_only_invalid_edits_on_missing_file_still_scans_new_strin
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_multiedit_missing_file_mixed_valid_invalid_includes_invalid_new_string(tmp_path):
+    """When the file is missing and edits mix valid + invalid `old_string` entries,
+    the missing-file fallback must scan EVERY edit's `new_string`. Filtering by
+    `_is_valid_old_string` is only correct for the existing-file branch (where
+    `replace('', X, 1)` would fabricate a prepend). For the missing-file branch
+    we start from empty and concatenate candidate content — the safe behavior is
+    over-blocking: scan all new_strings.
+    """
+    plans_directory = tmp_path / ".claude" / "plans"
+    plans_directory.mkdir(parents=True, exist_ok=True)
+    missing_plan_file = plans_directory / "not-yet-saved.md"
+    result = _run_hook(
+        "MultiEdit",
+        {
+            "file_path": str(missing_plan_file),
+            "edits": [
+                {"old_string": "", "new_string": "## Open Questions\n- foo\n"},
+                {"old_string": "preamble", "new_string": "epilogue"},
+            ],
+        },
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "Open Questions" in output["hookSpecificOutput"]["permissionDecisionReason"]

@@ -691,7 +691,7 @@ def test_multiedit_missing_file_mixed_valid_invalid_includes_invalid_new_string(
 
 
 def test_edit_with_file_path_pointing_at_directory_does_not_crash(tmp_path):
-    """When `file_path` points at a directory (not a file), `_read_existing_file_text`
+    """When `file_path` points at a directory (not a file), `_read_plan_file_text_and_missing_flag`
     raises `IsADirectoryError` on `Path.read_text`. The hook must catch it like the
     other narrow read failures and fall back to scanning the edit's `new_string`."""
     plans_directory = tmp_path / ".claude" / "plans"

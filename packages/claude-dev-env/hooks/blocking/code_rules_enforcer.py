@@ -106,8 +106,10 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_CAPS_WITH_UNDERSCORE_PATTERN,
     ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES,
     ALL_HOME_DIRECTORY_ENV_VAR_NAMES,
-    ALL_PATH_CLASS_CANONICAL_NAMES,
-    ALL_PATHLIB_MODULE_CANONICAL_NAMES,
+    ALL_ENVIRONMENT_GETTER_DOTTED_NAMES,
+    ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES,
+    ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT,
+    OS_ENVIRON_DOTTED_NAME,
     ENVIRONMENT_VARIABLE_REFERENCE_PATTERN,
     EXPANDVARS_DOTTED_NAME,
     ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
@@ -2455,60 +2457,145 @@ def _dotted_call_attribute_chain(call_node: ast.Call) -> str | None:
     return ".".join(chain_parts)
 
 
-def _build_import_alias_map(syntax_tree: ast.Module) -> dict[str, str]:
-    """Map each aliased import local name to its canonical first-segment name.
+def _build_alias_canonicalization_map(syntax_tree: ast.Module) -> dict[str, str]:
+    """Map each probe-relevant import local name to its canonical dotted prefix.
 
-    Resolves ``from pathlib import Path as P`` (``P`` -> ``Path``) and
-    ``import pathlib as pathlib_alias`` (``pathlib_alias`` -> ``pathlib``)
-    so a dotted-call chain rooted at the alias can be rewritten back to its
-    canonical form before membership comparison against the probe set. Only
-    pathlib / Path bindings are tracked because those are the home-probe
-    callees that can be exercised through an alias; bindings whose canonical
-    target is not a recognized pathlib or Path name are ignored.
+    Resolves both module aliases and bare-imported names so a dotted-call
+    chain rooted at any local binding rewrites to the canonical form the
+    probe set already matches:
+
+    - ``import os as o`` -> ``o`` resolves to ``os`` (so ``o.getenv`` ->
+      ``os.getenv`` and ``o.path.expanduser`` -> ``os.path.expanduser``).
+    - ``import os.path as op`` -> ``op`` resolves to ``os.path`` (so
+      ``op.expanduser`` -> ``os.path.expanduser``).
+    - ``import pathlib as pl`` -> ``pl`` resolves to ``pathlib``.
+    - ``from pathlib import Path as P`` -> ``P`` resolves to ``Path``.
+    - ``from os.path import expanduser as e`` -> ``e`` resolves to
+      ``os.path.expanduser``; ``from os import getenv`` -> ``getenv``
+      resolves to ``os.getenv``; ``from os import environ`` -> ``environ``
+      resolves to ``os.environ``.
+
+    Module aliases are recorded only for the probe-relevant modules in
+    ``ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES``. Bare-imported names are
+    recorded only for the ``(module, name)`` pairs in
+    ``ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT``. Imports outside those sets are
+    ignored so unrelated bindings never rewrite a chain.
 
     Args:
         syntax_tree: The parsed module to scan for import statements.
 
     Returns:
-        Mapping from local alias name to canonical name.
+        Mapping from local binding name to its canonical dotted prefix.
     """
-    alias_map: dict[str, str] = {}
+    all_canonical_names_by_alias: dict[str, str] = {}
     for each_node in ast.walk(syntax_tree):
         if isinstance(each_node, ast.Import):
             for each_alias in each_node.names:
-                if each_alias.asname is None:
+                if each_alias.name not in ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES:
                     continue
-                if each_alias.name in ALL_PATHLIB_MODULE_CANONICAL_NAMES:
-                    alias_map[each_alias.asname] = each_alias.name
+                local_name = each_alias.asname or each_alias.name
+                all_canonical_names_by_alias[local_name] = each_alias.name
         elif isinstance(each_node, ast.ImportFrom):
-            if each_node.module not in ALL_PATHLIB_MODULE_CANONICAL_NAMES:
-                continue
             for each_alias in each_node.names:
-                if each_alias.asname is None:
+                canonical_dotted = ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT.get(
+                    (each_node.module or "", each_alias.name)
+                )
+                if canonical_dotted is None:
                     continue
-                if each_alias.name in ALL_PATH_CLASS_CANONICAL_NAMES:
-                    alias_map[each_alias.asname] = each_alias.name
-    return alias_map
+                local_name = each_alias.asname or each_alias.name
+                all_canonical_names_by_alias[local_name] = canonical_dotted
+    return all_canonical_names_by_alias
 
 
-def _resolve_chain_through_aliases(chain: str, alias_map: dict[str, str]) -> str:
-    """Rewrite the first segment of *chain* through *alias_map*.
+def _collect_os_environ_local_binding_names(
+    syntax_tree: ast.Module, all_canonical_names_by_alias: dict[str, str],
+) -> set[str]:
+    """Return local names bound to ``os.environ`` within *syntax_tree*.
+
+    Tracks ``e = os.environ`` style assignments (resolving the right-hand
+    side through *all_canonical_names_by_alias* so ``e = o.environ`` with
+    ``import os as o`` is recognized) and ``from os import environ``
+    bindings. Subscript reads on these local names are treated as
+    ``os.environ[...]`` accesses.
 
     Args:
-        chain: A dotted callee chain such as ``"P.home"`` or
-            ``"pathlib_alias.Path.home"``.
-        alias_map: Local-alias-to-canonical-name mapping from
-            ``_build_import_alias_map``.
+        syntax_tree: The parsed module to scan.
+        all_canonical_names_by_alias: Import-alias map from
+            ``_build_alias_canonicalization_map``.
 
     Returns:
-        The chain with its leading segment replaced by the canonical name
-        when an alias matches; otherwise the chain unchanged.
+        Set of local variable names that reference ``os.environ``.
+    """
+    environ_bindings: set[str] = set()
+    for each_node in ast.walk(syntax_tree):
+        if isinstance(each_node, ast.ImportFrom):
+            for each_alias in each_node.names:
+                canonical_dotted = ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT.get(
+                    (each_node.module or "", each_alias.name)
+                )
+                if canonical_dotted == OS_ENVIRON_DOTTED_NAME:
+                    environ_bindings.add(each_alias.asname or each_alias.name)
+            continue
+        if not isinstance(each_node, ast.Assign):
+            continue
+        if not _attribute_chain_resolves_to_os_environ(each_node.value, all_canonical_names_by_alias):
+            continue
+        for each_target in each_node.targets:
+            if isinstance(each_target, ast.Name):
+                environ_bindings.add(each_target.id)
+    return environ_bindings
+
+
+def _attribute_chain_resolves_to_os_environ(
+    node: ast.expr, all_canonical_names_by_alias: dict[str, str],
+) -> bool:
+    if not isinstance(node, ast.Attribute):
+        return False
+    chain = _dotted_attribute_chain(node)
+    if chain is None:
+        return False
+    canonical_chain = _resolve_chain_through_aliases(
+        chain, all_canonical_names_by_alias
+    )
+    return canonical_chain == OS_ENVIRON_DOTTED_NAME
+
+
+def _dotted_attribute_chain(attribute_node: ast.Attribute) -> str | None:
+    chain_parts: list[str] = []
+    walker: ast.expr = attribute_node
+    while isinstance(walker, ast.Attribute):
+        chain_parts.append(walker.attr)
+        walker = walker.value
+    if not isinstance(walker, ast.Name):
+        return None
+    chain_parts.append(walker.id)
+    chain_parts.reverse()
+    return ".".join(chain_parts)
+
+
+def _resolve_chain_through_aliases(
+    chain: str, all_canonical_names_by_alias: dict[str, str],
+) -> str:
+    """Rewrite the leading segment of *chain* through the alias map.
+
+    Args:
+        chain: A dotted callee chain such as ``"P.home"``,
+            ``"op.expanduser"``, or ``"o.path.expanduser"``.
+        all_canonical_names_by_alias: Local-binding-to-canonical-prefix
+            mapping from ``_build_alias_canonicalization_map``.
+
+    Returns:
+        The chain with its leading segment replaced by the canonical
+        (possibly multi-segment) prefix when a binding matches; otherwise
+        the chain unchanged.
     """
     first_segment, separator, remainder = chain.partition(".")
-    canonical_first = alias_map.get(first_segment)
-    if canonical_first is None:
+    canonical_prefix = all_canonical_names_by_alias.get(first_segment)
+    if canonical_prefix is None:
         return chain
-    return f"{canonical_first}{separator}{remainder}"
+    if not separator:
+        return canonical_prefix
+    return f"{canonical_prefix}{separator}{remainder}"
 
 
 def _expandvars_argument_references_home_or_temp(call_node: ast.Call) -> bool:
@@ -2544,9 +2631,14 @@ def _expandvars_argument_references_home_or_temp(call_node: ast.Call) -> bool:
     )
 
 
-def _environ_key_string_from_call(call_node: ast.Call) -> str | None:
-    chain = _dotted_call_attribute_chain(call_node)
-    if chain not in {"os.getenv", "os.environ.get"}:
+def _environ_key_string_from_call(
+    call_node: ast.Call, all_canonical_names_by_alias: dict[str, str],
+) -> str | None:
+    raw_chain = _dotted_call_attribute_chain(call_node)
+    if raw_chain is None:
+        return None
+    canonical_chain = _resolve_chain_through_aliases(raw_chain, all_canonical_names_by_alias)
+    if canonical_chain not in ALL_ENVIRONMENT_GETTER_DOTTED_NAMES:
         return None
     if not call_node.args:
         return None
@@ -2556,18 +2648,31 @@ def _environ_key_string_from_call(call_node: ast.Call) -> str | None:
     return None
 
 
-def _environ_key_string_from_subscript(subscript_node: ast.Subscript) -> str | None:
-    if not (
-        isinstance(subscript_node.value, ast.Attribute)
-        and subscript_node.value.attr == "environ"
-        and isinstance(subscript_node.value.value, ast.Name)
-        and subscript_node.value.value.id == "os"
+def _environ_key_string_from_subscript(
+    subscript_node: ast.Subscript,
+    all_canonical_names_by_alias: dict[str, str],
+    all_environ_local_bindings: set[str],
+) -> str | None:
+    if not _subscript_target_is_os_environ(
+        subscript_node.value, all_canonical_names_by_alias, all_environ_local_bindings
     ):
         return None
     key_node = subscript_node.slice
     if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
         return key_node.value
     return None
+
+
+def _subscript_target_is_os_environ(
+    target_node: ast.expr,
+    all_canonical_names_by_alias: dict[str, str],
+    all_environ_local_bindings: set[str],
+) -> bool:
+    if isinstance(target_node, ast.Name):
+        return target_node.id in all_environ_local_bindings
+    if isinstance(target_node, ast.Attribute):
+        return _attribute_chain_resolves_to_os_environ(target_node, all_canonical_names_by_alias)
+    return False
 
 
 def _collect_pytest_collectable_test_functions(
@@ -2605,21 +2710,27 @@ def _collect_pytest_collectable_test_functions(
 
 def _detect_home_or_temp_probes_in_body(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
-    alias_map: dict[str, str],
+    all_canonical_names_by_alias: dict[str, str],
+    all_environ_local_bindings: set[str],
 ) -> list[tuple[int, str]]:
     """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*.
 
     The walk descends into ``ClassDef`` nodes nested inside the test body and
     into the method bodies of those classes, because instantiating a nested
-    class executes its method bodies as part of the test's runtime path.
-    Class-body statements (class attribute initializers) and standalone
-    nested helper functions or lambdas remain scope boundaries — those run
-    in their own callable scope and carry their own isolation contract.
+    class executes its method bodies as part of the test's runtime path. Once
+    inside that runtime path, the walk continues through further nested
+    functions and lambdas defined within a nested-class method, since they
+    run when the method runs. Class-body statements (class attribute
+    initializers) and standalone nested helper functions or lambdas defined
+    directly in the test body remain scope boundaries — those run in their
+    own callable scope and carry their own isolation contract.
 
     Args:
         function_node: The test function whose body is being scanned.
-        alias_map: Local-alias-to-canonical-name mapping used to resolve
-            aliased pathlib / Path imports before probe membership checks.
+        all_canonical_names_by_alias: Local-binding-to-canonical-prefix mapping used to resolve
+            aliased imports before probe membership checks.
+        all_environ_local_bindings: Local names bound to ``os.environ`` used to
+            attribute subscript reads to a HOME/TMP env probe.
 
     Returns:
         A list of ``(line_number, probe_label)`` tuples for each HOME/TMP
@@ -2631,7 +2742,9 @@ def _detect_home_or_temp_probes_in_body(
     ]
     while nodes_to_visit:
         each_descendant, inside_nested_class = nodes_to_visit.pop()
-        _record_home_or_temp_probe(each_descendant, probes, alias_map)
+        _record_home_or_temp_probe(
+            each_descendant, probes, all_canonical_names_by_alias, all_environ_local_bindings
+        )
         for each_grandchild, each_child_inside_nested_class in _children_to_descend_into(
             each_descendant, inside_nested_class
         ):
@@ -2640,13 +2753,16 @@ def _detect_home_or_temp_probes_in_body(
 
 
 def _record_home_or_temp_probe(
-    node: ast.AST, all_probes: list[tuple[int, str]], alias_map: dict[str, str],
+    node: ast.AST,
+    all_probes: list[tuple[int, str]],
+    all_canonical_names_by_alias: dict[str, str],
+    all_environ_local_bindings: set[str],
 ) -> None:
     if isinstance(node, ast.Call):
         raw_chain = _dotted_call_attribute_chain(node)
         if raw_chain is None:
             return
-        canonical_chain = _resolve_chain_through_aliases(raw_chain, alias_map)
+        canonical_chain = _resolve_chain_through_aliases(raw_chain, all_canonical_names_by_alias)
         if canonical_chain == EXPANDVARS_DOTTED_NAME:
             if _expandvars_argument_references_home_or_temp(node):
                 all_probes.append((node.lineno, f"{canonical_chain}()"))
@@ -2654,12 +2770,14 @@ def _record_home_or_temp_probe(
         if canonical_chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
             all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
-        environ_key = _environ_key_string_from_call(node)
+        environ_key = _environ_key_string_from_call(node, all_canonical_names_by_alias)
         if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
             all_probes.append((node.lineno, f"os env probe '{environ_key}'"))
         return
     if isinstance(node, ast.Subscript):
-        environ_key = _environ_key_string_from_subscript(node)
+        environ_key = _environ_key_string_from_subscript(
+            node, all_canonical_names_by_alias, all_environ_local_bindings
+        )
         if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
             all_probes.append((node.lineno, f"os.environ['{environ_key}']"))
 
@@ -2668,7 +2786,9 @@ def _children_to_descend_into(
     node: ast.AST, inside_nested_class: bool,
 ) -> list[tuple[ast.AST, bool]]:
     if isinstance(node, ast.Lambda):
-        return []
+        if not inside_nested_class:
+            return []
+        return [(node.body, True)]
     if isinstance(node, ast.ClassDef):
         method_children = [
             each_member
@@ -2679,7 +2799,7 @@ def _children_to_descend_into(
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         if not inside_nested_class:
             return []
-        return [(each_child, False) for each_child in ast.iter_child_nodes(node)]
+        return [(each_child, True) for each_child in ast.iter_child_nodes(node)]
     return [
         (each_child, inside_nested_class) for each_child in ast.iter_child_nodes(node)
     ]
@@ -2735,13 +2855,14 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
     except SyntaxError:
         return []
 
-    alias_map = _build_import_alias_map(syntax_tree)
+    all_canonical_names_by_alias = _build_alias_canonicalization_map(syntax_tree)
+    all_environ_local_bindings = _collect_os_environ_local_binding_names(syntax_tree, all_canonical_names_by_alias)
     issues: list[str] = []
     for each_node in _collect_pytest_collectable_test_functions(syntax_tree):
         if _function_uses_pytest_isolation_fixture(each_node):
             continue
         for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(
-            each_node, alias_map
+            each_node, all_canonical_names_by_alias, all_environ_local_bindings
         ):
             issues.append(
                 f"Line {each_line}: Test {each_node.name!r} probes {each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"

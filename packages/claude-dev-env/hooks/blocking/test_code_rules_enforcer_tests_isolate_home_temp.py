@@ -259,6 +259,151 @@ def test_should_not_flag_expandvars_referencing_unrelated_var() -> None:
     assert issues == []
 
 
+def test_should_flag_bare_imported_expanduser() -> None:
+    source = (
+        "from os.path import expanduser\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = expanduser('~/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_bare_imported_expanduser_under_alias() -> None:
+    source = (
+        "from os.path import expanduser as expand_home\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = expand_home('~/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_aliased_os_path_module_expanduser() -> None:
+    source = (
+        "import os.path as op\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = op.expanduser('~/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_bare_imported_getenv_for_home() -> None:
+    source = (
+        "from os import getenv\n"
+        "def test_resolves_home() -> None:\n"
+        "    home = getenv('HOME')\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_bare_imported_getenv_for_unrelated_var() -> None:
+    source = (
+        "from os import getenv\n"
+        "def test_resolves_token() -> None:\n"
+        "    token = getenv('MY_APP_TOKEN')\n"
+        "    print(token)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_aliased_os_module_path_expanduser() -> None:
+    source = (
+        "import os as o\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = o.path.expanduser('~/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_aliased_os_module_getenv_for_home() -> None:
+    source = (
+        "import os as o\n"
+        "def test_resolves_home() -> None:\n"
+        "    home = o.getenv('HOME')\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_aliased_os_module_getenv_for_unrelated_var() -> None:
+    source = (
+        "import os as o\n"
+        "def test_resolves_token() -> None:\n"
+        "    token = o.getenv('MY_APP_TOKEN')\n"
+        "    print(token)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_os_environ_via_local_binding() -> None:
+    source = (
+        "import os\n"
+        "def test_resolves_home() -> None:\n"
+        "    e = os.environ\n"
+        "    home = e['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_os_environ_local_binding_for_unrelated_var() -> None:
+    source = (
+        "import os\n"
+        "def test_resolves_token() -> None:\n"
+        "    e = os.environ\n"
+        "    token = e['MY_APP_TOKEN']\n"
+        "    print(token)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_path_home_inside_nested_function_within_nested_class_method() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "class TestFoo:\n"
+        "    def test_unsafe(self) -> None:\n"
+        "        class HomePath:\n"
+        "            def build(self) -> Path:\n"
+        "                def _inner() -> Path:\n"
+        "                    return Path.home()\n"
+        "                return _inner()\n"
+        "        h = HomePath()\n"
+        "        assert h is not None\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("Path.home" in each_issue for each_issue in issues)
+    assert any("test_unsafe" in each_issue for each_issue in issues)
+
+
+def test_should_flag_lambda_probe_inside_nested_class_method() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "class TestFoo:\n"
+        "    def test_unsafe(self) -> None:\n"
+        "        class HomePath:\n"
+        "            def build(self):\n"
+        "                return (lambda: Path.home())()\n"
+        "        h = HomePath()\n"
+        "        assert h is not None\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("Path.home" in each_issue for each_issue in issues)
+
+
 def test_should_not_run_on_production_files() -> None:
     source = (
         "from pathlib import Path\ndef test_writes_dotfile() -> None:\n    home_dir = Path.home()\n"

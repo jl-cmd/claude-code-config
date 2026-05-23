@@ -125,8 +125,30 @@ EXPANDVARS_DOTTED_NAME: str = "os.path.expandvars"
 ENVIRONMENT_VARIABLE_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
     r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
 )
-ALL_PATHLIB_MODULE_CANONICAL_NAMES: frozenset[str] = frozenset({"pathlib"})
-ALL_PATH_CLASS_CANONICAL_NAMES: frozenset[str] = frozenset({"Path"})
+OS_GETENV_DOTTED_NAME: str = "os.getenv"
+OS_ENVIRON_GET_DOTTED_NAME: str = "os.environ.get"
+OS_ENVIRON_DOTTED_NAME: str = "os.environ"
+ALL_ENVIRONMENT_GETTER_DOTTED_NAMES: frozenset[str] = frozenset({
+    OS_GETENV_DOTTED_NAME,
+    OS_ENVIRON_GET_DOTTED_NAME,
+})
+ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES: frozenset[str] = frozenset({
+    "os",
+    "os.path",
+    "pathlib",
+    "tempfile",
+})
+ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT: dict[tuple[str, str], str] = {
+    ("os.path", "expanduser"): "os.path.expanduser",
+    ("os.path", "expandvars"): "os.path.expandvars",
+    ("os", "getenv"): "os.getenv",
+    ("os", "environ"): "os.environ",
+    ("tempfile", "gettempdir"): "tempfile.gettempdir",
+    ("tempfile", "gettempprefix"): "tempfile.gettempprefix",
+    ("tempfile", "mkstemp"): "tempfile.mkstemp",
+    ("tempfile", "mkdtemp"): "tempfile.mkdtemp",
+    ("pathlib", "Path"): "Path",
+}
 MAX_TEST_ISOLATION_ISSUES: int = 5
 TEST_ISOLATION_MESSAGE_SUFFIX: str = (
     "must take a monkeypatch fixture and route HOME/TMP env reads through "

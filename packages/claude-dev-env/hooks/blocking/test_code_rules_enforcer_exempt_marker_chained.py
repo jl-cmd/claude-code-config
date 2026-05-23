@@ -56,6 +56,21 @@ def test_should_flag_noqa_with_chained_inline_comment() -> None:
     assert _is_exempt_python_comment(token) is False
 
 
+def test_should_flag_noqa_prefixed_prose_lacking_token_boundary() -> None:
+    token = _build_comment_token("# noqa-but-not-really: explanation")
+    assert _is_exempt_python_comment(token) is False
+
+
+def test_should_exempt_bare_noqa_without_code() -> None:
+    token = _build_comment_token("# noqa")
+    assert _is_exempt_python_comment(token) is True
+
+
+def test_should_exempt_noqa_followed_by_whitespace_then_code() -> None:
+    token = _build_comment_token("# noqa F401")
+    assert _is_exempt_python_comment(token) is True
+
+
 def test_should_flag_noqa_with_chained_hash_glued_directly_to_directive() -> None:
     token = _build_comment_token("# noqa: F401#note")
     assert _is_exempt_python_comment(token) is False

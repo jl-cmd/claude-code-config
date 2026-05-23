@@ -1,7 +1,9 @@
 """Tests for ``check_function_length``.
 
 Bodies at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60 lines) block the
-write (see CODE_RULES §6.5). Bodies below the threshold pass silently.
+write (small-function basis: Robert C. Martin, Clean Code Ch. 3 "Functions";
+Google Python Style Guide ~40-line function review hint). Bodies below the
+threshold pass silently.
 
 Cited SYNTHESIS evidence: pa#143 F4, F9, F14 (three recurrences in one PR);
 pa#136 F20.
@@ -123,3 +125,8 @@ def test_should_block_nested_function_over_blocking_threshold() -> None:
     source = f"def outer() -> None:\n    def inner() -> None:\n{inner_body}\n"
     issues = check_function_length(source, PRODUCTION_FILE_PATH)
     assert any("inner" in each_issue for each_issue in issues)
+
+
+def test_blocking_message_does_not_cite_file_length_section() -> None:
+    assert "6.5" not in hook_module.FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX
+    assert "Clean Code" in hook_module.FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX

@@ -35,6 +35,7 @@ ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES: tuple[str, ...] = (
     "pylint:",
     "pragma:",
 )
+ALL_TOKEN_ANCHORED_DIRECTIVE_BOUNDARY_CHARACTERS: frozenset[str] = frozenset({":"})
 ALL_FREE_FORM_EXEMPT_COMMENT_BODIES: tuple[str, ...] = (
     "type:",
     "TODO",
@@ -95,7 +96,9 @@ DOTTED_SEGMENT_PATTERN = re.compile(r"^\.[a-z][a-z0-9_]*$")
 FUNCTION_LENGTH_BLOCKING_THRESHOLD: int = 60
 MAX_FUNCTION_LENGTH_BLOCKING_ISSUES: int = 5
 FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX: str = (
-    "exceeds blocking threshold - split into helpers (see CODE_RULES §6.5)"
+    "exceeds blocking threshold - split into helpers (small functions: Robert C. "
+    "Martin, Clean Code Ch. 3 'Functions'; Google Python Style Guide ~40-line "
+    "function review hint)"
 )
 
 ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES: frozenset[str] = frozenset({

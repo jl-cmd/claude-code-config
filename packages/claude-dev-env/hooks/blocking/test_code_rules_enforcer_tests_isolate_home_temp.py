@@ -477,6 +477,29 @@ def test_should_flag_environ_binding_used_within_the_same_test() -> None:
     assert any("test_within_one_test" in each_issue for each_issue in issues)
 
 
+def test_should_flag_module_level_from_os_import_environ_subscript() -> None:
+    source = (
+        "from os import environ\n"
+        "def test_resolves_home() -> None:\n"
+        "    home = environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+    assert any("test_resolves_home" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_module_level_from_os_import_environ_for_unrelated_var() -> None:
+    source = (
+        "from os import environ\n"
+        "def test_resolves_token() -> None:\n"
+        "    token = environ['MY_APP_TOKEN']\n"
+        "    print(token)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
 def test_should_flag_path_home_inside_nested_function_within_nested_class_method() -> None:
     source = (
         "from pathlib import Path\n"
@@ -608,6 +631,22 @@ def test_should_cap_issue_count_at_configured_maximum() -> None:
     source = f"from pathlib import Path\ndef test_many_probes() -> None:\n{repeated_probes}\n"
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert len(issues) == hook_module.MAX_TEST_ISOLATION_ISSUES
+
+
+def test_should_report_earliest_probes_when_capped() -> None:
+    maximum_issues = hook_module.MAX_TEST_ISOLATION_ISSUES
+    repeated_probes = "\n".join(f"    p{each_index} = Path.home()" for each_index in range(20))
+    source = f"from pathlib import Path\ndef test_many_probes() -> None:\n{repeated_probes}\n"
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    first_probe_line_number = 3
+    reported_line_numbers = [
+        int(each_issue.split(":", maxsplit=1)[0].removeprefix("Line ").strip())
+        for each_issue in issues
+    ]
+    expected_line_numbers = [
+        first_probe_line_number + each_offset for each_offset in range(maximum_issues)
+    ]
+    assert reported_line_numbers == expected_line_numbers
 
 
 def test_should_ignore_test_method_inside_non_test_prefixed_helper_class() -> None:

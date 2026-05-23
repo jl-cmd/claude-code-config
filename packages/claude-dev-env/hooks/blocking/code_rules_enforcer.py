@@ -135,6 +135,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     EACH_PREFIX,
     ALL_FREE_FORM_EXEMPT_COMMENT_BODIES,
     ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES,
+    ALL_TOKEN_ANCHORED_DIRECTIVE_BOUNDARY_CHARACTERS,
     ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES,
     ALL_JAVASCRIPT_EXEMPT_INLINE_COMMENT_PREFIXES,
     ALL_PYTHON_TOKENIZE_FAILURE_EXCEPTIONS,
@@ -877,9 +878,40 @@ def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
         return True
     if directive_body.startswith(ALL_FREE_FORM_EXEMPT_COMMENT_BODIES):
         return True
-    if not directive_body.startswith(ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES):
+    if not _starts_with_bounded_token_anchored_directive(directive_body):
         return False
     return CHAINED_INLINE_COMMENT_PATTERN.search(directive_body) is None
+
+
+def _starts_with_bounded_token_anchored_directive(directive_body: str) -> bool:
+    """Return True when *directive_body* opens with a real exempt directive.
+
+    A token-anchored marker (``noqa``, ``pylint:``, ``pragma:``) counts only
+    when the matched token is immediately followed by a directive boundary —
+    end of string, a colon, or whitespace — so prose like
+    ``noqa-but-not-really: explanation`` that merely shares the prefix does
+    not inherit the exemption.
+
+    Args:
+        directive_body: The comment text with the leading hash and surrounding
+            whitespace already stripped.
+
+    Returns:
+        True when a token-anchored exempt directive is present at a real token
+        boundary, False otherwise.
+    """
+    for each_token in ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES:
+        if not directive_body.startswith(each_token):
+            continue
+        following_text = directive_body[len(each_token):]
+        if not following_text:
+            return True
+        next_character = following_text[0]
+        if next_character.isspace():
+            return True
+        if next_character in ALL_TOKEN_ANCHORED_DIRECTIVE_BOUNDARY_CHARACTERS:
+            return True
+    return False
 
 
 def _extract_python_comment_sets(content: str) -> tuple[set[str], set[str], bool]:
@@ -1417,16 +1449,11 @@ def _collect_banned_noun_word_bindings(
                 record(each_arg.arg, each_arg.lineno, each_arg.col_offset)
         elif isinstance(each_node, ast.ClassDef):
             record(each_node.name, each_node.lineno, each_node.col_offset)
-        elif isinstance(each_node, ast.Import):
+        elif isinstance(each_node, (ast.Import, ast.ImportFrom)):
             for each_alias in each_node.names:
-                bound_name = each_alias.asname or each_alias.name.split(".", maxsplit=1)[0]
-                record(bound_name, each_node.lineno, each_node.col_offset)
-        elif isinstance(each_node, ast.ImportFrom):
-            for each_alias in each_node.names:
-                bound_name = each_alias.asname or each_alias.name
-                if bound_name == "*":
+                if each_alias.asname is None:
                     continue
-                record(bound_name, each_node.lineno, each_node.col_offset)
+                record(each_alias.asname, each_node.lineno, each_node.col_offset)
 
     flagged_bindings.sort(key=lambda binding: (binding[1], binding[2]))
     return flagged_bindings
@@ -2836,7 +2863,9 @@ def _subscript_target_is_os_environ(
     all_environ_local_bindings: set[str],
 ) -> bool:
     if isinstance(target_node, ast.Name):
-        return target_node.id in all_environ_local_bindings
+        if target_node.id in all_environ_local_bindings:
+            return True
+        return all_canonical_names_by_alias.get(target_node.id) == OS_ENVIRON_DOTTED_NAME
     if isinstance(target_node, ast.Attribute):
         return _attribute_chain_resolves_to_os_environ(target_node, all_canonical_names_by_alias)
     return False
@@ -2927,6 +2956,7 @@ def _detect_home_or_temp_probes_in_body(
             each_descendant, inside_nested_class
         ):
             nodes_to_visit.append((each_grandchild, each_child_inside_nested_class))
+    probes.sort(key=lambda each_probe: each_probe[0])
     return probes
 
 
@@ -4889,7 +4919,13 @@ def check_function_length(content: str, file_path: str) -> list[str]:
     Function definition spans (signature line through last body statement,
     inclusive) at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60
     lines) appear in the returned issues list and block the write at the
-    gate (see CODE_RULES §6.5 for the source rationale).
+    gate. The threshold rests on the small-function guidance in Robert C.
+    Martin, *Clean Code* Ch. 3 ("Functions") and the Google Python Style
+    Guide's ~40-line function review hint
+    (https://google.github.io/styleguide/pyguide.html); this gate blocks on
+    body growth that pushes a function past that span. It does not derive
+    from CODE_RULES §6.5, which governs advisory file-length signals and
+    argues against hard numeric blocks.
 
     The issue message carries ``Function NAME (defined at line X) is Y lines``
     precisely so the gate's ``function_length_span_range`` can recover the

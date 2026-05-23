@@ -166,10 +166,16 @@ def test_should_flag_function_definition_with_data_word_in_name() -> None:
     assert any("fetch_data_table" in each_issue for each_issue in issues)
 
 
-def test_should_flag_import_from_alias_with_banned_word() -> None:
-    source = "from models import HolidayPeakResult\n"
+def test_should_flag_import_from_author_chosen_alias_with_banned_word() -> None:
+    source = "from models import HolidayPeak as holiday_peak_result\n"
     issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
-    assert any("HolidayPeakResult" in each_issue for each_issue in issues)
+    assert any("holiday_peak_result" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_non_aliased_upstream_import_with_banned_word() -> None:
+    source = "from typing import ItemsView\n"
+    issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
+    assert issues == []
 
 
 def test_should_flag_import_renamed_with_banned_word() -> None:
@@ -184,16 +190,22 @@ def test_should_skip_star_import_with_no_named_binding() -> None:
     assert issues == []
 
 
-def test_should_use_only_first_segment_of_dotted_import_name() -> None:
+def test_should_not_flag_non_aliased_dotted_import_with_clean_first_segment() -> None:
     source = "import analytics.data_pipeline\n"
     issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
     assert issues == []
 
 
-def test_should_flag_dotted_import_when_first_segment_has_banned_word() -> None:
+def test_should_not_flag_non_aliased_dotted_import_with_banned_first_segment() -> None:
     source = "import data_pipeline.analytics\n"
     issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
-    assert any("data_pipeline" in each_issue for each_issue in issues)
+    assert issues == []
+
+
+def test_should_flag_aliased_dotted_import_with_banned_word_in_alias() -> None:
+    source = "import analytics.pipeline as data_table\n"
+    issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
+    assert any("data_table" in each_issue for each_issue in issues)
 
 
 def test_should_flag_with_as_binding_target_with_banned_word() -> None:

@@ -1425,6 +1425,86 @@ def test_isolation_check_scopes_environ_bindings_to_their_own_test() -> None:
     assert not any("test_b" in each_issue for each_issue in issues)
 
 
+def test_isolation_check_flags_module_level_from_os_import_environ_subscript() -> None:
+    """A module-level `from os import environ` binds `environ` to `os.environ`,
+    so `environ['HOME']` inside a test must fire even without a per-test
+    local binding."""
+    source = (
+        "from os import environ\n"
+        "def test_resolves_home() -> None:\n"
+        "    home = environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_reports_earliest_probes_when_capped() -> None:
+    """When a test exceeds the issue cap, the earliest probes in source order
+    must survive, not the latest."""
+    maximum_issues = code_rules_enforcer.MAX_TEST_ISOLATION_ISSUES
+    repeated_probes = "\n".join(
+        f"    p{each_index} = Path.home()" for each_index in range(20)
+    )
+    source = (
+        f"from pathlib import Path\ndef test_many_probes() -> None:\n{repeated_probes}\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    first_probe_line_number = 3
+    reported_line_numbers = [
+        int(each_issue.split(":", maxsplit=1)[0].removeprefix("Line ").strip())
+        for each_issue in issues
+    ]
+    expected_line_numbers = [
+        first_probe_line_number + each_offset for each_offset in range(maximum_issues)
+    ]
+    assert reported_line_numbers == expected_line_numbers
+
+
+def test_exempt_comment_rejects_noqa_prefixed_prose_lacking_boundary() -> None:
+    """A comment body that merely starts with `noqa` followed by non-boundary
+    characters is not a real noqa directive and must stay subject to the
+    no-new-comments rule."""
+    source = "x = compute()  # noqa-but-not-really: explanation\n"
+    issues = code_rules_enforcer.check_comments_python(source)
+    assert issues
+
+
+def test_exempt_comment_keeps_bare_and_coded_noqa_exempt() -> None:
+    """A bare `# noqa` and a coded `# noqa: E501` remain exempt under the
+    tightened boundary rule."""
+    bare_source = "x = compute()  # noqa\n"
+    coded_source = "x = compute()  # noqa: E501\n"
+    assert code_rules_enforcer.check_comments_python(bare_source) == []
+    assert code_rules_enforcer.check_comments_python(coded_source) == []
+
+
+def test_banned_noun_word_skips_non_aliased_upstream_import() -> None:
+    """A non-aliased upstream import the author cannot rename
+    (`from typing import ItemsView`) must not be flagged, while an
+    author-coined alias still is."""
+    production_path = "packages/myapp/services/customer_pipeline.py"
+    upstream_issues = code_rules_enforcer.check_banned_noun_word_boundary(
+        "from typing import ItemsView\n", production_path
+    )
+    aliased_issues = code_rules_enforcer.check_banned_noun_word_boundary(
+        "import legacy_helper as cached_response\n", production_path
+    )
+    assert upstream_issues == []
+    assert any("cached_response" in each_issue for each_issue in aliased_issues)
+
+
+def test_function_length_message_does_not_cite_file_length_section() -> None:
+    """The blocking message must cite a function-length basis, not the
+    advisory file-length section (CODE_RULES §6.5)."""
+    assert "6.5" not in code_rules_enforcer.FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX
+    assert "Clean Code" in code_rules_enforcer.FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX
+
+
 def _function_node_named(source: str, function_name: str) -> ast.FunctionDef:
     syntax_tree = ast.parse(source)
     for each_node in syntax_tree.body:

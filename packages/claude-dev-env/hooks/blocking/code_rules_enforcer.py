@@ -107,6 +107,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES,
     ALL_HOME_DIRECTORY_ENV_VAR_NAMES,
     ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
+    PYTEST_TEST_CLASS_NAME_PREFIX,
     FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
     FUNCTION_LENGTH_BLOCKING_THRESHOLD,
     MAX_FUNCTION_LENGTH_BLOCKING_ISSUES,
@@ -2479,7 +2480,8 @@ def _collect_pytest_collectable_test_functions(
     Walks module-level statements and the top-level methods of module-level
     classes only. Functions nested inside other functions or lambdas are
     excluded because pytest does not collect nested callables. Module-level
-    classes whose name does not start with ``Test`` are skipped because the
+    classes whose name does not start with the
+    ``PYTEST_TEST_CLASS_NAME_PREFIX`` (``Test``) are skipped because the
     repo's ``pytest.ini`` declares ``python_classes = Test*``; methods on
     non-``Test*`` helper classes are never collected by pytest.
     """
@@ -2492,7 +2494,7 @@ def _collect_pytest_collectable_test_functions(
             ):
                 collectable.append(each_module_statement)
         elif isinstance(each_module_statement, ast.ClassDef):
-            if not each_module_statement.name.startswith("Test"):
+            if not each_module_statement.name.startswith(PYTEST_TEST_CLASS_NAME_PREFIX):
                 continue
             for each_class_member in each_module_statement.body:
                 if isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)) and (

@@ -59,6 +59,28 @@ from hooks_constants.stuttering_check_config import (  # noqa: E402
 PRODUCTION_FILE_PATH = "packages/claude-dev-env/hooks/blocking/example_production.py"
 
 
+def test_should_treat_repo_relative_hook_path_as_hook_infrastructure() -> None:
+    relative_hook_path = "packages/claude-dev-env/hooks/blocking/code_rules_enforcer.py"
+    assert code_rules_enforcer.is_hook_infrastructure(relative_hook_path) is True
+
+
+def test_should_treat_backslash_repo_relative_hook_path_as_hook_infrastructure() -> None:
+    relative_hook_path = "packages\\claude-dev-env\\hooks\\blocking\\code_rules_enforcer.py"
+    assert code_rules_enforcer.is_hook_infrastructure(relative_hook_path) is True
+
+
+def test_should_not_treat_unrelated_repo_relative_path_as_hook_infrastructure() -> None:
+    relative_source_path = "packages/claude-dev-env/skills/bugteam/scripts/runner.py"
+    assert code_rules_enforcer.is_hook_infrastructure(relative_source_path) is False
+
+
+def test_should_exempt_repo_relative_hook_file_from_function_length() -> None:
+    body_lines = "\n".join(f"    bound_{each_index} = {each_index}" for each_index in range(70))
+    grown_function_source = "def grown_function() -> None:\n" + body_lines + "\n"
+    relative_hook_path = "packages/claude-dev-env/hooks/blocking/code_rules_enforcer.py"
+    assert code_rules_enforcer.check_function_length(grown_function_source, relative_hook_path) == []
+
+
 def test_should_expose_all_banned_identifiers_from_config() -> None:
     expected_banned_identifiers = frozenset({
         "result", "data", "output", "response", "value", "item", "temp",

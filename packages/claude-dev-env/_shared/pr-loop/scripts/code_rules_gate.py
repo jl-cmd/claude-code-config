@@ -19,6 +19,9 @@ from pr_loop_shared_constants.code_rules_gate_constants import (  # noqa: E402
     ALL_TEST_FILENAME_SUFFIXES,
     EXPECTED_NON_RENAME_COLUMN_COUNT,
     EXPECTED_RENAME_COLUMN_COUNT,
+    FUNCTION_LENGTH_DEFINITION_LINE_GROUP_INDEX,
+    FUNCTION_LENGTH_SPAN_GROUP_INDEX,
+    FUNCTION_LENGTH_VIOLATION_PATTERN,
     GIT_NAME_STATUS_ADDED_PREFIX,
     GIT_NAME_STATUS_RENAMED_PREFIX,
     MAX_VIOLATIONS_PER_CHECK,
@@ -909,6 +912,29 @@ def extract_violation_line_number(violation_text: str) -> int | None:
     return int(match_result.group(1))
 
 
+def function_length_span_range(violation_text: str) -> range | None:
+    """Return the declared line range of a function-length violation, or None.
+
+    The enforcer's function-length message carries the definition line and
+    the function's line span: ``Function 'NAME' (defined at line X) is Y
+    lines - ...``. The function occupies lines ``X`` through ``X + Y - 1``
+    inclusive.
+
+    Args:
+        violation_text: A single violation string emitted by the enforcer.
+
+    Returns:
+        A ``range`` covering the function's declared line span, or None when
+        the text is not a function-length violation.
+    """
+    match_result = FUNCTION_LENGTH_VIOLATION_PATTERN.search(violation_text)
+    if match_result is None:
+        return None
+    definition_line = int(match_result.group(FUNCTION_LENGTH_DEFINITION_LINE_GROUP_INDEX))
+    line_span = int(match_result.group(FUNCTION_LENGTH_SPAN_GROUP_INDEX))
+    return range(definition_line, definition_line + line_span)
+
+
 def split_violations_by_scope(
     all_issues: list[str],
     all_added_line_numbers: set[int] | None,
@@ -922,15 +948,25 @@ def split_violations_by_scope(
 
     Returns:
         Tuple ``(blocking, advisory)``. When *all_added_line_numbers* is
-        None, every issue is blocking; otherwise issues whose ``Line N:``
-        prefix matches an added line are blocking and the rest are
-        advisory.
+        None, every issue is blocking. Function-length violations are
+        blocking when the function's declared line span intersects the added
+        lines (the body grew in this diff) and advisory otherwise (a
+        pre-existing untouched long function). Every other issue is blocking
+        when its ``Line N:`` prefix names an added line and advisory
+        otherwise.
     """
     if all_added_line_numbers is None:
         return list(all_issues), []
     blocking: list[str] = []
     advisory: list[str] = []
     for each_issue in all_issues:
+        span_range = function_length_span_range(each_issue)
+        if span_range is not None:
+            if any(each_line in all_added_line_numbers for each_line in span_range):
+                blocking.append(each_issue)
+            else:
+                advisory.append(each_issue)
+            continue
         violation_line = extract_violation_line_number(each_issue)
         if violation_line is None:
             blocking.append(each_issue)

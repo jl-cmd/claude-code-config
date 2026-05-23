@@ -167,7 +167,7 @@ def get_file_extension(file_path: str) -> str:
 
 def is_hook_infrastructure(file_path: str) -> bool:
     """Check if file is a Claude Code hook (standalone infrastructure, not project code)."""
-    path_lower = file_path.lower().replace("\\", "/")
+    path_lower = "/" + file_path.lower().replace("\\", "/").lstrip("/")
     return any(pattern.replace("\\", "/") in path_lower for pattern in ALL_HOOK_INFRASTRUCTURE_PATTERNS)
 
 

@@ -1,7 +1,15 @@
 """Constants for code_rules_gate.py per CODE_RULES centralized-config rule."""
 
+import re
+
 MAX_VIOLATIONS_PER_CHECK: int = 3
 EXPECTED_TUPLE_PAIR_LENGTH: int = 2
+
+FUNCTION_LENGTH_VIOLATION_PATTERN: re.Pattern[str] = re.compile(
+    r"\(defined at line (\d+)\) is (\d+) lines"
+)
+FUNCTION_LENGTH_DEFINITION_LINE_GROUP_INDEX: int = 1
+FUNCTION_LENGTH_SPAN_GROUP_INDEX: int = 2
 
 ALL_CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
     {".py", ".js", ".ts", ".tsx", ".jsx"}

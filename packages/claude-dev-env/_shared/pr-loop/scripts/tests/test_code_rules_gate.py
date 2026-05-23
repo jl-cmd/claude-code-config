@@ -31,22 +31,6 @@ def _load_gate_module() -> ModuleType:
 gate_module = _load_gate_module()
 
 
-def _load_enforcer_module() -> ModuleType:
-    package_root = gate_module.resolve_claude_dev_env_root(
-        Path(gate_module.__file__).resolve()
-    )
-    enforcer_path = package_root / "hooks" / "blocking" / "code_rules_enforcer.py"
-    spec = importlib.util.spec_from_file_location("code_rules_enforcer", enforcer_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-enforcer_module = _load_enforcer_module()
-
-
 def run_git_in_repository(repository_root: Path, *arguments: str) -> str:
     completion = subprocess.run(
         ["git", *arguments],

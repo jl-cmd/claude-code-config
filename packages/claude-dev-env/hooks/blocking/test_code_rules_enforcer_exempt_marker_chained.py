@@ -56,6 +56,26 @@ def test_should_flag_noqa_with_chained_inline_comment() -> None:
     assert _is_exempt_python_comment(token) is False
 
 
+def test_should_flag_noqa_with_chained_hash_glued_directly_to_directive() -> None:
+    token = _build_comment_token("# noqa: F401#note")
+    assert _is_exempt_python_comment(token) is False
+
+
+def test_should_flag_noqa_with_chained_hash_lacking_trailing_space() -> None:
+    token = _build_comment_token("# noqa: F401 #prose")
+    assert _is_exempt_python_comment(token) is False
+
+
+def test_should_flag_pragma_with_chained_hash_glued_directly_to_directive() -> None:
+    token = _build_comment_token("# pragma: no cover#why")
+    assert _is_exempt_python_comment(token) is False
+
+
+def test_should_flag_pylint_with_chained_hash_lacking_trailing_space() -> None:
+    token = _build_comment_token("# pylint: disable=line-too-long #prose")
+    assert _is_exempt_python_comment(token) is False
+
+
 def test_should_exempt_bare_pylint_directive() -> None:
     token = _build_comment_token("# pylint: disable=line-too-long")
     assert _is_exempt_python_comment(token) is True

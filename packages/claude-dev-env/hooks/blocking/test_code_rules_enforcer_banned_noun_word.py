@@ -28,6 +28,8 @@ assert hook_spec.loader is not None
 hook_module = importlib.util.module_from_spec(hook_spec)
 hook_spec.loader.exec_module(hook_module)
 check_banned_noun_word_boundary = hook_module.check_banned_noun_word_boundary
+check_banned_identifiers = hook_module.check_banned_identifiers
+validate_content = hook_module.validate_content
 _identifier_word_parts = hook_module._identifier_word_parts
 _find_banned_noun_word = hook_module._find_banned_noun_word
 
@@ -202,3 +204,53 @@ def test_should_flag_with_as_binding_target_with_banned_word() -> None:
     )
     issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
     assert any("data_result" in each_issue for each_issue in issues)
+
+
+EDIT_FRAGMENT_WITHOUT_BANNED_NAME = (
+    "def compute_total() -> int:\n    running_sum = 0\n    return running_sum\n"
+)
+FULL_FILE_WITH_BANNED_NAME_OUTSIDE_FRAGMENT = (
+    "def compute_total() -> int:\n    running_sum = 0\n    return running_sum\n"
+    "\n"
+    "def aggregate() -> list[int]:\n"
+    "    canned_results = [4, 5, 6]\n"
+    "    return canned_results\n"
+)
+
+
+def test_edit_scope_matches_companion_banned_identifier_check() -> None:
+    fragment_noun_issues = check_banned_noun_word_boundary(
+        EDIT_FRAGMENT_WITHOUT_BANNED_NAME, PRODUCTION_FILE_PATH
+    )
+    fragment_exact_issues = check_banned_identifiers(
+        EDIT_FRAGMENT_WITHOUT_BANNED_NAME, PRODUCTION_FILE_PATH
+    )
+    noun_issues = validate_content(
+        EDIT_FRAGMENT_WITHOUT_BANNED_NAME,
+        PRODUCTION_FILE_PATH,
+        old_content="",
+        full_file_content=FULL_FILE_WITH_BANNED_NAME_OUTSIDE_FRAGMENT,
+    )
+    assert fragment_noun_issues == []
+    assert fragment_exact_issues == []
+    assert not any("canned_results" in each_issue for each_issue in noun_issues), (
+        "check_banned_noun_word_boundary must analyze the edited fragment scope "
+        "on an Edit (matching check_banned_identifiers), not the reconstructed "
+        f"full file; got {noun_issues!r}"
+    )
+
+
+def test_edit_scope_still_flags_banned_word_inside_fragment() -> None:
+    fragment_with_banned_word = (
+        "def aggregate() -> list[int]:\n"
+        "    canned_results = [4, 5, 6]\n"
+        "    return canned_results\n"
+    )
+    full_file = EDIT_FRAGMENT_WITHOUT_BANNED_NAME + "\n" + fragment_with_banned_word
+    noun_issues = validate_content(
+        fragment_with_banned_word,
+        PRODUCTION_FILE_PATH,
+        old_content="",
+        full_file_content=full_file,
+    )
+    assert any("canned_results" in each_issue for each_issue in noun_issues)

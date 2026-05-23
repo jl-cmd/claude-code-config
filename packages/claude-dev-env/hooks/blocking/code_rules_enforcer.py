@@ -106,6 +106,10 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_CAPS_WITH_UNDERSCORE_PATTERN,
     ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES,
     ALL_HOME_DIRECTORY_ENV_VAR_NAMES,
+    ALL_PATH_CLASS_CANONICAL_NAMES,
+    ALL_PATHLIB_MODULE_CANONICAL_NAMES,
+    ENVIRONMENT_VARIABLE_REFERENCE_PATTERN,
+    EXPANDVARS_DOTTED_NAME,
     ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
     PYTEST_TEST_CLASS_NAME_PREFIX,
     FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
@@ -840,13 +844,18 @@ def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
     characters (space or tab) between the hash and the directive body.
 
     Token-anchored markers (``noqa``, ``pylint:``, ``pragma:``) are
-    exempt only when the comment carries no chained second comment. A
-    chained ``\\s#\\s`` sequence inside the comment body — for example
-    ``# noqa: F401  # imported for re-export`` — indicates a second
-    free-form inline comment piggybacking on the exempt marker; the
-    trailing prose is not itself an exempt directive and therefore
-    must not inherit exemption. Free-form markers (``type:``,
-    ``TODO``, ``FIXME``, ``HACK``, ``XXX``) accept any trailing prose:
+    exempt only when the comment carries no chained second comment. Any
+    second ``#`` after the directive body — regardless of whitespace
+    around the inner hash, so ``# noqa: F401#note``,
+    ``# noqa: F401 #prose``, and ``# noqa: F401  # imported for re-export``
+    all qualify — indicates a second free-form inline comment
+    piggybacking on the exempt marker; the trailing prose is not itself
+    an exempt directive and therefore must not inherit exemption. A
+    token-anchored directive body never legitimately carries a ``#``
+    (noqa codes, pylint symbols, and pragma directives contain none), so
+    any inner ``#`` reliably marks chained prose. Free-form markers
+    (``type:``, ``TODO``, ``FIXME``, ``HACK``, ``XXX``) accept any
+    trailing prose:
     ``# type:`` participates in the documented justification
     convention enforced by ``check_type_escape_hatches`` (which
     requires a trailing reason), and the TODO-family markers carry
@@ -2446,6 +2455,95 @@ def _dotted_call_attribute_chain(call_node: ast.Call) -> str | None:
     return ".".join(chain_parts)
 
 
+def _build_import_alias_map(syntax_tree: ast.Module) -> dict[str, str]:
+    """Map each aliased import local name to its canonical first-segment name.
+
+    Resolves ``from pathlib import Path as P`` (``P`` -> ``Path``) and
+    ``import pathlib as pathlib_alias`` (``pathlib_alias`` -> ``pathlib``)
+    so a dotted-call chain rooted at the alias can be rewritten back to its
+    canonical form before membership comparison against the probe set. Only
+    pathlib / Path bindings are tracked because those are the home-probe
+    callees that can be exercised through an alias; bindings whose canonical
+    target is not a recognized pathlib or Path name are ignored.
+
+    Args:
+        syntax_tree: The parsed module to scan for import statements.
+
+    Returns:
+        Mapping from local alias name to canonical name.
+    """
+    alias_map: dict[str, str] = {}
+    for each_node in ast.walk(syntax_tree):
+        if isinstance(each_node, ast.Import):
+            for each_alias in each_node.names:
+                if each_alias.asname is None:
+                    continue
+                if each_alias.name in ALL_PATHLIB_MODULE_CANONICAL_NAMES:
+                    alias_map[each_alias.asname] = each_alias.name
+        elif isinstance(each_node, ast.ImportFrom):
+            if each_node.module not in ALL_PATHLIB_MODULE_CANONICAL_NAMES:
+                continue
+            for each_alias in each_node.names:
+                if each_alias.asname is None:
+                    continue
+                if each_alias.name in ALL_PATH_CLASS_CANONICAL_NAMES:
+                    alias_map[each_alias.asname] = each_alias.name
+    return alias_map
+
+
+def _resolve_chain_through_aliases(chain: str, alias_map: dict[str, str]) -> str:
+    """Rewrite the first segment of *chain* through *alias_map*.
+
+    Args:
+        chain: A dotted callee chain such as ``"P.home"`` or
+            ``"pathlib_alias.Path.home"``.
+        alias_map: Local-alias-to-canonical-name mapping from
+            ``_build_import_alias_map``.
+
+    Returns:
+        The chain with its leading segment replaced by the canonical name
+        when an alias matches; otherwise the chain unchanged.
+    """
+    first_segment, separator, remainder = chain.partition(".")
+    canonical_first = alias_map.get(first_segment)
+    if canonical_first is None:
+        return chain
+    return f"{canonical_first}{separator}{remainder}"
+
+
+def _expandvars_argument_references_home_or_temp(call_node: ast.Call) -> bool:
+    """Return True when an ``expandvars`` call expands a home/temp env var.
+
+    Inspects the first string argument for ``$NAME`` / ``${NAME}`` references
+    and reports whether any referenced name is a home/temp env var. A
+    non-constant or absent argument is treated as not referencing a home/temp
+    variable, mirroring the conservative env-name filtering applied to
+    ``os.getenv``.
+
+    Args:
+        call_node: The ``os.path.expandvars(...)`` call node.
+
+    Returns:
+        True when at least one expanded variable name is in
+        ``ALL_HOME_DIRECTORY_ENV_VAR_NAMES``.
+    """
+    if not call_node.args:
+        return False
+    first_argument = call_node.args[0]
+    if not (
+        isinstance(first_argument, ast.Constant)
+        and isinstance(first_argument.value, str)
+    ):
+        return False
+    referenced_names = ENVIRONMENT_VARIABLE_REFERENCE_PATTERN.findall(
+        first_argument.value
+    )
+    return any(
+        each_name in ALL_HOME_DIRECTORY_ENV_VAR_NAMES
+        for each_name in referenced_names
+    )
+
+
 def _environ_key_string_from_call(call_node: ast.Call) -> str | None:
     chain = _dotted_call_attribute_chain(call_node)
     if chain not in {"os.getenv", "os.environ.get"}:
@@ -2507,6 +2605,7 @@ def _collect_pytest_collectable_test_functions(
 
 def _detect_home_or_temp_probes_in_body(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    alias_map: dict[str, str],
 ) -> list[tuple[int, str]]:
     """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*.
 
@@ -2519,6 +2618,8 @@ def _detect_home_or_temp_probes_in_body(
 
     Args:
         function_node: The test function whose body is being scanned.
+        alias_map: Local-alias-to-canonical-name mapping used to resolve
+            aliased pathlib / Path imports before probe membership checks.
 
     Returns:
         A list of ``(line_number, probe_label)`` tuples for each HOME/TMP
@@ -2530,7 +2631,7 @@ def _detect_home_or_temp_probes_in_body(
     ]
     while nodes_to_visit:
         each_descendant, inside_nested_class = nodes_to_visit.pop()
-        _record_home_or_temp_probe(each_descendant, probes)
+        _record_home_or_temp_probe(each_descendant, probes, alias_map)
         for each_grandchild, each_child_inside_nested_class in _children_to_descend_into(
             each_descendant, inside_nested_class
         ):
@@ -2539,12 +2640,19 @@ def _detect_home_or_temp_probes_in_body(
 
 
 def _record_home_or_temp_probe(
-    node: ast.AST, all_probes: list[tuple[int, str]],
+    node: ast.AST, all_probes: list[tuple[int, str]], alias_map: dict[str, str],
 ) -> None:
     if isinstance(node, ast.Call):
-        chain = _dotted_call_attribute_chain(node)
-        if chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
-            all_probes.append((node.lineno, f"{chain}()"))
+        raw_chain = _dotted_call_attribute_chain(node)
+        if raw_chain is None:
+            return
+        canonical_chain = _resolve_chain_through_aliases(raw_chain, alias_map)
+        if canonical_chain == EXPANDVARS_DOTTED_NAME:
+            if _expandvars_argument_references_home_or_temp(node):
+                all_probes.append((node.lineno, f"{canonical_chain}()"))
+            return
+        if canonical_chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
+            all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
         environ_key = _environ_key_string_from_call(node)
         if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
@@ -2627,11 +2735,14 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
     except SyntaxError:
         return []
 
+    alias_map = _build_import_alias_map(syntax_tree)
     issues: list[str] = []
     for each_node in _collect_pytest_collectable_test_functions(syntax_tree):
         if _function_uses_pytest_isolation_fixture(each_node):
             continue
-        for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(each_node):
+        for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(
+            each_node, alias_map
+        ):
             issues.append(
                 f"Line {each_line}: Test {each_node.name!r} probes {each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"
             )
@@ -4473,6 +4584,15 @@ def check_function_length(content: str, file_path: str) -> list[str]:
     lines) appear in the returned issues list and block the write at the
     gate (see CODE_RULES §6.5 for the source rationale).
 
+    The issue message intentionally leads with ``Function`` rather than the
+    ``Line N:`` prefix the gate's ``split_violations_by_scope`` parses for
+    touched-line membership. Growing an existing function's body past the
+    threshold leaves the ``def`` line outside the diff's added-line set, so a
+    ``Line N:`` anchor at the definition would be downgraded to advisory and
+    let the regression merge. Emitting no parseable line prefix routes the
+    violation through the gate's always-blocking path while the function name
+    and definition line stay in the message for the operator.
+
     Exempt: test files (test bodies are sometimes long by necessity), Django
     migrations (auto-generated), workflow registries (registry entries), and
     hook infrastructure.
@@ -4504,7 +4624,7 @@ def check_function_length(content: str, file_path: str) -> list[str]:
         line_span = _function_definition_line_span(each_node)
         if line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:
             issues.append(
-                f"Line {each_node.lineno}: function {each_node.name!r} is {line_span} lines - {FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX}"
+                f"Function {each_node.name!r} (defined at line {each_node.lineno}) is {line_span} lines - {FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX}"
             )
             if len(issues) >= MAX_FUNCTION_LENGTH_BLOCKING_ISSUES:
                 break
@@ -4548,7 +4668,7 @@ def validate_content(
         all_issues.extend(check_file_global_constants_use_count(content, file_path))
         all_issues.extend(check_type_escape_hatches(effective_content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))
-        all_issues.extend(check_banned_noun_word_boundary(effective_content, file_path))
+        all_issues.extend(check_banned_noun_word_boundary(content, file_path))
         all_issues.extend(check_banned_prefixes(effective_content, file_path))
         all_issues.extend(check_stub_implementations(effective_content, file_path))
         all_issues.extend(check_typed_dict_encode_decode(effective_content, file_path))

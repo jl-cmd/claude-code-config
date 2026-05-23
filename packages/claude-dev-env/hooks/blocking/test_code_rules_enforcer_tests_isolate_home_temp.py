@@ -215,6 +215,50 @@ def test_should_not_flag_os_getenv_for_unrelated_var() -> None:
     assert issues == []
 
 
+def test_should_flag_expandvars_referencing_home_env_var() -> None:
+    source = (
+        "import os\n"
+        "def test_expands_home() -> None:\n"
+        "    target = os.path.expandvars('$HOME/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expandvars" in each_issue for each_issue in issues)
+
+
+def test_should_flag_expandvars_referencing_temp_env_var() -> None:
+    source = (
+        "import os\n"
+        "def test_expands_temp() -> None:\n"
+        "    target = os.path.expandvars('$TEMP/scratch')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expandvars" in each_issue for each_issue in issues)
+
+
+def test_should_flag_expandvars_with_braced_home_reference() -> None:
+    source = (
+        "import os\n"
+        "def test_expands_braced_home() -> None:\n"
+        "    target = os.path.expandvars('${USERPROFILE}/Documents')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expandvars" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_expandvars_referencing_unrelated_var() -> None:
+    source = (
+        "import os\n"
+        "def test_expands_unrelated() -> None:\n"
+        "    token = os.path.expandvars('$MY_APP_TOKEN')\n"
+        "    print(token)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
 def test_should_not_run_on_production_files() -> None:
     source = (
         "from pathlib import Path\ndef test_writes_dotfile() -> None:\n    home_dir = Path.home()\n"
@@ -244,6 +288,39 @@ def test_should_ignore_helper_named_with_bare_test_prefix() -> None:
         "    return Path.home()\n"
         "def testament_root() -> Path:\n"
         "    return Path.home()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_aliased_path_home_probe() -> None:
+    source = (
+        "from pathlib import Path as P\n"
+        "def test_writes_dotfile() -> None:\n"
+        "    home_dir = P.home()\n"
+        "    (home_dir / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("home" in each_issue.lower() for each_issue in issues)
+
+
+def test_should_flag_aliased_module_import_home_probe() -> None:
+    source = (
+        "import pathlib as pathlib_alias\n"
+        "def test_writes_dotfile() -> None:\n"
+        "    home_dir = pathlib_alias.Path.home()\n"
+        "    (home_dir / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("home" in each_issue.lower() for each_issue in issues)
+
+
+def test_should_allow_aliased_path_home_with_monkeypatch_fixture() -> None:
+    source = (
+        "from pathlib import Path as P\n"
+        "def test_writes_dotfile(monkeypatch) -> None:\n"
+        "    monkeypatch.setenv('HOME', '/tmp/fake')\n"
+        "    home_dir = P.home()\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert issues == []

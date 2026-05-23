@@ -42,7 +42,7 @@ ALL_FREE_FORM_EXEMPT_COMMENT_BODIES: tuple[str, ...] = (
     "HACK",
     "XXX",
 )
-CHAINED_INLINE_COMMENT_PATTERN = re.compile(r"\s#\s")
+CHAINED_INLINE_COMMENT_PATTERN = re.compile(r"#")
 ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES: tuple[str, ...] = (
     "// @ts-",
     "// eslint-",
@@ -121,6 +121,12 @@ ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
     "tempfile.mkstemp",
     "tempfile.mkdtemp",
 })
+EXPANDVARS_DOTTED_NAME: str = "os.path.expandvars"
+ENVIRONMENT_VARIABLE_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
+    r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
+)
+ALL_PATHLIB_MODULE_CANONICAL_NAMES: frozenset[str] = frozenset({"pathlib"})
+ALL_PATH_CLASS_CANONICAL_NAMES: frozenset[str] = frozenset({"Path"})
 MAX_TEST_ISOLATION_ISSUES: int = 5
 TEST_ISOLATION_MESSAGE_SUFFIX: str = (
     "must take a monkeypatch fixture and route HOME/TMP env reads through "

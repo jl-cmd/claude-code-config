@@ -854,6 +854,60 @@ def test_check_wrapper_plumb_through_skips_class_methods_calling_module_delegate
     )
 
 
+def _build_function_module(
+    function_name: str, body_line_count: int, leading_lines: int = 0
+) -> str:
+    preamble = "".join("anchor_name\n" for _ in range(leading_lines))
+    body = "\n".join("    keep_alive_name" for _ in range(body_line_count))
+    return f"{preamble}def {function_name}() -> None:\n{body}\n"
+
+
+def test_main_blocks_when_function_body_grows_past_threshold_with_def_line_untouched(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An existing function grown past the blocking threshold by editing its
+    body must be classified blocking even when the ``def`` line is untouched.
+
+    Anchoring the function-length violation to the ``def`` line let the gate
+    treat it as advisory whenever body growth left the definition line
+    outside the added-line set. The violation must surface as blocking
+    regardless of which body line carries the edit.
+    """
+    short_body_count = 5
+    baseline = _build_function_module("grow_me", body_line_count=short_body_count)
+    write_file(temporary_git_repository / "module.py", baseline)
+    commit_all_files(temporary_git_repository, "baseline short function")
+
+    grown_body_count = 70
+    grown = _build_function_module("grow_me", body_line_count=grown_body_count)
+    write_file(temporary_git_repository / "module.py", grown)
+    stage_file(temporary_git_repository, "module.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1
+
+
+def test_split_violations_treats_function_length_issue_as_blocking_off_added_lines() -> None:
+    """The function-length violation message must not be parsed as a touched-line
+    issue, so it stays blocking even when no added line matches its location."""
+    validate_content = gate_module.load_validate_content()
+    long_function = _build_function_module("oversized", body_line_count=70, leading_lines=3)
+    issues = validate_content(long_function, "src/long_module.py", "")
+    function_length_issues = [
+        each_issue for each_issue in issues if "blocking threshold" in each_issue
+    ]
+    assert function_length_issues, f"expected a function-length issue, got {issues!r}"
+    blocking, advisory = gate_module.split_violations_by_scope(
+        function_length_issues,
+        all_added_line_numbers=set(),
+    )
+    assert blocking == function_length_issues
+    assert advisory == []
+
+
 def test_renamed_file_source_map_since_uses_null_byte_separator(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,

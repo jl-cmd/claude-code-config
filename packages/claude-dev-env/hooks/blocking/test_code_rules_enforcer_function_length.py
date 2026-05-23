@@ -101,7 +101,32 @@ def test_should_skip_when_source_does_not_parse() -> None:
     assert issues == []
 
 
-def test_should_cap_blocking_issue_count_at_configured_maximum() -> None:
+def test_edit_drops_every_out_of_scope_long_function() -> None:
+    """An edit that touches none of the oversized functions reports nothing —
+    every violation is out of scope (untouched code must not block a single-file
+    edit), so the cap has nothing in scope to preserve."""
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    body_lines = [
+        f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
+    ]
+    body_block = "\n".join(body_lines)
+    function_count = hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES + 3
+    chunks = [
+        f"def f_{each_index}() -> None:\n{body_block}\n" for each_index in range(function_count)
+    ]
+    source = "\n".join(chunks)
+    untouched_line_far_outside_any_span = 100000
+    issues = check_function_length(
+        source,
+        PRODUCTION_FILE_PATH,
+        all_changed_lines={untouched_line_far_outside_any_span},
+    )
+    assert issues == []
+
+
+def test_new_file_reports_every_long_function_uncapped() -> None:
+    """On a new file (``all_changed_lines is None``) every line is in scope, so
+    the cap must not drop a long function — all are reported."""
     body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
     body_lines = [
         f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
@@ -113,7 +138,7 @@ def test_should_cap_blocking_issue_count_at_configured_maximum() -> None:
     ]
     source = "\n".join(chunks)
     issues = check_function_length(source, PRODUCTION_FILE_PATH)
-    assert len(issues) == hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
+    assert len(issues) == function_count
 
 
 def test_should_block_nested_function_over_blocking_threshold() -> None:

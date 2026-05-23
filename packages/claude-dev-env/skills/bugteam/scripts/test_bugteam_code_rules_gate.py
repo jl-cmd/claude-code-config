@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 import unittest.mock
 from pathlib import Path
+from types import ModuleType
 import pytest
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
@@ -11,6 +13,20 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
 import bugteam_code_rules_gate as gate_module
+
+
+def _load_enforcer_module() -> ModuleType:
+    package_root = gate_module.resolve_claude_dev_env_root()
+    enforcer_path = package_root / "hooks" / "blocking" / "code_rules_enforcer.py"
+    spec = importlib.util.spec_from_file_location("code_rules_enforcer", enforcer_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+enforcer_module = _load_enforcer_module()
 
 
 def run_git_in_repository(repository_root: Path, *arguments: str) -> str:
@@ -531,6 +547,42 @@ def test_main_blocks_sixth_isolation_probe_on_added_lines_past_document_order_ca
     assert exit_code == 1, (
         "the sixth HOME probe — the only one on staged lines — must block even "
         "though five untouched probes precede it in document order"
+    )
+
+
+def _banned_noun_function_text(index: int) -> str:
+    return (
+        f"def leading_{index}(canned_results: int) -> int:\n"
+        f"    return canned_results\n"
+    )
+
+
+def test_main_blocks_banned_noun_on_added_lines_past_document_order_cap(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """loop7-P1: with three pre-existing untouched banned-noun identifiers ahead
+    of it in document order, introducing a fourth banned-noun on a staged line
+    must still block at the bugteam gate. The banned-noun check's cap must not
+    drop the in-scope identifier before the gate scopes by added lines."""
+    leading_count = enforcer_module.MAX_BANNED_NOUN_WORD_ISSUES
+    leading_functions = "".join(
+        _banned_noun_function_text(each_index) for each_index in range(leading_count)
+    )
+    baseline = leading_functions + "def placeholder() -> int:\n    return 0\n"
+    write_file(temporary_git_repository / "module.py", baseline)
+    commit_all_files(temporary_git_repository, "three banned nouns plus a clean function")
+
+    grown = leading_functions + "def aggregate(holiday_result: int) -> int:\n    return holiday_result\n"
+    write_file(temporary_git_repository / "module.py", grown)
+    stage_file(temporary_git_repository, "module.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1, (
+        "the fourth banned-noun identifier — the only one on staged lines — must "
+        "block even though three untouched ones precede it in document order"
     )
 
 

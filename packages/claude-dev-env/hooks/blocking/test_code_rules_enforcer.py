@@ -1537,12 +1537,13 @@ def test_isolation_check_flags_module_level_from_os_import_environ_subscript() -
     assert any("HOME" in each_issue for each_issue in issues)
 
 
-def test_isolation_check_reports_earliest_probes_when_capped() -> None:
-    """When a test exceeds the issue cap, the earliest probes in source order
-    must survive, not the latest."""
-    maximum_issues = code_rules_enforcer.MAX_TEST_ISOLATION_ISSUES
+def test_isolation_check_reports_probes_in_source_order_on_new_file() -> None:
+    """On a new file (``all_changed_lines is None``) every probe is in scope and
+    reported in source order — none dropped by the cap, which now trims only
+    out-of-scope advisory noise."""
+    probe_count = 20
     repeated_probes = "\n".join(
-        f"    p{each_index} = Path.home()" for each_index in range(20)
+        f"    p{each_index} = Path.home()" for each_index in range(probe_count)
     )
     source = (
         f"from pathlib import Path\ndef test_many_probes() -> None:\n{repeated_probes}\n"
@@ -1556,7 +1557,7 @@ def test_isolation_check_reports_earliest_probes_when_capped() -> None:
         for each_issue in issues
     ]
     expected_line_numbers = [
-        first_probe_line_number + each_offset for each_offset in range(maximum_issues)
+        first_probe_line_number + each_offset for each_offset in range(probe_count)
     ]
     assert reported_line_numbers == expected_line_numbers
 
@@ -1890,3 +1891,219 @@ def test_function_length_cap_keeps_in_scope_violation_beyond_document_order() ->
         len(function_length_issues)
         <= code_rules_enforcer.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
     ), f"function-length issues must respect the cap, got: {function_length_issues!r}"
+
+
+def test_new_file_write_reports_every_in_scope_long_function_uncapped() -> None:
+    """loop7-bugbot: a new-file Write passes ``all_changed_lines is None``; every
+    line was just authored and is in scope, so the cap must not drop a long
+    function past the walk-order window — it trims only out-of-scope advisory."""
+    function_count = code_rules_enforcer.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES + 1
+    all_functions = "\n".join(
+        _oversized_function_source(f"new_long_{each_index}")
+        for each_index in range(function_count)
+    )
+    issues = code_rules_enforcer.validate_content(
+        all_functions,
+        "/project/src/freshly_written_module.py",
+        old_content="",
+    )
+    function_length_issues = [
+        each_issue for each_issue in issues if "defined at line" in each_issue
+    ]
+    assert len(function_length_issues) == function_count, (
+        "every long function in a new file is in scope and must be reported, "
+        f"got: {function_length_issues!r}"
+    )
+
+
+def test_new_file_write_reports_every_in_scope_isolation_probe_uncapped() -> None:
+    """loop7-bugbot: a new test file Write passes ``all_changed_lines is None``;
+    every HOME probe is in scope, so the cap must not drop one past the window."""
+    probe_count = code_rules_enforcer.MAX_TEST_ISOLATION_ISSUES + 1
+    probing_tests = "".join(
+        f"def test_probe_{each_index}() -> None:\n"
+        f"    home_dir_{each_index} = Path.home()\n"
+        f"    assert home_dir_{each_index}\n"
+        for each_index in range(probe_count)
+    )
+    source = "from pathlib import Path\n" + probing_tests
+    issues = code_rules_enforcer.validate_content(
+        source,
+        "/project/src/test_freshly_written_module.py",
+        old_content="",
+    )
+    home_probe_issues = [
+        each_issue for each_issue in issues if "Path.home" in each_issue
+    ]
+    assert len(home_probe_issues) == probe_count, (
+        "every HOME probe in a new test file is in scope and must be reported, "
+        f"got: {home_probe_issues!r}"
+    )
+
+
+def test_banned_noun_word_defers_cap_to_caller_when_requested() -> None:
+    """loop7-P1: when the gate sets the deferral flag, the banned-noun check must
+    return every violation uncapped so ``split_violations_by_scope`` can scope by
+    added line before any cap trims an in-scope identifier."""
+    binding_count = code_rules_enforcer.MAX_BANNED_NOUN_WORD_ISSUES + 2
+    source = "".join(
+        f"BINDING_{each_index}_RESULT_PATH = {each_index}\n"
+        for each_index in range(binding_count)
+    )
+    issues = code_rules_enforcer.check_banned_noun_word_boundary(
+        source,
+        "/project/src/many_nouns.py",
+        defer_scope_and_cap_to_caller=True,
+    )
+    assert len(issues) == binding_count, (
+        "deferral must return every banned-noun violation uncapped, "
+        f"got: {issues!r}"
+    )
+
+
+def test_banned_noun_word_keeps_in_scope_binding_beyond_cap_window() -> None:
+    """loop7-P1: an Edit whose changed line introduces a banned-noun identifier
+    past ``MAX_BANNED_NOUN_WORD_ISSUES`` pre-existing ones must still report the
+    new in-scope binding rather than capping it away in walk order."""
+    leading_count = code_rules_enforcer.MAX_BANNED_NOUN_WORD_ISSUES
+    leading_bindings = "".join(
+        f"LEADING_{each_index}_RESULT_PATH = {each_index}\n"
+        for each_index in range(leading_count)
+    )
+    target_before = "PLACEHOLDER_NAME = 0\n"
+    target_after = "INTRODUCED_RESULT_PATH = 0\n"
+    prior_full_file = leading_bindings + target_before
+    post_edit_full_file = leading_bindings + target_after
+    issues = code_rules_enforcer.validate_content(
+        target_after,
+        "/project/src/many_nouns.py",
+        old_content=target_before,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any(
+        "INTRODUCED_RESULT_PATH" in each_issue for each_issue in issues
+    ), f"in-scope banned-noun past the cap window must still block, got: {issues!r}"
+
+
+def test_module_import_inside_top_level_try_is_retained_in_alias_map() -> None:
+    """loop7-P2 (2566): a module-level ``try: import os as o`` is genuinely
+    module-scoped; its alias must enter the shared canonicalization map so a
+    later ``o.path.expanduser('~')`` inside a test is flagged."""
+    source = (
+        "try:\n"
+        "    import os as o\n"
+        "except ImportError:\n"
+        "    o = None\n"
+        "def test_reads_home() -> None:\n"
+        "    discovered = o.path.expanduser('~')\n"
+        "    assert discovered\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_optional_import.py"
+    )
+    assert any(
+        "test_reads_home" in each_issue for each_issue in issues
+    ), f"module import nested in top-level try must be retained, got: {issues!r}"
+
+
+def test_direct_module_aliased_import_is_retained_in_alias_map() -> None:
+    """loop7-P2 (2566): a plain top-level ``import os as o`` must still resolve so
+    ``o.path.expanduser('~')`` inside a test is flagged."""
+    source = (
+        "import os as o\n"
+        "def test_reads_home() -> None:\n"
+        "    discovered = o.path.expanduser('~')\n"
+        "    assert discovered\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_direct_import.py"
+    )
+    assert any(
+        "test_reads_home" in each_issue for each_issue in issues
+    ), f"direct module aliased import must resolve, got: {issues!r}"
+
+
+def test_function_local_import_does_not_enter_shared_alias_map() -> None:
+    """loop7-P2 (2566): an import inside one test must not canonicalize a
+    same-named reference in a sibling test that never imported it."""
+    source = (
+        "def test_imports_locally() -> None:\n"
+        "    import os as o\n"
+        "    assert o\n"
+        "def test_sibling_uses_o() -> None:\n"
+        "    o = make_unrelated_object()\n"
+        "    discovered = o.path.expanduser('~')\n"
+        "    assert discovered\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_local_import_scope.py"
+    )
+    assert not any(
+        "test_sibling_uses_o" in each_issue for each_issue in issues
+    ), f"function-local import must not leak to a sibling test, got: {issues!r}"
+
+
+def test_import_inside_nested_helper_does_not_leak_to_outer_test_overlay() -> None:
+    """loop7-P2 (2690): an import inside a standalone nested helper runs in its own
+    callable scope; its alias must not enter the outer test's overlay and flag a
+    sibling reference in the outer body."""
+    source = (
+        "def test_outer() -> None:\n"
+        "    def nested_helper() -> None:\n"
+        "        import os as o\n"
+        "        assert o\n"
+        "    o = make_unrelated_object()\n"
+        "    discovered = o.path.expanduser('~')\n"
+        "    assert discovered\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_nested_helper_scope.py"
+    )
+    assert not any(
+        "test_outer" in each_issue for each_issue in issues
+    ), f"nested-helper import must not leak to the outer test, got: {issues!r}"
+
+
+def test_environ_binding_inside_nested_helper_does_not_leak_to_outer_test() -> None:
+    """loop7-P2 (2690 sibling): an ``os.environ`` binding inside a standalone
+    nested helper runs in its own scope; a same-named outer reference must not be
+    attributed to that binding."""
+    source = (
+        "import os\n"
+        "def test_outer() -> None:\n"
+        "    def nested_helper() -> None:\n"
+        "        captured = os.environ\n"
+        "        assert captured\n"
+        "    captured = make_unrelated_mapping()\n"
+        "    discovered = captured['HOME']\n"
+        "    assert discovered\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_environ_nested_scope.py"
+    )
+    assert not any(
+        "test_outer" in each_issue for each_issue in issues
+    ), f"nested-helper environ binding must not leak to the outer test, got: {issues!r}"
+
+
+def test_pathlib_binding_inside_nested_helper_does_not_leak_to_outer_test() -> None:
+    """loop7-P2 (2690 sibling): a home-tilde ``Path('~')`` binding inside a
+    standalone nested helper runs in its own scope; a same-named outer
+    ``.expanduser()`` call must not be attributed to that binding."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_outer() -> None:\n"
+        "    def nested_helper() -> None:\n"
+        "        candidate = Path('~/config')\n"
+        "        assert candidate\n"
+        "    candidate = make_unrelated_path()\n"
+        "    discovered = candidate.expanduser()\n"
+        "    assert discovered\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_pathlib_nested_scope.py"
+    )
+    assert not any(
+        "test_outer" in each_issue for each_issue in issues
+    ), f"nested-helper pathlib binding must not leak to the outer test, got: {issues!r}"

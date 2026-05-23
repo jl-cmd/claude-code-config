@@ -750,13 +750,13 @@ def function_length_span_range(violation_text: str) -> range | None:
         A ``range`` covering the function's declared line span, or None when
         the text is not a function-length violation.
     """
-    match_result = FUNCTION_LENGTH_VIOLATION_PATTERN.search(violation_text)
-    if match_result is None:
+    span_match = FUNCTION_LENGTH_VIOLATION_PATTERN.search(violation_text)
+    if span_match is None:
         return None
     definition_line = int(
-        match_result.group(FUNCTION_LENGTH_DEFINITION_LINE_GROUP_INDEX)
+        span_match.group(FUNCTION_LENGTH_DEFINITION_LINE_GROUP_INDEX)
     )
-    line_span = int(match_result.group(FUNCTION_LENGTH_SPAN_GROUP_INDEX))
+    line_span = int(span_match.group(FUNCTION_LENGTH_SPAN_GROUP_INDEX))
     return range(definition_line, definition_line + line_span)
 
 

@@ -1463,7 +1463,11 @@ def _collect_banned_noun_word_bindings(
     return flagged_bindings
 
 
-def check_banned_noun_word_boundary(content: str, file_path: str) -> list[str]:
+def check_banned_noun_word_boundary(
+    content: str,
+    file_path: str,
+    defer_scope_and_cap_to_caller: bool = False,
+) -> list[str]:
     """Flag identifiers containing CODE_RULES §5 banned noun words.
 
     Companion to ``check_banned_identifiers`` (exact-match cases only). This
@@ -1478,15 +1482,31 @@ def check_banned_noun_word_boundary(content: str, file_path: str) -> list[str]:
     are skipped because they are already reported by
     ``check_banned_identifiers``.
 
+    Scoping mirrors ``check_banned_identifiers``: the check analyzes *content*
+    directly. At PreToolUse *content* is the edited fragment, so every binding
+    in it is in scope; at the commit/push gate *content* is the whole file and
+    every violation message carries a ``Line N:`` prefix, so the gate's
+    ``split_violations_by_scope`` can classify it blocking or advisory by added
+    line. Passing ``defer_scope_and_cap_to_caller`` True on that path returns
+    every violation uncapped so the cap never drops an in-scope binding before
+    the gate scopes — the same deferral ``check_function_length`` and
+    ``check_tests_use_isolated_filesystem_paths`` use.
+
     Args:
-        content: The Python source to analyze.
+        content: The Python source to analyze (the edited fragment at
+            PreToolUse, the whole file at the gate).
         file_path: The path of the file being checked (used for exemption
             routing).
+        defer_scope_and_cap_to_caller: When True, return every violation
+            uncapped so the commit/push gate's ``split_violations_by_scope`` can
+            scope by added line and report the in-scope set. Capping here would
+            drop an in-scope binding that lands past the cap window in walk order
+            before the gate ever scopes it.
 
     Returns:
-        A list of issue strings, each describing one offending binding. Capped
-        at ``MAX_BANNED_NOUN_WORD_ISSUES`` so a single file with many
-        violations does not flood the diagnostic payload.
+        Issue strings, each describing one offending binding, capped at
+        ``MAX_BANNED_NOUN_WORD_ISSUES`` when this enforcer is terminal; every
+        violation uncapped when *defer_scope_and_cap_to_caller* is True.
     """
     if is_test_file(file_path) or is_hook_infrastructure(file_path):
         return []
@@ -1502,14 +1522,19 @@ def check_banned_noun_word_boundary(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
 
-    issues: list[str] = []
+    all_violations_in_walk_order: list[tuple[range, str]] = []
     for each_name, each_lineno, _, each_word in _collect_banned_noun_word_bindings(parsed_tree):
-        issues.append(
+        span_range = range(each_lineno, each_lineno + 1)
+        message = (
             f"Line {each_lineno}: Identifier {each_name!r} {BANNED_NOUN_WORD_MESSAGE_SUFFIX} (word: {each_word!r})"
         )
-        if len(issues) >= MAX_BANNED_NOUN_WORD_ISSUES:
-            break
-    return issues
+        all_violations_in_walk_order.append((span_range, message))
+    return _scope_and_cap_violations(
+        all_violations_in_walk_order,
+        None,
+        MAX_BANNED_NOUN_WORD_ISSUES,
+        defer_scope_and_cap_to_caller,
+    )
 
 
 
@@ -2548,29 +2573,65 @@ def _build_alias_canonicalization_map(syntax_tree: ast.Module) -> dict[str, str]
       resolves to ``os.getenv``; ``from os import environ`` -> ``environ``
       resolves to ``os.environ``.
 
-    Only imports that are direct children of the module body are scanned. A
-    function-local import binds its name only inside the function it appears
-    in, so it must never enter this shared, module-wide map — otherwise a probe
-    import inside one test would canonicalize a same-named reference in a
-    sibling test that never imported it. Function-local imports are scoped to
+    An import is module-scoped — and enters this shared map — when it is not
+    lexically inside any ``FunctionDef``/``AsyncFunctionDef``. That admits
+    top-level imports nested in module-level ``try``/``except``, ``if``, or
+    ``with`` blocks (the ``try: import os as o except ImportError:`` optional-
+    import idiom binds ``o`` module-wide) while still excluding function-local
+    imports. A function-local import binds its name only inside the function it
+    appears in, so it must never enter this shared, module-wide map — otherwise
+    a probe import inside one test would canonicalize a same-named reference in
+    a sibling test that never imported it. Function-local imports are scoped to
     their own function by ``_collect_local_probe_alias_bindings``.
 
     Args:
-        syntax_tree: The parsed module to scan for top-level import statements.
+        syntax_tree: The parsed module to scan for module-scoped import
+            statements.
 
     Returns:
         Mapping from module-level local binding name to its canonical dotted
         prefix.
     """
+    parent_by_child_id = _build_parent_map(syntax_tree)
     all_canonical_names_by_alias: dict[str, str] = {}
-    for each_node in syntax_tree.body:
-        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
-            _record_probe_import_aliases(each_node, all_canonical_names_by_alias)
+    for each_node in ast.walk(syntax_tree):
+        if not isinstance(each_node, (ast.Import, ast.ImportFrom)):
+            continue
+        if _node_is_lexically_inside_function(each_node, parent_by_child_id):
+            continue
+        _record_probe_import_aliases(each_node, all_canonical_names_by_alias)
     return all_canonical_names_by_alias
 
 
+def _node_is_lexically_inside_function(
+    node: ast.AST, parent_by_child_id: dict[int, ast.AST],
+) -> bool:
+    """Return True when *node*'s nearest enclosing scope is a function.
+
+    Walks ancestors via *parent_by_child_id*. A node nested only inside
+    module-level ``try``/``if``/``with`` blocks (or a class body) has no
+    enclosing function and is module-scoped; a node inside a
+    ``FunctionDef``/``AsyncFunctionDef`` body is function-local.
+
+    Args:
+        node: The node whose lexical scope is being classified.
+        parent_by_child_id: Child-``id()``-to-parent map from
+            ``_build_parent_map``.
+
+    Returns:
+        True when an enclosing ``FunctionDef``/``AsyncFunctionDef`` exists.
+    """
+    current_ancestor = parent_by_child_id.get(id(node))
+    while current_ancestor is not None:
+        if isinstance(current_ancestor, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return True
+        current_ancestor = parent_by_child_id.get(id(current_ancestor))
+    return False
+
+
 def _collect_os_environ_local_binding_names(
-    scope_node: ast.AST, all_canonical_names_by_alias: dict[str, str],
+    scope_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    all_canonical_names_by_alias: dict[str, str],
 ) -> set[str]:
     """Return local names bound to ``os.environ`` within *scope_node*.
 
@@ -2591,7 +2652,7 @@ def _collect_os_environ_local_binding_names(
         Set of local variable names that reference ``os.environ``.
     """
     environ_bindings: set[str] = set()
-    for each_node in ast.walk(scope_node):
+    for each_node in _descend_within_test_scope(scope_node):
         if isinstance(each_node, ast.ImportFrom):
             for each_alias in each_node.names:
                 canonical_dotted = ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT.get(
@@ -2611,7 +2672,8 @@ def _collect_os_environ_local_binding_names(
 
 
 def _collect_pathlib_path_local_binding_names(
-    scope_node: ast.AST, all_canonical_names_by_alias: dict[str, str],
+    scope_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    all_canonical_names_by_alias: dict[str, str],
 ) -> set[str]:
     """Return local names bound to a home-tilde ``pathlib.Path(...)`` construction.
 
@@ -2638,7 +2700,7 @@ def _collect_pathlib_path_local_binding_names(
         construction.
     """
     path_bindings: set[str] = set()
-    for each_node in ast.walk(scope_node):
+    for each_node in _descend_within_test_scope(scope_node):
         if not isinstance(each_node, ast.Assign):
             continue
         if not _pathlib_path_construction_uses_home_tilde(
@@ -2652,7 +2714,8 @@ def _collect_pathlib_path_local_binding_names(
 
 
 def _collect_local_probe_alias_bindings(
-    scope_node: ast.AST, all_canonical_names_by_alias: dict[str, str],
+    scope_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    all_canonical_names_by_alias: dict[str, str],
 ) -> dict[str, str]:
     """Return a per-test overlay mapping local names to canonical probe prefixes.
 
@@ -2686,7 +2749,7 @@ def _collect_local_probe_alias_bindings(
         Mapping from local binding name to its canonical probe prefix.
     """
     local_alias_canonical_names: dict[str, str] = {}
-    for each_node in ast.walk(scope_node):
+    for each_node in _descend_within_test_scope(scope_node):
         if isinstance(each_node, (ast.Import, ast.ImportFrom)):
             _record_probe_import_aliases(each_node, local_alias_canonical_names)
             continue
@@ -3070,11 +3133,7 @@ def _detect_home_or_temp_probes_in_body(
         probe attributed to the test, in stack-pop order.
     """
     probes: list[tuple[int, str]] = []
-    nodes_to_visit: list[tuple[ast.AST, bool]] = [
-        (each_child, False) for each_child in ast.iter_child_nodes(function_node)
-    ]
-    while nodes_to_visit:
-        each_descendant, inside_nested_class = nodes_to_visit.pop()
+    for each_descendant in _descend_within_test_scope(function_node):
         _record_home_or_temp_probe(
             each_descendant,
             probes,
@@ -3082,10 +3141,6 @@ def _detect_home_or_temp_probes_in_body(
             all_environ_local_bindings,
             all_path_local_bindings,
         )
-        for each_grandchild, each_child_inside_nested_class in _children_to_descend_into(
-            each_descendant, inside_nested_class
-        ):
-            nodes_to_visit.append((each_grandchild, each_child_inside_nested_class))
     probes.sort(key=lambda each_probe: each_probe[0])
     return probes
 
@@ -3152,6 +3207,38 @@ def _children_to_descend_into(
     return [
         (each_child, inside_nested_class) for each_child in ast.iter_child_nodes(node)
     ]
+
+
+def _descend_within_test_scope(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> Iterator[ast.AST]:
+    """Yield every descendant of *function_node* on the test's own runtime path.
+
+    Bounded traversal that shares ``_children_to_descend_into`` so every caller
+    treats the same nodes as in scope. Standalone nested helper functions and
+    lambdas defined directly in the test body are scope boundaries — they run in
+    their own callable scope and carry their own isolation contract — so a
+    binding or probe inside one does not leak into the outer test. Nested
+    ``ClassDef`` bodies and the methods of those classes stay in scope because
+    their class-creation statements and method bodies run on the test's path.
+
+    Args:
+        function_node: The test function whose in-scope descendants to yield.
+
+    Yields:
+        Each descendant node within the test's bounded scope, in stack-pop
+        order.
+    """
+    nodes_to_visit: list[tuple[ast.AST, bool]] = [
+        (each_child, False) for each_child in ast.iter_child_nodes(function_node)
+    ]
+    while nodes_to_visit:
+        each_descendant, inside_nested_class = nodes_to_visit.pop()
+        yield each_descendant
+        for each_grandchild, each_child_inside_nested_class in _children_to_descend_into(
+            each_descendant, inside_nested_class
+        ):
+            nodes_to_visit.append((each_grandchild, each_child_inside_nested_class))
 
 
 def _function_uses_pytest_isolation_fixture(
@@ -5144,44 +5231,73 @@ def _scope_and_cap_violations(
 ) -> list[str]:
     """Scope span-tagged violations by diff intersection, then apply the cap.
 
+    The cap never drops an in-scope (blocking) violation; it may only trim the
+    out-of-scope set. Out-of-scope violations are surfaced only as capped
+    advisory noise, never as blocking output:
+
+    - ``defer_scope_and_cap_to_caller`` True (the commit/push gate): every
+      violation is returned uncapped so the gate's ``split_violations_by_scope``
+      can classify blocking vs advisory by added line. The gate caps the
+      advisory partition to *issue_cap* per check.
+    - ``all_changed_lines`` None (a terminal new-file or full-file write): every
+      line was just authored, so every violation is in scope and none is
+      trimmed.
+    - ``all_changed_lines`` provided (a terminal diff-scoped Edit): every
+      in-scope violation is reported and the untouched out-of-scope set is
+      dropped, because untouched code must not block a single-file edit.
+
     Args:
         all_violations_in_walk_order: ``(span_range, issue_message)`` pairs in
             ``ast.walk`` traversal order, where ``span_range`` covers the
             violation's source lines.
         all_changed_lines: Post-edit line numbers the current edit touched, or
-            None to treat every violation as in-scope (a terminal new-file or
-            full-file write where this enforcer is the only gate).
-        issue_cap: The maximum number of issue messages to return.
+            None to treat every violation as in-scope.
+        issue_cap: The maximum number of out-of-scope advisory issue messages a
+            downstream scoper surfaces for this check on the deferred path.
         defer_scope_and_cap_to_caller: When True, return every violation message
-            uncapped and unscoped in walk order. A downstream scoper (the
-            commit/push gate's ``split_violations_by_scope``) then classifies
-            blocking vs advisory by added line and reports the in-scope set, so
-            pre-capping here would silently drop an in-scope violation before
-            that scoping ever runs. When False, this enforcer is terminal and
-            scopes-then-caps directly.
+            uncapped and unscoped in walk order so the gate can scope-then-cap.
+            When False, this enforcer is terminal and scopes directly: an
+            in-scope violation is never dropped before that scoping runs.
 
     Returns:
-        When *defer_scope_and_cap_to_caller* is True, every violation message
-        in walk order with no cap. Otherwise up to *issue_cap* messages: when
-        *all_changed_lines* is provided, the cap may only trim violations whose
-        span does not intersect the changed lines — every in-scope violation is
-        preserved ahead of the cap so an edit that grows a function past the
-        threshold always blocks even when earlier untouched functions already
-        exceed it.
+        Every violation message when *defer_scope_and_cap_to_caller* is True or
+        *all_changed_lines* is None; otherwise only the in-scope messages whose
+        span intersects the changed lines — so an edit that grows a function
+        past the threshold always blocks even when many earlier untouched
+        functions already exceed it, and the out-of-scope advisory set is held
+        to *issue_cap* by the deferred gate.
     """
     if defer_scope_and_cap_to_caller:
-        return [each_message for _, each_message in all_violations_in_walk_order]
+        return _cap_out_of_scope_advisory(all_violations_in_walk_order, issue_cap)
     if all_changed_lines is None:
-        return [
-            each_message
-            for _, each_message in all_violations_in_walk_order[:issue_cap]
-        ]
-    all_in_scope_messages = [
+        return [each_message for _, each_message in all_violations_in_walk_order]
+    return [
         each_message
         for each_span, each_message in all_violations_in_walk_order
         if any(each_line in all_changed_lines for each_line in each_span)
     ]
-    return all_in_scope_messages[:issue_cap]
+
+
+def _cap_out_of_scope_advisory(
+    all_violations_in_walk_order: list[tuple[range, str]], issue_cap: int,
+) -> list[str]:
+    """Return every violation message uncapped for the deferred gate path.
+
+    The deferred gate owns scoping: it classifies each message blocking or
+    advisory by added line, so every message must reach it uncapped. The
+    *issue_cap* documents the advisory ceiling the gate applies after that
+    classification; trimming here would drop an in-scope message before the gate
+    ever sees it.
+
+    Args:
+        all_violations_in_walk_order: ``(span_range, issue_message)`` pairs.
+        issue_cap: The advisory ceiling the gate applies downstream.
+
+    Returns:
+        Every violation message in walk order.
+    """
+    del issue_cap
+    return [each_message for _, each_message in all_violations_in_walk_order]
 
 
 def check_function_length(
@@ -5331,7 +5447,13 @@ def validate_content(
         all_issues.extend(check_file_global_constants_use_count(content, file_path))
         all_issues.extend(check_type_escape_hatches(effective_content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))
-        all_issues.extend(check_banned_noun_word_boundary(content, file_path))
+        all_issues.extend(
+            check_banned_noun_word_boundary(
+                content,
+                file_path,
+                defer_scope_and_cap_to_caller=defer_function_and_isolation_cap_to_caller,
+            )
+        )
         all_issues.extend(check_banned_prefixes(effective_content, file_path))
         all_issues.extend(check_stub_implementations(effective_content, file_path))
         all_issues.extend(check_typed_dict_encode_decode(effective_content, file_path))

@@ -148,16 +148,32 @@ def test_should_include_banned_word_in_message() -> None:
     assert "outputs" in issues[0]
 
 
-def test_should_cap_issue_count_at_configured_maximum() -> None:
-    source = (
-        "AAA_RESULT_PATH = 'a'\n"
-        "BBB_RESULT_PATH = 'b'\n"
-        "CCC_RESULT_PATH = 'c'\n"
-        "DDD_RESULT_PATH = 'd'\n"
-        "EEE_RESULT_PATH = 'e'\n"
+def test_terminal_fragment_reports_every_banned_noun_uncapped() -> None:
+    """On the terminal (non-deferred) path the check analyzes *content* as the
+    edited fragment, where every binding is in scope — so none is dropped by the
+    cap, which now only bounds the deferred gate's advisory set."""
+    binding_count = hook_module.MAX_BANNED_NOUN_WORD_ISSUES + 2
+    source = "".join(
+        f"BINDING_{each_index}_RESULT_PATH = {each_index}\n"
+        for each_index in range(binding_count)
     )
     issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
-    assert len(issues) == hook_module.MAX_BANNED_NOUN_WORD_ISSUES
+    assert len(issues) == binding_count
+
+
+def test_deferred_path_returns_every_banned_noun_uncapped() -> None:
+    """When the gate sets the deferral flag the check returns every violation
+    uncapped so ``split_violations_by_scope`` can scope by added line before any
+    cap trims an in-scope identifier."""
+    binding_count = hook_module.MAX_BANNED_NOUN_WORD_ISSUES + 2
+    source = "".join(
+        f"BINDING_{each_index}_RESULT_PATH = {each_index}\n"
+        for each_index in range(binding_count)
+    )
+    issues = check_banned_noun_word_boundary(
+        source, PRODUCTION_FILE_PATH, defer_scope_and_cap_to_caller=True
+    )
+    assert len(issues) == binding_count
 
 
 def test_should_flag_function_definition_with_data_word_in_name() -> None:

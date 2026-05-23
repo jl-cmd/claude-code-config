@@ -685,27 +685,31 @@ def test_should_skip_when_source_fails_to_parse() -> None:
     assert issues == []
 
 
-def test_should_cap_issue_count_at_configured_maximum() -> None:
+def test_edit_drops_every_out_of_scope_probe() -> None:
+    """An edit that touches none of the probe lines reports nothing — every
+    probe is out of scope (untouched code must not block a single-file edit), so
+    the cap has nothing in scope to preserve."""
     repeated_probes = "\n".join(f"    p{each_index} = Path.home()" for each_index in range(20))
     source = f"from pathlib import Path\ndef test_many_probes() -> None:\n{repeated_probes}\n"
-    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
-    assert len(issues) == hook_module.MAX_TEST_ISOLATION_ISSUES
+    untouched_line_far_outside_any_probe = 100000
+    issues = check_tests_use_isolated_filesystem_paths(
+        source,
+        TEST_FILE_PATH,
+        all_changed_lines={untouched_line_far_outside_any_probe},
+    )
+    assert issues == []
 
 
-def test_should_report_earliest_probes_when_capped() -> None:
-    maximum_issues = hook_module.MAX_TEST_ISOLATION_ISSUES
-    repeated_probes = "\n".join(f"    p{each_index} = Path.home()" for each_index in range(20))
+def test_new_file_reports_every_probe_uncapped() -> None:
+    """On a new file (``all_changed_lines is None``) every line is in scope, so
+    the cap must not drop a probe — all are reported."""
+    probe_count = 20
+    repeated_probes = "\n".join(
+        f"    p{each_index} = Path.home()" for each_index in range(probe_count)
+    )
     source = f"from pathlib import Path\ndef test_many_probes() -> None:\n{repeated_probes}\n"
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
-    first_probe_line_number = 3
-    reported_line_numbers = [
-        int(each_issue.split(":", maxsplit=1)[0].removeprefix("Line ").strip())
-        for each_issue in issues
-    ]
-    expected_line_numbers = [
-        first_probe_line_number + each_offset for each_offset in range(maximum_issues)
-    ]
-    assert reported_line_numbers == expected_line_numbers
+    assert len(issues) == probe_count
 
 
 def test_should_ignore_test_method_inside_non_test_prefixed_helper_class() -> None:

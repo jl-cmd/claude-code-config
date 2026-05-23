@@ -55,10 +55,9 @@ DENY_REASON_TEMPLATE: str = (
 )
 
 STOP_BLOCK_REASON_TEMPLATE: str = (
-    "BLOCKED [fix-push-gate]: HEAD advanced to {head_sha} on PR branch "
-    "{branch} this turn, but no fix-push gate result records that commit as "
-    "passing code_rules_gate. The push bypassed the deterministic gate. "
-    "Run code_rules_gate.py --base {base_ref} over the PR diff, resolve any "
-    "blocking violations, and record a passing gate result before ending the "
-    "turn.\n\n{gate_output}"
+    "BLOCKED [fix-push-gate]: the current HEAD {head_sha} on this PR branch is "
+    "not recorded as passing code_rules_gate, and a re-run of the gate against "
+    "origin/{base_ref} reports a blocking violation. A fix push bypassed the "
+    "deterministic gate. Resolve the flagged lines, re-run the gate to record a "
+    "passing result, then end the turn.\n\n{gate_output}"
 )

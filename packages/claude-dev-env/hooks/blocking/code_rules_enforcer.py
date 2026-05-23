@@ -3348,8 +3348,9 @@ def check_tests_use_isolated_filesystem_paths(
             each_node, all_canonical_names_by_alias, all_environ_local_bindings, all_path_local_bindings
         ):
             message = (
-                f"Line {each_line}: Test {each_node.name!r} probes "
-                f"{each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"
+                f"Line {each_line}: Test {each_node.name!r} "
+                f"(defined at line {each_node.lineno}, spanning {line_span} lines) "
+                f"probes {each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"
             )
             all_violations_in_source_line_order.append(
                 (enclosing_function_span, message)

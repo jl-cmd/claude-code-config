@@ -17,6 +17,12 @@ FUNCTION_LENGTH_VIOLATION_PATTERN: re.Pattern[str] = re.compile(
 FUNCTION_LENGTH_DEFINITION_LINE_GROUP_INDEX: int = 1
 FUNCTION_LENGTH_SPAN_GROUP_INDEX: int = 2
 
+ISOLATION_VIOLATION_PATTERN: re.Pattern[str] = re.compile(
+    r"\(defined at line (\d+), spanning (\d+) lines\)"
+)
+ISOLATION_DEFINITION_LINE_GROUP_INDEX: int = 1
+ISOLATION_SPAN_GROUP_INDEX: int = 2
+
 ALL_CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
     {".py", ".js", ".ts", ".tsx", ".jsx"}
 )

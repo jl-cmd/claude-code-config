@@ -453,6 +453,48 @@ def test_split_violations_advises_function_length_when_span_misses_added_lines()
     assert blocking == []
 
 
+def _isolation_issues_for_home_probe_test() -> list[str]:
+    validate_content = gate_module.load_validate_content()
+    header = "from pathlib import Path\n"
+    test_body = (
+        "def test_reads_home() -> None:\n"
+        "    target_path = Path.home()\n"
+        "    assert target_path\n"
+    )
+    issues = validate_content(header + test_body, "src/test_module.py", "")
+    return [each_issue for each_issue in issues if "probes" in each_issue]
+
+
+def test_split_violations_blocks_isolation_when_function_span_intersects_added_lines() -> None:
+    """An isolation issue whose enclosing test-function span overlaps the diff's
+    added lines is blocking — a signature-line change that un-isolates an
+    unchanged-body probe must block, matching the enforcer's terminal path."""
+    isolation_issues = _isolation_issues_for_home_probe_test()
+    assert isolation_issues, "expected an isolation issue from the HOME probe test"
+    signature_line = 2
+    blocking, advisory = gate_module.split_violations_by_scope(
+        isolation_issues,
+        all_added_line_numbers={signature_line},
+    )
+    assert blocking == isolation_issues
+    assert advisory == []
+
+
+def test_split_violations_advises_isolation_when_function_span_misses_added_lines() -> None:
+    """An isolation issue for an untouched pre-existing probe — whose enclosing
+    test-function span does not overlap any added line — is advisory, not
+    blocking, mirroring the function-length scope contract."""
+    isolation_issues = _isolation_issues_for_home_probe_test()
+    assert isolation_issues, "expected an isolation issue from the HOME probe test"
+    line_far_outside_span = 5000
+    blocking, advisory = gate_module.split_violations_by_scope(
+        isolation_issues,
+        all_added_line_numbers={line_far_outside_span},
+    )
+    assert advisory == isolation_issues
+    assert blocking == []
+
+
 def _oversized_function_text(function_name: str) -> str:
     body = "\n".join("    keep_alive_name" for _ in range(70))
     return f"def {function_name}() -> None:\n{body}\n"

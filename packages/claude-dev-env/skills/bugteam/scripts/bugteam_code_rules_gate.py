@@ -22,6 +22,9 @@ from bugteam_scripts_constants.bugteam_code_rules_gate_constants import (
     FUNCTION_LENGTH_SPAN_GROUP_INDEX,
     FUNCTION_LENGTH_VIOLATION_PATTERN,
     HUNK_HEADER_RAW_PATTERN,
+    ISOLATION_DEFINITION_LINE_GROUP_INDEX,
+    ISOLATION_SPAN_GROUP_INDEX,
+    ISOLATION_VIOLATION_PATTERN,
     MAXIMUM_COLUMN_TUPLE_ELEMENT_COUNT,
     MAXIMUM_ISSUES_TO_REPORT,
     VIOLATION_LINE_RAW_PATTERN,
@@ -760,6 +763,33 @@ def function_length_span_range(violation_text: str) -> range | None:
     return range(definition_line, definition_line + line_span)
 
 
+def isolation_span_range(violation_text: str) -> range | None:
+    """Return the enclosing test-function line range of an isolation violation.
+
+    The enforcer's HOME/TMP isolation message carries the enclosing test
+    function's definition line and span: ``Line N: Test 'NAME' (defined at
+    line X, spanning Y lines) probes ...``. The function occupies lines ``X``
+    through ``X + Y - 1`` inclusive, so a signature-line change that
+    un-isolates an unchanged-body probe is scoped by the same span the
+    enforcer uses rather than by the ``Line N:`` probe line alone.
+
+    Args:
+        violation_text: A single violation string emitted by the enforcer.
+
+    Returns:
+        A ``range`` covering the enclosing test function's declared line span,
+        or None when the text is not an isolation violation.
+    """
+    span_match = ISOLATION_VIOLATION_PATTERN.search(violation_text)
+    if span_match is None:
+        return None
+    definition_line = int(
+        span_match.group(ISOLATION_DEFINITION_LINE_GROUP_INDEX)
+    )
+    line_span = int(span_match.group(ISOLATION_SPAN_GROUP_INDEX))
+    return range(definition_line, definition_line + line_span)
+
+
 def split_violations_by_scope(
     all_issues: list[str],
     all_added_line_numbers: set[int] | None,
@@ -772,18 +802,21 @@ def split_violations_by_scope(
 
     Returns:
         Tuple of (blocking_issues, advisory_issues). When *all_added_line_numbers*
-        is None, every issue is blocking. Function-length violations are
-        blocking when the function's declared line span intersects the added
-        lines (the body grew in this diff) and advisory otherwise (a
-        pre-existing untouched long function). Every other issue is blocking
-        when its ``Line N:`` prefix names an added line and advisory otherwise.
+        is None, every issue is blocking. Function-length and HOME/TMP isolation
+        violations are blocking when the enclosing function's declared line span
+        intersects the added lines (the body grew or its signature changed in
+        this diff) and advisory otherwise (a pre-existing untouched function).
+        Every other issue is blocking when its ``Line N:`` prefix names an added
+        line and advisory otherwise.
     """
     if all_added_line_numbers is None:
         return list(all_issues), []
     blocking: list[str] = []
     advisory: list[str] = []
     for each_issue in all_issues:
-        span_range = function_length_span_range(each_issue)
+        span_range = function_length_span_range(
+            each_issue
+        ) or isolation_span_range(each_issue)
         if span_range is not None:
             if any(each_line in all_added_line_numbers for each_line in span_range):
                 blocking.append(each_issue)

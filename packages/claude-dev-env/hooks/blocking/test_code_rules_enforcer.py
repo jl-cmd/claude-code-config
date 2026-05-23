@@ -1891,7 +1891,29 @@ def test_isolation_edit_blocks_probe_unisolated_by_signature_line_change() -> No
     ), f"signature-line change that un-isolates a probe must block, got: {issues!r}"
 
 
-def test_function_length_reports_only_in_scope_violation_on_terminal_edit() -> None:
+def test_isolation_message_carries_enclosing_function_definition_span() -> None:
+    """The isolation message must carry the enclosing test's definition line
+    and line span so the commit gate can scope by the same function span the
+    enforcer uses, while keeping the ``Line N:`` probe-line prefix intact."""
+    header = "from pathlib import Path\n"
+    test_body = (
+        "def test_reads_home() -> None:\n"
+        "    target_path = Path.home()\n"
+        "    assert target_path\n"
+    )
+    source = header + test_body
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    definition_line = 2
+    function_span = 3
+    expected_span_fragment = (
+        f"(defined at line {definition_line}, spanning {function_span} lines)"
+    )
+    assert any(
+        each_issue.startswith("Line ") and expected_span_fragment in each_issue
+        for each_issue in issues
+    ), f"isolation message must carry the def-line + span fragment, got: {issues!r}"
     """A terminal diff-scoped Edit reports only the function whose changed-line
     span grew past the threshold; untouched oversized functions earlier in the
     file are out of scope and dropped, regardless of how many precede it."""

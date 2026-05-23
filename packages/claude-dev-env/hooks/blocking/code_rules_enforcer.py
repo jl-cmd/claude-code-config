@@ -2550,16 +2550,18 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
 
     Pattern class: tests that call ``Path.home()``, ``os.path.expanduser('~')``,
     ``os.getenv('HOME'|'USERPROFILE'|'TMPDIR'|…)``, ``os.environ['HOME'|…]``, or
-    ``tempfile.gettempdir()`` outside of pytest's ``tmp_path`` / ``monkeypatch``
-    isolation context leak state across the suite and surface as environment-
-    coupled bugs (audit Theme M).
+    ``tempfile.gettempdir()`` against the real environment leak state across
+    the suite and surface as environment-coupled bugs (audit Theme M).
 
-    Test functions whose signatures take ``tmp_path``, ``tmp_path_factory``,
-    ``tmpdir``, ``tmpdir_factory``, or ``monkeypatch`` are treated as
-    intentionally isolated and pass. Module-level helpers and fixtures (any
-    function whose name does not start with ``test_`` or ``should_``) are
-    out of scope — only ``def test_*`` / ``async def test_*`` / ``def
-    should_*`` functions are scanned.
+    Test functions whose signatures take ``monkeypatch`` are treated as
+    intentionally isolated and pass — ``monkeypatch.setenv('HOME', ...)``
+    can intercept every env-derived probe. ``tmp_path`` / ``tmp_path_factory``
+    / ``tmpdir`` / ``tmpdir_factory`` allocate alternative sandbox paths but
+    do not intercept env reads, so their presence alone does not suppress
+    the check. Module-level helpers and fixtures (any function whose name
+    does not start with ``test_`` or ``should_``) are out of scope — only
+    pytest-collectable ``def test_*`` / ``async def test_*`` / ``def
+    should_*`` module-level or class-method functions are scanned.
 
     Args:
         content: The Python source to analyze.

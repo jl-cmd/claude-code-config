@@ -122,6 +122,8 @@ ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
 })
 MAX_TEST_ISOLATION_ISSUES: int = 5
 TEST_ISOLATION_MESSAGE_SUFFIX: str = (
-    "must use tmp_path / monkeypatch isolation; calling real HOME or TMP "
-    "leaks across the suite (CODE_RULES — see audits 2026-05-22 Theme M)"
+    "must take a monkeypatch fixture and route HOME/TMP env reads through "
+    "monkeypatch.setenv; tmp_path / tmpdir allocate a sandbox path but do "
+    "not intercept env reads, so they leak across the suite (CODE_RULES — "
+    "see audits 2026-05-22 Theme M)"
 )

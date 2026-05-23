@@ -1914,6 +1914,9 @@ def test_isolation_message_carries_enclosing_function_definition_span() -> None:
         each_issue.startswith("Line ") and expected_span_fragment in each_issue
         for each_issue in issues
     ), f"isolation message must carry the def-line + span fragment, got: {issues!r}"
+
+
+def test_function_length_reports_only_in_scope_violation_on_terminal_edit() -> None:
     """A terminal diff-scoped Edit reports only the function whose changed-line
     span grew past the threshold; untouched oversized functions earlier in the
     file are out of scope and dropped, regardless of how many precede it."""
@@ -2158,3 +2161,143 @@ def test_pathlib_binding_inside_nested_helper_does_not_leak_to_outer_test() -> N
     assert not any(
         "test_outer" in each_issue for each_issue in issues
     ), f"nested-helper pathlib binding must not leak to the outer test, got: {issues!r}"
+
+
+def test_banned_noun_edit_drops_untouched_out_of_scope_binding() -> None:
+    """An Edit that touches none of the banned-noun bindings reports nothing —
+    the check now routes through the reconstructed effective content and the
+    edit's changed lines, exactly like check_function_length, so an untouched
+    binding outside the edit hunk must not block."""
+    leading = "".join(
+        f"LEADING_{each_index}_RESULT_PATH = {each_index}\n" for each_index in range(5)
+    )
+    edited_tail = "def compute_total() -> int:\n    running_sum = 0\n    return running_sum\n"
+    prior_full_file = leading + "def compute_total() -> int:\n    running_sum = 0\n    return 0\n"
+    post_edit_full_file = leading + edited_tail
+    issues = code_rules_enforcer.validate_content(
+        edited_tail,
+        "/project/src/many_nouns.py",
+        old_content="def compute_total() -> int:\n    running_sum = 0\n    return 0\n",
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert not any(
+        "RESULT_PATH" in each_issue for each_issue in issues
+    ), f"untouched banned-noun bindings must stay out of scope, got: {issues!r}"
+
+
+def test_banned_noun_edit_keeps_touched_binding_in_scope() -> None:
+    """An Edit whose changed line introduces a banned-noun binding reports it,
+    using the reconstructed effective content and the edit's changed lines."""
+    leading = "".join(
+        f"LEADING_{each_index}_VALUE_PATH = {each_index}\n" for each_index in range(5)
+    )
+    prior_tail = "PLACEHOLDER_NAME = 0\n"
+    edited_tail = "INTRODUCED_RESULT_PATH = 0\n"
+    prior_full_file = leading + prior_tail
+    post_edit_full_file = leading + edited_tail
+    issues = code_rules_enforcer.validate_content(
+        edited_tail,
+        "/project/src/introduces_noun.py",
+        old_content=prior_tail,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any(
+        "INTRODUCED_RESULT_PATH" in each_issue for each_issue in issues
+    ), f"introduced banned-noun binding must block, got: {issues!r}"
+
+
+def test_banned_noun_message_carries_binding_line_span() -> None:
+    """A banned-noun binding carries its own binding line as a one-line span so
+    the commit gate reconstructs it through the same shared span mechanism the
+    other diff-scoped checks use, while keeping the Line N: prefix intact. The
+    binding-line granularity matches the companion exact-match
+    check_banned_identifiers and avoids re-flagging a pre-existing binding when
+    an unrelated line of its enclosing function is edited."""
+    source = (
+        "def aggregate() -> list[int]:\n"
+        "    canned_results = [1, 2, 3]\n"
+        "    return canned_results\n"
+    )
+    issues = code_rules_enforcer.check_banned_noun_word_boundary(
+        source, "/project/src/has_noun.py"
+    )
+    binding_line = 2
+    expected_fragment = f"(binding span at line {binding_line}, spanning 1 lines)"
+    assert any(
+        each_issue.startswith(f"Line {binding_line}:") and expected_fragment in each_issue
+        for each_issue in issues
+    ), f"banned-noun message must carry the binding-line span fragment, got: {issues!r}"
+
+
+def test_banned_noun_message_module_level_binding_spans_one_line() -> None:
+    """A module-level banned-noun binding spans its own binding line alone
+    (span 1)."""
+    source = "SAFE_OUTPUT_PATH = '/var/run/x'\n"
+    issues = code_rules_enforcer.check_banned_noun_word_boundary(
+        source, "/project/src/module_noun.py"
+    )
+    expected_fragment = "(binding span at line 1, spanning 1 lines)"
+    assert any(expected_fragment in each_issue for each_issue in issues), (
+        f"module-level banned-noun span must be one line, got: {issues!r}"
+    )
+
+
+def test_banned_noun_edit_does_not_reflag_param_when_unrelated_body_line_changes() -> None:
+    """Editing a body line of a function that already has a banned-noun
+    parameter must not re-flag that pre-existing parameter: the binding-line
+    span keeps the parameter out of scope unless its own declaration line is in
+    the changed set."""
+    prior_full_file = (
+        "def transform(canned_results: int) -> int:\n"
+        "    midpoint = canned_results\n"
+        "    return midpoint\n"
+    )
+    post_edit_full_file = (
+        "def transform(canned_results: int) -> int:\n"
+        "    midpoint = canned_results + 1\n"
+        "    return midpoint\n"
+    )
+    issues = code_rules_enforcer.validate_content(
+        "    midpoint = canned_results + 1\n",
+        "/project/src/has_param.py",
+        old_content="    midpoint = canned_results\n",
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert not any(
+        "canned_results" in each_issue for each_issue in issues
+    ), f"pre-existing param must not re-flag on unrelated body edit, got: {issues!r}"
+
+
+def test_unreadable_prior_yields_no_prior_and_no_reconstruction() -> None:
+    """When the on-disk prior cannot be read for an Edit, the prior/post helper
+    returns (None, None): a missing prior must not be fabricated as an empty
+    string that would diff every line as changed and defeat edit scoping."""
+    missing_path = "/project/src/does_not_exist_anywhere.py"
+    prior_content, post_edit_content = code_rules_enforcer.prior_and_post_edit_content(
+        missing_path,
+        old_string="placeholder = 0\n",
+        new_string="placeholder = 1\n",
+    )
+    assert prior_content is None
+    assert post_edit_content is None
+
+
+def test_readable_prior_yields_consistent_prior_and_reconstruction(tmp_path) -> None:
+    """When the prior reads cleanly, the helper returns the same prior content it
+    reconstructed the post-edit view from, so the two never diverge across two
+    independent reads."""
+    source_file = tmp_path / "module.py"
+    original = "alpha = 1\nbeta = 2\n"
+    source_file.write_text(original, encoding="utf-8")
+    prior_content, post_edit_content = code_rules_enforcer.prior_and_post_edit_content(
+        str(source_file),
+        old_string="beta = 2\n",
+        new_string="beta = 3\n",
+    )
+    assert prior_content == original
+    assert post_edit_content == "alpha = 1\nbeta = 3\n"
+    changed = code_rules_enforcer.changed_line_numbers(prior_content, post_edit_content)
+    assert changed == {2}

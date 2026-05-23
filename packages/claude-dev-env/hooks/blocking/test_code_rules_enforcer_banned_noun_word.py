@@ -28,7 +28,6 @@ assert hook_spec.loader is not None
 hook_module = importlib.util.module_from_spec(hook_spec)
 hook_spec.loader.exec_module(hook_module)
 check_banned_noun_word_boundary = hook_module.check_banned_noun_word_boundary
-check_banned_identifiers = hook_module.check_banned_identifiers
 validate_content = hook_module.validate_content
 _identifier_word_parts = hook_module._identifier_word_parts
 _find_banned_noun_word = hook_module._find_banned_noun_word
@@ -246,39 +245,48 @@ FULL_FILE_WITH_BANNED_NAME_OUTSIDE_FRAGMENT = (
 )
 
 
-def test_edit_scope_matches_companion_banned_identifier_check() -> None:
-    fragment_noun_issues = check_banned_noun_word_boundary(
-        EDIT_FRAGMENT_WITHOUT_BANNED_NAME, PRODUCTION_FILE_PATH
+def test_edit_drops_untouched_out_of_scope_banned_noun() -> None:
+    """An Edit that touches none of the banned-noun bindings reports nothing —
+    the check routes through the reconstructed effective content and the edit's
+    changed lines, exactly like ``check_function_length``, so an untouched
+    binding outside the edit hunk stays out of scope."""
+    prior_tail = (
+        "def compute_total() -> int:\n    running_sum = 0\n    return 0\n"
     )
-    fragment_exact_issues = check_banned_identifiers(
-        EDIT_FRAGMENT_WITHOUT_BANNED_NAME, PRODUCTION_FILE_PATH
+    edited_tail = EDIT_FRAGMENT_WITHOUT_BANNED_NAME
+    prior_full_file = FULL_FILE_WITH_BANNED_NAME_OUTSIDE_FRAGMENT.replace(
+        EDIT_FRAGMENT_WITHOUT_BANNED_NAME, prior_tail
     )
+    post_edit_full_file = FULL_FILE_WITH_BANNED_NAME_OUTSIDE_FRAGMENT
     noun_issues = validate_content(
-        EDIT_FRAGMENT_WITHOUT_BANNED_NAME,
+        edited_tail,
         PRODUCTION_FILE_PATH,
-        old_content="",
-        full_file_content=FULL_FILE_WITH_BANNED_NAME_OUTSIDE_FRAGMENT,
+        old_content=prior_tail,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
     )
-    assert fragment_noun_issues == []
-    assert fragment_exact_issues == []
     assert not any("canned_results" in each_issue for each_issue in noun_issues), (
-        "check_banned_noun_word_boundary must analyze the edited fragment scope "
-        "on an Edit (matching check_banned_identifiers), not the reconstructed "
-        f"full file; got {noun_issues!r}"
+        "an untouched banned-noun binding outside the edit hunk must stay out of "
+        f"scope on a diff-scoped Edit; got {noun_issues!r}"
     )
 
 
-def test_edit_scope_still_flags_banned_word_inside_fragment() -> None:
-    fragment_with_banned_word = (
+def test_edit_still_flags_banned_word_inside_changed_lines() -> None:
+    """An Edit whose changed lines introduce a banned-noun binding reports it,
+    using the reconstructed effective content and the edit's changed lines."""
+    edited_tail = (
         "def aggregate() -> list[int]:\n"
         "    canned_results = [4, 5, 6]\n"
         "    return canned_results\n"
     )
-    full_file = EDIT_FRAGMENT_WITHOUT_BANNED_NAME + "\n" + fragment_with_banned_word
+    prior_tail = "def aggregate() -> list[int]:\n    return []\n"
+    prior_full_file = EDIT_FRAGMENT_WITHOUT_BANNED_NAME + "\n" + prior_tail
+    post_edit_full_file = EDIT_FRAGMENT_WITHOUT_BANNED_NAME + "\n" + edited_tail
     noun_issues = validate_content(
-        fragment_with_banned_word,
+        edited_tail,
         PRODUCTION_FILE_PATH,
-        old_content="",
-        full_file_content=full_file,
+        old_content=prior_tail,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
     )
     assert any("canned_results" in each_issue for each_issue in noun_issues)

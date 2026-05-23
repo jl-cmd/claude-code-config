@@ -125,6 +125,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_DIFF_CHANGED_OPCODE_TAGS,
     FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
     FUNCTION_LENGTH_BLOCKING_THRESHOLD,
+    BANNED_NOUN_SPAN_FRAGMENT_TEMPLATE,
     BARE_EACH_TOKEN,
     ALL_BOOLEAN_NAME_PREFIXES,
     ALL_BUILTIN_DICT_METHOD_NAMES,
@@ -1463,6 +1464,7 @@ def _collect_banned_noun_word_bindings(
 def check_banned_noun_word_boundary(
     content: str,
     file_path: str,
+    all_changed_lines: set[int] | None = None,
     defer_scope_to_caller: bool = False,
 ) -> list[str]:
     """Flag identifiers containing CODE_RULES §5 banned noun words.
@@ -1479,21 +1481,30 @@ def check_banned_noun_word_boundary(
     are skipped because they are already reported by
     ``check_banned_identifiers``.
 
-    Scoping mirrors ``check_banned_identifiers``: the check analyzes *content*
-    directly. At PreToolUse *content* is the edited fragment, so every binding
-    in it is in scope; at the commit/push gate *content* is the whole file and
-    every violation message carries a ``Line N:`` prefix, so the gate's
-    ``split_violations_by_scope`` can classify it blocking or advisory by added
-    line. Passing ``defer_scope_to_caller`` True on that path returns every
-    violation so the gate scopes by added line — the same deferral
-    ``check_function_length`` and ``check_tests_use_isolated_filesystem_paths``
-    use.
+    Scoping mirrors ``check_function_length`` and
+    ``check_tests_use_isolated_filesystem_paths`` through the shared
+    ``_scope_violations_to_changed_lines`` helper. A banned-noun binding is a
+    point fact about one identifier, so its enclosing unit is its own binding
+    line: each violation carries the binding line as a one-line ``range`` for
+    terminal diff scoping and a ``(binding span at line X, spanning 1 lines)``
+    message fragment the commit gate reconstructs through the same shared span
+    extractor registry the other two scoped checks use. Anchoring to the
+    binding line (rather than the whole enclosing function) matches the
+    companion exact-match ``check_banned_identifiers`` and keeps a pre-existing
+    binding out of scope when an unrelated line of its enclosing function is
+    edited. On a terminal Edit only violations whose binding line is among
+    ``all_changed_lines`` are returned; on a new-file or full-file write every
+    violation is in scope; ``defer_scope_to_caller`` returns every violation so
+    the gate scopes by added line.
 
     Args:
-        content: The Python source to analyze (the edited fragment at
-            PreToolUse, the whole file at the gate).
+        content: The reconstructed effective file content to analyze (the
+            whole post-edit file on an Edit, the whole file at the gate).
         file_path: The path of the file being checked (used for exemption
             routing).
+        all_changed_lines: Post-edit line numbers the current edit touched, or
+            None to treat the whole file as in scope. When provided, a violation
+            blocks only when its binding line is among the changed lines.
         defer_scope_to_caller: When True, return every violation so the
             commit/push gate's ``split_violations_by_scope`` can scope by added
             line and report the in-scope set.
@@ -1517,16 +1528,21 @@ def check_banned_noun_word_boundary(
     except SyntaxError:
         return []
 
+    single_line_span = 1
     all_violations_in_walk_order: list[tuple[range, str]] = []
     for each_name, each_lineno, _, each_word in _collect_banned_noun_word_bindings(parsed_tree):
-        span_range = range(each_lineno, each_lineno + 1)
+        span_range = range(each_lineno, each_lineno + single_line_span)
+        span_fragment = BANNED_NOUN_SPAN_FRAGMENT_TEMPLATE.format(
+            definition_line=each_lineno, line_span=single_line_span
+        )
         message = (
-            f"Line {each_lineno}: Identifier {each_name!r} {BANNED_NOUN_WORD_MESSAGE_SUFFIX} (word: {each_word!r})"
+            f"Line {each_lineno}: Identifier {each_name!r} {BANNED_NOUN_WORD_MESSAGE_SUFFIX} "
+            f"(word: {each_word!r}) {span_fragment}"
         )
         all_violations_in_walk_order.append((span_range, message))
     return _scope_violations_to_changed_lines(
         all_violations_in_walk_order,
-        None,
+        all_changed_lines,
         defer_scope_to_caller,
     )
 
@@ -3100,16 +3116,16 @@ def _detect_home_or_temp_probes_in_body(
     """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*.
 
     The walk descends into ``ClassDef`` nodes nested inside the test body and
-    into both the class-level statements and the method bodies of those
-    classes. Class-level statements (class attribute initializers) run at
-    class-creation time as the ``class`` statement executes during the test,
-    so a probe in an initializer such as ``root = Path.home()`` is on the
-    test's runtime path and is reported. Method bodies run when the method
-    runs, which a nested-class instantiation triggers, so the walk continues
-    through further nested functions and lambdas defined within a nested-class
-    method. Standalone nested helper functions or lambdas defined directly in
-    the test body remain scope boundaries — those run in their own callable
-    scope and carry their own isolation contract.
+    into their class-level statements. Class-level statements (class attribute
+    initializers) run at class-creation time as the ``class`` statement
+    executes during the test, so a probe in an initializer such as ``root =
+    Path.home()`` is on the test's runtime path and is reported. A method of a
+    nested class is a callable-scope boundary: Python does not run a method
+    just because its class is defined, so the walk does not descend into method
+    bodies. Standalone nested helper functions and lambdas defined anywhere are
+    likewise scope boundaries — each runs in its own callable scope and carries
+    its own isolation contract. Probes that genuinely execute on the test path
+    (top-level statements and class-level initializers) are still detected.
 
     Args:
         function_node: The test function whose body is being scanned.
@@ -3185,22 +3201,12 @@ def _record_home_or_temp_probe(
             all_probes.append((node.lineno, f"os.environ['{environ_key}']"))
 
 
-def _children_to_descend_into(
-    node: ast.AST, inside_nested_class: bool,
-) -> list[tuple[ast.AST, bool]]:
-    if isinstance(node, ast.Lambda):
-        if not inside_nested_class:
-            return []
-        return [(node.body, True)]
+def _children_to_descend_into(node: ast.AST) -> list[ast.AST]:
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        return []
     if isinstance(node, ast.ClassDef):
-        return [(each_member, True) for each_member in node.body]
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        if not inside_nested_class:
-            return []
-        return [(each_child, True) for each_child in ast.iter_child_nodes(node)]
-    return [
-        (each_child, inside_nested_class) for each_child in ast.iter_child_nodes(node)
-    ]
+        return list(node.body)
+    return list(ast.iter_child_nodes(node))
 
 
 def _descend_within_test_scope(
@@ -3209,12 +3215,13 @@ def _descend_within_test_scope(
     """Yield every descendant of *function_node* on the test's own runtime path.
 
     Bounded traversal that shares ``_children_to_descend_into`` so every caller
-    treats the same nodes as in scope. Standalone nested helper functions and
-    lambdas defined directly in the test body are scope boundaries — they run in
-    their own callable scope and carry their own isolation contract — so a
-    binding or probe inside one does not leak into the outer test. Nested
-    ``ClassDef`` bodies and the methods of those classes stay in scope because
-    their class-creation statements and method bodies run on the test's path.
+    treats the same nodes as in scope. Nested function definitions, methods, and
+    lambdas are scope boundaries — Python does not run a callable's body just
+    because the callable (or its enclosing class) is defined, so a binding or
+    probe inside one does not leak onto the test's runtime path. Nested
+    ``ClassDef`` bodies stay in scope because their class-creation statements
+    (class attribute initializers) run as the ``class`` statement executes
+    during the test; descent stops at the methods declared in that class body.
 
     Args:
         function_node: The test function whose in-scope descendants to yield.
@@ -3223,16 +3230,11 @@ def _descend_within_test_scope(
         Each descendant node within the test's bounded scope, in stack-pop
         order.
     """
-    nodes_to_visit: list[tuple[ast.AST, bool]] = [
-        (each_child, False) for each_child in ast.iter_child_nodes(function_node)
-    ]
+    nodes_to_visit: list[ast.AST] = list(ast.iter_child_nodes(function_node))
     while nodes_to_visit:
-        each_descendant, inside_nested_class = nodes_to_visit.pop()
+        each_descendant = nodes_to_visit.pop()
         yield each_descendant
-        for each_grandchild, each_child_inside_nested_class in _children_to_descend_into(
-            each_descendant, inside_nested_class
-        ):
-            nodes_to_visit.append((each_grandchild, each_child_inside_nested_class))
+        nodes_to_visit.extend(_children_to_descend_into(each_descendant))
 
 
 def _function_uses_pytest_isolation_fixture(
@@ -5409,9 +5411,10 @@ def validate_content(
         all_issues.extend(check_banned_identifiers(content, file_path))
         all_issues.extend(
             check_banned_noun_word_boundary(
-                content,
+                effective_content,
                 file_path,
-                defer_scope_to_caller=defer_scope_to_caller,
+                all_changed_lines,
+                defer_scope_to_caller,
             )
         )
         all_issues.extend(check_banned_prefixes(effective_content, file_path))
@@ -5480,26 +5483,41 @@ def _read_existing_file_content(file_path: str) -> str | None:
         return None
 
 
-def _reconstruct_post_edit_file_content(
+def prior_and_post_edit_content(
     file_path: str, old_string: str, new_string: str,
-) -> str | None:
-    """Return the file content as it will look after the Edit applies, or None.
+) -> tuple[str | None, str | None]:
+    """Return the pre-edit and post-edit file content from a single disk read.
 
-    Reads ``file_path`` from disk and replaces the first occurrence of
-    ``old_string`` with ``new_string``, mirroring how the Edit tool itself
-    applies a single replacement. Returns None when the file cannot be read,
-    ``old_string`` is empty, or ``old_string`` is not present in the existing
-    file (which means the Edit will fail or has already been applied — neither
-    case yields a well-defined post-edit view).
+    Reads ``file_path`` once and derives both views from that single read so the
+    prior and the reconstruction never diverge across two independent reads.
+    The post-edit view replaces the first occurrence of ``old_string`` with
+    ``new_string``, mirroring how the Edit tool itself applies a single
+    replacement.
+
+    Returns ``(None, None)`` when the file cannot be read, ``old_string`` is
+    empty, or ``old_string`` is not present in the existing file (the Edit will
+    fail or has already been applied — neither case yields a well-defined
+    post-edit view). A failed prior read is never coerced to an empty string,
+    because an empty prior diffs every line of the reconstruction as changed and
+    defeats the diff scoping the scoped checks rely on.
+
+    Args:
+        file_path: The path of the file the Edit targets.
+        old_string: The Edit's ``old_string`` fragment.
+        new_string: The Edit's ``new_string`` fragment.
+
+    Returns:
+        A ``(prior_content, post_edit_content)`` pair, or ``(None, None)`` when
+        no well-defined post-edit view exists.
     """
     if not old_string:
-        return None
+        return None, None
     existing_content = _read_existing_file_content(file_path)
     if existing_content is None:
-        return None
+        return None, None
     if old_string not in existing_content:
-        return None
-    return existing_content.replace(old_string, new_string, 1)
+        return None, None
+    return existing_content, existing_content.replace(old_string, new_string, 1)
 
 
 def main() -> None:
@@ -5528,10 +5546,10 @@ def main() -> None:
     if tool_name == "Edit":
         content = tool_input.get("new_string", "")
         old_content = tool_input.get("old_string", "")
-        prior_full_file_content = _read_existing_file_content(file_path) or ""
-        full_file_content_after_edit = _reconstruct_post_edit_file_content(
+        prior_content, full_file_content_after_edit = prior_and_post_edit_content(
             file_path, old_content, content,
         )
+        prior_full_file_content = prior_content or ""
     else:
         content = tool_input.get("content", "") or tool_input.get("new_string", "")
         old_content = _read_existing_file_content(file_path) or ""

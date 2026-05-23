@@ -102,6 +102,10 @@ FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX: str = (
     "function review hint)"
 )
 
+BANNED_NOUN_SPAN_FRAGMENT_TEMPLATE: str = (
+    "(binding span at line {definition_line}, spanning {line_span} lines)"
+)
+
 ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES: frozenset[str] = frozenset({
     "monkeypatch",
 })

@@ -19,6 +19,9 @@ from pr_loop_shared_constants.code_rules_gate_constants import (  # noqa: E402
     ALL_TEST_FILENAME_SUFFIXES,
     EXPECTED_NON_RENAME_COLUMN_COUNT,
     EXPECTED_RENAME_COLUMN_COUNT,
+    BANNED_NOUN_DEFINITION_LINE_GROUP_INDEX,
+    BANNED_NOUN_SPAN_GROUP_INDEX,
+    BANNED_NOUN_VIOLATION_PATTERN,
     FUNCTION_LENGTH_DEFINITION_LINE_GROUP_INDEX,
     FUNCTION_LENGTH_SPAN_GROUP_INDEX,
     FUNCTION_LENGTH_VIOLATION_PATTERN,
@@ -506,6 +509,63 @@ def _iter_calls_excluding_nested_functions(node: ast.AST) -> Iterator[ast.Call]:
         yield from _iter_calls_excluding_nested_functions(each_child)
 
 
+def _module_level_optional_kwargs_by_name(tree: ast.Module) -> dict[str, set[str]]:
+    function_signatures: dict[str, set[str]] = {}
+    for each_node in ast.iter_child_nodes(tree):
+        if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            optional_kwargs: set[str] = set()
+            for each_kwonly, each_default in zip(
+                each_node.args.kwonlyargs, each_node.args.kw_defaults
+            ):
+                if each_default is not None:
+                    optional_kwargs.add(each_kwonly.arg)
+            positional_defaults = each_node.args.defaults
+            positional_args_with_defaults = (
+                each_node.args.args[-len(positional_defaults):]
+                if positional_defaults
+                else []
+            )
+            for each_positional_arg in positional_args_with_defaults:
+                optional_kwargs.add(each_positional_arg.arg)
+            function_signatures[each_node.name] = optional_kwargs
+    return function_signatures
+
+
+def _class_method_node_ids(tree: ast.Module) -> set[int]:
+    class_method_node_ids: set[int] = set()
+    for each_class_def in ast.walk(tree):
+        if not isinstance(each_class_def, ast.ClassDef):
+            continue
+        for each_class_body_node in each_class_def.body:
+            if isinstance(
+                each_class_body_node, (ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                class_method_node_ids.add(id(each_class_body_node))
+    return class_method_node_ids
+
+
+def _wrapper_dropped_kwarg_findings(
+    wrapper_node: ast.FunctionDef | ast.AsyncFunctionDef,
+    kwargs_by_function_name: dict[str, set[str]],
+) -> Iterator[str]:
+    wrapper_kwargs = kwargs_by_function_name.get(wrapper_node.name, set())
+    for each_call in _iter_calls_excluding_nested_functions(wrapper_node):
+        if isinstance(each_call.func, ast.Name):
+            delegate_name = each_call.func.id
+        elif isinstance(each_call.func, ast.Attribute):
+            delegate_name = each_call.func.attr
+        else:
+            continue
+        delegate_kwargs = kwargs_by_function_name.get(delegate_name)
+        if delegate_kwargs is None:
+            continue
+        missing = delegate_kwargs - wrapper_kwargs
+        if missing:
+            yield (
+                f"Line {wrapper_node.lineno}: Wrapper {wrapper_node.name!r} drops optional kwargs {sorted(missing)!r} of delegate {delegate_name!r}"
+            )
+
+
 def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
     """Flag calls inside public functions that drop a same-file delegate's optional kwargs.
 
@@ -516,14 +576,10 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
     capped at MAX_VIOLATIONS_PER_CHECK findings per call to run_gate.
 
     Limitations:
-    - Only module-level FunctionDef nodes contribute signatures. Methods
-      defined inside ClassDef bodies are ignored so cross-class same-name
-      methods cannot overwrite a module-level delegate's signature index.
-    - Methods defined inside ClassDef bodies are also skipped as wrapper
-      candidates. A class method that calls a module-level delegate has a
-      signature unrelated to that delegate's keyword-argument surface, so
-      treating it as a wrapper produces false positives that flag every
-      class method calling a free-function delegate with optional kwargs.
+    - Only module-level FunctionDef nodes contribute signatures, and ClassDef
+      methods are skipped both as signature sources and as wrapper candidates:
+      a class method's signature is unrelated to a free-function delegate's
+      keyword surface, so treating it as a wrapper produces false positives.
     - ast.Attribute calls match by attribute name only; the receiver type is
       not checked, so `self.fetch(...)` and `other.fetch(...)` both match a
       module-level `fetch` definition.
@@ -552,33 +608,8 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
         tree = ast.parse(content)
     except SyntaxError:
         return []
-    function_signatures: dict[str, set[str]] = {}
-    for each_node in ast.iter_child_nodes(tree):
-        if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            optional_kwargs: set[str] = set()
-            for each_kwonly, each_default in zip(
-                each_node.args.kwonlyargs, each_node.args.kw_defaults
-            ):
-                if each_default is not None:
-                    optional_kwargs.add(each_kwonly.arg)
-            positional_defaults = each_node.args.defaults
-            positional_args_with_defaults = (
-                each_node.args.args[-len(positional_defaults):]
-                if positional_defaults
-                else []
-            )
-            for each_positional_arg in positional_args_with_defaults:
-                optional_kwargs.add(each_positional_arg.arg)
-            function_signatures[each_node.name] = optional_kwargs
-    class_method_node_ids: set[int] = set()
-    for each_class_def in ast.walk(tree):
-        if not isinstance(each_class_def, ast.ClassDef):
-            continue
-        for each_class_body_node in each_class_def.body:
-            if isinstance(
-                each_class_body_node, (ast.FunctionDef, ast.AsyncFunctionDef)
-            ):
-                class_method_node_ids.add(id(each_class_body_node))
+    function_signatures = _module_level_optional_kwargs_by_name(tree)
+    class_method_node_ids = _class_method_node_ids(tree)
     issues: list[str] = []
     for each_node in ast.walk(tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -587,24 +618,10 @@ def check_wrapper_plumb_through(content: str, file_path: str) -> list[str]:
             continue
         if each_node.name.startswith("_"):
             continue
-        wrapper_kwargs = function_signatures.get(each_node.name, set())
-        for each_call in _iter_calls_excluding_nested_functions(each_node):
-            if isinstance(each_call.func, ast.Name):
-                delegate_name = each_call.func.id
-            elif isinstance(each_call.func, ast.Attribute):
-                delegate_name = each_call.func.attr
-            else:
-                continue
-            delegate_kwargs = function_signatures.get(delegate_name)
-            if delegate_kwargs is None:
-                continue
-            missing = delegate_kwargs - wrapper_kwargs
-            if missing:
-                issues.append(
-                    f"Line {each_node.lineno}: Wrapper {each_node.name!r} drops optional kwargs {sorted(missing)!r} of delegate {delegate_name!r}"
-                )
-                if len(issues) >= MAX_VIOLATIONS_PER_CHECK:
-                    return issues
+        for each_finding in _wrapper_dropped_kwarg_findings(each_node, function_signatures):
+            issues.append(each_finding)
+            if len(issues) >= MAX_VIOLATIONS_PER_CHECK:
+                return issues
     return issues
 
 
@@ -963,6 +980,64 @@ def isolation_span_range(violation_text: str) -> range | None:
     return range(definition_line, definition_line + line_span)
 
 
+def banned_noun_span_range(violation_text: str) -> range | None:
+    """Return the enclosing-unit line range of a banned-noun violation, or None.
+
+    The enforcer's banned-noun message carries the enclosing-unit definition
+    line and span: ``Line N: Identifier 'NAME' ... (binding span at line X,
+    spanning Y lines)``. The unit occupies lines ``X`` through ``X + Y - 1``
+    inclusive — the enclosing function span where the binding sits inside one,
+    else the binding line alone — so a binding declared on a ``def`` line is
+    scoped by the same enclosing-unit span the enforcer uses rather than by the
+    ``Line N:`` binding line alone.
+
+    Args:
+        violation_text: A single violation string emitted by the enforcer.
+
+    Returns:
+        A ``range`` covering the binding's enclosing-unit line span, or None
+        when the text is not a banned-noun violation.
+    """
+    span_match = BANNED_NOUN_VIOLATION_PATTERN.search(violation_text)
+    if span_match is None:
+        return None
+    definition_line = int(span_match.group(BANNED_NOUN_DEFINITION_LINE_GROUP_INDEX))
+    line_span = int(span_match.group(BANNED_NOUN_SPAN_GROUP_INDEX))
+    return range(definition_line, definition_line + line_span)
+
+
+def _all_span_range_extractors() -> tuple[Callable[[str], range | None], ...]:
+    return (
+        function_length_span_range,
+        isolation_span_range,
+        banned_noun_span_range,
+    )
+
+
+def enclosing_span_range(violation_text: str) -> range | None:
+    """Return the enclosing-unit line range of a span-tagged violation, or None.
+
+    Every diff-scoped enforcer check tags its message with an enclosing-unit
+    span fragment. This dispatcher tries each span extractor from
+    ``_all_span_range_extractors`` so the gate reconstructs every scoped
+    check's span through one shared mechanism — adding a new scoped check means
+    adding one extractor to that registry rather than threading a new branch
+    through ``split_violations_by_scope``.
+
+    Args:
+        violation_text: A single violation string emitted by the enforcer.
+
+    Returns:
+        The first non-None span range any extractor recovers, or None when the
+        text carries no enclosing-unit span fragment.
+    """
+    for each_extractor in _all_span_range_extractors():
+        span_range = each_extractor(violation_text)
+        if span_range is not None:
+            return span_range
+    return None
+
+
 def split_violations_by_scope(
     all_issues: list[str],
     all_added_line_numbers: set[int] | None,
@@ -976,21 +1051,21 @@ def split_violations_by_scope(
 
     Returns:
         Tuple ``(blocking, advisory)``. When *all_added_line_numbers* is
-        None, every issue is blocking. Function-length and HOME/TMP isolation
-        violations are blocking when the enclosing function's declared line
-        span intersects the added lines (the body grew or its signature
-        changed in this diff) and advisory otherwise (a pre-existing untouched
-        function). Every other issue is blocking when its ``Line N:`` prefix
-        names an added line and advisory otherwise.
+        None, every issue is blocking. Every diff-scoped violation
+        (function-length, HOME/TMP isolation, banned-noun) carries an
+        enclosing-unit span fragment that ``enclosing_span_range`` reconstructs
+        through one shared extractor registry; such a violation is blocking
+        when its declared span intersects the added lines (the unit grew or its
+        signature changed in this diff) and advisory otherwise (a pre-existing
+        untouched unit). Every other issue is blocking when its ``Line N:``
+        prefix names an added line and advisory otherwise.
     """
     if all_added_line_numbers is None:
         return list(all_issues), []
     blocking: list[str] = []
     advisory: list[str] = []
     for each_issue in all_issues:
-        span_range = function_length_span_range(
-            each_issue
-        ) or isolation_span_range(each_issue)
+        span_range = enclosing_span_range(each_issue)
         if span_range is not None:
             if any(each_line in all_added_line_numbers for each_line in span_range):
                 blocking.append(each_issue)

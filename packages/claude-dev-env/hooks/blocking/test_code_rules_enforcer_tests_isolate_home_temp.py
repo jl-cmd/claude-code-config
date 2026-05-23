@@ -177,6 +177,45 @@ def test_should_flag_path_home_inside_nested_class_body() -> None:
     assert any("Path.home" in each_issue for each_issue in issues)
 
 
+def test_should_ignore_path_home_inside_uncalled_nested_class_method() -> None:
+    # An ordinary method of a nested class does not run merely because the
+    # class is defined during the test; Python only executes a method when it
+    # is called. A Path.home() in the body of an uncalled method is therefore
+    # not on the test's runtime path and must not be flagged.
+    source = (
+        "from pathlib import Path\n"
+        "def test_defines_inner_class() -> None:\n"
+        "    class Inner:\n"
+        "        def resolve_root(self) -> Path:\n"
+        "            return Path.home()\n"
+        "    assert Inner is not None\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == [], (
+        "an uncalled nested-class method body does not execute during the test, "
+        f"so its Path.home() must not be flagged; got: {issues!r}"
+    )
+
+
+def test_should_ignore_path_home_inside_nested_class_method_lambda() -> None:
+    # A lambda defined inside a nested class method is two callable scopes
+    # removed from the test path; neither the method nor the lambda runs from
+    # the class definition alone.
+    source = (
+        "from pathlib import Path\n"
+        "def test_defines_inner_class() -> None:\n"
+        "    class Inner:\n"
+        "        def build(self) -> object:\n"
+        "            return lambda: Path.home()\n"
+        "    assert Inner is not None\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == [], (
+        "a lambda inside an uncalled nested-class method must not be flagged; "
+        f"got: {issues!r}"
+    )
+
+
 def test_should_ignore_nested_test_named_function_pytest_does_not_collect() -> None:
     source = (
         "from pathlib import Path\n"
@@ -559,7 +598,11 @@ def test_should_not_flag_module_level_from_os_import_environ_for_unrelated_var()
     assert issues == []
 
 
-def test_should_flag_path_home_inside_nested_function_within_nested_class_method() -> None:
+def test_should_ignore_path_home_inside_nested_function_within_nested_class_method() -> None:
+    # A function nested inside an uncalled nested-class method is two callable
+    # scopes removed from the test path. Neither the method nor the inner
+    # function runs from the class definition alone, so the probe must not be
+    # flagged.
     source = (
         "from pathlib import Path\n"
         "class TestFoo:\n"
@@ -573,11 +616,16 @@ def test_should_flag_path_home_inside_nested_function_within_nested_class_method
         "        assert h is not None\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
-    assert any("Path.home" in each_issue for each_issue in issues)
-    assert any("test_unsafe" in each_issue for each_issue in issues)
+    assert issues == [], (
+        "a probe inside an uncalled nested-class method body must stay out of "
+        f"scope; got: {issues!r}"
+    )
 
 
-def test_should_flag_lambda_probe_inside_nested_class_method() -> None:
+def test_should_ignore_lambda_probe_inside_nested_class_method() -> None:
+    # A lambda body inside a nested-class method runs only when the method
+    # runs, which the class definition alone does not trigger. The method body
+    # is a callable-scope boundary, so the lambda probe must not be flagged.
     source = (
         "from pathlib import Path\n"
         "class TestFoo:\n"
@@ -589,7 +637,10 @@ def test_should_flag_lambda_probe_inside_nested_class_method() -> None:
         "        assert h is not None\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
-    assert any("Path.home" in each_issue for each_issue in issues)
+    assert issues == [], (
+        "a lambda probe inside an uncalled nested-class method body must stay "
+        f"out of scope; got: {issues!r}"
+    )
 
 
 def test_should_not_run_on_production_files() -> None:
@@ -741,11 +792,12 @@ def test_should_flag_test_method_inside_test_prefixed_class() -> None:
     assert any("Path.home" in each_issue for each_issue in issues)
 
 
-def test_should_flag_path_home_inside_nested_class_method_of_outer_test() -> None:
-    # A class defined locally inside a test executes its method bodies as
-    # part of the test's runtime path once an instance is constructed. The
-    # walker must descend into nested-class methods so a Path.home() probe
-    # in __init__ or any other method is attributed to the outer test.
+def test_should_ignore_path_home_inside_nested_class_method_of_outer_test() -> None:
+    # A method of a nested class is a callable-scope boundary. Python does not
+    # run a method just because its class is defined, and static analysis
+    # cannot reliably tell which methods a later instantiation calls. The
+    # walker treats every nested-class method body as a boundary, so a
+    # Path.home() in __init__ is not attributed to the outer test.
     source = (
         "from pathlib import Path\n"
         "class TestFoo:\n"
@@ -757,8 +809,10 @@ def test_should_flag_path_home_inside_nested_class_method_of_outer_test() -> Non
         "        assert h is not None\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
-    assert any("Path.home" in each_issue for each_issue in issues)
-    assert any("test_unsafe" in each_issue for each_issue in issues)
+    assert issues == [], (
+        "a probe inside a nested-class method body must stay out of scope; "
+        f"got: {issues!r}"
+    )
 
 
 def test_should_ignore_path_home_inside_standalone_nested_helper_function() -> None:

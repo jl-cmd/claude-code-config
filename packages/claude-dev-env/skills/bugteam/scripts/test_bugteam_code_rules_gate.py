@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import subprocess
 import sys
 import unittest.mock
@@ -329,10 +330,10 @@ def test_check_database_column_string_magic_signals_cap_exit(
     assert "cap reached" in captured.err.lower()
 
 
-def test_check_wrapper_plumb_through_signals_cap_exit(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """check_wrapper_plumb_through must signal when MAXIMUM_ISSUES_TO_REPORT trims."""
+def test_check_wrapper_plumb_through_caps_findings_at_max_per_check() -> None:
+    """check_wrapper_plumb_through stops emitting at MAX_VIOLATIONS_PER_CHECK
+    findings — the cap bounds the blocking payload silently, matching the
+    _shared gate copy."""
     delegate_definition = (
         "def delegate(*, optional_one=1, optional_two=2, optional_three=3,"
         " optional_four=4): return 0\n"
@@ -346,9 +347,48 @@ def test_check_wrapper_plumb_through_signals_cap_exit(
         source_with_many_wrappers,
         "production/wrappers.py",
     )
-    assert len(issues) == 3
-    captured = capsys.readouterr()
-    assert "cap reached" in captured.err.lower()
+    assert len(issues) == gate_module.MAX_VIOLATIONS_PER_CHECK
+
+
+def _bugteam_banned_noun_parameter_issues() -> list[str]:
+    validate_content = gate_module.load_validate_content()
+    source = (
+        "def aggregate(canned_results: int) -> int:\n"
+        "    doubled = canned_results * 2\n"
+        "    return doubled\n"
+    )
+    issues = validate_content(source, "src/module.py", "")
+    return [each_issue for each_issue in issues if "banned noun" in each_issue]
+
+
+def test_bugteam_split_violations_blocks_banned_noun_when_binding_line_is_added() -> None:
+    """The bugteam gate reconstructs a banned-noun binding's one-line span the
+    same way the _shared gate does: the violation is blocking when its own
+    binding line is among the added lines."""
+    banned_noun_issues = _bugteam_banned_noun_parameter_issues()
+    assert banned_noun_issues, "expected a banned-noun parameter issue"
+    parameter_binding_line = 1
+    blocking, advisory = gate_module.split_violations_by_scope(
+        banned_noun_issues,
+        {parameter_binding_line},
+    )
+    assert blocking == banned_noun_issues
+    assert advisory == []
+
+
+def test_bugteam_split_violations_advises_banned_noun_when_binding_line_untouched() -> None:
+    """A banned-noun binding whose own line is untouched is advisory at the
+    bugteam gate, so editing an unrelated body line does not pull a pre-existing
+    binding into scope."""
+    banned_noun_issues = _bugteam_banned_noun_parameter_issues()
+    assert banned_noun_issues, "expected a banned-noun parameter issue"
+    unrelated_body_line = 2
+    blocking, advisory = gate_module.split_violations_by_scope(
+        banned_noun_issues,
+        {unrelated_body_line},
+    )
+    assert advisory == banned_noun_issues
+    assert blocking == []
 
 
 def test_run_gate_exits_nonzero_when_a_file_is_unreadable(
@@ -649,3 +689,72 @@ def test_report_partitioned_violations_returns_one_when_file_skipped(tmp_path: P
         skipped_unreadable_count=1,
     )
     assert exit_code == 1
+
+
+def test_check_wrapper_plumb_through_skips_class_methods_calling_module_delegate() -> None:
+    """A class method calling a module-level delegate is not a wrapper; its
+    signature is unrelated to the delegate's keyword surface, so it must not be
+    flagged — matching the _shared gate copy."""
+    source = (
+        "def fetch(target, *, retries=3):\n"
+        "    return target\n"
+        "\n"
+        "class MyService:\n"
+        "    def public_method(self, target):\n"
+        "        return fetch(target)\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert issues == [], (
+        f"class methods must not be treated as module-level wrappers; got {issues!r}"
+    )
+
+
+def test_check_wrapper_plumb_through_flags_name_call_dropping_kwarg() -> None:
+    """A bare-name call (``delegate(value)``) to a same-file delegate that
+    exposes an optional kwarg the public wrapper omits must be flagged — the
+    bugteam copy must handle ``ast.Name`` targets, not only ``ast.Attribute``."""
+    source = (
+        "def delegate(value, *, retries=3):\n"
+        "    return value\n"
+        "\n"
+        "def public_wrapper(value):\n"
+        "    return delegate(value)\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert any("retries" in each_issue for each_issue in issues), (
+        f"a bare-name delegate call dropping an optional kwarg must flag; got {issues!r}"
+    )
+
+
+def test_check_wrapper_plumb_through_ignores_calls_nested_inside_delegate_arguments() -> None:
+    """A callee nested as an argument (``delegate(helper(x))``) is not a
+    separate call site; only the enclosing call is inspected, matching the
+    _shared gate copy."""
+    source = (
+        "def delegate(value, *, retries=3):\n"
+        "    return value\n"
+        "\n"
+        "def helper(value):\n"
+        "    return value\n"
+        "\n"
+        "def public_caller(value):\n"
+        "    return delegate(helper(value))\n"
+    )
+    issues = gate_module.check_wrapper_plumb_through(source, "module.py")
+    assert all("helper" not in each_issue for each_issue in issues), (
+        f"nested-argument callee must not be a separate call site; got {issues!r}"
+    )
+
+
+def test_check_wrapper_plumb_through_stays_under_function_length_threshold() -> None:
+    """check_wrapper_plumb_through must stay under the enforcer's function-length
+    blocking threshold so its signature-index, class-method-id, and per-wrapper
+    finding logic live in extracted helpers, matching the _shared gate copy."""
+    declared_line_count = len(
+        inspect.getsource(gate_module.check_wrapper_plumb_through).splitlines()
+    )
+    blocking_threshold = 60
+    assert declared_line_count < blocking_threshold, (
+        f"check_wrapper_plumb_through is {declared_line_count} lines; extract "
+        "helpers to keep it under the function-length blocking threshold"
+    )

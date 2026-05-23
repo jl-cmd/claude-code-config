@@ -1141,3 +1141,121 @@ def test_main_blocks_banned_noun_on_added_lines_past_document_order(
         "the fourth banned-noun identifier — the only one on staged lines — must "
         "block even though three untouched ones precede it in document order"
     )
+
+
+def _load_bugteam_gate_module() -> ModuleType:
+    bugteam_scripts_dir = (
+        Path(__file__).resolve().parents[4]
+        / "skills"
+        / "bugteam"
+        / "scripts"
+    )
+    if str(bugteam_scripts_dir) not in sys.path:
+        sys.path.insert(0, str(bugteam_scripts_dir))
+    module_path = bugteam_scripts_dir / "bugteam_code_rules_gate.py"
+    spec = importlib.util.spec_from_file_location("bugteam_code_rules_gate", module_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_both_gates_classify_wrapper_plumb_through_identically() -> None:
+    """The bugteam and _shared gate copies of check_wrapper_plumb_through must
+    return identical findings. A class method calling a module-level delegate
+    is not a wrapper; both gates must exclude it rather than one emitting a
+    false positive the other does not."""
+    bugteam_gate = _load_bugteam_gate_module()
+    class_method_calling_delegate = (
+        "def fetch(target, *, retries=3):\n"
+        "    return target\n"
+        "\n"
+        "class MyService:\n"
+        "    def public_method(self, target):\n"
+        "        return fetch(target)\n"
+    )
+    nested_call_inside_delegate_argument = (
+        "def delegate(value, *, retries=3):\n"
+        "    return value\n"
+        "\n"
+        "def helper(value):\n"
+        "    return value\n"
+        "\n"
+        "def public_caller(value):\n"
+        "    return delegate(helper(value))\n"
+    )
+    name_call_dropping_kwarg = (
+        "def delegate(value, *, retries=3):\n"
+        "    return value\n"
+        "\n"
+        "def public_wrapper(value):\n"
+        "    return delegate(value)\n"
+    )
+    for each_source in (
+        class_method_calling_delegate,
+        nested_call_inside_delegate_argument,
+        name_call_dropping_kwarg,
+    ):
+        shared_issues = gate_module.check_wrapper_plumb_through(each_source, "module.py")
+        bugteam_issues = bugteam_gate.check_wrapper_plumb_through(each_source, "module.py")
+        assert shared_issues == bugteam_issues, (
+            "both gate copies of check_wrapper_plumb_through must classify "
+            f"identically; shared={shared_issues!r} bugteam={bugteam_issues!r}"
+        )
+
+
+def test_check_wrapper_plumb_through_stays_under_function_length_threshold() -> None:
+    """check_wrapper_plumb_through must stay under the enforcer's function-length
+    blocking threshold so editing it (e.g. aligning the two gate copies) does
+    not itself trip the gate; its signature-index and class-method-id collection
+    are extracted into helpers."""
+    enforcer_span = inspect.getsource(gate_module.check_wrapper_plumb_through)
+    declared_line_count = len(enforcer_span.splitlines())
+    blocking_threshold = 60
+    assert declared_line_count < blocking_threshold, (
+        f"check_wrapper_plumb_through is {declared_line_count} lines; extract "
+        "helpers to keep it under the function-length blocking threshold"
+    )
+
+
+def _banned_noun_parameter_issues() -> list[str]:
+    validate_content = gate_module.load_validate_content()
+    source = (
+        "def aggregate(canned_results: int) -> int:\n"
+        "    doubled = canned_results * 2\n"
+        "    return doubled\n"
+    )
+    issues = validate_content(source, "src/module.py", "")
+    return [each_issue for each_issue in issues if "banned noun" in each_issue]
+
+
+def test_split_violations_blocks_banned_noun_when_binding_line_is_added() -> None:
+    """A banned-noun binding is blocking when its own binding line is among the
+    added lines. The gate reconstructs the one-line binding span through the
+    same shared extractor registry it uses for function-length and isolation,
+    rather than relying on the bare ``Line N:`` prefix branch."""
+    banned_noun_issues = _banned_noun_parameter_issues()
+    assert banned_noun_issues, "expected a banned-noun parameter issue"
+    parameter_binding_line = 1
+    blocking, advisory = gate_module.split_violations_by_scope(
+        banned_noun_issues,
+        all_added_line_numbers={parameter_binding_line},
+    )
+    assert blocking == banned_noun_issues
+    assert advisory == []
+
+
+def test_split_violations_advises_banned_noun_when_binding_line_untouched() -> None:
+    """A banned-noun binding whose own line is not among the added lines is
+    advisory — editing an unrelated body line does not pull a pre-existing
+    binding into scope, mirroring the companion exact-match identifier check."""
+    banned_noun_issues = _banned_noun_parameter_issues()
+    assert banned_noun_issues, "expected a banned-noun parameter issue"
+    unrelated_body_line = 2
+    blocking, advisory = gate_module.split_violations_by_scope(
+        banned_noun_issues,
+        all_added_line_numbers={unrelated_body_line},
+    )
+    assert advisory == banned_noun_issues
+    assert blocking == []

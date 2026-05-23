@@ -17,6 +17,12 @@ ISOLATION_VIOLATION_PATTERN: re.Pattern[str] = re.compile(
 ISOLATION_DEFINITION_LINE_GROUP_INDEX: int = 1
 ISOLATION_SPAN_GROUP_INDEX: int = 2
 
+BANNED_NOUN_VIOLATION_PATTERN: re.Pattern[str] = re.compile(
+    r"\(binding span at line (\d+), spanning (\d+) lines\)"
+)
+BANNED_NOUN_DEFINITION_LINE_GROUP_INDEX: int = 1
+BANNED_NOUN_SPAN_GROUP_INDEX: int = 2
+
 ALL_CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
     {".py", ".js", ".ts", ".tsx", ".jsx"}
 )

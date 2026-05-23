@@ -1425,6 +1425,102 @@ def test_isolation_check_scopes_environ_bindings_to_their_own_test() -> None:
     assert not any("test_b" in each_issue for each_issue in issues)
 
 
+def test_isolation_check_ignores_path_constructor_expanduser_with_tilde_free_argument() -> None:
+    """`Path('/tmp/x').expanduser()` carries no leading tilde, so it expands no
+    home directory and must stay symmetric with `os.path.expanduser` of a
+    tilde-free literal — neither fires."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_resolves_absolute() -> None:\n"
+        "    target = Path('/tmp/x').expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert issues == []
+
+
+def test_isolation_check_ignores_static_pathlib_expanduser_with_dynamic_argument() -> None:
+    """`pathlib.Path.expanduser(some_path)` with a non-constant argument cannot
+    be inspected for a leading tilde, so it follows the conservative rule and
+    does not fire — symmetric with `os.path.expanduser(some_path)`."""
+    source = (
+        "import pathlib\n"
+        "def test_resolves_dynamic(some_path) -> None:\n"
+        "    target = pathlib.Path.expanduser(some_path)\n"
+        "    target.read_text()\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert issues == []
+
+
+def test_isolation_check_flags_path_home_via_function_local_class_alias() -> None:
+    """`path_class = Path` then `path_class.home()` reaches the real home
+    directory through a per-test class alias and must fire just like the bare
+    `Path.home()` form."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_home() -> None:\n"
+        "    path_class = Path\n"
+        "    home_dir = path_class.home()\n"
+        "    (home_dir / '.myapp').write_text('x')\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("home" in each_issue.lower() for each_issue in issues)
+
+
+def test_isolation_check_flags_getenv_via_function_local_callable_alias() -> None:
+    """`read_env = os.getenv` then `read_env('HOME')` reads HOME through a
+    per-test callable alias and must fire just like the bare `os.getenv('HOME')`
+    form."""
+    source = (
+        "import os\n"
+        "def test_reads_home() -> None:\n"
+        "    read_env = os.getenv\n"
+        "    home = read_env('HOME')\n"
+        "    print(home)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_flags_tempfile_spooled_temporary_file() -> None:
+    """`tempfile.SpooledTemporaryFile()` allocates in the shared temp dir and
+    must fire as a temp-isolation probe alongside the other tempfile factories."""
+    source = (
+        "import tempfile\n"
+        "def test_writes_spooled_temp() -> None:\n"
+        "    handle = tempfile.SpooledTemporaryFile()\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("SpooledTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_flags_tempfile_gettempdirb() -> None:
+    """`tempfile.gettempdirb()` returns the shared temp dir as bytes and must
+    fire just like the string-returning `tempfile.gettempdir()`."""
+    source = (
+        "import tempfile\n"
+        "def test_resolves_temp_bytes() -> None:\n"
+        "    base = tempfile.gettempdirb()\n"
+        "    print(base)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("gettempdirb" in each_issue for each_issue in issues)
+
+
 def test_isolation_check_flags_module_level_from_os_import_environ_subscript() -> None:
     """A module-level `from os import environ` binds `environ` to `os.environ`,
     so `environ['HOME']` inside a test must fire even without a per-test

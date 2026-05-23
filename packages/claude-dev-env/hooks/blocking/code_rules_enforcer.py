@@ -115,8 +115,10 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     WINDOWS_PERCENT_VARIABLE_REFERENCE_PATTERN,
     EXPANDVARS_DOTTED_NAME,
     EXPANDUSER_DOTTED_NAME,
+    ALL_PATHLIB_STATIC_EXPANDUSER_DOTTED_NAMES,
     PATHLIB_EXPANDUSER_METHOD_NAME,
     ALL_PATHLIB_PATH_CONSTRUCTOR_CANONICAL_NAMES,
+    ALL_PROBE_ALIASABLE_CANONICAL_PREFIXES,
     HOME_DIRECTORY_TILDE_PREFIX,
     ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
     PYTEST_TEST_CLASS_NAME_PREFIX,
@@ -2586,16 +2588,20 @@ def _collect_os_environ_local_binding_names(
 def _collect_pathlib_path_local_binding_names(
     scope_node: ast.AST, all_canonical_names_by_alias: dict[str, str],
 ) -> set[str]:
-    """Return local names bound to a ``pathlib.Path(...)`` construction.
+    """Return local names bound to a home-tilde ``pathlib.Path(...)`` construction.
 
     Scoped to the single test function passed as *scope_node* so a binding in
     one test never attributes a same-named ``.expanduser()`` call in a sibling
-    test. Tracks ``candidate = Path('~/x')`` style assignments (resolving the
-    constructor through *all_canonical_names_by_alias* so an aliased
+    test. Tracks ``candidate = Path('~/x')`` style assignments whose first
+    constructor argument is a literal string beginning with ``~`` (resolving
+    the constructor through *all_canonical_names_by_alias* so an aliased
     ``candidate = P('~/x')`` with ``from pathlib import Path as P`` and a
     fully qualified ``candidate = pathlib.Path('~/x')`` are both recognized).
     A later ``candidate.expanduser()`` call on such a name is attributed to a
-    home-directory probe.
+    home-directory probe. A tilde-free or dynamic constructor argument
+    (``Path('/tmp/x')`` / ``Path(some_path)``) expands no home directory and
+    is not collected, keeping the instance ``.expanduser()`` form symmetric
+    with ``os.path.expanduser`` argument inspection.
 
     Args:
         scope_node: The single test function node to scan for bindings.
@@ -2603,13 +2609,16 @@ def _collect_pathlib_path_local_binding_names(
             ``_build_alias_canonicalization_map``.
 
     Returns:
-        Set of local variable names bound to a ``pathlib.Path`` construction.
+        Set of local variable names bound to a home-tilde ``pathlib.Path``
+        construction.
     """
     path_bindings: set[str] = set()
     for each_node in ast.walk(scope_node):
         if not isinstance(each_node, ast.Assign):
             continue
-        if not _call_constructs_pathlib_path(each_node.value, all_canonical_names_by_alias):
+        if not _pathlib_path_construction_uses_home_tilde(
+            each_node.value, all_canonical_names_by_alias
+        ):
             continue
         for each_target in each_node.targets:
             if isinstance(each_target, ast.Name):
@@ -2617,9 +2626,86 @@ def _collect_pathlib_path_local_binding_names(
     return path_bindings
 
 
-def _call_constructs_pathlib_path(
+def _collect_local_probe_alias_bindings(
+    scope_node: ast.AST, all_canonical_names_by_alias: dict[str, str],
+) -> dict[str, str]:
+    """Return a per-test overlay mapping local names to canonical probe prefixes.
+
+    Scoped to the single test function passed as *scope_node* so an alias bound
+    in one test never resolves a same-named access in a sibling test. Tracks
+    rebindings of a probe module, class, or callable to a local name —
+    ``path_class = Path``, ``read_env = os.getenv``, ``temp_module = tempfile``,
+    ``path_module = os.path``, ``e = os.environ`` — by resolving each
+    right-hand side through *all_canonical_names_by_alias* and keeping only
+    those whose canonical prefix is probe-aliasable
+    (``ALL_PROBE_ALIASABLE_CANONICAL_PREFIXES``). Merged over the module-level
+    alias map, the overlay lets a later ``path_class.home()`` /
+    ``read_env('HOME')`` / ``temp_module.mkdtemp()`` resolve to its canonical
+    probe chain.
+
+    Args:
+        scope_node: The single test function node to scan for alias bindings.
+        all_canonical_names_by_alias: Module-level import-alias map from
+            ``_build_alias_canonicalization_map``.
+
+    Returns:
+        Mapping from local binding name to its canonical probe prefix.
+    """
+    local_alias_canonical_names: dict[str, str] = {}
+    for each_node in ast.walk(scope_node):
+        if not isinstance(each_node, ast.Assign):
+            continue
+        canonical_prefix = _canonical_probe_prefix_for_value(
+            each_node.value, all_canonical_names_by_alias
+        )
+        if canonical_prefix is None:
+            continue
+        for each_target in each_node.targets:
+            if isinstance(each_target, ast.Name):
+                local_alias_canonical_names[each_target.id] = canonical_prefix
+    return local_alias_canonical_names
+
+
+def _canonical_probe_prefix_for_value(
+    node: ast.expr, all_canonical_names_by_alias: dict[str, str],
+) -> str | None:
+    if isinstance(node, ast.Name):
+        candidate_prefix = all_canonical_names_by_alias.get(node.id, node.id)
+    elif isinstance(node, ast.Attribute):
+        attribute_chain = _dotted_attribute_chain(node)
+        if attribute_chain is None:
+            return None
+        candidate_prefix = _resolve_chain_through_aliases(
+            attribute_chain, all_canonical_names_by_alias
+        )
+    else:
+        return None
+    if candidate_prefix in ALL_PROBE_ALIASABLE_CANONICAL_PREFIXES:
+        return candidate_prefix
+    return None
+
+
+def _pathlib_path_construction_uses_home_tilde(
     node: ast.expr, all_canonical_names_by_alias: dict[str, str],
 ) -> bool:
+    """Return True for a ``pathlib.Path('~...')`` construction with a home tilde.
+
+    The node is a Path construction when its callee chain resolves (directly,
+    aliased, or fully qualified) to a member of
+    ``ALL_PATHLIB_PATH_CONSTRUCTOR_CANONICAL_NAMES``. It uses the home tilde
+    when its first argument is a literal string beginning with ``~``. A
+    tilde-free or dynamic first argument expands no home directory and returns
+    False, mirroring ``_expanduser_argument_references_home``.
+
+    Args:
+        node: The candidate ``Path(...)`` construction expression.
+        all_canonical_names_by_alias: Import-alias map from
+            ``_build_alias_canonicalization_map``.
+
+    Returns:
+        True when *node* constructs a ``pathlib.Path`` from a leading-tilde
+        literal string.
+    """
     if not isinstance(node, ast.Call):
         return False
     constructor_chain = _dotted_call_attribute_chain(node)
@@ -2628,7 +2714,9 @@ def _call_constructs_pathlib_path(
     canonical_chain = _resolve_chain_through_aliases(
         constructor_chain, all_canonical_names_by_alias
     )
-    return canonical_chain in ALL_PATHLIB_PATH_CONSTRUCTOR_CANONICAL_NAMES
+    if canonical_chain not in ALL_PATHLIB_PATH_CONSTRUCTOR_CANONICAL_NAMES:
+        return False
+    return _expanduser_argument_references_home(node)
 
 
 def _expanduser_method_call_targets_pathlib_path(
@@ -2636,23 +2724,28 @@ def _expanduser_method_call_targets_pathlib_path(
     all_canonical_names_by_alias: dict[str, str],
     all_path_local_bindings: set[str],
 ) -> bool:
-    """Return True for a ``.expanduser()`` method call on a ``pathlib.Path``.
+    """Return True for a ``.expanduser()`` call on a home-tilde ``pathlib.Path``.
 
-    ``Path.expanduser`` takes no string argument — it expands the bound
-    ``~`` in the receiver Path — so the call is flagged whenever the receiver
-    resolves to a Path object, regardless of arguments. The receiver is a Path
-    when it is a ``pathlib.Path(...)`` construction (directly, aliased, or fully
-    qualified) or a local variable previously bound to such a construction.
+    ``Path.expanduser`` expands the ``~`` bound into the receiver Path, so the
+    call resolves the home directory only when that receiver carries a leading
+    tilde. The receiver carries a tilde when it is a ``pathlib.Path('~...')``
+    construction (directly, aliased, or fully qualified) or a local variable
+    previously bound to such a construction. A tilde-free or dynamic receiver
+    (``Path('/tmp/x').expanduser()`` / ``Path(some_path).expanduser()``)
+    expands no home directory and is not flagged, keeping the form symmetric
+    with ``os.path.expanduser`` argument inspection.
 
     Args:
         call_node: The call whose callee attribute is ``expanduser``.
         all_canonical_names_by_alias: Import-alias map from
             ``_build_alias_canonicalization_map``.
-        all_path_local_bindings: Local names bound to a ``pathlib.Path``
-            construction from ``_collect_pathlib_path_local_binding_names``.
+        all_path_local_bindings: Local names bound to a home-tilde
+            ``pathlib.Path`` construction from
+            ``_collect_pathlib_path_local_binding_names``.
 
     Returns:
-        True when the ``expanduser`` receiver resolves to a ``pathlib.Path``.
+        True when the ``expanduser`` receiver resolves to a home-tilde
+        ``pathlib.Path``.
     """
     callee = call_node.func
     if not isinstance(callee, ast.Attribute):
@@ -2662,7 +2755,7 @@ def _expanduser_method_call_targets_pathlib_path(
     receiver = callee.value
     if isinstance(receiver, ast.Name):
         return receiver.id in all_path_local_bindings
-    return _call_constructs_pathlib_path(receiver, all_canonical_names_by_alias)
+    return _pathlib_path_construction_uses_home_tilde(receiver, all_canonical_names_by_alias)
 
 
 def _attribute_chain_resolves_to_os_environ(
@@ -2985,6 +3078,10 @@ def _record_home_or_temp_probe(
             if _expanduser_argument_references_home(node):
                 all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
+        if canonical_chain in ALL_PATHLIB_STATIC_EXPANDUSER_DOTTED_NAMES:
+            if _expanduser_argument_references_home(node):
+                all_probes.append((node.lineno, f"{canonical_chain}()"))
+            return
         if canonical_chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
             all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
@@ -3045,13 +3142,41 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
 
     Test functions whose signatures take ``monkeypatch`` are treated as
     intentionally isolated and pass — ``monkeypatch.setenv('HOME', ...)``
-    can intercept every env-derived probe. ``tmp_path`` / ``tmp_path_factory``
+    can intercept every env-derived probe, and this suppression applies
+    uniformly to every probe type below. ``tmp_path`` / ``tmp_path_factory``
     / ``tmpdir`` / ``tmpdir_factory`` allocate alternative sandbox paths but
     do not intercept env reads, so their presence alone does not suppress
     the check. Module-level helpers and fixtures (any function whose name
     does not start with ``test_`` or ``should_``) are out of scope — only
     pytest-collectable ``def test_*`` / ``async def test_*`` / ``def
     should_*`` module-level or class-method functions are scanned.
+
+    Covered forms (API surface × access form):
+        Probe API surfaces — ``pathlib.Path.home()``,
+        ``pathlib.Path('~...').expanduser()``, ``os.path.expanduser(arg)``,
+        ``os.path.expandvars(arg)``, ``os.getenv(name)``,
+        ``os.environ[name]``, ``os.environ.get(name)``, and the ``tempfile``
+        allocators (``gettempdir``, ``gettempdirb``, ``gettempprefix``,
+        ``mkstemp``, ``mkdtemp``, ``mktemp``, ``NamedTemporaryFile``,
+        ``TemporaryFile``, ``TemporaryDirectory``, ``SpooledTemporaryFile``).
+        Each surface is recognized through four access forms: (1) canonical
+        dotted (``os.path.expanduser``), (2) module-level ``from X import
+        name`` bare use (``from os import environ; environ['HOME']``),
+        (3) module-level aliased import (``import tempfile as tf;
+        tf.mkdtemp()``), and (4) function-local alias bound and tracked per
+        test (``path_class = Path; path_class.home()``;
+        ``read_env = os.getenv; read_env('HOME')``). Gating is symmetric
+        across the two ``expanduser`` forms (flag only on a leading-``~``
+        literal) and across the env getters / subscript (flag only on a
+        home/temp env-var name). Probes are reported in source-line order
+        for every probe type before the ``MAX_TEST_ISOLATION_ISSUES`` cap.
+
+    Out of scope by design (dynamically constructed call targets that no
+    AST-level pattern can resolve statically): attribute access through
+    ``getattr(os, 'environ')``, callable names assembled at runtime by
+    string concatenation, and calls built through ``exec``/``eval``. These
+    bound the detector to a fixed, documented surface rather than an
+    open-ended chase.
 
     Args:
         content: The Python source to analyze.
@@ -3070,11 +3195,15 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
     except SyntaxError:
         return []
 
-    all_canonical_names_by_alias = _build_alias_canonicalization_map(syntax_tree)
+    all_module_canonical_names_by_alias = _build_alias_canonicalization_map(syntax_tree)
     issues: list[str] = []
     for each_node in _collect_pytest_collectable_test_functions(syntax_tree):
         if _function_uses_pytest_isolation_fixture(each_node):
             continue
+        all_canonical_names_by_alias = {
+            **all_module_canonical_names_by_alias,
+            **_collect_local_probe_alias_bindings(each_node, all_module_canonical_names_by_alias),
+        }
         all_environ_local_bindings = _collect_os_environ_local_binding_names(each_node, all_canonical_names_by_alias)
         all_path_local_bindings = _collect_pathlib_path_local_binding_names(each_node, all_canonical_names_by_alias)
         for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(
@@ -4842,10 +4971,10 @@ def check_loop_variable_naming(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
     issues: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.For, ast.AsyncFor)):
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, (ast.For, ast.AsyncFor)):
             continue
-        for each_name_node in _collect_target_names(node.target):
+        for each_name_node in _collect_target_names(each_node.target):
             target_name = each_name_node.id
             if target_name in ALL_LOOP_INDEX_LETTER_EXEMPTIONS:
                 continue

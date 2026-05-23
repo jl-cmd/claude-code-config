@@ -117,11 +117,8 @@ ALL_HOME_DIRECTORY_ENV_VAR_NAMES: frozenset[str] = frozenset({
 ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
     "Path.home",
     "pathlib.Path.home",
-    "Path.expanduser",
-    "pathlib.Path.expanduser",
-    "os.path.expanduser",
-    "os.path.expandvars",
     "tempfile.gettempdir",
+    "tempfile.gettempdirb",
     "tempfile.gettempprefix",
     "tempfile.mkstemp",
     "tempfile.mkdtemp",
@@ -129,13 +126,28 @@ ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
     "tempfile.NamedTemporaryFile",
     "tempfile.TemporaryFile",
     "tempfile.TemporaryDirectory",
+    "tempfile.SpooledTemporaryFile",
 })
 EXPANDVARS_DOTTED_NAME: str = "os.path.expandvars"
 EXPANDUSER_DOTTED_NAME: str = "os.path.expanduser"
+ALL_PATHLIB_STATIC_EXPANDUSER_DOTTED_NAMES: frozenset[str] = frozenset({
+    "Path.expanduser",
+    "pathlib.Path.expanduser",
+})
 PATHLIB_EXPANDUSER_METHOD_NAME: str = "expanduser"
 ALL_PATHLIB_PATH_CONSTRUCTOR_CANONICAL_NAMES: frozenset[str] = frozenset({
     "Path",
     "pathlib.Path",
+})
+ALL_PROBE_ALIASABLE_CANONICAL_PREFIXES: frozenset[str] = frozenset({
+    "os",
+    "os.path",
+    "os.environ",
+    "os.getenv",
+    "pathlib",
+    "pathlib.Path",
+    "Path",
+    "tempfile",
 })
 HOME_DIRECTORY_TILDE_PREFIX: str = "~"
 ENVIRONMENT_VARIABLE_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
@@ -165,6 +177,7 @@ ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT: dict[tuple[str, str], str] = {
     ("os", "getenv"): "os.getenv",
     ("os", "environ"): "os.environ",
     ("tempfile", "gettempdir"): "tempfile.gettempdir",
+    ("tempfile", "gettempdirb"): "tempfile.gettempdirb",
     ("tempfile", "gettempprefix"): "tempfile.gettempprefix",
     ("tempfile", "mkstemp"): "tempfile.mkstemp",
     ("tempfile", "mkdtemp"): "tempfile.mkdtemp",
@@ -172,6 +185,7 @@ ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT: dict[tuple[str, str], str] = {
     ("tempfile", "NamedTemporaryFile"): "tempfile.NamedTemporaryFile",
     ("tempfile", "TemporaryFile"): "tempfile.TemporaryFile",
     ("tempfile", "TemporaryDirectory"): "tempfile.TemporaryDirectory",
+    ("tempfile", "SpooledTemporaryFile"): "tempfile.SpooledTemporaryFile",
     ("pathlib", "Path"): "Path",
 }
 MAX_TEST_ISOLATION_ISSUES: int = 5

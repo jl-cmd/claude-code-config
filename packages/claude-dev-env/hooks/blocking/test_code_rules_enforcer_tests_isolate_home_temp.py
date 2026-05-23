@@ -891,15 +891,37 @@ def test_should_flag_expanduser_on_path_bound_local_variable() -> None:
     assert any("expanduser" in each_issue for each_issue in issues)
 
 
-def test_should_flag_static_pathlib_path_expanduser_unbound_method() -> None:
+def test_should_flag_static_pathlib_path_expanduser_with_tilde_argument() -> None:
     source = (
         "import pathlib\n"
-        "def test_reads_dotfile(some_path) -> None:\n"
-        "    target = pathlib.Path.expanduser(some_path)\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = pathlib.Path.expanduser('~/x')\n"
         "    target.read_text()\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_static_pathlib_path_expanduser_with_dynamic_argument() -> None:
+    source = (
+        "import pathlib\n"
+        "def test_resolves_dynamic(some_path) -> None:\n"
+        "    target = pathlib.Path.expanduser(some_path)\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_not_flag_static_pathlib_path_expanduser_with_tilde_free_argument() -> None:
+    source = (
+        "import pathlib\n"
+        "def test_resolves_relative() -> None:\n"
+        "    target = pathlib.Path.expanduser('relative/path')\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
 
 
 def test_should_allow_path_constructor_expanduser_with_monkeypatch_fixture() -> None:
@@ -987,3 +1009,177 @@ def test_should_allow_tempfile_constructor_with_monkeypatch_fixture() -> None:
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert issues == []
+
+
+def test_should_not_flag_path_constructor_expanduser_with_tilde_free_argument() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_resolves_absolute() -> None:\n"
+        "    target = Path('/tmp/x').expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_not_flag_path_constructor_expanduser_with_dynamic_argument() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_resolves_dynamic(some_path) -> None:\n"
+        "    target = Path(some_path).expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_not_flag_path_bound_local_expanduser_with_tilde_free_argument() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_resolves_absolute() -> None:\n"
+        "    candidate = Path('/tmp/x')\n"
+        "    target = candidate.expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_path_home_via_function_local_class_alias() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_home() -> None:\n"
+        "    path_class = Path\n"
+        "    home_dir = path_class.home()\n"
+        "    (home_dir / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("home" in each_issue.lower() for each_issue in issues)
+
+
+def test_should_flag_getenv_via_function_local_callable_alias() -> None:
+    source = (
+        "import os\n"
+        "def test_reads_home() -> None:\n"
+        "    read_env = os.getenv\n"
+        "    home = read_env('HOME')\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_getenv_function_local_alias_for_unrelated_var() -> None:
+    source = (
+        "import os\n"
+        "def test_reads_token() -> None:\n"
+        "    read_env = os.getenv\n"
+        "    token = read_env('MY_APP_TOKEN')\n"
+        "    print(token)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_expanduser_via_function_local_os_path_module_alias() -> None:
+    source = (
+        "import os\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    path_module = os.path\n"
+        "    target = path_module.expanduser('~/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_mkdtemp_via_function_local_tempfile_module_alias() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_makes_temp_dir() -> None:\n"
+        "    temp_module = tempfile\n"
+        "    holder = temp_module.mkdtemp()\n"
+        "    print(holder)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("mkdtemp" in each_issue for each_issue in issues)
+
+
+def test_should_flag_path_home_via_function_local_pathlib_module_alias() -> None:
+    source = (
+        "import pathlib\n"
+        "def test_reads_home() -> None:\n"
+        "    pathlib_module = pathlib\n"
+        "    home_dir = pathlib_module.Path.home()\n"
+        "    (home_dir / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("home" in each_issue.lower() for each_issue in issues)
+
+
+def test_should_not_flag_local_class_alias_leaking_from_a_different_test() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_a() -> None:\n"
+        "    path_class = Path\n"
+        "    path_class.home()\n"
+        "def test_b(path_class) -> None:\n"
+        "    path_class.home()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("test_a" in each_issue for each_issue in issues)
+    assert not any("test_b" in each_issue for each_issue in issues)
+
+
+def test_should_flag_tempfile_gettempdirb_without_isolation() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_resolves_temp_bytes() -> None:\n"
+        "    base = tempfile.gettempdirb()\n"
+        "    print(base)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("gettempdirb" in each_issue for each_issue in issues)
+
+
+def test_should_flag_tempfile_spooled_temporary_file_without_isolation() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_spooled_temp() -> None:\n"
+        "    handle = tempfile.SpooledTemporaryFile()\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("SpooledTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_flag_bare_imported_tempfile_spooled_temporary_file() -> None:
+    source = (
+        "from tempfile import SpooledTemporaryFile\n"
+        "def test_writes_spooled_temp() -> None:\n"
+        "    handle = SpooledTemporaryFile()\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("SpooledTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_order_mixed_probe_types_by_source_line() -> None:
+    source = (
+        "import os\n"
+        "from pathlib import Path\n"
+        "import tempfile\n"
+        "def test_many_probe_kinds() -> None:\n"
+        "    home = os.environ['HOME']\n"
+        "    base = tempfile.mkdtemp()\n"
+        "    root = Path.home()\n"
+        "    target = os.path.expanduser('~/x')\n"
+        "    print(home, base, root, target)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    reported_line_numbers = [
+        int(each_issue.split(":", maxsplit=1)[0].removeprefix("Line ").strip())
+        for each_issue in issues
+    ]
+    assert reported_line_numbers == sorted(reported_line_numbers)
+    assert reported_line_numbers == [5, 6, 7, 8]

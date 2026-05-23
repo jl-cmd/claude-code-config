@@ -1399,6 +1399,12 @@ def _collect_banned_noun_word_bindings(
                 record(each_arg.arg, each_arg.lineno, each_arg.col_offset)
         elif isinstance(each_node, ast.ClassDef):
             record(each_node.name, each_node.lineno, each_node.col_offset)
+        elif isinstance(each_node, (ast.Import, ast.ImportFrom)):
+            for each_alias in each_node.names:
+                bound_name = each_alias.asname or each_alias.name
+                if bound_name == "*":
+                    continue
+                record(bound_name, each_node.lineno, each_node.col_offset)
 
     flagged_bindings.sort(key=lambda binding: (binding[1], binding[2]))
     return flagged_bindings
@@ -2461,6 +2467,33 @@ def _environ_key_string_from_subscript(subscript_node: ast.Subscript) -> str | N
     return None
 
 
+def _collect_pytest_collectable_test_functions(
+    syntax_tree: ast.Module,
+) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Enumerate the function nodes pytest would actually collect as tests.
+
+    Walks module-level statements and the top-level methods of module-level
+    classes only. Functions nested inside other functions or lambdas are
+    excluded because pytest does not collect nested callables.
+    """
+    collectable: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
+    for each_module_statement in syntax_tree.body:
+        if isinstance(each_module_statement, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if (
+                each_module_statement.name.startswith("test_")
+                or each_module_statement.name.startswith("should_")
+            ):
+                collectable.append(each_module_statement)
+        elif isinstance(each_module_statement, ast.ClassDef):
+            for each_class_member in each_module_statement.body:
+                if isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                    each_class_member.name.startswith("test_")
+                    or each_class_member.name.startswith("should_")
+                ):
+                    collectable.append(each_class_member)
+    return collectable
+
+
 def _detect_home_or_temp_probes_in_body(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> list[tuple[int, str]]:
@@ -2542,11 +2575,7 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
         return []
 
     issues: list[str] = []
-    for each_node in ast.walk(syntax_tree):
-        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        if not (each_node.name.startswith("test_") or each_node.name.startswith("should_")):
-            continue
+    for each_node in _collect_pytest_collectable_test_functions(syntax_tree):
         if _function_uses_pytest_isolation_fixture(each_node):
             continue
         for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(each_node):

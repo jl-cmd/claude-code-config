@@ -164,6 +164,24 @@ def test_should_flag_function_definition_with_data_word_in_name() -> None:
     assert any("fetch_data_table" in each_issue for each_issue in issues)
 
 
+def test_should_flag_import_from_alias_with_banned_word() -> None:
+    source = "from models import HolidayPeakResult\n"
+    issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
+    assert any("HolidayPeakResult" in each_issue for each_issue in issues)
+
+
+def test_should_flag_import_renamed_with_banned_word() -> None:
+    source = "import legacy_helper as cached_response\n"
+    issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
+    assert any("cached_response" in each_issue for each_issue in issues)
+
+
+def test_should_skip_star_import_with_no_named_binding() -> None:
+    source = "from models import *\n"
+    issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
+    assert issues == []
+
+
 def test_should_flag_with_as_binding_target_with_banned_word() -> None:
     source = (
         "def load_payload() -> str:\n"

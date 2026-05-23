@@ -43,7 +43,7 @@ def test_should_flag_path_home_in_test_without_fixture() -> None:
     assert any("Path.home" in each_issue for each_issue in issues)
 
 
-def test_should_allow_path_home_in_test_with_tmp_path_fixture() -> None:
+def test_should_flag_path_home_when_only_tmp_path_fixture_present() -> None:
     source = (
         "from pathlib import Path\n"
         "def test_writes_dotfile(tmp_path) -> None:\n"
@@ -51,15 +51,26 @@ def test_should_allow_path_home_in_test_with_tmp_path_fixture() -> None:
         "    (tmp_path / '.myapp').write_text('x')\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
-    assert issues == []
+    assert any("Path.home" in each_issue for each_issue in issues)
 
 
-def test_should_allow_path_home_in_test_with_positional_only_fixture() -> None:
+def test_should_flag_path_home_when_only_positional_only_tmp_path_present() -> None:
     source = (
         "from pathlib import Path\n"
         "def test_writes_dotfile(tmp_path, /) -> None:\n"
         "    home_dir = Path.home()\n"
         "    (tmp_path / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("Path.home" in each_issue for each_issue in issues)
+
+
+def test_should_allow_path_home_in_test_with_positional_only_monkeypatch_fixture() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_writes_dotfile(monkeypatch, /) -> None:\n"
+        "    monkeypatch.setenv('HOME', '/tmp/fake')\n"
+        "    home_dir = Path.home()\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert issues == []
@@ -95,6 +106,19 @@ def test_should_ignore_path_home_inside_nested_class_body() -> None:
         "    class Inner:\n"
         "        root = Path.home()\n"
         "    assert Inner is not None\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_ignore_nested_test_named_function_pytest_does_not_collect() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_outer_caller(monkeypatch) -> None:\n"
+        "    monkeypatch.setenv('HOME', '/tmp/fake')\n"
+        "    def test_home_helper() -> None:\n"
+        "        Path.home()\n"
+        "    assert callable(test_home_helper)\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert issues == []

@@ -99,10 +99,6 @@ FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX: str = (
 )
 
 ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES: frozenset[str] = frozenset({
-    "tmp_path",
-    "tmp_path_factory",
-    "tmpdir",
-    "tmpdir_factory",
     "monkeypatch",
 })
 ALL_HOME_DIRECTORY_ENV_VAR_NAMES: frozenset[str] = frozenset({

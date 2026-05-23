@@ -309,3 +309,39 @@ def test_should_flag_test_method_inside_test_prefixed_class() -> None:
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert any("Path.home" in each_issue for each_issue in issues)
+
+
+def test_should_flag_path_home_inside_nested_class_method_of_outer_test() -> None:
+    # A class defined locally inside a test executes its method bodies as
+    # part of the test's runtime path once an instance is constructed. The
+    # walker must descend into nested-class methods so a Path.home() probe
+    # in __init__ or any other method is attributed to the outer test.
+    source = (
+        "from pathlib import Path\n"
+        "class TestFoo:\n"
+        "    def test_unsafe(self) -> None:\n"
+        "        class HomePath:\n"
+        "            def __init__(self) -> None:\n"
+        "                self.real_home = Path.home()\n"
+        "        h = HomePath()\n"
+        "        assert h is not None\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("Path.home" in each_issue for each_issue in issues)
+    assert any("test_unsafe" in each_issue for each_issue in issues)
+
+
+def test_should_ignore_path_home_inside_standalone_nested_helper_function() -> None:
+    # A standalone nested function defined inside a test body is its own
+    # callable scope — it carries its own isolation contract and is not
+    # part of the test's direct execution path. Probes there must remain
+    # unattributed to the outer test (preserves existing scope boundary).
+    source = (
+        "from pathlib import Path\n"
+        "def test_outer() -> None:\n"
+        "    def helper() -> Path:\n"
+        "        return Path.home()\n"
+        "    assert callable(helper)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []

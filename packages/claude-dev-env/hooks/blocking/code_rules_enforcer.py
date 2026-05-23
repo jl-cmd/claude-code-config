@@ -2510,31 +2510,71 @@ def _detect_home_or_temp_probes_in_body(
 ) -> list[tuple[int, str]]:
     """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*.
 
-    Descent stops at FunctionDef, AsyncFunctionDef, ClassDef, and Lambda
-    boundaries so probes defined inside a nested helper (which may have
-    its own isolation contract) are not attributed to the enclosing test.
+    The walk descends into ``ClassDef`` nodes nested inside the test body and
+    into the method bodies of those classes, because instantiating a nested
+    class executes its method bodies as part of the test's runtime path.
+    Class-body statements (class attribute initializers) and standalone
+    nested helper functions or lambdas remain scope boundaries — those run
+    in their own callable scope and carry their own isolation contract.
+
+    Args:
+        function_node: The test function whose body is being scanned.
+
+    Returns:
+        A list of ``(line_number, probe_label)`` tuples for each HOME/TMP
+        probe attributed to the test, in stack-pop order.
     """
-    scope_boundary_types = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
     probes: list[tuple[int, str]] = []
-    nodes_to_visit: list[ast.AST] = list(ast.iter_child_nodes(function_node))
+    nodes_to_visit: list[tuple[ast.AST, bool]] = [
+        (each_child, False) for each_child in ast.iter_child_nodes(function_node)
+    ]
     while nodes_to_visit:
-        each_descendant = nodes_to_visit.pop()
-        if isinstance(each_descendant, ast.Call):
-            chain = _dotted_call_attribute_chain(each_descendant)
-            if chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
-                probes.append((each_descendant.lineno, f"{chain}()"))
-            else:
-                environ_key = _environ_key_string_from_call(each_descendant)
-                if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
-                    probes.append((each_descendant.lineno, f"os env probe '{environ_key}'"))
-        elif isinstance(each_descendant, ast.Subscript):
-            environ_key = _environ_key_string_from_subscript(each_descendant)
-            if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
-                probes.append((each_descendant.lineno, f"os.environ['{environ_key}']"))
-        if isinstance(each_descendant, scope_boundary_types):
-            continue
-        nodes_to_visit.extend(ast.iter_child_nodes(each_descendant))
+        each_descendant, inside_nested_class = nodes_to_visit.pop()
+        _record_home_or_temp_probe(each_descendant, probes)
+        for each_grandchild, each_child_inside_nested_class in _children_to_descend_into(
+            each_descendant, inside_nested_class
+        ):
+            nodes_to_visit.append((each_grandchild, each_child_inside_nested_class))
     return probes
+
+
+def _record_home_or_temp_probe(
+    node: ast.AST, all_probes: list[tuple[int, str]],
+) -> None:
+    if isinstance(node, ast.Call):
+        chain = _dotted_call_attribute_chain(node)
+        if chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
+            all_probes.append((node.lineno, f"{chain}()"))
+            return
+        environ_key = _environ_key_string_from_call(node)
+        if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
+            all_probes.append((node.lineno, f"os env probe '{environ_key}'"))
+        return
+    if isinstance(node, ast.Subscript):
+        environ_key = _environ_key_string_from_subscript(node)
+        if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
+            all_probes.append((node.lineno, f"os.environ['{environ_key}']"))
+
+
+def _children_to_descend_into(
+    node: ast.AST, inside_nested_class: bool,
+) -> list[tuple[ast.AST, bool]]:
+    if isinstance(node, ast.Lambda):
+        return []
+    if isinstance(node, ast.ClassDef):
+        method_children = [
+            each_member
+            for each_member in node.body
+            if isinstance(each_member, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        return [(each_method, True) for each_method in method_children]
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if not inside_nested_class:
+            return []
+        return [(each_child, False) for each_child in ast.iter_child_nodes(node)]
+    return [
+        (each_child, inside_nested_class) for each_child in ast.iter_child_nodes(node)
+    ]
 
 
 def _function_uses_pytest_isolation_fixture(
@@ -4508,7 +4548,7 @@ def validate_content(
         all_issues.extend(check_file_global_constants_use_count(content, file_path))
         all_issues.extend(check_type_escape_hatches(effective_content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))
-        all_issues.extend(check_banned_noun_word_boundary(content, file_path))
+        all_issues.extend(check_banned_noun_word_boundary(effective_content, file_path))
         all_issues.extend(check_banned_prefixes(effective_content, file_path))
         all_issues.extend(check_stub_implementations(effective_content, file_path))
         all_issues.extend(check_typed_dict_encode_decode(effective_content, file_path))
@@ -4519,7 +4559,7 @@ def validate_content(
         all_issues.extend(check_docstring_format(effective_content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
-        all_issues.extend(check_tests_use_isolated_filesystem_paths(content, file_path))
+        all_issues.extend(check_tests_use_isolated_filesystem_paths(effective_content, file_path))
         all_issues.extend(check_existence_check_tests(content, file_path))
         all_issues.extend(check_constant_equality_tests(content, file_path))
         all_issues.extend(check_unused_optional_parameters(content, file_path))
@@ -4533,7 +4573,7 @@ def validate_content(
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))
-        all_issues.extend(check_function_length(content, file_path))
+        all_issues.extend(check_function_length(effective_content, file_path))
         all_issues.extend(check_loop_variable_naming(content, file_path))
         all_issues.extend(check_inline_literal_collections(content, file_path))
         all_issues.extend(check_inline_tuple_string_magic(content, file_path))

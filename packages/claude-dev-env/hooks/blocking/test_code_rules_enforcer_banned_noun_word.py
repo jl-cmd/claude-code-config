@@ -182,6 +182,18 @@ def test_should_skip_star_import_with_no_named_binding() -> None:
     assert issues == []
 
 
+def test_should_use_only_first_segment_of_dotted_import_name() -> None:
+    source = "import analytics.data_pipeline\n"
+    issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_dotted_import_when_first_segment_has_banned_word() -> None:
+    source = "import data_pipeline.analytics\n"
+    issues = check_banned_noun_word_boundary(source, PRODUCTION_FILE_PATH)
+    assert any("data_pipeline" in each_issue for each_issue in issues)
+
+
 def test_should_flag_with_as_binding_target_with_banned_word() -> None:
     source = (
         "def load_payload() -> str:\n"

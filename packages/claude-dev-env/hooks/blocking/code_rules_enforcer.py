@@ -1399,7 +1399,11 @@ def _collect_banned_noun_word_bindings(
                 record(each_arg.arg, each_arg.lineno, each_arg.col_offset)
         elif isinstance(each_node, ast.ClassDef):
             record(each_node.name, each_node.lineno, each_node.col_offset)
-        elif isinstance(each_node, (ast.Import, ast.ImportFrom)):
+        elif isinstance(each_node, ast.Import):
+            for each_alias in each_node.names:
+                bound_name = each_alias.asname or each_alias.name.split(".", maxsplit=1)[0]
+                record(bound_name, each_node.lineno, each_node.col_offset)
+        elif isinstance(each_node, ast.ImportFrom):
             for each_alias in each_node.names:
                 bound_name = each_alias.asname or each_alias.name
                 if bound_name == "*":

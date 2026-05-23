@@ -30,6 +30,13 @@ files during fix phase in multi-PR mode.
   comment / naming nits with no behavior → straight to fix.
 - **Implement** via `Agent` (`subagent_type: "clean-coder"`).
   Full-stop if `Agent` is unavailable.
+- **Run the fix-push gate** before staging: run
+  `~/.claude/_shared/pr-loop/scripts/code_rules_gate.py --base origin/<base_ref>`
+  over the PR diff, fix every flagged line (sweep the whole enumerable class per
+  the Category-K carve-out in [`fix-protocol.md`](../../../_shared/pr-loop/fix-protocol.md)),
+  and re-run until exit 0. Then write `.bugteam-pr<N>.gate.json` in the worktree
+  as `{passed: true, head_sha, base_ref, checked_at}` for the Stop backstop. The
+  `fix_push_gate_blocker` hook re-runs this gate at push time.
 - Stage affected files and create one new commit on existing branch:
   ```bash
 git add <files> && git commit -m "fix(review): <brief summary>"

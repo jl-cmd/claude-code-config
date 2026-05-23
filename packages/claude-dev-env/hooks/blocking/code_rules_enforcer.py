@@ -3310,7 +3310,10 @@ def check_tests_use_isolated_filesystem_paths(
             on test files.
         all_changed_lines: Post-edit line numbers the current edit touched, or
             None to treat the whole file as in scope. When provided, a probe
-            blocks only when its source line is among the changed lines.
+            blocks when any line of its enclosing test function's declared span
+            (signature line through last body line) is among the changed lines,
+            so editing the signature to remove an isolation fixture brings an
+            unchanged-body probe into scope.
         defer_scope_to_caller: When True, return every probe so the commit/push
             gate's ``split_violations_by_scope`` can scope by added line and
             report the in-scope set.
@@ -3339,6 +3342,8 @@ def check_tests_use_isolated_filesystem_paths(
         }
         all_environ_local_bindings = _collect_os_environ_local_binding_names(each_node, all_canonical_names_by_alias)
         all_path_local_bindings = _collect_pathlib_path_local_binding_names(each_node, all_canonical_names_by_alias)
+        line_span = _function_definition_line_span(each_node)
+        enclosing_function_span = range(each_node.lineno, each_node.lineno + line_span)
         for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(
             each_node, all_canonical_names_by_alias, all_environ_local_bindings, all_path_local_bindings
         ):
@@ -3347,7 +3352,7 @@ def check_tests_use_isolated_filesystem_paths(
                 f"{each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"
             )
             all_violations_in_source_line_order.append(
-                (range(each_line, each_line + 1), message)
+                (enclosing_function_span, message)
             )
     return _scope_violations_to_changed_lines(
         all_violations_in_source_line_order,

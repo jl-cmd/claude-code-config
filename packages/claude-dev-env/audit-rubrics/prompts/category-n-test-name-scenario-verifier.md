@@ -55,7 +55,7 @@ ID prefix: `find`.
 - Adversarial probes: (a) does the test spawn `threading.Thread` / `multiprocessing.Process` / `asyncio.gather` / `concurrent.futures.ThreadPoolExecutor`; (b) does the test's act phase exercise the concurrency primitive the production function relies on; (c) does the test introduce a race window the production function's lock should serialize.
 
 **N9. Neutral-named tests (out of scope)**
-- Tests named `test_returns_empty_list_on_x` / `test_handles_y` / `test_raises_on_missing_z` (no scenario claim in the name) are NOT subject to N1–N8.
+- Tests named `test_returns_empty_list_for_unknown_key` / `test_handles_y` / `test_raises_value_error` (no scenario claim in the name) are NOT subject to N1–N8.
 - For neutral-named tests, only N5 (assertion shape mismatch) applies.
 
 ## Cross-bucket questions to answer at the end

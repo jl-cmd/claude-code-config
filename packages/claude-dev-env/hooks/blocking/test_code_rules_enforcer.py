@@ -1861,6 +1861,36 @@ def test_isolation_edit_blocks_probe_added_on_changed_lines() -> None:
     ), f"isolation probe added on changed lines must block, got: {issues!r}"
 
 
+def test_isolation_edit_blocks_probe_unisolated_by_signature_line_change() -> None:
+    """Removing the ``monkeypatch`` fixture from a test's signature line
+    un-isolates a HOME probe in its unchanged body; the violation must block
+    because the enclosing function's span covers the changed signature line."""
+    test_before = (
+        "def test_reads_home(monkeypatch) -> None:\n"
+        "    target_path = Path.home()\n"
+        "    assert target_path\n"
+    )
+    test_after = (
+        "def test_reads_home() -> None:\n"
+        "    target_path = Path.home()\n"
+        "    assert target_path\n"
+    )
+    header = "from pathlib import Path\n"
+    prior_full_file = header + test_before
+    post_edit_full_file = header + test_after
+    issues = code_rules_enforcer.validate_content(
+        test_after,
+        "/project/src/test_edited_module.py",
+        old_content=test_before,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any(
+        "test_reads_home" in each_issue and "Path.home" in each_issue
+        for each_issue in issues
+    ), f"signature-line change that un-isolates a probe must block, got: {issues!r}"
+
+
 def test_function_length_reports_only_in_scope_violation_on_terminal_edit() -> None:
     """A terminal diff-scoped Edit reports only the function whose changed-line
     span grew past the threshold; untouched oversized functions earlier in the

@@ -91,7 +91,7 @@ The PR introduces `_extract_paths_from_everything_cli_stdout(stdout: str) -> lis
 - Adversarial probe (a): the `es.exe` man page does NOT state output uniqueness; verified non-unique.
 - Adversarial probe (b): the producer's tests use a single hand-crafted stdout fixture with no duplicates; the duplicate-emission case is uncovered.
 - Adversarial probe (c): the consumer dict-build is an M3 partner — set-coercion via dict-comprehension overwrite.
-- **Severity P0**: production RuntimeError observed in pa#143's audit trail.
+- **Severity P0**: production `sqlite3.IntegrityError` (UNIQUE constraint on `watched_dirs.path`) observed in pa#143's audit trail; a plain dict assignment never raises, so the collapse stays silent until the writeback.
 - **Fix**: change the producer to return `frozenset[Path]` via `return frozenset(Path(each_line) for each_line in stdout.splitlines() if each_line.strip())`. The consumer's `{each_path: WatchedDirectoryState() for each_path in ...}` dict-comprehension already produces a unique-keyed dict from a frozenset.
 
 **M2. Database / registry queries**

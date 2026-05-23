@@ -9,9 +9,13 @@ The convention is: every check_* function should either apply an
 explicit cap (the meta-test treats a function as capped when its source
 contains a ``MAX_`` constant name or uses ``itertools.islice`` for bounded
 iteration), or appear in DIFF_SCOPED_CHECK_FUNCTION_NAMES when its blocking
-payload is bounded by diff scoping (only violations whose span intersects the
-edit's changed lines block, so untouched code cannot spam the payload), or be
-explicitly listed in KNOWN_UNCAPPED_CHECKS_PENDING_REVIEW along with the
+payload is scoped by the diff: on a terminal Edit (``all_changed_lines`` is a
+set) only violations whose span intersects the edit's changed lines block, so
+untouched code cannot spam the payload; on a new-file or full-file write
+(``all_changed_lines is None``) every violation is reported because the author
+wrote the whole file. The scoping bounds the Edit payload to the change the
+author is making rather than imposing a fixed ceiling. A function may instead
+be explicitly listed in KNOWN_UNCAPPED_CHECKS_PENDING_REVIEW along with the
 reason, or appear in VOID_ADVISORY_CHECK_FUNCTION_NAMES when the function is
 annotated ``-> None`` and never contributes issues to the blocking payload
 (stderr-only advisories). New check_* functions added to the module without

@@ -28,7 +28,7 @@ Decomposition is by the **kind of scenario claim** the test name makes vs the ev
 | N6 | Cross-platform scenario gating | Tests named `_on_<platform>` MUST gate on `sys.platform`, `monkeypatch.setattr(os, ...)`, or `@pytest.mark.skipif(sys.platform != "<platform>")` — bare scenario names that run unchanged across platforms claim more than they prove |
 | N7 | Time / clock scenario gating | Tests named `_after_<duration>` / `_at_midnight` / `_during_business_hours` MUST inject a frozen clock (`freezegun.freeze_time`, `monkeypatch.setattr(time, "time", ...)`) — wall-clock tests are non-deterministic and may pass against the wrong scenario |
 | N8 | Concurrent / load scenario gating | Tests named `_under_load` / `_with_concurrent_writers` MUST spawn the concurrent workers and `wait()` on them — single-threaded tests cannot claim concurrent-scenario coverage |
-| N9 | Neutral-named tests (out of scope) | Tests named `test_returns_empty_list_on_x` / `test_handles_y` (no scenario claim in the name) are NOT subject to N1–N8; flag them only for assertion-shape mismatches under N5 |
+| N9 | Neutral-named tests (out of scope) | Tests named `test_returns_empty_list_for_unknown_key` / `test_handles_y` (no scenario claim in the name) are NOT subject to N1–N8; flag them only for assertion-shape mismatches under N5 |
 
 Customize per-artifact: a pure-function test corpus with no scenario claims reduces N1–N4 to "verified clean — no scenario-named tests in scope"; a path-classifier PR may need N2 exhausted across 8+ canonical inputs.
 

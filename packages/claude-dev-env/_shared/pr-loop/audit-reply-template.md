@@ -143,5 +143,5 @@ The audit review body announces a complete audit pass; the reply template addres
 ## Cross-references
 
 - [`audit-contract.md`](audit-contract.md) — finding schema (Shape A / Shape B), adversarial second pass, post-fix self-audit, persistence layout. The fields in a Shape A finding (`file`, `line`, `failure_mode`) feed the placeholders in this template. Replies cite the same `<file>:<line>` anchors that the originating audit recorded.
-- [`fix-protocol.md`](fix-protocol.md) — step 12 of the fix protocol describes the reply step and renders this template's full structure.
+- [`fix-protocol.md`](fix-protocol.md) — step 13 of the fix protocol describes the reply step and renders this template's full structure.
 - [`gh-payloads.md`](gh-payloads.md) — MCP and REST endpoints used to post replies (`add_reply_to_pull_request_comment` and `post_fix_reply.py`). The transport is independent of the template; both transports accept the body string this template defines.

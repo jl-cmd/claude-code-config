@@ -1,12 +1,15 @@
 """Tests for token-anchored exempt-marker behavior in `_is_exempt_python_comment`.
 
-A chained `\\s#\\s` sequence after a token-anchored exempt marker (``noqa``,
+A bare ``#`` appearing after a token-anchored exempt marker (``noqa``,
 ``pylint:``, ``pragma:``) marks the trailing text as a separate inline comment
-that the no-new-comments rule must catch. Free-form markers (``type:``,
-``TODO``, ``FIXME``, ``HACK``, ``XXX``) keep their permissive behavior because
-``# type:`` participates in the justification convention enforced by
-``check_type_escape_hatches`` and the TODO-family markers carry annotation
-text by convention.
+that the no-new-comments rule must catch. The chained ``#`` triggers detection
+whether or not it carries surrounding whitespace — glued directly to the
+directive (``# noqa: F401#note``), lacking a trailing space (``# noqa: F401
+#prose``), or padded on both sides (``# noqa: F401  # prose``) all fire.
+Free-form markers (``type:``, ``TODO``, ``FIXME``, ``HACK``, ``XXX``) keep their
+permissive behavior because ``# type:`` participates in the justification
+convention enforced by ``check_type_escape_hatches`` and the TODO-family markers
+carry annotation text by convention.
 """
 
 from __future__ import annotations

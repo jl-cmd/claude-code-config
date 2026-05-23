@@ -494,14 +494,14 @@ def test_is_test_path_helper_matches_code_rules_patterns() -> None:
     assert not gate_module.is_test_path("packages/foo/regular_module.py")
 
 
-def test_validate_content_callable_signature_is_explicit() -> None:
-    callable_alias_source = inspect.getsource(gate_module).split("\n")
-    matching_lines = [
-        each_line
-        for each_line in callable_alias_source
-        if "ValidateContentCallable" in each_line and "Callable[" in each_line
-    ]
-    assert any("[str, str, str]" in each_line for each_line in matching_lines)
+def test_gate_defers_function_and_isolation_cap_to_the_gate() -> None:
+    """The gate owns scope classification, so its per-file validation must call
+    validate_content with ``defer_function_and_isolation_cap_to_caller=True``.
+    Without that flag the enforcer pre-caps function-length and isolation
+    violations in walk order at five, dropping an in-scope sixth violation
+    before the gate ever scopes by added line (bugbot-2)."""
+    per_file_source = inspect.getsource(gate_module._scoped_violations_for_file)
+    assert "defer_function_and_isolation_cap_to_caller=True" in per_file_source
 
 
 def test_run_gate_uses_each_path_loop_variable() -> None:
@@ -981,3 +981,84 @@ def test_renamed_file_source_map_since_uses_null_byte_separator(
     assert rename_map == {
         "destination_with\ttab.py": "source_with\ttab.py",
     }
+
+
+def _oversized_function_text(function_name: str) -> str:
+    body = "\n".join("    keep_alive_name" for _ in range(70))
+    return f"def {function_name}() -> None:\n{body}\n"
+
+
+def _short_function_text(function_name: str) -> str:
+    return f"def {function_name}() -> None:\n    keep_alive_name\n"
+
+
+def test_main_blocks_sixth_long_function_on_added_lines_past_document_order_cap(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """bugbot-2: with five pre-existing untouched long functions ahead of it in
+    document order, growing the sixth function past the threshold on staged
+    lines must still block at the gate. The enforcer's per-check cap must not
+    drop the sixth (the only in-scope violation) before the gate scopes by
+    added lines."""
+    leading_long_functions = "".join(
+        _oversized_function_text(f"leading_long_{each_index}")
+        for each_index in range(5)
+    )
+    baseline = leading_long_functions + _short_function_text("target_function")
+    write_file(temporary_git_repository / "module.py", baseline)
+    commit_all_files(temporary_git_repository, "five long functions plus a short sixth")
+
+    grown = leading_long_functions + _oversized_function_text("target_function")
+    write_file(temporary_git_repository / "module.py", grown)
+    stage_file(temporary_git_repository, "module.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1, (
+        "the sixth long function — the only one on staged lines — must block "
+        "even though five untouched long functions precede it in document order"
+    )
+
+
+def _home_probe_test_text(test_name: str) -> str:
+    return (
+        f"def {test_name}() -> None:\n"
+        "    target_path = Path.home()\n"
+        "    assert target_path\n"
+    )
+
+
+def _clean_test_text(test_name: str) -> str:
+    return f"def {test_name}() -> None:\n    assert 1 + 1 == 2\n"
+
+
+def test_main_blocks_sixth_isolation_probe_on_added_lines_past_document_order_cap(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """bugbot-2 mirror: with five pre-existing untouched HOME probes ahead of it
+    in document order, adding a HOME probe to the sixth test on staged lines
+    must still block at the gate. The isolation-check cap must not drop the
+    sixth (the only in-scope probe) before the gate scopes by added lines."""
+    header = "from pathlib import Path\n"
+    leading_probe_tests = "".join(
+        _home_probe_test_text(f"test_leading_probe_{each_index}")
+        for each_index in range(5)
+    )
+    baseline = header + leading_probe_tests + _clean_test_text("test_target_probe")
+    write_file(temporary_git_repository / "test_module.py", baseline)
+    commit_all_files(temporary_git_repository, "five probe tests plus a clean sixth")
+
+    grown = header + leading_probe_tests + _home_probe_test_text("test_target_probe")
+    write_file(temporary_git_repository / "test_module.py", grown)
+    stage_file(temporary_git_repository, "test_module.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1, (
+        "the sixth HOME probe — the only one on staged lines — must block even "
+        "though five untouched probes precede it in document order"
+    )

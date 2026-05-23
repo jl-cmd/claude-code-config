@@ -2494,11 +2494,45 @@ def _dotted_call_attribute_chain(call_node: ast.Call) -> str | None:
     return ".".join(chain_parts)
 
 
+def _record_probe_import_aliases(
+    import_node: ast.Import | ast.ImportFrom,
+    all_canonical_names_by_alias: dict[str, str],
+) -> None:
+    """Record the probe-relevant alias entries from a single import statement.
+
+    Module aliases are recorded only for the probe-relevant modules in
+    ``ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES``. Bare-imported names are
+    recorded only for the ``(module, name)`` pairs in
+    ``ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT``. Imports outside those sets are
+    ignored so unrelated bindings never rewrite a chain.
+
+    Args:
+        import_node: A single ``ast.Import`` or ``ast.ImportFrom`` statement.
+        all_canonical_names_by_alias: The alias map to mutate in place with any
+            probe-relevant local-name to canonical-dotted-prefix entries.
+    """
+    if isinstance(import_node, ast.Import):
+        for each_alias in import_node.names:
+            if each_alias.name not in ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES:
+                continue
+            local_name = each_alias.asname or each_alias.name
+            all_canonical_names_by_alias[local_name] = each_alias.name
+        return
+    for each_alias in import_node.names:
+        canonical_dotted = ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT.get(
+            (import_node.module or "", each_alias.name)
+        )
+        if canonical_dotted is None:
+            continue
+        local_name = each_alias.asname or each_alias.name
+        all_canonical_names_by_alias[local_name] = canonical_dotted
+
+
 def _build_alias_canonicalization_map(syntax_tree: ast.Module) -> dict[str, str]:
-    """Map each probe-relevant import local name to its canonical dotted prefix.
+    """Map each module-level probe import local name to its canonical prefix.
 
     Resolves both module aliases and bare-imported names so a dotted-call
-    chain rooted at any local binding rewrites to the canonical form the
+    chain rooted at any module-level binding rewrites to the canonical form the
     probe set already matches:
 
     - ``import os as o`` -> ``o`` resolves to ``os`` (so ``o.getenv`` ->
@@ -2514,35 +2548,24 @@ def _build_alias_canonicalization_map(syntax_tree: ast.Module) -> dict[str, str]
       resolves to ``os.getenv``; ``from os import environ`` -> ``environ``
       resolves to ``os.environ``.
 
-    Module aliases are recorded only for the probe-relevant modules in
-    ``ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES``. Bare-imported names are
-    recorded only for the ``(module, name)`` pairs in
-    ``ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT``. Imports outside those sets are
-    ignored so unrelated bindings never rewrite a chain.
+    Only imports that are direct children of the module body are scanned. A
+    function-local import binds its name only inside the function it appears
+    in, so it must never enter this shared, module-wide map — otherwise a probe
+    import inside one test would canonicalize a same-named reference in a
+    sibling test that never imported it. Function-local imports are scoped to
+    their own function by ``_collect_local_probe_alias_bindings``.
 
     Args:
-        syntax_tree: The parsed module to scan for import statements.
+        syntax_tree: The parsed module to scan for top-level import statements.
 
     Returns:
-        Mapping from local binding name to its canonical dotted prefix.
+        Mapping from module-level local binding name to its canonical dotted
+        prefix.
     """
     all_canonical_names_by_alias: dict[str, str] = {}
-    for each_node in ast.walk(syntax_tree):
-        if isinstance(each_node, ast.Import):
-            for each_alias in each_node.names:
-                if each_alias.name not in ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES:
-                    continue
-                local_name = each_alias.asname or each_alias.name
-                all_canonical_names_by_alias[local_name] = each_alias.name
-        elif isinstance(each_node, ast.ImportFrom):
-            for each_alias in each_node.names:
-                canonical_dotted = ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT.get(
-                    (each_node.module or "", each_alias.name)
-                )
-                if canonical_dotted is None:
-                    continue
-                local_name = each_alias.asname or each_alias.name
-                all_canonical_names_by_alias[local_name] = canonical_dotted
+    for each_node in syntax_tree.body:
+        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
+            _record_probe_import_aliases(each_node, all_canonical_names_by_alias)
     return all_canonical_names_by_alias
 
 
@@ -2634,16 +2657,25 @@ def _collect_local_probe_alias_bindings(
     """Return a per-test overlay mapping local names to canonical probe prefixes.
 
     Scoped to the single test function passed as *scope_node* so an alias bound
-    in one test never resolves a same-named access in a sibling test. Tracks
-    rebindings of a probe module, class, or callable to a local name —
-    ``path_class = Path``, ``read_env = os.getenv``, ``temp_module = tempfile``,
-    ``path_module = os.path``, ``e = os.environ`` — by resolving each
-    right-hand side through *all_canonical_names_by_alias* and keeping only
-    those whose canonical prefix is probe-aliasable
-    (``ALL_PROBE_ALIASABLE_CANONICAL_PREFIXES``). Merged over the module-level
-    alias map, the overlay lets a later ``path_class.home()`` /
-    ``read_env('HOME')`` / ``temp_module.mkdtemp()`` resolve to its canonical
-    probe chain.
+    in one test never resolves a same-named access in a sibling test. Two
+    binding forms are tracked, both scoped to this function only:
+
+    - Function-local imports — ``import os as o``, ``from os import environ``,
+      ``from pathlib import Path`` — resolved through the same probe-relevant
+      filtering ``_build_alias_canonicalization_map`` applies to module-level
+      imports. Because the shared module map omits function-local imports, this
+      overlay is the only place a probe import inside one test takes effect, and
+      it stays confined to that test's body.
+    - Rebindings of a probe module, class, or callable to a local name —
+      ``path_class = Path``, ``read_env = os.getenv``, ``temp_module = tempfile``,
+      ``path_module = os.path``, ``e = os.environ`` — by resolving each
+      right-hand side through *all_canonical_names_by_alias* and keeping only
+      those whose canonical prefix is probe-aliasable
+      (``ALL_PROBE_ALIASABLE_CANONICAL_PREFIXES``).
+
+    Merged over the module-level alias map, the overlay lets a later
+    ``path_class.home()`` / ``read_env('HOME')`` / ``temp_module.mkdtemp()``
+    resolve to its canonical probe chain.
 
     Args:
         scope_node: The single test function node to scan for alias bindings.
@@ -2655,6 +2687,9 @@ def _collect_local_probe_alias_bindings(
     """
     local_alias_canonical_names: dict[str, str] = {}
     for each_node in ast.walk(scope_node):
+        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
+            _record_probe_import_aliases(each_node, local_alias_canonical_names)
+            continue
         if not isinstance(each_node, ast.Assign):
             continue
         canonical_prefix = _canonical_probe_prefix_for_value(
@@ -3138,6 +3173,7 @@ def check_tests_use_isolated_filesystem_paths(
     content: str,
     file_path: str,
     all_changed_lines: set[int] | None = None,
+    defer_scope_and_cap_to_caller: bool = False,
 ) -> list[str]:
     """Flag test functions that probe HOME or TMP without pytest isolation.
 
@@ -3169,12 +3205,15 @@ def check_tests_use_isolated_filesystem_paths(
         dotted (``os.path.expanduser``), (2) module-level ``from X import
         name`` bare use (``from os import environ; environ['HOME']``),
         (3) module-level aliased import (``import tempfile as tf;
-        tf.mkdtemp()``), and (4) function-local alias bound and tracked per
-        test (``path_class = Path; path_class.home()``;
-        ``read_env = os.getenv; read_env('HOME')``). Gating is symmetric
-        across the two ``expanduser`` forms (flag only on a leading-``~``
-        literal) and across the env getters / subscript (flag only on a
-        home/temp env-var name). Probes are reported in source-line order
+        tf.mkdtemp()``), and (4) a function-local binding tracked per test —
+        either a function-local import (``def t(): from os import environ;
+        environ['HOME']``) or a local rebinding (``path_class = Path;
+        path_class.home()``; ``read_env = os.getenv; read_env('HOME')``). A
+        function-local binding never leaks into a sibling test, so a same-named
+        bare reference in another test that lacks its own binding does not fire.
+        Gating is symmetric across the two ``expanduser`` forms (flag only on a
+        leading-``~`` literal) and across the env getters / subscript (flag only
+        on a home/temp env-var name). Probes are reported in source-line order
         for every probe type before the ``MAX_TEST_ISOLATION_ISSUES`` cap.
 
     Out of scope by design (dynamically constructed call targets that no
@@ -3193,10 +3232,16 @@ def check_tests_use_isolated_filesystem_paths(
             blocks only when its source line is among the changed lines, and the
             ``MAX_TEST_ISOLATION_ISSUES`` cap is applied after that scoping so an
             in-scope probe is never dropped in favor of earlier untouched ones.
+        defer_scope_and_cap_to_caller: When True, return every probe uncapped so
+            the commit/push gate's ``split_violations_by_scope`` can scope by
+            added line and report the in-scope set. Capping here would drop an
+            in-scope probe that lands past the cap window in source-line order
+            before the gate ever scopes it.
 
     Returns:
         A list of issue strings naming each offending probe call. Capped at
-        ``MAX_TEST_ISOLATION_ISSUES``.
+        ``MAX_TEST_ISOLATION_ISSUES`` when this enforcer is terminal; uncapped
+        when *defer_scope_and_cap_to_caller* is True.
     """
     if not is_test_file(file_path):
         return []
@@ -3231,6 +3276,7 @@ def check_tests_use_isolated_filesystem_paths(
         all_violations_in_source_line_order,
         all_changed_lines,
         MAX_TEST_ISOLATION_ISSUES,
+        defer_scope_and_cap_to_caller,
     )
 
 
@@ -5091,35 +5137,48 @@ def changed_line_numbers(prior_content: str, post_edit_content: str) -> set[int]
 
 
 def _scope_and_cap_violations(
-    all_violations_in_document_order: list[tuple[range, str]],
+    all_violations_in_walk_order: list[tuple[range, str]],
     all_changed_lines: set[int] | None,
     issue_cap: int,
+    defer_scope_and_cap_to_caller: bool = False,
 ) -> list[str]:
-    """Partition span-tagged violations by diff scope, then apply the cap.
+    """Scope span-tagged violations by diff intersection, then apply the cap.
 
     Args:
-        all_violations_in_document_order: ``(span_range, issue_message)`` pairs
-            in AST document order, where ``span_range`` covers the violation's
-            source lines.
+        all_violations_in_walk_order: ``(span_range, issue_message)`` pairs in
+            ``ast.walk`` traversal order, where ``span_range`` covers the
+            violation's source lines.
         all_changed_lines: Post-edit line numbers the current edit touched, or
-            None to treat every violation as in-scope.
+            None to treat every violation as in-scope (a terminal new-file or
+            full-file write where this enforcer is the only gate).
         issue_cap: The maximum number of issue messages to return.
+        defer_scope_and_cap_to_caller: When True, return every violation message
+            uncapped and unscoped in walk order. A downstream scoper (the
+            commit/push gate's ``split_violations_by_scope``) then classifies
+            blocking vs advisory by added line and reports the in-scope set, so
+            pre-capping here would silently drop an in-scope violation before
+            that scoping ever runs. When False, this enforcer is terminal and
+            scopes-then-caps directly.
 
     Returns:
-        Up to *issue_cap* issue messages. When *all_changed_lines* is provided,
-        the cap may only trim violations whose span does not intersect the
-        changed lines — every in-scope violation is preserved ahead of the cap
-        so an edit that grows a function past the threshold always blocks even
-        when earlier untouched functions already exceed it.
+        When *defer_scope_and_cap_to_caller* is True, every violation message
+        in walk order with no cap. Otherwise up to *issue_cap* messages: when
+        *all_changed_lines* is provided, the cap may only trim violations whose
+        span does not intersect the changed lines — every in-scope violation is
+        preserved ahead of the cap so an edit that grows a function past the
+        threshold always blocks even when earlier untouched functions already
+        exceed it.
     """
+    if defer_scope_and_cap_to_caller:
+        return [each_message for _, each_message in all_violations_in_walk_order]
     if all_changed_lines is None:
         return [
             each_message
-            for _, each_message in all_violations_in_document_order[:issue_cap]
+            for _, each_message in all_violations_in_walk_order[:issue_cap]
         ]
     all_in_scope_messages = [
         each_message
-        for each_span, each_message in all_violations_in_document_order
+        for each_span, each_message in all_violations_in_walk_order
         if any(each_line in all_changed_lines for each_line in each_span)
     ]
     return all_in_scope_messages[:issue_cap]
@@ -5129,6 +5188,7 @@ def check_function_length(
     content: str,
     file_path: str,
     all_changed_lines: set[int] | None = None,
+    defer_scope_and_cap_to_caller: bool = False,
 ) -> list[str]:
     """Flag functions whose definition span exceeds cognitive-load thresholds.
 
@@ -5166,10 +5226,16 @@ def check_function_length(
             lines, and the ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES`` cap is applied
             after that scoping so an in-scope violation is never dropped in favor
             of earlier untouched ones.
+        defer_scope_and_cap_to_caller: When True, return every violation
+            uncapped so the commit/push gate's ``split_violations_by_scope`` can
+            scope by added line and report the in-scope set. Capping here would
+            drop an in-scope violation that lands past the cap window in walk
+            order before the gate ever scopes it.
 
     Returns:
-        Blocking issues only. Capped at
-        ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES``.
+        Blocking issues. Capped at ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES`` when
+        this enforcer is terminal; uncapped when
+        *defer_scope_and_cap_to_caller* is True.
     """
     if is_test_file(file_path):
         return []
@@ -5183,7 +5249,7 @@ def check_function_length(
     except SyntaxError:
         return []
 
-    all_violations_in_document_order: list[tuple[range, str]] = []
+    all_violations_in_walk_order: list[tuple[range, str]] = []
     for each_node in ast.walk(parsed_tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
@@ -5194,11 +5260,12 @@ def check_function_length(
                 f"Function {each_node.name!r} (defined at line {each_node.lineno}) "
                 f"is {line_span} lines - {FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX}"
             )
-            all_violations_in_document_order.append((span_range, message))
+            all_violations_in_walk_order.append((span_range, message))
     return _scope_and_cap_violations(
-        all_violations_in_document_order,
+        all_violations_in_walk_order,
         all_changed_lines,
         MAX_FUNCTION_LENGTH_BLOCKING_ISSUES,
+        defer_scope_and_cap_to_caller,
     )
 
 
@@ -5208,6 +5275,7 @@ def validate_content(
     old_content: str = "",
     full_file_content: str | None = None,
     prior_full_file_content: str = "",
+    defer_function_and_isolation_cap_to_caller: bool = False,
 ) -> list[str]:
     """Run all applicable validators on content.
 
@@ -5230,6 +5298,16 @@ def validate_content(
             mirroring the gate's span-intersection scoping. Defaults to the
             empty string for Write and for gate invocations, which leaves those
             checks scanning the whole file with no diff scoping.
+        defer_function_and_isolation_cap_to_caller: The explicit signal that a
+            downstream scoper will run, used to disambiguate the two callers that
+            supply no changed-line set. The commit/push gate passes True: it
+            owns ``split_violations_by_scope`` and classifies blocking vs
+            advisory by added line, so the function-length and test-isolation
+            checks must return their violations uncapped — pre-capping at five in
+            walk order would drop an in-scope violation that lands past the cap
+            window before the gate scopes it. PreToolUse new-file or full-file
+            writes leave this False: this enforcer is terminal, so it marks every
+            violation in scope and caps last.
     """
     extension = get_file_extension(file_path)
     all_issues = []
@@ -5265,7 +5343,12 @@ def validate_content(
         all_issues.extend(check_boolean_naming(content, file_path))
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
         all_issues.extend(
-            check_tests_use_isolated_filesystem_paths(effective_content, file_path, all_changed_lines)
+            check_tests_use_isolated_filesystem_paths(
+                effective_content,
+                file_path,
+                all_changed_lines,
+                defer_function_and_isolation_cap_to_caller,
+            )
         )
         all_issues.extend(check_existence_check_tests(content, file_path))
         all_issues.extend(check_constant_equality_tests(content, file_path))
@@ -5280,7 +5363,14 @@ def validate_content(
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))
-        all_issues.extend(check_function_length(effective_content, file_path, all_changed_lines))
+        all_issues.extend(
+            check_function_length(
+                effective_content,
+                file_path,
+                all_changed_lines,
+                defer_function_and_isolation_cap_to_caller,
+            )
+        )
         all_issues.extend(check_loop_variable_naming(content, file_path))
         all_issues.extend(check_inline_literal_collections(content, file_path))
         all_issues.extend(check_inline_tuple_string_magic(content, file_path))

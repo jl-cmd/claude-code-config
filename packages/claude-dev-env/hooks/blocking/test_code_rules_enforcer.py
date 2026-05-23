@@ -1667,6 +1667,101 @@ def test_collect_os_environ_bindings_only_sees_the_scope_node_function() -> None
     assert "e" not in test_b_bindings
 
 
+def test_function_local_from_os_import_environ_does_not_leak_into_sibling_test() -> None:
+    """bugbot-1: a function-local `from os import environ` in test_a binds
+    `environ` only for test_a's runtime. A sibling test_b that references the
+    bare name `environ` without importing it must not be flagged, while the
+    test that actually imports and probes HOME (test_a) must be flagged."""
+    source = (
+        "def test_a() -> None:\n"
+        "    from os import environ\n"
+        "    home = environ['HOME']\n"
+        "    print(home)\n"
+        "def test_b() -> None:\n"
+        "    home = environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("test_a" in each_issue for each_issue in issues), (
+        f"test_a's own function-local environ import must be flagged, got: {issues!r}"
+    )
+    assert not any("test_b" in each_issue for each_issue in issues), (
+        "test_b references bare `environ` it never imports, so the function-local "
+        f"import in test_a must not leak into it, got: {issues!r}"
+    )
+
+
+def test_function_local_aliased_module_import_does_not_leak_into_sibling_test() -> None:
+    """bugbot-1 sibling: a function-local `import os as o` in test_a aliases
+    `o` only for test_a. test_b referencing `o.getenv('HOME')` without its own
+    import must not be flagged; test_a's own probe must be flagged."""
+    source = (
+        "def test_a() -> None:\n"
+        "    import os as o\n"
+        "    home = o.getenv('HOME')\n"
+        "    print(home)\n"
+        "def test_b() -> None:\n"
+        "    home = o.getenv('HOME')\n"
+        "    print(home)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("test_a" in each_issue for each_issue in issues), (
+        f"test_a's own function-local aliased import must be flagged, got: {issues!r}"
+    )
+    assert not any("test_b" in each_issue for each_issue in issues), (
+        "test_b references alias `o` it never bound, so the function-local "
+        f"import in test_a must not leak into it, got: {issues!r}"
+    )
+
+
+def test_build_alias_map_excludes_function_local_imports() -> None:
+    """bugbot-1: the module-wide alias canonicalization map must be built only
+    from top-level imports. A function-local `import os as o` and a
+    function-local `from os import environ` must not appear in the shared map."""
+    source = (
+        "import tempfile as module_temp\n"
+        "def test_a() -> None:\n"
+        "    import os as o\n"
+        "    from os import environ\n"
+        "    print(o, environ)\n"
+    )
+    syntax_tree = ast.parse(source)
+    alias_map = code_rules_enforcer._build_alias_canonicalization_map(syntax_tree)
+    assert alias_map.get("module_temp") == "tempfile", (
+        f"top-level alias must be recorded, got: {alias_map!r}"
+    )
+    assert "o" not in alias_map, (
+        f"function-local `import os as o` must not leak into the module map, got: {alias_map!r}"
+    )
+    assert "environ" not in alias_map, (
+        f"function-local `from os import environ` must not leak into the module map, got: {alias_map!r}"
+    )
+
+
+def test_module_level_from_os_import_environ_still_flags_every_referencing_test() -> None:
+    """bugbot-1 guard: a genuine module-level `from os import environ` binds the
+    name for the whole module, so every test that probes HOME through it must
+    still be flagged. The per-function scoping must not suppress this case."""
+    source = (
+        "from os import environ\n"
+        "def test_a() -> None:\n"
+        "    print(environ['HOME'])\n"
+        "def test_b() -> None:\n"
+        "    print(environ['HOME'])\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("test_a" in each_issue for each_issue in issues)
+    assert any("test_b" in each_issue for each_issue in issues), (
+        f"module-level import must flag every probing test, got: {issues!r}"
+    )
+
+
 def _oversized_function_source(name: str) -> str:
     body_line_count = code_rules_enforcer.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
     body_lines = [

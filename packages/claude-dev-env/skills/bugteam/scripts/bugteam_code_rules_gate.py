@@ -419,6 +419,35 @@ def is_code_path(file_path: Path) -> bool:
     return suffix in ALL_CODE_FILE_EXTENSIONS
 
 
+def _resolve_eligible_code_path(
+    candidate_path: Path,
+    repository_root: Path,
+) -> Path | None:
+    """Resolve *candidate_path* and return it only when the gate should scan it.
+
+    Args:
+        candidate_path: One file path from the gate's candidate set.
+        repository_root: The repository root the resolved path must fall under.
+
+    Returns:
+        The resolved path when it lives under *repository_root*, carries a code
+        extension, and is an existing file; otherwise None.
+    """
+    try:
+        resolved = candidate_path.resolve()
+    except OSError:
+        return None
+    try:
+        resolved.relative_to(repository_root.resolve())
+    except ValueError:
+        return None
+    if not is_code_path(resolved):
+        return None
+    if not resolved.is_file():
+        return None
+    return resolved
+
+
 def check_database_column_string_magic(content: str, file_path: str) -> list[str]:
     """Flag string literals that look like database/HTTP column or key names inside function bodies.
 
@@ -793,6 +822,46 @@ def print_violation_section(
             print(f"  {each_issue}", file=sys.stderr)
 
 
+def _scoped_violations_for_file(
+    validate_content: ValidateContentCallable,
+    resolved_path: Path,
+    repository_root: Path,
+    all_added_lines_for_file: set[int] | None,
+) -> tuple[list[str], list[str]] | None:
+    """Validate one resolved file and partition its violations by diff scope.
+
+    Args:
+        validate_content: The validator function from code_rules_enforcer.
+        resolved_path: The resolved code file to validate.
+        repository_root: The repository root for relative path resolution.
+        all_added_lines_for_file: Lines added in the current diff for this file,
+            or None to treat every violation as blocking.
+
+    Returns:
+        ``(blocking, advisory)`` for the file, or None when the file could not
+        be read (the caller logs the skip and counts it).
+    """
+    try:
+        content = resolved_path.read_text(encoding="utf-8")
+    except OSError:
+        print(f"{BUGTEAM_CODE_RULES_GATE_PREFIX}skip unreadable {resolved_path}", file=sys.stderr)
+        return None
+    relative_posix = str(
+        resolved_path.relative_to(repository_root.resolve())
+    ).replace("\\", "/")
+    issues = validate_content(
+        content,
+        relative_posix,
+        old_content=content,
+        defer_function_and_isolation_cap_to_caller=True,
+    )
+    issues.extend(check_database_column_string_magic(content, relative_posix))
+    issues.extend(check_wrapper_plumb_through(content, relative_posix))
+    if not issues:
+        return [], []
+    return split_violations_by_scope(issues, all_added_lines_for_file)
+
+
 def run_gate(
     validate_content: ValidateContentCallable,
     all_file_paths: list[Path],
@@ -821,51 +890,66 @@ def run_gate(
     advisory_by_file: dict[Path, list[str]] = {}
     skipped_unreadable_count = 0
     for each_file_path in sorted(set(all_file_paths)):
-        try:
-            resolved = each_file_path.resolve()
-        except OSError:
+        resolved = _resolve_eligible_code_path(each_file_path, repository_root)
+        if resolved is None:
             continue
-        try:
-            resolved.relative_to(repository_root.resolve())
-        except ValueError:
-            continue
-        if not is_code_path(resolved):
-            continue
-        if not resolved.is_file():
-            continue
-        try:
-            content = resolved.read_text(encoding="utf-8")
-        except OSError:
-            print(f"{BUGTEAM_CODE_RULES_GATE_PREFIX}skip unreadable {resolved}", file=sys.stderr)
+        all_added_lines_for_file = (
+            None if all_added_lines_map is None else all_added_lines_map.get(resolved)
+        )
+        scoped_violations = _scoped_violations_for_file(
+            validate_content, resolved, repository_root, all_added_lines_for_file
+        )
+        if scoped_violations is None:
             skipped_unreadable_count += 1
             continue
-        relative = resolved.relative_to(repository_root.resolve())
-        issues = validate_content(content, str(relative).replace("\\", "/"), old_content=content)
-        issues.extend(check_database_column_string_magic(content, str(relative).replace("\\", "/")))
-        issues.extend(check_wrapper_plumb_through(content, str(relative).replace("\\", "/")))
-        if not issues:
-            continue
-        added_for_file = None if all_added_lines_map is None else all_added_lines_map.get(resolved)
-        blocking, advisory = split_violations_by_scope(issues, added_for_file)
+        blocking, advisory = scoped_violations
         if blocking:
             blocking_by_file[resolved] = blocking
         if advisory:
             advisory_by_file[resolved] = advisory
+    return _report_partitioned_violations(
+        blocking_by_file,
+        advisory_by_file,
+        repository_root,
+        all_added_lines_map is None,
+        skipped_unreadable_count,
+    )
+
+
+def _report_partitioned_violations(
+    blocking_by_file: dict[Path, list[str]],
+    advisory_by_file: dict[Path, list[str]],
+    repository_root: Path,
+    is_whole_file_scope: bool,
+    skipped_unreadable_count: int,
+) -> int:
+    """Print the blocking and advisory sections and return the gate exit code.
+
+    Args:
+        blocking_by_file: Blocking violations grouped by resolved file path.
+        advisory_by_file: Advisory violations grouped by resolved file path.
+        repository_root: Repository root used to compute relative paths.
+        is_whole_file_scope: True when no per-file added-line map was supplied,
+            which selects the whole-file header wording.
+        skipped_unreadable_count: Count of files that could not be read; a
+            non-zero count forces a non-zero exit because the gate cannot
+            vouch for those files.
+
+    Returns:
+        Zero when no blocking violations were found and no file was skipped;
+        non-zero otherwise.
+    """
     blocking_count = sum(len(each_list) for each_list in blocking_by_file.values())
     advisory_count = sum(len(each_list) for each_list in advisory_by_file.values())
     if blocking_count:
-        if all_added_lines_map is None:
+        if is_whole_file_scope:
             header = f"{BUGTEAM_CODE_RULES_GATE_PREFIX}{blocking_count} violation(s) reported."
         else:
             header = (
                 f"{BUGTEAM_CODE_RULES_GATE_PREFIX}{blocking_count} violation(s) "
                 "introduced on changed lines:"
             )
-        print_violation_section(
-            header,
-            blocking_by_file,
-            repository_root,
-        )
+        print_violation_section(header, blocking_by_file, repository_root)
     if advisory_count:
         if blocking_count:
             print("", file=sys.stderr)

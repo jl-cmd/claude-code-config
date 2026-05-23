@@ -32,7 +32,7 @@ from pr_loop_shared_constants.code_rules_gate_constants import (  # noqa: E402
 )
 
 
-ValidateContentCallable = Callable[[str, str, str], list[str]]
+ValidateContentCallable = Callable[..., list[str]]
 
 
 def hunk_header_pattern() -> re.Pattern[str]:
@@ -1027,6 +1027,48 @@ def read_prior_committed_content(
     return show_result.stdout
 
 
+def _scoped_violations_for_file(
+    validate_content: ValidateContentCallable,
+    resolved_path: Path,
+    repository_root: Path,
+    all_added_lines_for_file: set[int] | None,
+) -> tuple[list[str], list[str]] | None:
+    """Validate one resolved file and partition its violations by diff scope.
+
+    Args:
+        validate_content: The enforcer ``validate_content`` callable.
+        resolved_path: The resolved code file to validate.
+        repository_root: Repository root used to resolve the relative path.
+        all_added_lines_for_file: Lines added in the current diff for this file,
+            or None to treat every violation as blocking.
+
+    Returns:
+        ``(blocking, advisory)`` for the file, or None when the file is
+        unreadable (the caller logs and skips it).
+    """
+    try:
+        content = resolved_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        print(f"code_rules_gate: skip unreadable {resolved_path}", file=sys.stderr)
+        return None
+    relative_posix = str(
+        resolved_path.relative_to(repository_root.resolve())
+    ).replace("\\", "/")
+    prior_content = read_prior_committed_content(
+        repository_root.resolve(), relative_posix
+    )
+    issues = validate_content(
+        content,
+        relative_posix,
+        prior_content,
+        defer_function_and_isolation_cap_to_caller=True,
+    )
+    issues.extend(check_wrapper_plumb_through(content, relative_posix))
+    if not issues:
+        return [], []
+    return split_violations_by_scope(issues, all_added_lines_for_file)
+
+
 def run_gate(
     validate_content: ValidateContentCallable,
     all_file_paths: list[Path],
@@ -1061,45 +1103,58 @@ def run_gate(
             continue
         if not resolved.is_file():
             continue
-        try:
-            content = resolved.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            print(f"code_rules_gate: skip unreadable {resolved}", file=sys.stderr)
-            continue
-        relative = resolved.relative_to(repository_root.resolve())
-        relative_posix = str(relative).replace("\\", "/")
-        prior_content = read_prior_committed_content(
-            repository_root.resolve(), relative_posix
-        )
-        issues = validate_content(content, relative_posix, prior_content)
-        issues.extend(check_wrapper_plumb_through(content, relative_posix))
-        if not issues:
-            continue
-        added_for_file = (
+        all_added_lines_for_file = (
             None
             if all_added_lines_by_path is None
             else all_added_lines_by_path.get(resolved)
         )
-        blocking, advisory = split_violations_by_scope(issues, added_for_file)
+        scoped_violations = _scoped_violations_for_file(
+            validate_content, resolved, repository_root, all_added_lines_for_file
+        )
+        if scoped_violations is None:
+            continue
+        blocking, advisory = scoped_violations
         if blocking:
             blocking_by_file[resolved] = blocking
         if advisory:
             advisory_by_file[resolved] = advisory
+    return _report_partitioned_violations(
+        blocking_by_file,
+        advisory_by_file,
+        repository_root,
+        all_added_lines_by_path is None,
+    )
+
+
+def _report_partitioned_violations(
+    blocking_by_file: dict[Path, list[str]],
+    advisory_by_file: dict[Path, list[str]],
+    repository_root: Path,
+    is_whole_file_scope: bool,
+) -> int:
+    """Print the blocking and advisory sections and return the gate exit code.
+
+    Args:
+        blocking_by_file: Blocking violations grouped by resolved file path.
+        advisory_by_file: Advisory violations grouped by resolved file path.
+        repository_root: Repository root used to compute relative paths.
+        is_whole_file_scope: True when no per-file added-line map was supplied,
+            which selects the whole-file header wording.
+
+    Returns:
+        ``1`` when at least one blocking violation is reported, ``0`` otherwise.
+    """
     blocking_count = sum(len(each_list) for each_list in blocking_by_file.values())
     advisory_count = sum(len(each_list) for each_list in advisory_by_file.values())
     if blocking_count:
-        if all_added_lines_by_path is None:
+        if is_whole_file_scope:
             header = f"code_rules_gate: {blocking_count} violation(s) reported."
         else:
             header = (
                 f"code_rules_gate: {blocking_count} violation(s) "
                 "introduced on changed lines:"
             )
-        print_violation_section(
-            header,
-            blocking_by_file,
-            repository_root,
-        )
+        print_violation_section(header, blocking_by_file, repository_root)
     if advisory_count:
         if blocking_count:
             print("", file=sys.stderr)

@@ -19,6 +19,8 @@ _npv/
 
 # Bugteam workflow artifacts
 .bugteam-pr*-loop*.outcomes.xml
+.bugteam-pr*.gate.json
+.subagent-hook-probe.json
 post_pr_replies.ps1
 
 # Eval artifacts

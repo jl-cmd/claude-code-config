@@ -1235,3 +1235,47 @@ def test_validate_content_honors_empty_full_file_content_for_thin_wrapper_check(
     assert not any("thin wrapper" in each.lower() for each in issues), (
         f"empty post-edit file must not be flagged as a thin wrapper, got: {issues!r}"
     )
+
+
+def test_isolation_check_does_not_flag_expanduser_without_tilde_argument() -> None:
+    """expanduser of a tilde-free string does not probe HOME and must not fire."""
+    source = (
+        "import os\n"
+        "def test_resolves_relative() -> None:\n"
+        "    target = os.path.expanduser('relative/path')\n"
+        "    assert target\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert issues == [], f"tilde-free expanduser must not be flagged, got: {issues!r}"
+
+
+def test_isolation_check_flags_expanduser_with_tilde_argument() -> None:
+    """expanduser of a leading-tilde string resolves HOME and must fire."""
+    source = (
+        "import os\n"
+        "def test_reads_home() -> None:\n"
+        "    target = os.path.expanduser('~/.config/x')\n"
+        "    assert target\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_flags_class_level_probe_in_nested_class_body() -> None:
+    """A Path.home() initializer in a nested class body runs at class-creation
+    time during the test, so it must fire."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_defines_inner_class() -> None:\n"
+        "    class Inner:\n"
+        "        root = Path.home()\n"
+        "    assert Inner is not None\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("Path.home" in each_issue for each_issue in issues)

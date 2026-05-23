@@ -122,6 +122,8 @@ ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
     "tempfile.mkdtemp",
 })
 EXPANDVARS_DOTTED_NAME: str = "os.path.expandvars"
+EXPANDUSER_DOTTED_NAME: str = "os.path.expanduser"
+HOME_DIRECTORY_TILDE_PREFIX: str = "~"
 ENVIRONMENT_VARIABLE_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
     r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
 )

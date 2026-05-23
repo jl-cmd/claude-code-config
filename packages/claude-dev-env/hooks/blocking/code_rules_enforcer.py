@@ -112,6 +112,8 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     OS_ENVIRON_DOTTED_NAME,
     ENVIRONMENT_VARIABLE_REFERENCE_PATTERN,
     EXPANDVARS_DOTTED_NAME,
+    EXPANDUSER_DOTTED_NAME,
+    HOME_DIRECTORY_TILDE_PREFIX,
     ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
     PYTEST_TEST_CLASS_NAME_PREFIX,
     FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
@@ -2631,6 +2633,33 @@ def _expandvars_argument_references_home_or_temp(call_node: ast.Call) -> bool:
     )
 
 
+def _expanduser_argument_references_home(call_node: ast.Call) -> bool:
+    """Return True when an ``expanduser`` call expands the home directory.
+
+    ``os.path.expanduser`` only substitutes a leading ``~`` (``~`` alone or
+    ``~user``); a string without a leading tilde is returned unchanged and
+    never touches HOME. A non-constant or absent argument is treated as not
+    referencing home, mirroring the conservative argument inspection applied
+    to ``expandvars``.
+
+    Args:
+        call_node: The ``os.path.expanduser(...)`` call node.
+
+    Returns:
+        True when the first string argument begins with the home-directory
+        tilde prefix.
+    """
+    if not call_node.args:
+        return False
+    first_argument = call_node.args[0]
+    if not (
+        isinstance(first_argument, ast.Constant)
+        and isinstance(first_argument.value, str)
+    ):
+        return False
+    return first_argument.value.startswith(HOME_DIRECTORY_TILDE_PREFIX)
+
+
 def _environ_key_string_from_call(
     call_node: ast.Call, all_canonical_names_by_alias: dict[str, str],
 ) -> str | None:
@@ -2716,14 +2745,16 @@ def _detect_home_or_temp_probes_in_body(
     """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*.
 
     The walk descends into ``ClassDef`` nodes nested inside the test body and
-    into the method bodies of those classes, because instantiating a nested
-    class executes its method bodies as part of the test's runtime path. Once
-    inside that runtime path, the walk continues through further nested
-    functions and lambdas defined within a nested-class method, since they
-    run when the method runs. Class-body statements (class attribute
-    initializers) and standalone nested helper functions or lambdas defined
-    directly in the test body remain scope boundaries — those run in their
-    own callable scope and carry their own isolation contract.
+    into both the class-level statements and the method bodies of those
+    classes. Class-level statements (class attribute initializers) run at
+    class-creation time as the ``class`` statement executes during the test,
+    so a probe in an initializer such as ``root = Path.home()`` is on the
+    test's runtime path and is reported. Method bodies run when the method
+    runs, which a nested-class instantiation triggers, so the walk continues
+    through further nested functions and lambdas defined within a nested-class
+    method. Standalone nested helper functions or lambdas defined directly in
+    the test body remain scope boundaries — those run in their own callable
+    scope and carry their own isolation contract.
 
     Args:
         function_node: The test function whose body is being scanned.
@@ -2767,6 +2798,10 @@ def _record_home_or_temp_probe(
             if _expandvars_argument_references_home_or_temp(node):
                 all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
+        if canonical_chain == EXPANDUSER_DOTTED_NAME:
+            if _expanduser_argument_references_home(node):
+                all_probes.append((node.lineno, f"{canonical_chain}()"))
+            return
         if canonical_chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
             all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
@@ -2790,12 +2825,7 @@ def _children_to_descend_into(
             return []
         return [(node.body, True)]
     if isinstance(node, ast.ClassDef):
-        method_children = [
-            each_member
-            for each_member in node.body
-            if isinstance(each_member, (ast.FunctionDef, ast.AsyncFunctionDef))
-        ]
-        return [(each_method, True) for each_method in method_children]
+        return [(each_member, True) for each_member in node.body]
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         if not inside_nested_class:
             return []
@@ -4705,14 +4735,15 @@ def check_function_length(content: str, file_path: str) -> list[str]:
     lines) appear in the returned issues list and block the write at the
     gate (see CODE_RULES §6.5 for the source rationale).
 
-    The issue message intentionally leads with ``Function`` rather than the
-    ``Line N:`` prefix the gate's ``split_violations_by_scope`` parses for
-    touched-line membership. Growing an existing function's body past the
-    threshold leaves the ``def`` line outside the diff's added-line set, so a
-    ``Line N:`` anchor at the definition would be downgraded to advisory and
-    let the regression merge. Emitting no parseable line prefix routes the
-    violation through the gate's always-blocking path while the function name
-    and definition line stay in the message for the operator.
+    The issue message carries ``Function NAME (defined at line X) is Y lines``
+    precisely so the gate's ``function_length_span_range`` can recover the
+    function's full declared span (lines ``X`` through ``X + Y - 1``). The
+    gate classifies the violation blocking when that span intersects the
+    diff's added lines — the body grew this diff — and advisory otherwise — a
+    pre-existing, untouched long function in a file the diff happened to
+    touch. Anchoring to the span rather than a single ``Line N:`` definition
+    line lets body growth on any interior line block correctly even when the
+    ``def`` line itself is untouched.
 
     Exempt: test files (test bodies are sometimes long by necessity), Django
     migrations (auto-generated), workflow registries (registry entries), and

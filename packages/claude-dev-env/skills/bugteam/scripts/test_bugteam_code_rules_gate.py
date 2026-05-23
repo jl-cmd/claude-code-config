@@ -398,3 +398,56 @@ def test_added_lines_for_staged_file_returns_parsed_result_when_diff_is_non_empt
     )
 
     assert added_line_numbers == set()
+
+
+def _build_function_module(
+    function_name: str, body_line_count: int, leading_lines: int
+) -> str:
+    preamble = "".join("anchor_name\n" for _ in range(leading_lines))
+    body = "\n".join("    keep_alive_name" for _ in range(body_line_count))
+    return f"{preamble}def {function_name}() -> None:\n{body}\n"
+
+
+def test_split_violations_blocks_function_length_when_span_intersects_added_lines() -> None:
+    """A function-length issue whose declared span overlaps the diff's added
+    lines is blocking — the body grew, which is the regression intent."""
+    validate_content = gate_module.load_validate_content()
+    long_function = _build_function_module(
+        "oversized", body_line_count=70, leading_lines=3
+    )
+    issues = validate_content(long_function, "src/long_module.py", "")
+    function_length_issues = [
+        each_issue for each_issue in issues if "blocking threshold" in each_issue
+    ]
+    assert function_length_issues, f"expected a function-length issue, got {issues!r}"
+    span_def_line = 4
+    inside_span_line = span_def_line + 10
+    blocking, advisory = gate_module.split_violations_by_scope(
+        function_length_issues,
+        all_added_line_numbers={inside_span_line},
+    )
+    assert blocking == function_length_issues
+    assert advisory == []
+
+
+def test_split_violations_advises_function_length_when_span_misses_added_lines() -> None:
+    """A function-length issue for an untouched pre-existing function — whose
+    declared span does not overlap any added line — is advisory, not blocking.
+    Prevents the over-block regression where every pre-existing long function
+    in a touched file was forced into the blocking payload."""
+    validate_content = gate_module.load_validate_content()
+    long_function = _build_function_module(
+        "oversized", body_line_count=70, leading_lines=3
+    )
+    issues = validate_content(long_function, "src/long_module.py", "")
+    function_length_issues = [
+        each_issue for each_issue in issues if "blocking threshold" in each_issue
+    ]
+    assert function_length_issues, f"expected a function-length issue, got {issues!r}"
+    line_far_outside_span = 5000
+    blocking, advisory = gate_module.split_violations_by_scope(
+        function_length_issues,
+        all_added_line_numbers={line_far_outside_span},
+    )
+    assert advisory == function_length_issues
+    assert blocking == []

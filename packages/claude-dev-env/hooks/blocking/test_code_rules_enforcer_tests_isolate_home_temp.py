@@ -2,10 +2,14 @@
 
 Pattern class: tests that call ``Path.home()``, ``os.path.expanduser('~')``,
 ``os.getenv('HOME'|'USERPROFILE'|'TMPDIR'|…)``, ``os.environ['HOME'|…]``, or
-``tempfile.gettempdir()`` without taking a pytest isolation fixture
-(``tmp_path``, ``tmp_path_factory``, ``tmpdir``, ``tmpdir_factory``,
-``monkeypatch``) leak across the suite. Cited SYNTHESIS evidence: ccc#476
-F16, F19, F28; pa#136 F11.
+``tempfile.gettempdir()`` without taking a ``monkeypatch`` fixture leak across
+the suite. Only ``monkeypatch`` suppresses the finding, because
+``monkeypatch.setenv(...)`` actually intercepts the env reads the probes
+depend on. ``tmp_path``, ``tmp_path_factory``, ``tmpdir``, and
+``tmpdir_factory`` allocate a sandbox path but do not intercept env reads, so
+their presence alone does not suppress the finding (see
+``test_should_flag_path_home_when_only_tmp_path_fixture_present``). Cited
+SYNTHESIS evidence: ccc#476 F16, F19, F28; pa#136 F11.
 """
 
 from __future__ import annotations
@@ -99,7 +103,10 @@ def test_should_ignore_path_home_inside_nested_lambda() -> None:
     assert issues == []
 
 
-def test_should_ignore_path_home_inside_nested_class_body() -> None:
+def test_should_flag_path_home_inside_nested_class_body() -> None:
+    # A class-level statement directly in a nested class body runs at
+    # class-creation time during the test, so a Path.home() initializer there
+    # executes on the test's runtime path and must be flagged.
     source = (
         "from pathlib import Path\n"
         "def test_defines_inner_class() -> None:\n"
@@ -108,7 +115,7 @@ def test_should_ignore_path_home_inside_nested_class_body() -> None:
         "    assert Inner is not None\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
-    assert issues == []
+    assert any("Path.home" in each_issue for each_issue in issues)
 
 
 def test_should_ignore_nested_test_named_function_pytest_does_not_collect() -> None:
@@ -564,6 +571,50 @@ def test_should_ignore_path_home_inside_standalone_nested_helper_function() -> N
         "    def helper() -> Path:\n"
         "        return Path.home()\n"
         "    assert callable(helper)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_expanduser_with_tilde_only_argument() -> None:
+    source = (
+        "import os\n"
+        "def test_reads_home() -> None:\n"
+        "    target = os.path.expanduser('~')\n"
+        "    assert target\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_expanduser_with_named_user_tilde_argument() -> None:
+    source = (
+        "import os\n"
+        "def test_reads_other_home() -> None:\n"
+        "    target = os.path.expanduser('~alice/.config')\n"
+        "    assert target\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_expanduser_with_relative_path_without_tilde() -> None:
+    source = (
+        "import os\n"
+        "def test_resolves_relative() -> None:\n"
+        "    target = os.path.expanduser('relative/path')\n"
+        "    assert target\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_not_flag_expanduser_with_non_constant_argument() -> None:
+    source = (
+        "import os\n"
+        "def test_resolves_dynamic(some_path) -> None:\n"
+        "    target = os.path.expanduser(some_path)\n"
+        "    assert target\n"
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert issues == []

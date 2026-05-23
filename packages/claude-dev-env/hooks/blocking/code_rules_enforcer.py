@@ -2473,6 +2473,8 @@ def _build_alias_canonicalization_map(syntax_tree: ast.Module) -> dict[str, str]
       ``op.expanduser`` -> ``os.path.expanduser``).
     - ``import pathlib as pl`` -> ``pl`` resolves to ``pathlib``.
     - ``from pathlib import Path as P`` -> ``P`` resolves to ``Path``.
+    - ``from os import path`` -> ``path`` resolves to ``os.path`` (so
+      ``path.expanduser`` -> ``os.path.expanduser``).
     - ``from os.path import expanduser as e`` -> ``e`` resolves to
       ``os.path.expanduser``; ``from os import getenv`` -> ``getenv``
       resolves to ``os.getenv``; ``from os import environ`` -> ``environ``

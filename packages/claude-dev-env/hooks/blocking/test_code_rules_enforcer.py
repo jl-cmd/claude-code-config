@@ -1279,3 +1279,48 @@ def test_isolation_check_flags_class_level_probe_in_nested_class_body() -> None:
         source, "/project/src/test_module.py"
     )
     assert any("Path.home" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_flags_from_os_import_path_expanduser() -> None:
+    """`from os import path` binds `path` to `os.path`, so `path.expanduser`
+    must resolve to the canonical `os.path.expanduser` probe and fire."""
+    source = (
+        "from os import path\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = path.expanduser('~/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_flags_expandvars_with_windows_percent_userprofile() -> None:
+    """expandvars expands Windows `%USERPROFILE%` percent syntax, so a percent
+    reference to a home env var must fire."""
+    source = (
+        "import os\n"
+        "def test_expands_userprofile() -> None:\n"
+        "    target = os.path.expandvars('%USERPROFILE%\\\\.cfg')\n"
+        "    open(target).read()\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("expandvars" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_ignores_expandvars_with_unrelated_windows_percent_var() -> None:
+    """A percent reference to an unrelated env var does not probe HOME/TMP and
+    must not fire."""
+    source = (
+        "import os\n"
+        "def test_expands_unrelated() -> None:\n"
+        "    token = os.path.expandvars('%MY_APP_TOKEN%')\n"
+        "    print(token)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert issues == []

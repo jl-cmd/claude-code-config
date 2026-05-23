@@ -127,6 +127,9 @@ HOME_DIRECTORY_TILDE_PREFIX: str = "~"
 ENVIRONMENT_VARIABLE_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
     r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
 )
+WINDOWS_PERCENT_VARIABLE_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
+    r"%([A-Za-z_][A-Za-z0-9_]*)%"
+)
 OS_GETENV_DOTTED_NAME: str = "os.getenv"
 OS_ENVIRON_GET_DOTTED_NAME: str = "os.environ.get"
 OS_ENVIRON_DOTTED_NAME: str = "os.environ"
@@ -143,6 +146,7 @@ ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES: frozenset[str] = frozenset({
 ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT: dict[tuple[str, str], str] = {
     ("os.path", "expanduser"): "os.path.expanduser",
     ("os.path", "expandvars"): "os.path.expandvars",
+    ("os", "path"): "os.path",
     ("os", "getenv"): "os.getenv",
     ("os", "environ"): "os.environ",
     ("tempfile", "gettempdir"): "tempfile.gettempdir",

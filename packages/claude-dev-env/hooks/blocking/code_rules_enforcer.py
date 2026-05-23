@@ -111,6 +111,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT,
     OS_ENVIRON_DOTTED_NAME,
     ENVIRONMENT_VARIABLE_REFERENCE_PATTERN,
+    WINDOWS_PERCENT_VARIABLE_REFERENCE_PATTERN,
     EXPANDVARS_DOTTED_NAME,
     EXPANDUSER_DOTTED_NAME,
     HOME_DIRECTORY_TILDE_PREFIX,
@@ -2603,11 +2604,13 @@ def _resolve_chain_through_aliases(
 def _expandvars_argument_references_home_or_temp(call_node: ast.Call) -> bool:
     """Return True when an ``expandvars`` call expands a home/temp env var.
 
-    Inspects the first string argument for ``$NAME`` / ``${NAME}`` references
-    and reports whether any referenced name is a home/temp env var. A
-    non-constant or absent argument is treated as not referencing a home/temp
-    variable, mirroring the conservative env-name filtering applied to
-    ``os.getenv``.
+    Inspects the first string argument for dollar-style ``$NAME`` / ``${NAME}``
+    references and Windows percent-style ``%NAME%`` references, then reports
+    whether any referenced name is a home/temp env var. ``os.path.expandvars``
+    expands percent syntax on Windows, so both forms reach the same home/temp
+    env-var name set. A non-constant or absent argument is treated as not
+    referencing a home/temp variable, mirroring the conservative env-name
+    filtering applied to ``os.getenv``.
 
     Args:
         call_node: The ``os.path.expandvars(...)`` call node.
@@ -2624,12 +2627,16 @@ def _expandvars_argument_references_home_or_temp(call_node: ast.Call) -> bool:
         and isinstance(first_argument.value, str)
     ):
         return False
-    referenced_names = ENVIRONMENT_VARIABLE_REFERENCE_PATTERN.findall(
+    dollar_style_names = ENVIRONMENT_VARIABLE_REFERENCE_PATTERN.findall(
         first_argument.value
     )
+    percent_style_names = WINDOWS_PERCENT_VARIABLE_REFERENCE_PATTERN.findall(
+        first_argument.value
+    )
+    all_referenced_names = dollar_style_names + percent_style_names
     return any(
         each_name in ALL_HOME_DIRECTORY_ENV_VAR_NAMES
-        for each_name in referenced_names
+        for each_name in all_referenced_names
     )
 
 

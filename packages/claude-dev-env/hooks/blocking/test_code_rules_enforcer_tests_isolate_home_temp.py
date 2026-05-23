@@ -618,3 +618,91 @@ def test_should_not_flag_expanduser_with_non_constant_argument() -> None:
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert issues == []
+
+
+def test_should_flag_from_os_import_path_expanduser() -> None:
+    source = (
+        "from os import path\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = path.expanduser('~/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_from_os_import_path_expandvars_home_var() -> None:
+    source = (
+        "from os import path\n"
+        "def test_expands_home() -> None:\n"
+        "    target = path.expandvars('$HOME/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expandvars" in each_issue for each_issue in issues)
+
+
+def test_should_flag_from_os_import_path_under_alias_expanduser() -> None:
+    source = (
+        "from os import path as p\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = p.expanduser('~/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_expandvars_with_windows_percent_userprofile() -> None:
+    source = (
+        "import os\n"
+        "def test_expands_userprofile() -> None:\n"
+        "    target = os.path.expandvars('%USERPROFILE%\\\\.cfg')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expandvars" in each_issue for each_issue in issues)
+
+
+def test_should_flag_expandvars_with_windows_percent_temp() -> None:
+    source = (
+        "import os\n"
+        "def test_expands_temp() -> None:\n"
+        "    target = os.path.expandvars('%TEMP%\\\\scratch')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expandvars" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_expandvars_with_windows_percent_unrelated_var() -> None:
+    source = (
+        "import os\n"
+        "def test_expands_unrelated() -> None:\n"
+        "    token = os.path.expandvars('%MY_APP_TOKEN%')\n"
+        "    print(token)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_bare_imported_expandvars_home_var() -> None:
+    source = (
+        "from os.path import expandvars\n"
+        "def test_expands_home() -> None:\n"
+        "    target = expandvars('$HOME/.config/x')\n"
+        "    open(target).read()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expandvars" in each_issue for each_issue in issues)
+
+
+def test_should_flag_from_pathlib_import_path_without_alias() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_home() -> None:\n"
+        "    home_dir = Path.home()\n"
+        "    (home_dir / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("Path.home" in each_issue for each_issue in issues)

@@ -110,6 +110,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES,
     ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT,
     OS_ENVIRON_DOTTED_NAME,
+    ENVIRON_GET_METHOD_NAME,
     ENVIRONMENT_VARIABLE_REFERENCE_PATTERN,
     WINDOWS_PERCENT_VARIABLE_REFERENCE_PATTERN,
     EXPANDVARS_DOTTED_NAME,
@@ -2515,18 +2516,20 @@ def _build_alias_canonicalization_map(syntax_tree: ast.Module) -> dict[str, str]
 
 
 def _collect_os_environ_local_binding_names(
-    syntax_tree: ast.Module, all_canonical_names_by_alias: dict[str, str],
+    scope_node: ast.AST, all_canonical_names_by_alias: dict[str, str],
 ) -> set[str]:
-    """Return local names bound to ``os.environ`` within *syntax_tree*.
+    """Return local names bound to ``os.environ`` within *scope_node*.
 
-    Tracks ``e = os.environ`` style assignments (resolving the right-hand
-    side through *all_canonical_names_by_alias* so ``e = o.environ`` with
-    ``import os as o`` is recognized) and ``from os import environ``
-    bindings. Subscript reads on these local names are treated as
-    ``os.environ[...]`` accesses.
+    Scoped to the single test function passed as *scope_node* so a binding in
+    one test never attributes a same-named access in a sibling test. Tracks
+    ``e = os.environ`` style assignments (resolving the right-hand side through
+    *all_canonical_names_by_alias* so ``e = o.environ`` with ``import os as o``
+    is recognized) and ``from os import environ`` bindings (rare inside a
+    function but supported for completeness). Subscript and ``.get(...)`` reads
+    on these local names are treated as ``os.environ`` accesses.
 
     Args:
-        syntax_tree: The parsed module to scan.
+        scope_node: The single test function node to scan for bindings.
         all_canonical_names_by_alias: Import-alias map from
             ``_build_alias_canonicalization_map``.
 
@@ -2534,7 +2537,7 @@ def _collect_os_environ_local_binding_names(
         Set of local variable names that reference ``os.environ``.
     """
     environ_bindings: set[str] = set()
-    for each_node in ast.walk(syntax_tree):
+    for each_node in ast.walk(scope_node):
         if isinstance(each_node, ast.ImportFrom):
             for each_alias in each_node.names:
                 canonical_dotted = ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT.get(
@@ -2752,13 +2755,11 @@ def _expanduser_argument_references_home(call_node: ast.Call) -> bool:
 
 
 def _environ_key_string_from_call(
-    call_node: ast.Call, all_canonical_names_by_alias: dict[str, str],
+    call_node: ast.Call,
+    all_canonical_names_by_alias: dict[str, str],
+    all_environ_local_bindings: set[str],
 ) -> str | None:
-    raw_chain = _dotted_call_attribute_chain(call_node)
-    if raw_chain is None:
-        return None
-    canonical_chain = _resolve_chain_through_aliases(raw_chain, all_canonical_names_by_alias)
-    if canonical_chain not in ALL_ENVIRONMENT_GETTER_DOTTED_NAMES:
+    if not _call_is_environment_getter(call_node, all_canonical_names_by_alias, all_environ_local_bindings):
         return None
     if not call_node.args:
         return None
@@ -2766,6 +2767,50 @@ def _environ_key_string_from_call(
     if isinstance(first_argument, ast.Constant) and isinstance(first_argument.value, str):
         return first_argument.value
     return None
+
+
+def _call_is_environment_getter(
+    call_node: ast.Call,
+    all_canonical_names_by_alias: dict[str, str],
+    all_environ_local_bindings: set[str],
+) -> bool:
+    """Return True when *call_node* reads an env var via a recognized getter.
+
+    Recognizes the canonical ``os.getenv(...)`` / ``os.environ.get(...)``
+    chains and the local-alias ``e.get(...)`` form where ``e`` is a name in
+    *all_environ_local_bindings* (a binding to ``os.environ`` collected from
+    the same test function).
+
+    Args:
+        call_node: The call to inspect.
+        all_canonical_names_by_alias: Import-alias map from
+            ``_build_alias_canonicalization_map``.
+        all_environ_local_bindings: Local names bound to ``os.environ`` within
+            the test function being analyzed.
+
+    Returns:
+        True when the call is an environment getter whose key argument is
+        worth inspecting.
+    """
+    if _call_targets_local_environ_get(call_node, all_environ_local_bindings):
+        return True
+    raw_chain = _dotted_call_attribute_chain(call_node)
+    if raw_chain is None:
+        return False
+    canonical_chain = _resolve_chain_through_aliases(raw_chain, all_canonical_names_by_alias)
+    return canonical_chain in ALL_ENVIRONMENT_GETTER_DOTTED_NAMES
+
+
+def _call_targets_local_environ_get(
+    call_node: ast.Call, all_environ_local_bindings: set[str],
+) -> bool:
+    callee = call_node.func
+    if not isinstance(callee, ast.Attribute):
+        return False
+    if callee.attr != ENVIRON_GET_METHOD_NAME:
+        return False
+    receiver = callee.value
+    return isinstance(receiver, ast.Name) and receiver.id in all_environ_local_bindings
 
 
 def _environ_key_string_from_subscript(
@@ -2852,8 +2897,12 @@ def _detect_home_or_temp_probes_in_body(
         function_node: The test function whose body is being scanned.
         all_canonical_names_by_alias: Local-binding-to-canonical-prefix mapping used to resolve
             aliased imports before probe membership checks.
-        all_environ_local_bindings: Local names bound to ``os.environ`` used to
-            attribute subscript reads to a HOME/TMP env probe.
+        all_environ_local_bindings: Local names bound to ``os.environ`` (scoped
+            to *function_node*) used to attribute subscript and ``.get(...)``
+            reads to a HOME/TMP env probe.
+        all_path_local_bindings: Local names bound to a ``pathlib.Path``
+            construction (scoped to *function_node*) used to attribute a
+            ``.expanduser()`` method call to a home-directory probe.
 
     Returns:
         A list of ``(line_number, probe_label)`` tuples for each HOME/TMP
@@ -2907,7 +2956,9 @@ def _record_home_or_temp_probe(
         if canonical_chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
             all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
-        environ_key = _environ_key_string_from_call(node, all_canonical_names_by_alias)
+        environ_key = _environ_key_string_from_call(
+            node, all_canonical_names_by_alias, all_environ_local_bindings
+        )
         if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
             all_probes.append((node.lineno, f"os env probe '{environ_key}'"))
         return
@@ -2988,12 +3039,12 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
         return []
 
     all_canonical_names_by_alias = _build_alias_canonicalization_map(syntax_tree)
-    all_environ_local_bindings = _collect_os_environ_local_binding_names(syntax_tree, all_canonical_names_by_alias)
-    all_path_local_bindings = _collect_pathlib_path_local_binding_names(syntax_tree, all_canonical_names_by_alias)
     issues: list[str] = []
     for each_node in _collect_pytest_collectable_test_functions(syntax_tree):
         if _function_uses_pytest_isolation_fixture(each_node):
             continue
+        all_environ_local_bindings = _collect_os_environ_local_binding_names(each_node, all_canonical_names_by_alias)
+        all_path_local_bindings = _collect_pathlib_path_local_binding_names(each_node, all_canonical_names_by_alias)
         for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(
             each_node, all_canonical_names_by_alias, all_environ_local_bindings, all_path_local_bindings
         ):

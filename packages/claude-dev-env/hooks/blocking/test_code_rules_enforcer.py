@@ -1369,3 +1369,57 @@ def test_isolation_check_ignores_expandvars_with_unrelated_windows_percent_var()
         source, "/project/src/test_module.py"
     )
     assert issues == []
+
+
+def test_isolation_check_flags_environ_get_via_local_binding() -> None:
+    """`e = os.environ` then `e.get('HOME')` reads HOME through a local alias
+    and must fire just like the subscript `e['HOME']` form."""
+    source = (
+        "import os\n"
+        "def test_resolves_home() -> None:\n"
+        "    e = os.environ\n"
+        "    home = e.get('HOME')\n"
+        "    print(home)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_scopes_path_bindings_to_their_own_test() -> None:
+    """A `p = Path('~/x')` binding in one test must not make an unrelated
+    `p.expanduser()` in a sibling test a finding; bindings are per-test."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_a() -> None:\n"
+        "    p = Path('~/x')\n"
+        "    p.expanduser()\n"
+        "def test_b(p) -> None:\n"
+        "    p.expanduser()\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("test_a" in each_issue for each_issue in issues)
+    assert not any("test_b" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_scopes_environ_bindings_to_their_own_test() -> None:
+    """An `e = os.environ` binding in one test must not make an unrelated
+    `e['HOME']` in a sibling test a finding; bindings are per-test."""
+    source = (
+        "import os\n"
+        "def test_a() -> None:\n"
+        "    e = os.environ\n"
+        "    home = e['HOME']\n"
+        "    print(home)\n"
+        "def test_b(e) -> None:\n"
+        "    home = e['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("test_a" in each_issue for each_issue in issues)
+    assert not any("test_b" in each_issue for each_issue in issues)

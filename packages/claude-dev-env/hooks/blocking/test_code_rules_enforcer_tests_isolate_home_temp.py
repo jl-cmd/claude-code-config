@@ -378,6 +378,105 @@ def test_should_not_flag_os_environ_local_binding_for_unrelated_var() -> None:
     assert issues == []
 
 
+def test_should_flag_os_environ_get_via_local_binding() -> None:
+    source = (
+        "import os\n"
+        "def test_resolves_home() -> None:\n"
+        "    e = os.environ\n"
+        "    home = e.get('HOME')\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_os_environ_get_local_binding_for_unrelated_var() -> None:
+    source = (
+        "import os\n"
+        "def test_resolves_token() -> None:\n"
+        "    e = os.environ\n"
+        "    token = e.get('MY_APP_TOKEN')\n"
+        "    print(token)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_canonical_os_environ_get_for_home() -> None:
+    source = (
+        "import os\n"
+        "def test_resolves_home() -> None:\n"
+        "    home = os.environ.get('HOME')\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_path_binding_leaking_from_a_different_test() -> None:
+    # The Path-binding collector must scope its bindings to the test currently
+    # being analyzed. A `p = Path('~/x')` binding in test_a must NOT make an
+    # unrelated `p.expanduser()` in test_b a finding (test_b never bound `p`
+    # to a Path). Module-wide binding collection produces this false positive.
+    source = (
+        "from pathlib import Path\n"
+        "def test_a() -> None:\n"
+        "    p = Path('~/x')\n"
+        "    p.expanduser()\n"
+        "def test_b(p) -> None:\n"
+        "    p.expanduser()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("test_a" in each_issue for each_issue in issues)
+    assert not any("test_b" in each_issue for each_issue in issues)
+
+
+def test_should_flag_path_binding_used_within_the_same_test() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_within_one_test() -> None:\n"
+        "    p = Path('~/x')\n"
+        "    p.expanduser()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+    assert any("test_within_one_test" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_environ_binding_leaking_from_a_different_test() -> None:
+    # The environ-binding collector must scope its bindings to the test
+    # currently being analyzed. An `e = os.environ` binding in test_a must NOT
+    # make an unrelated `e['HOME']` in test_b a finding (test_b never bound
+    # `e` to os.environ). Module-wide binding collection produces this false
+    # positive.
+    source = (
+        "import os\n"
+        "def test_a() -> None:\n"
+        "    e = os.environ\n"
+        "    home = e['HOME']\n"
+        "    print(home)\n"
+        "def test_b(e) -> None:\n"
+        "    home = e['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("test_a" in each_issue for each_issue in issues)
+    assert not any("test_b" in each_issue for each_issue in issues)
+
+
+def test_should_flag_environ_binding_used_within_the_same_test() -> None:
+    source = (
+        "import os\n"
+        "def test_within_one_test() -> None:\n"
+        "    e = os.environ\n"
+        "    home = e['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+    assert any("test_within_one_test" in each_issue for each_issue in issues)
+
+
 def test_should_flag_path_home_inside_nested_function_within_nested_class_method() -> None:
     source = (
         "from pathlib import Path\n"

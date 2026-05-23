@@ -144,6 +144,7 @@ WINDOWS_PERCENT_VARIABLE_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
 OS_GETENV_DOTTED_NAME: str = "os.getenv"
 OS_ENVIRON_GET_DOTTED_NAME: str = "os.environ.get"
 OS_ENVIRON_DOTTED_NAME: str = "os.environ"
+ENVIRON_GET_METHOD_NAME: str = "get"
 ALL_ENVIRONMENT_GETTER_DOTTED_NAMES: frozenset[str] = frozenset({
     OS_GETENV_DOTTED_NAME,
     OS_ENVIRON_GET_DOTTED_NAME,

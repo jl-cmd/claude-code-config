@@ -1423,3 +1423,69 @@ def test_isolation_check_scopes_environ_bindings_to_their_own_test() -> None:
     )
     assert any("test_a" in each_issue for each_issue in issues)
     assert not any("test_b" in each_issue for each_issue in issues)
+
+
+def _function_node_named(source: str, function_name: str) -> ast.FunctionDef:
+    syntax_tree = ast.parse(source)
+    for each_node in syntax_tree.body:
+        if isinstance(each_node, ast.FunctionDef) and each_node.name == function_name:
+            return each_node
+    raise AssertionError(f"no function named {function_name!r} in source")
+
+
+def test_collect_pathlib_path_bindings_only_sees_the_scope_node_function() -> None:
+    """The Path-binding collector must scope its walk to the function node it
+    is given. A `p = Path('~/x')` binding in test_a must not appear when the
+    collector is handed test_b's node (test_b never binds `p` to a Path)."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_a() -> None:\n"
+        "    p = Path('~/x')\n"
+        "    p.expanduser()\n"
+        "def test_b(p) -> None:\n"
+        "    p.expanduser()\n"
+    )
+    syntax_tree = ast.parse(source)
+    alias_map = code_rules_enforcer._build_alias_canonicalization_map(syntax_tree)
+    test_a_node = _function_node_named(source, "test_a")
+    test_b_node = _function_node_named(source, "test_b")
+
+    test_a_bindings = code_rules_enforcer._collect_pathlib_path_local_binding_names(
+        test_a_node, alias_map
+    )
+    test_b_bindings = code_rules_enforcer._collect_pathlib_path_local_binding_names(
+        test_b_node, alias_map
+    )
+
+    assert "p" in test_a_bindings
+    assert "p" not in test_b_bindings
+
+
+def test_collect_os_environ_bindings_only_sees_the_scope_node_function() -> None:
+    """The environ-binding collector must scope its walk to the function node
+    it is given. An `e = os.environ` binding in test_a must not appear when the
+    collector is handed test_b's node (test_b never binds `e`)."""
+    source = (
+        "import os\n"
+        "def test_a() -> None:\n"
+        "    e = os.environ\n"
+        "    home = e['HOME']\n"
+        "    print(home)\n"
+        "def test_b(e) -> None:\n"
+        "    home = e['HOME']\n"
+        "    print(home)\n"
+    )
+    syntax_tree = ast.parse(source)
+    alias_map = code_rules_enforcer._build_alias_canonicalization_map(syntax_tree)
+    test_a_node = _function_node_named(source, "test_a")
+    test_b_node = _function_node_named(source, "test_b")
+
+    test_a_bindings = code_rules_enforcer._collect_os_environ_local_binding_names(
+        test_a_node, alias_map
+    )
+    test_b_bindings = code_rules_enforcer._collect_os_environ_local_binding_names(
+        test_b_node, alias_map
+    )
+
+    assert "e" in test_a_bindings
+    assert "e" not in test_b_bindings

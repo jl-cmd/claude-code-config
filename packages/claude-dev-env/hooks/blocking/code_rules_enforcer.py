@@ -2557,11 +2557,13 @@ def _collect_os_environ_local_binding_names(
 
 
 def _collect_pathlib_path_local_binding_names(
-    syntax_tree: ast.Module, all_canonical_names_by_alias: dict[str, str],
+    scope_node: ast.AST, all_canonical_names_by_alias: dict[str, str],
 ) -> set[str]:
     """Return local names bound to a ``pathlib.Path(...)`` construction.
 
-    Tracks ``candidate = Path('~/x')`` style assignments (resolving the
+    Scoped to the single test function passed as *scope_node* so a binding in
+    one test never attributes a same-named ``.expanduser()`` call in a sibling
+    test. Tracks ``candidate = Path('~/x')`` style assignments (resolving the
     constructor through *all_canonical_names_by_alias* so an aliased
     ``candidate = P('~/x')`` with ``from pathlib import Path as P`` and a
     fully qualified ``candidate = pathlib.Path('~/x')`` are both recognized).
@@ -2569,7 +2571,7 @@ def _collect_pathlib_path_local_binding_names(
     home-directory probe.
 
     Args:
-        syntax_tree: The parsed module to scan.
+        scope_node: The single test function node to scan for bindings.
         all_canonical_names_by_alias: Import-alias map from
             ``_build_alias_canonicalization_map``.
 
@@ -2577,7 +2579,7 @@ def _collect_pathlib_path_local_binding_names(
         Set of local variable names bound to a ``pathlib.Path`` construction.
     """
     path_bindings: set[str] = set()
-    for each_node in ast.walk(syntax_tree):
+    for each_node in ast.walk(scope_node):
         if not isinstance(each_node, ast.Assign):
             continue
         if not _call_constructs_pathlib_path(each_node.value, all_canonical_names_by_alias):

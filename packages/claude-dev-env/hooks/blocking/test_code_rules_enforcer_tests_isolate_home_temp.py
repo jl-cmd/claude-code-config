@@ -47,6 +47,65 @@ def test_should_flag_path_home_in_test_without_fixture() -> None:
     assert any("Path.home" in each_issue for each_issue in issues)
 
 
+def test_changed_lines_scope_skips_untouched_probe() -> None:
+    """loop5-3: with changed_lines naming only an unrelated test, an untouched
+    HOME probe in another test must not be reported."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_home() -> None:\n"
+        "    home_dir = Path.home()\n"
+        "    assert home_dir\n"
+        "def test_addition() -> None:\n"
+        "    assert 2 + 2 == 4\n"
+    )
+    addition_assert_line = 6
+    issues = check_tests_use_isolated_filesystem_paths(
+        source, TEST_FILE_PATH, all_changed_lines={addition_assert_line}
+    )
+    assert issues == [], f"untouched probe must not be in scope, got: {issues!r}"
+
+
+def test_changed_lines_scope_keeps_touched_probe() -> None:
+    """loop5-3: when a changed line is the probe's source line, the violation
+    must remain reported."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_home() -> None:\n"
+        "    home_dir = Path.home()\n"
+        "    assert home_dir\n"
+    )
+    probe_line = 3
+    issues = check_tests_use_isolated_filesystem_paths(
+        source, TEST_FILE_PATH, all_changed_lines={probe_line}
+    )
+    assert any("Path.home" in each_issue for each_issue in issues)
+
+
+def test_cap_does_not_drop_in_scope_probe_past_document_order_window() -> None:
+    """loop5-2: an in-scope probe appearing after the cap window of out-of-scope
+    probes must still be reported."""
+    leading_probe_count = hook_module.MAX_TEST_ISOLATION_ISSUES
+    leading_tests = "".join(
+        f"def test_leading_{each_index}() -> None:\n"
+        f"    leading_home = Path.home()\n"
+        f"    assert leading_home\n"
+        for each_index in range(leading_probe_count)
+    )
+    header = "from pathlib import Path\n"
+    target_test = (
+        "def test_target() -> None:\n"
+        "    target_home = Path.home()\n"
+        "    assert target_home\n"
+    )
+    source = header + leading_tests + target_test
+    target_probe_line = len(source.splitlines()) - 1
+    issues = check_tests_use_isolated_filesystem_paths(
+        source, TEST_FILE_PATH, all_changed_lines={target_probe_line}
+    )
+    assert any("test_target" in each_issue for each_issue in issues)
+    assert len(issues) <= hook_module.MAX_TEST_ISOLATION_ISSUES
+
+
 def test_should_flag_path_home_when_only_tmp_path_fixture_present() -> None:
     source = (
         "from pathlib import Path\n"

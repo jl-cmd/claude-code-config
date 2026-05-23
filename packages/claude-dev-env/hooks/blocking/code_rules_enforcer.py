@@ -23,6 +23,7 @@ the suffix variants, so edits to this file include the bypass sentinel
 ``# pragma: no-tdd-gate`` until the TDD hook learns the suffix convention.
 """
 import ast
+import difflib
 import io
 import json
 import re
@@ -122,6 +123,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     HOME_DIRECTORY_TILDE_PREFIX,
     ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
     PYTEST_TEST_CLASS_NAME_PREFIX,
+    ALL_DIFF_CHANGED_OPCODE_TAGS,
     FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
     FUNCTION_LENGTH_BLOCKING_THRESHOLD,
     MAX_FUNCTION_LENGTH_BLOCKING_ISSUES,
@@ -3132,7 +3134,11 @@ def _function_uses_pytest_isolation_fixture(
     return False
 
 
-def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> list[str]:
+def check_tests_use_isolated_filesystem_paths(
+    content: str,
+    file_path: str,
+    all_changed_lines: set[int] | None = None,
+) -> list[str]:
     """Flag test functions that probe HOME or TMP without pytest isolation.
 
     Pattern class: tests that call ``Path.home()``, ``os.path.expanduser('~')``,
@@ -3182,6 +3188,11 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
         content: The Python source to analyze.
         file_path: The path of the file being checked. The check only fires
             on test files.
+        all_changed_lines: Post-edit line numbers the current edit touched, or
+            None to treat the whole file as in scope. When provided, a probe
+            blocks only when its source line is among the changed lines, and the
+            ``MAX_TEST_ISOLATION_ISSUES`` cap is applied after that scoping so an
+            in-scope probe is never dropped in favor of earlier untouched ones.
 
     Returns:
         A list of issue strings naming each offending probe call. Capped at
@@ -3196,7 +3207,7 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
         return []
 
     all_module_canonical_names_by_alias = _build_alias_canonicalization_map(syntax_tree)
-    issues: list[str] = []
+    all_violations_in_source_line_order: list[tuple[range, str]] = []
     for each_node in _collect_pytest_collectable_test_functions(syntax_tree):
         if _function_uses_pytest_isolation_fixture(each_node):
             continue
@@ -3209,12 +3220,18 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
         for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(
             each_node, all_canonical_names_by_alias, all_environ_local_bindings, all_path_local_bindings
         ):
-            issues.append(
-                f"Line {each_line}: Test {each_node.name!r} probes {each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"
+            message = (
+                f"Line {each_line}: Test {each_node.name!r} probes "
+                f"{each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"
             )
-            if len(issues) >= MAX_TEST_ISOLATION_ISSUES:
-                return issues
-    return issues
+            all_violations_in_source_line_order.append(
+                (range(each_line, each_line + 1), message)
+            )
+    return _scope_and_cap_violations(
+        all_violations_in_source_line_order,
+        all_changed_lines,
+        MAX_TEST_ISOLATION_ISSUES,
+    )
 
 
 def _collect_assert_nodes_bounded(node: ast.AST) -> list[ast.Assert]:
@@ -5042,7 +5059,77 @@ def _function_definition_line_span(
     return end_lineno - function_node.lineno + 1
 
 
-def check_function_length(content: str, file_path: str) -> list[str]:
+def changed_line_numbers(prior_content: str, post_edit_content: str) -> set[int]:
+    """Return the post-edit line numbers an edit added or replaced.
+
+    Runs a line-level diff of *prior_content* against *post_edit_content* and
+    collects the 1-indexed line numbers in *post_edit_content* that fall inside
+    a ``replace`` or ``insert`` opcode. This mirrors the "added lines" notion
+    that ``code_rules_gate.parse_added_line_numbers`` derives from
+    ``git diff --unified=0``, so the PreToolUse layer and the gate agree on
+    which lines the change touched.
+
+    Args:
+        prior_content: The file content before the edit.
+        post_edit_content: The reconstructed file content after the edit.
+
+    Returns:
+        The set of 1-indexed line numbers in *post_edit_content* that the edit
+        added or replaced.
+    """
+    matcher = difflib.SequenceMatcher(
+        a=prior_content.splitlines(),
+        b=post_edit_content.splitlines(),
+        autojunk=False,
+    )
+    all_changed_lines: set[int] = set()
+    for each_tag, _, _, each_post_start, each_post_end in matcher.get_opcodes():
+        if each_tag in ALL_DIFF_CHANGED_OPCODE_TAGS:
+            for each_post_index in range(each_post_start, each_post_end):
+                all_changed_lines.add(each_post_index + 1)
+    return all_changed_lines
+
+
+def _scope_and_cap_violations(
+    all_violations_in_document_order: list[tuple[range, str]],
+    all_changed_lines: set[int] | None,
+    issue_cap: int,
+) -> list[str]:
+    """Partition span-tagged violations by diff scope, then apply the cap.
+
+    Args:
+        all_violations_in_document_order: ``(span_range, issue_message)`` pairs
+            in AST document order, where ``span_range`` covers the violation's
+            source lines.
+        all_changed_lines: Post-edit line numbers the current edit touched, or
+            None to treat every violation as in-scope.
+        issue_cap: The maximum number of issue messages to return.
+
+    Returns:
+        Up to *issue_cap* issue messages. When *all_changed_lines* is provided,
+        the cap may only trim violations whose span does not intersect the
+        changed lines — every in-scope violation is preserved ahead of the cap
+        so an edit that grows a function past the threshold always blocks even
+        when earlier untouched functions already exceed it.
+    """
+    if all_changed_lines is None:
+        return [
+            each_message
+            for _, each_message in all_violations_in_document_order[:issue_cap]
+        ]
+    all_in_scope_messages = [
+        each_message
+        for each_span, each_message in all_violations_in_document_order
+        if any(each_line in all_changed_lines for each_line in each_span)
+    ]
+    return all_in_scope_messages[:issue_cap]
+
+
+def check_function_length(
+    content: str,
+    file_path: str,
+    all_changed_lines: set[int] | None = None,
+) -> list[str]:
     """Flag functions whose definition span exceeds cognitive-load thresholds.
 
     Function definition spans (signature line through last body statement,
@@ -5073,6 +5160,12 @@ def check_function_length(content: str, file_path: str) -> list[str]:
     Args:
         content: The Python source to analyze.
         file_path: The path of the file being checked.
+        all_changed_lines: Post-edit line numbers the current edit touched, or
+            None to treat the whole file as in scope. When provided, a violation
+            blocks only when the function's declared span intersects the changed
+            lines, and the ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES`` cap is applied
+            after that scoping so an in-scope violation is never dropped in favor
+            of earlier untouched ones.
 
     Returns:
         Blocking issues only. Capped at
@@ -5090,18 +5183,23 @@ def check_function_length(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
 
-    issues: list[str] = []
+    all_violations_in_document_order: list[tuple[range, str]] = []
     for each_node in ast.walk(parsed_tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         line_span = _function_definition_line_span(each_node)
         if line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:
-            issues.append(
-                f"Function {each_node.name!r} (defined at line {each_node.lineno}) is {line_span} lines - {FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX}"
+            span_range = range(each_node.lineno, each_node.lineno + line_span)
+            message = (
+                f"Function {each_node.name!r} (defined at line {each_node.lineno}) "
+                f"is {line_span} lines - {FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX}"
             )
-            if len(issues) >= MAX_FUNCTION_LENGTH_BLOCKING_ISSUES:
-                break
-    return issues
+            all_violations_in_document_order.append((span_range, message))
+    return _scope_and_cap_violations(
+        all_violations_in_document_order,
+        all_changed_lines,
+        MAX_FUNCTION_LENGTH_BLOCKING_ISSUES,
+    )
 
 
 def validate_content(
@@ -5109,6 +5207,7 @@ def validate_content(
     file_path: str,
     old_content: str = "",
     full_file_content: str | None = None,
+    prior_full_file_content: str = "",
 ) -> list[str]:
     """Run all applicable validators on content.
 
@@ -5123,10 +5222,23 @@ def validate_content(
             by ``new_string``). Whole-file checks such as the unused-import
             scanner use this to evaluate references across the file rather than
             just within the inserted fragment.
+        prior_full_file_content: For Edit operations, the entire file content as
+            it existed before the edit applied. Whole-file span checks
+            (function length, test isolation) diff this against
+            ``full_file_content`` to recover the lines the edit touched, then
+            block only on violations whose source span intersects those lines —
+            mirroring the gate's span-intersection scoping. Defaults to the
+            empty string for Write and for gate invocations, which leaves those
+            checks scanning the whole file with no diff scoping.
     """
     extension = get_file_extension(file_path)
     all_issues = []
     effective_content = content if full_file_content is None else full_file_content
+    all_changed_lines = (
+        changed_line_numbers(prior_full_file_content, full_file_content)
+        if full_file_content is not None
+        else None
+    )
 
     if extension in ALL_PYTHON_EXTENSIONS:
         if not is_test_file(file_path):
@@ -5152,7 +5264,9 @@ def validate_content(
         all_issues.extend(check_docstring_format(effective_content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
-        all_issues.extend(check_tests_use_isolated_filesystem_paths(effective_content, file_path))
+        all_issues.extend(
+            check_tests_use_isolated_filesystem_paths(effective_content, file_path, all_changed_lines)
+        )
         all_issues.extend(check_existence_check_tests(content, file_path))
         all_issues.extend(check_constant_equality_tests(content, file_path))
         all_issues.extend(check_unused_optional_parameters(content, file_path))
@@ -5166,7 +5280,7 @@ def validate_content(
         all_issues.extend(check_library_print(content, file_path))
         all_issues.extend(check_parameter_annotations(content, file_path))
         all_issues.extend(check_return_annotations(content, file_path))
-        all_issues.extend(check_function_length(effective_content, file_path))
+        all_issues.extend(check_function_length(effective_content, file_path, all_changed_lines))
         all_issues.extend(check_loop_variable_naming(content, file_path))
         all_issues.extend(check_inline_literal_collections(content, file_path))
         all_issues.extend(check_inline_tuple_string_magic(content, file_path))
@@ -5185,6 +5299,15 @@ def validate_content(
     return all_issues
 
 
+def _read_existing_file_content(file_path: str) -> str | None:
+    """Return the on-disk content of *file_path*, or None when it cannot be read."""
+    try:
+        with open(file_path, "r", encoding="utf-8") as existing_file:
+            return existing_file.read()
+    except (FileNotFoundError, OSError, UnicodeDecodeError):
+        return None
+
+
 def _reconstruct_post_edit_file_content(
     file_path: str, old_string: str, new_string: str,
 ) -> str | None:
@@ -5199,10 +5322,8 @@ def _reconstruct_post_edit_file_content(
     """
     if not old_string:
         return None
-    try:
-        with open(file_path, "r", encoding="utf-8") as existing_file:
-            existing_content = existing_file.read()
-    except (FileNotFoundError, OSError, UnicodeDecodeError):
+    existing_content = _read_existing_file_content(file_path)
+    if existing_content is None:
         return None
     if old_string not in existing_content:
         return None
@@ -5230,20 +5351,18 @@ def main() -> None:
         sys.exit(0)
 
     old_content = ""
+    prior_full_file_content = ""
     full_file_content_after_edit: str | None = None
     if tool_name == "Edit":
         content = tool_input.get("new_string", "")
         old_content = tool_input.get("old_string", "")
+        prior_full_file_content = _read_existing_file_content(file_path) or ""
         full_file_content_after_edit = _reconstruct_post_edit_file_content(
             file_path, old_content, content,
         )
     else:
         content = tool_input.get("content", "") or tool_input.get("new_string", "")
-        try:
-            with open(file_path, "r", encoding="utf-8") as existing_file:
-                old_content = existing_file.read()
-        except (FileNotFoundError, OSError, UnicodeDecodeError):
-            old_content = ""
+        old_content = _read_existing_file_content(file_path) or ""
 
         if old_content:
             sys.exit(0)
@@ -5251,7 +5370,13 @@ def main() -> None:
     if not content:
         sys.exit(0)
 
-    issues = validate_content(content, file_path, old_content, full_file_content_after_edit)
+    issues = validate_content(
+        content,
+        file_path,
+        old_content,
+        full_file_content_after_edit,
+        prior_full_file_content,
+    )
 
     if issues:
         issue_list = "; ".join(issues[:10])

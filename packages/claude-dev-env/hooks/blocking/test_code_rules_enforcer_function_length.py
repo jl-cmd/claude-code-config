@@ -130,3 +130,47 @@ def test_should_block_nested_function_over_blocking_threshold() -> None:
 def test_blocking_message_does_not_cite_file_length_section() -> None:
     assert "6.5" not in hook_module.FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX
     assert "Clean Code" in hook_module.FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX
+
+
+def _oversized_source(name: str) -> str:
+    return _build_function_source(
+        name, body_line_count=hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    )
+
+
+def test_changed_lines_scope_skips_untouched_long_function() -> None:
+    """loop5-1: with changed_lines naming only the short helper, an untouched
+    oversized function above it must not appear in the issues."""
+    untouched_long = _oversized_source("untouched_long")
+    short_helper = "def short_helper() -> int:\n    return 2\n"
+    full_source = untouched_long + "\n" + short_helper
+    short_helper_line = len(full_source.splitlines())
+    issues = check_function_length(
+        full_source, PRODUCTION_FILE_PATH, all_changed_lines={short_helper_line}
+    )
+    assert issues == [], f"untouched long function must not be in scope, got: {issues!r}"
+
+
+def test_changed_lines_scope_keeps_touched_long_function() -> None:
+    """loop5-1: when a changed line falls inside the oversized function's span,
+    the violation must remain in the issues."""
+    long_function = _oversized_source("grows_now")
+    issues = check_function_length(
+        long_function, PRODUCTION_FILE_PATH, all_changed_lines={2}
+    )
+    assert any("grows_now" in each_issue for each_issue in issues)
+
+
+def test_cap_does_not_drop_in_scope_violation_past_document_order_window() -> None:
+    """loop5-2: an in-scope violation appearing after the cap window of
+    out-of-scope violations must still be reported."""
+    leading_count = hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
+    leading = "\n".join(_oversized_source(f"leading_{each_index}") for each_index in range(leading_count))
+    target = _oversized_source("target_function")
+    full_source = leading + "\n" + target
+    target_definition_line = len(leading.splitlines()) + 2
+    issues = check_function_length(
+        full_source, PRODUCTION_FILE_PATH, all_changed_lines={target_definition_line}
+    )
+    assert any("target_function" in each_issue for each_issue in issues)
+    assert len(issues) <= hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES

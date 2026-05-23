@@ -1665,3 +1665,133 @@ def test_collect_os_environ_bindings_only_sees_the_scope_node_function() -> None
 
     assert "e" in test_a_bindings
     assert "e" not in test_b_bindings
+
+
+def _oversized_function_source(name: str) -> str:
+    body_line_count = code_rules_enforcer.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    body_lines = [
+        f"    bound_{each_index} = {each_index}" for each_index in range(body_line_count)
+    ]
+    return f"def {name}() -> None:\n" + "\n".join(body_lines) + "\n"
+
+
+def test_function_length_edit_does_not_block_untouched_long_function() -> None:
+    """loop5-1: editing a short region of a file that already contains an
+    untouched oversized function must not produce a blocking function-length
+    violation at the PreToolUse layer."""
+    untouched_long_function = _oversized_function_source("untouched_long")
+    short_helper_before = "def short_helper() -> int:\n    return 1\n"
+    short_helper_after = "def short_helper() -> int:\n    return 2\n"
+    prior_full_file = untouched_long_function + "\n" + short_helper_before
+    post_edit_full_file = untouched_long_function + "\n" + short_helper_after
+    issues = code_rules_enforcer.validate_content(
+        short_helper_after,
+        "/project/src/edited_module.py",
+        old_content=short_helper_before,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert not any(
+        "untouched_long" in each_issue for each_issue in issues
+    ), f"untouched long function must not block on an unrelated edit, got: {issues!r}"
+
+
+def test_function_length_edit_blocks_function_grown_on_changed_lines() -> None:
+    """loop5-1: when the edit itself grows a function past the threshold, the
+    function-length violation must still block at the PreToolUse layer."""
+    short_function_before = "def grows_now() -> int:\n    return 1\n"
+    grown_function_after = _oversized_function_source("grows_now")
+    prior_full_file = short_function_before
+    post_edit_full_file = grown_function_after
+    issues = code_rules_enforcer.validate_content(
+        grown_function_after,
+        "/project/src/edited_module.py",
+        old_content=short_function_before,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any(
+        "grows_now" in each_issue for each_issue in issues
+    ), f"function grown past threshold on changed lines must block, got: {issues!r}"
+
+
+def test_isolation_edit_does_not_block_untouched_probe() -> None:
+    """loop5-3: editing a short region of a test file that already contains an
+    untouched HOME probe must not block at the PreToolUse layer."""
+    untouched_probe_function = (
+        "def test_reads_home() -> None:\n"
+        "    target_path = Path.home()\n"
+        "    assert target_path\n"
+    )
+    short_test_before = "def test_addition() -> None:\n    assert 1 + 1 == 2\n"
+    short_test_after = "def test_addition() -> None:\n    assert 2 + 2 == 4\n"
+    header = "from pathlib import Path\n"
+    prior_full_file = header + untouched_probe_function + "\n" + short_test_before
+    post_edit_full_file = header + untouched_probe_function + "\n" + short_test_after
+    issues = code_rules_enforcer.validate_content(
+        short_test_after,
+        "/project/src/test_edited_module.py",
+        old_content=short_test_before,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert not any(
+        "test_reads_home" in each_issue for each_issue in issues
+    ), f"untouched isolation probe must not block on an unrelated edit, got: {issues!r}"
+
+
+def test_isolation_edit_blocks_probe_added_on_changed_lines() -> None:
+    """loop5-3: when the edit introduces a HOME probe, the isolation violation
+    must still block at the PreToolUse layer."""
+    test_before = "def test_writes() -> None:\n    assert True\n"
+    test_after = (
+        "def test_writes() -> None:\n"
+        "    target_path = Path.home()\n"
+        "    assert target_path\n"
+    )
+    header = "from pathlib import Path\n"
+    prior_full_file = header + test_before
+    post_edit_full_file = header + test_after
+    issues = code_rules_enforcer.validate_content(
+        test_after,
+        "/project/src/test_edited_module.py",
+        old_content=test_before,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any(
+        "test_writes" in each_issue and "Path.home" in each_issue
+        for each_issue in issues
+    ), f"isolation probe added on changed lines must block, got: {issues!r}"
+
+
+def test_function_length_cap_keeps_in_scope_violation_beyond_document_order() -> None:
+    """loop5-2: the cap must not drop an in-scope (changed-line) function-length
+    violation just because it appears after ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES``
+    other oversized functions in document order."""
+    leading_function_count = code_rules_enforcer.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
+    leading_functions = "\n".join(
+        _oversized_function_source(f"leading_long_{each_index}")
+        for each_index in range(leading_function_count)
+    )
+    short_target_before = "def target_function() -> int:\n    return 1\n"
+    grown_target_after = _oversized_function_source("target_function")
+    prior_full_file = leading_functions + "\n" + short_target_before
+    post_edit_full_file = leading_functions + "\n" + grown_target_after
+    issues = code_rules_enforcer.validate_content(
+        grown_target_after,
+        "/project/src/many_functions.py",
+        old_content=short_target_before,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any(
+        "target_function" in each_issue for each_issue in issues
+    ), f"in-scope violation past the cap window must still block, got: {issues!r}"
+    function_length_issues = [
+        each_issue for each_issue in issues if "defined at line" in each_issue
+    ]
+    assert (
+        len(function_length_issues)
+        <= code_rules_enforcer.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
+    ), f"function-length issues must respect the cap, got: {function_length_issues!r}"

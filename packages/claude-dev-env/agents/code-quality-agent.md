@@ -113,7 +113,7 @@ A bare verified-clean label is inadequate: every Shape B entry lists the files o
 
 ## Per-Category Expectation
 
-Every category A through K is investigated. The output for each category is one of:
+Every category A through N is investigated. The output for each category is one of:
 - one or more Shape A findings, or
 - one Shape B proof-of-absence entry with concrete files, quoted lines, and adversarial probes.
 

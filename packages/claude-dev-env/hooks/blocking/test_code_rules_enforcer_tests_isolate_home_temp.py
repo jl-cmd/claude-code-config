@@ -280,3 +280,32 @@ def test_should_cap_issue_count_at_configured_maximum() -> None:
     source = f"from pathlib import Path\ndef test_many_probes() -> None:\n{repeated_probes}\n"
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert len(issues) == hook_module.MAX_TEST_ISOLATION_ISSUES
+
+
+def test_should_ignore_test_method_inside_non_test_prefixed_helper_class() -> None:
+    # Helper classes (non-Test* prefix) are not collected by pytest under the
+    # repo's `python_classes = Test*` setting, so methods on them must not
+    # produce HOME/TMP isolation findings.
+    source = (
+        "from pathlib import Path\n"
+        "class HelperFactory:\n"
+        "    def test_makes_home_probe(self) -> Path:\n"
+        "        return Path.home()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_test_method_inside_test_prefixed_class() -> None:
+    # Test*-prefixed classes ARE collected by pytest under the repo's
+    # `python_classes = Test*` setting, so methods on them must still produce
+    # HOME/TMP isolation findings.
+    source = (
+        "from pathlib import Path\n"
+        "class TestHomeProbing:\n"
+        "    def test_makes_home_probe(self) -> None:\n"
+        "        home_dir = Path.home()\n"
+        "        (home_dir / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("Path.home" in each_issue for each_issue in issues)

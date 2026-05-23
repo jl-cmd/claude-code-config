@@ -2478,7 +2478,10 @@ def _collect_pytest_collectable_test_functions(
 
     Walks module-level statements and the top-level methods of module-level
     classes only. Functions nested inside other functions or lambdas are
-    excluded because pytest does not collect nested callables.
+    excluded because pytest does not collect nested callables. Module-level
+    classes whose name does not start with ``Test`` are skipped because the
+    repo's ``pytest.ini`` declares ``python_classes = Test*``; methods on
+    non-``Test*`` helper classes are never collected by pytest.
     """
     collectable: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
     for each_module_statement in syntax_tree.body:
@@ -2489,6 +2492,8 @@ def _collect_pytest_collectable_test_functions(
             ):
                 collectable.append(each_module_statement)
         elif isinstance(each_module_statement, ast.ClassDef):
+            if not each_module_statement.name.startswith("Test"):
+                continue
             for each_class_member in each_module_statement.body:
                 if isinstance(each_class_member, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
                     each_class_member.name.startswith("test_")

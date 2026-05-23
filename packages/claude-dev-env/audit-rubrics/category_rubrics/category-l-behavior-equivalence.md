@@ -5,7 +5,7 @@
 **Why this category is its own bucket:** Categories A–K catch failure modes inside the rewrite itself (wrong signature, dead code, missed branch). Category L catches the failure mode that emerges between the rewrite and the *historically valid inputs* the original code accepted. The diff looks internally consistent and the new unit tests pass — but inputs the prior code accepted fall through under the new implementation, or inputs the prior code rejected slip past. The bug only surfaces against the corpus of canonical inputs the original implementation was tuned for.
 
 **Examples of Category L findings:**
-- A tokenize-based exempt-marker check rejects `#noqa` (no space after `#`) when the original `startswith("# noqa")` check accepted it. (ccc#479 F1)
+- A tokenize-based exempt-marker check accepts `#noqa` (no space after `#`) when the original `startswith("# noqa")` check rejected it. (ccc#479 F1)
 - A new comment classifier misreads a bare `#` lookalike that the original regex correctly rejected. (ccc#479 F4)
 - A refactored shebang detector drops the inline `#!` variant the original handled. (ccc#479 F5)
 - An invariant the original loop enforced at the first match (early-exit) is dropped in the rewrite. (ccc#479 F6)

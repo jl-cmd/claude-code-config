@@ -49,7 +49,6 @@ from hooks_constants.banned_identifiers_constants import (  # noqa: E402
     BANNED_NOUN_WORD_MESSAGE_SUFFIX,
     CAMEL_CASE_WORD_PATTERN,
     MAX_BANNED_IDENTIFIER_ISSUES,
-    MAX_BANNED_NOUN_WORD_ISSUES,
 )
 from hooks_constants.hardcoded_user_path_constants import (  # noqa: E402
     HARDCODED_USER_PATH_GUIDANCE,
@@ -126,7 +125,6 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_DIFF_CHANGED_OPCODE_TAGS,
     FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
     FUNCTION_LENGTH_BLOCKING_THRESHOLD,
-    MAX_FUNCTION_LENGTH_BLOCKING_ISSUES,
     BARE_EACH_TOKEN,
     ALL_BOOLEAN_NAME_PREFIXES,
     ALL_BUILTIN_DICT_METHOD_NAMES,
@@ -147,7 +145,6 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_HOOK_INFRASTRUCTURE_PATTERNS,
     ALL_IMPORT_STATEMENT_PREFIXES,
     MAX_COMMENT_ISSUES,
-    MAX_TEST_ISOLATION_ISSUES,
     TEST_ISOLATION_MESSAGE_SUFFIX,
     INLINE_COLLECTION_MIN_LENGTH,
     ALL_JAVASCRIPT_EXTENSIONS,
@@ -1466,7 +1463,7 @@ def _collect_banned_noun_word_bindings(
 def check_banned_noun_word_boundary(
     content: str,
     file_path: str,
-    defer_scope_and_cap_to_caller: bool = False,
+    defer_scope_to_caller: bool = False,
 ) -> list[str]:
     """Flag identifiers containing CODE_RULES §5 banned noun words.
 
@@ -1487,26 +1484,24 @@ def check_banned_noun_word_boundary(
     in it is in scope; at the commit/push gate *content* is the whole file and
     every violation message carries a ``Line N:`` prefix, so the gate's
     ``split_violations_by_scope`` can classify it blocking or advisory by added
-    line. Passing ``defer_scope_and_cap_to_caller`` True on that path returns
-    every violation uncapped so the cap never drops an in-scope binding before
-    the gate scopes — the same deferral ``check_function_length`` and
-    ``check_tests_use_isolated_filesystem_paths`` use.
+    line. Passing ``defer_scope_to_caller`` True on that path returns every
+    violation so the gate scopes by added line — the same deferral
+    ``check_function_length`` and ``check_tests_use_isolated_filesystem_paths``
+    use.
 
     Args:
         content: The Python source to analyze (the edited fragment at
             PreToolUse, the whole file at the gate).
         file_path: The path of the file being checked (used for exemption
             routing).
-        defer_scope_and_cap_to_caller: When True, return every violation
-            uncapped so the commit/push gate's ``split_violations_by_scope`` can
-            scope by added line and report the in-scope set. Capping here would
-            drop an in-scope binding that lands past the cap window in walk order
-            before the gate ever scopes it.
+        defer_scope_to_caller: When True, return every violation so the
+            commit/push gate's ``split_violations_by_scope`` can scope by added
+            line and report the in-scope set.
 
     Returns:
-        Issue strings, each describing one offending binding, capped at
-        ``MAX_BANNED_NOUN_WORD_ISSUES`` when this enforcer is terminal; every
-        violation uncapped when *defer_scope_and_cap_to_caller* is True.
+        Issue strings, each describing one offending binding. When
+        *defer_scope_to_caller* is True every binding is returned for the gate
+        to scope; otherwise every binding in scope is returned.
     """
     if is_test_file(file_path) or is_hook_infrastructure(file_path):
         return []
@@ -1529,11 +1524,10 @@ def check_banned_noun_word_boundary(
             f"Line {each_lineno}: Identifier {each_name!r} {BANNED_NOUN_WORD_MESSAGE_SUFFIX} (word: {each_word!r})"
         )
         all_violations_in_walk_order.append((span_range, message))
-    return _scope_and_cap_violations(
+    return _scope_violations_to_changed_lines(
         all_violations_in_walk_order,
         None,
-        MAX_BANNED_NOUN_WORD_ISSUES,
-        defer_scope_and_cap_to_caller,
+        defer_scope_to_caller,
     )
 
 
@@ -3260,7 +3254,7 @@ def check_tests_use_isolated_filesystem_paths(
     content: str,
     file_path: str,
     all_changed_lines: set[int] | None = None,
-    defer_scope_and_cap_to_caller: bool = False,
+    defer_scope_to_caller: bool = False,
 ) -> list[str]:
     """Flag test functions that probe HOME or TMP without pytest isolation.
 
@@ -3301,7 +3295,7 @@ def check_tests_use_isolated_filesystem_paths(
         Gating is symmetric across the two ``expanduser`` forms (flag only on a
         leading-``~`` literal) and across the env getters / subscript (flag only
         on a home/temp env-var name). Probes are reported in source-line order
-        for every probe type before the ``MAX_TEST_ISOLATION_ISSUES`` cap.
+        for every probe type.
 
     Out of scope by design (dynamically constructed call targets that no
     AST-level pattern can resolve statically): attribute access through
@@ -3316,19 +3310,15 @@ def check_tests_use_isolated_filesystem_paths(
             on test files.
         all_changed_lines: Post-edit line numbers the current edit touched, or
             None to treat the whole file as in scope. When provided, a probe
-            blocks only when its source line is among the changed lines, and the
-            ``MAX_TEST_ISOLATION_ISSUES`` cap is applied after that scoping so an
-            in-scope probe is never dropped in favor of earlier untouched ones.
-        defer_scope_and_cap_to_caller: When True, return every probe uncapped so
-            the commit/push gate's ``split_violations_by_scope`` can scope by
-            added line and report the in-scope set. Capping here would drop an
-            in-scope probe that lands past the cap window in source-line order
-            before the gate ever scopes it.
+            blocks only when its source line is among the changed lines.
+        defer_scope_to_caller: When True, return every probe so the commit/push
+            gate's ``split_violations_by_scope`` can scope by added line and
+            report the in-scope set.
 
     Returns:
-        A list of issue strings naming each offending probe call. Capped at
-        ``MAX_TEST_ISOLATION_ISSUES`` when this enforcer is terminal; uncapped
-        when *defer_scope_and_cap_to_caller* is True.
+        A list of issue strings naming each offending probe call. When
+        *defer_scope_to_caller* is True every probe is returned for the gate to
+        scope; otherwise every probe in scope is returned.
     """
     if not is_test_file(file_path):
         return []
@@ -3359,11 +3349,10 @@ def check_tests_use_isolated_filesystem_paths(
             all_violations_in_source_line_order.append(
                 (range(each_line, each_line + 1), message)
             )
-    return _scope_and_cap_violations(
+    return _scope_violations_to_changed_lines(
         all_violations_in_source_line_order,
         all_changed_lines,
-        MAX_TEST_ISOLATION_ISSUES,
-        defer_scope_and_cap_to_caller,
+        defer_scope_to_caller,
     )
 
 
@@ -5223,28 +5212,26 @@ def changed_line_numbers(prior_content: str, post_edit_content: str) -> set[int]
     return all_changed_lines
 
 
-def _scope_and_cap_violations(
+def _scope_violations_to_changed_lines(
     all_violations_in_walk_order: list[tuple[range, str]],
     all_changed_lines: set[int] | None,
-    issue_cap: int,
-    defer_scope_and_cap_to_caller: bool = False,
+    defer_scope_to_caller: bool = False,
 ) -> list[str]:
-    """Scope span-tagged violations by diff intersection, then apply the cap.
+    """Scope span-tagged violations by diff intersection.
 
-    The cap never drops an in-scope (blocking) violation; it may only trim the
-    out-of-scope set. Out-of-scope violations are surfaced only as capped
-    advisory noise, never as blocking output:
+    In-scope violations are always reported; the untouched out-of-scope set is
+    surfaced or dropped according to which caller path is active:
 
-    - ``defer_scope_and_cap_to_caller`` True (the commit/push gate): every
-      violation is returned uncapped so the gate's ``split_violations_by_scope``
-      can classify blocking vs advisory by added line. The gate caps the
-      advisory partition to *issue_cap* per check.
+    - ``defer_scope_to_caller`` True (the commit/push gate): every violation is
+      returned in walk order so the gate's ``split_violations_by_scope`` can
+      classify blocking vs advisory by added line. The gate does this scoping,
+      so no scoping happens here.
     - ``all_changed_lines`` None (a terminal new-file or full-file write): every
-      line was just authored, so every violation is in scope and none is
-      trimmed.
-    - ``all_changed_lines`` provided (a terminal diff-scoped Edit): every
-      in-scope violation is reported and the untouched out-of-scope set is
-      dropped, because untouched code must not block a single-file edit.
+      line was just authored, so every violation is in scope and returned.
+    - ``all_changed_lines`` provided (a terminal diff-scoped Edit): only the
+      in-scope violations whose span intersects the changed lines are returned;
+      the untouched out-of-scope set is dropped, because untouched code must not
+      block a single-file edit.
 
     Args:
         all_violations_in_walk_order: ``(span_range, issue_message)`` pairs in
@@ -5252,23 +5239,19 @@ def _scope_and_cap_violations(
             violation's source lines.
         all_changed_lines: Post-edit line numbers the current edit touched, or
             None to treat every violation as in-scope.
-        issue_cap: The maximum number of out-of-scope advisory issue messages a
-            downstream scoper surfaces for this check on the deferred path.
-        defer_scope_and_cap_to_caller: When True, return every violation message
-            uncapped and unscoped in walk order so the gate can scope-then-cap.
-            When False, this enforcer is terminal and scopes directly: an
-            in-scope violation is never dropped before that scoping runs.
+        defer_scope_to_caller: When True, return every violation message in walk
+            order so the gate scopes by added line. When False, this enforcer is
+            terminal and scopes directly.
 
     Returns:
-        Every violation message when *defer_scope_and_cap_to_caller* is True or
+        Every violation message when *defer_scope_to_caller* is True or
         *all_changed_lines* is None; otherwise only the in-scope messages whose
         span intersects the changed lines — so an edit that grows a function
         past the threshold always blocks even when many earlier untouched
-        functions already exceed it, and the out-of-scope advisory set is held
-        to *issue_cap* by the deferred gate.
+        functions already exceed it.
     """
-    if defer_scope_and_cap_to_caller:
-        return _cap_out_of_scope_advisory(all_violations_in_walk_order, issue_cap)
+    if defer_scope_to_caller:
+        return [each_message for _, each_message in all_violations_in_walk_order]
     if all_changed_lines is None:
         return [each_message for _, each_message in all_violations_in_walk_order]
     return [
@@ -5278,33 +5261,11 @@ def _scope_and_cap_violations(
     ]
 
 
-def _cap_out_of_scope_advisory(
-    all_violations_in_walk_order: list[tuple[range, str]], issue_cap: int,
-) -> list[str]:
-    """Return every violation message uncapped for the deferred gate path.
-
-    The deferred gate owns scoping: it classifies each message blocking or
-    advisory by added line, so every message must reach it uncapped. The
-    *issue_cap* documents the advisory ceiling the gate applies after that
-    classification; trimming here would drop an in-scope message before the gate
-    ever sees it.
-
-    Args:
-        all_violations_in_walk_order: ``(span_range, issue_message)`` pairs.
-        issue_cap: The advisory ceiling the gate applies downstream.
-
-    Returns:
-        Every violation message in walk order.
-    """
-    del issue_cap
-    return [each_message for _, each_message in all_violations_in_walk_order]
-
-
 def check_function_length(
     content: str,
     file_path: str,
     all_changed_lines: set[int] | None = None,
-    defer_scope_and_cap_to_caller: bool = False,
+    defer_scope_to_caller: bool = False,
 ) -> list[str]:
     """Flag functions whose definition span exceeds cognitive-load thresholds.
 
@@ -5339,19 +5300,15 @@ def check_function_length(
         all_changed_lines: Post-edit line numbers the current edit touched, or
             None to treat the whole file as in scope. When provided, a violation
             blocks only when the function's declared span intersects the changed
-            lines, and the ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES`` cap is applied
-            after that scoping so an in-scope violation is never dropped in favor
-            of earlier untouched ones.
-        defer_scope_and_cap_to_caller: When True, return every violation
-            uncapped so the commit/push gate's ``split_violations_by_scope`` can
-            scope by added line and report the in-scope set. Capping here would
-            drop an in-scope violation that lands past the cap window in walk
-            order before the gate ever scopes it.
+            lines.
+        defer_scope_to_caller: When True, return every violation so the
+            commit/push gate's ``split_violations_by_scope`` can scope by added
+            line and report the in-scope set.
 
     Returns:
-        Blocking issues. Capped at ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES`` when
-        this enforcer is terminal; uncapped when
-        *defer_scope_and_cap_to_caller* is True.
+        Blocking issues. When *defer_scope_to_caller* is True every violation is
+        returned for the gate to scope; otherwise every violation in scope is
+        returned.
     """
     if is_test_file(file_path):
         return []
@@ -5377,11 +5334,10 @@ def check_function_length(
                 f"is {line_span} lines - {FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX}"
             )
             all_violations_in_walk_order.append((span_range, message))
-    return _scope_and_cap_violations(
+    return _scope_violations_to_changed_lines(
         all_violations_in_walk_order,
         all_changed_lines,
-        MAX_FUNCTION_LENGTH_BLOCKING_ISSUES,
-        defer_scope_and_cap_to_caller,
+        defer_scope_to_caller,
     )
 
 
@@ -5391,7 +5347,7 @@ def validate_content(
     old_content: str = "",
     full_file_content: str | None = None,
     prior_full_file_content: str = "",
-    defer_function_and_isolation_cap_to_caller: bool = False,
+    defer_scope_to_caller: bool = False,
 ) -> list[str]:
     """Run all applicable validators on content.
 
@@ -5414,16 +5370,14 @@ def validate_content(
             mirroring the gate's span-intersection scoping. Defaults to the
             empty string for Write and for gate invocations, which leaves those
             checks scanning the whole file with no diff scoping.
-        defer_function_and_isolation_cap_to_caller: The explicit signal that a
-            downstream scoper will run, used to disambiguate the two callers that
-            supply no changed-line set. The commit/push gate passes True: it
-            owns ``split_violations_by_scope`` and classifies blocking vs
-            advisory by added line, so the function-length and test-isolation
-            checks must return their violations uncapped — pre-capping at five in
-            walk order would drop an in-scope violation that lands past the cap
-            window before the gate scopes it. PreToolUse new-file or full-file
-            writes leave this False: this enforcer is terminal, so it marks every
-            violation in scope and caps last.
+        defer_scope_to_caller: The explicit signal that a downstream scoper will
+            run, used to disambiguate the two callers that supply no changed-line
+            set. The commit/push gate passes True: it owns
+            ``split_violations_by_scope`` and classifies blocking vs advisory by
+            added line, so the function-length, test-isolation, and banned-noun
+            checks return their violations unscoped for the gate to classify.
+            PreToolUse new-file or full-file writes leave this False: this
+            enforcer is terminal, so it marks every violation in scope.
     """
     extension = get_file_extension(file_path)
     all_issues = []
@@ -5451,7 +5405,7 @@ def validate_content(
             check_banned_noun_word_boundary(
                 content,
                 file_path,
-                defer_scope_and_cap_to_caller=defer_function_and_isolation_cap_to_caller,
+                defer_scope_to_caller=defer_scope_to_caller,
             )
         )
         all_issues.extend(check_banned_prefixes(effective_content, file_path))
@@ -5469,7 +5423,7 @@ def validate_content(
                 effective_content,
                 file_path,
                 all_changed_lines,
-                defer_function_and_isolation_cap_to_caller,
+                defer_scope_to_caller,
             )
         )
         all_issues.extend(check_existence_check_tests(content, file_path))
@@ -5490,7 +5444,7 @@ def validate_content(
                 effective_content,
                 file_path,
                 all_changed_lines,
-                defer_function_and_isolation_cap_to_caller,
+                defer_scope_to_caller,
             )
         )
         all_issues.extend(check_loop_variable_naming(content, file_path))

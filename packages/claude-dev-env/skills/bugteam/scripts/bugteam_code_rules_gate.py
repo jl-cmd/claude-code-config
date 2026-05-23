@@ -853,7 +853,7 @@ def _scoped_violations_for_file(
         content,
         relative_posix,
         old_content=content,
-        defer_function_and_isolation_cap_to_caller=True,
+        defer_scope_to_caller=True,
     )
     issues.extend(check_database_column_string_magic(content, relative_posix))
     issues.extend(check_wrapper_plumb_through(content, relative_posix))

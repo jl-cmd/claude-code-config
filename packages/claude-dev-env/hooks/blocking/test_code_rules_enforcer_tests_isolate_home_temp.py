@@ -81,10 +81,10 @@ def test_changed_lines_scope_keeps_touched_probe() -> None:
     assert any("Path.home" in each_issue for each_issue in issues)
 
 
-def test_cap_does_not_drop_in_scope_probe_past_document_order_window() -> None:
-    """loop5-2: an in-scope probe appearing after the cap window of out-of-scope
-    probes must still be reported."""
-    leading_probe_count = hook_module.MAX_TEST_ISOLATION_ISSUES
+def test_reports_only_in_scope_probe_among_untouched_ones() -> None:
+    """loop5-2: an in-scope probe appearing after several untouched out-of-scope
+    probes is still reported, while the untouched ones stay out of scope."""
+    leading_probe_count = 5
     leading_tests = "".join(
         f"def test_leading_{each_index}() -> None:\n"
         f"    leading_home = Path.home()\n"
@@ -103,7 +103,7 @@ def test_cap_does_not_drop_in_scope_probe_past_document_order_window() -> None:
         source, TEST_FILE_PATH, all_changed_lines={target_probe_line}
     )
     assert any("test_target" in each_issue for each_issue in issues)
-    assert len(issues) <= hook_module.MAX_TEST_ISOLATION_ISSUES
+    assert not any("test_leading_" in each_issue for each_issue in issues)
 
 
 def test_should_flag_path_home_when_only_tmp_path_fixture_present() -> None:

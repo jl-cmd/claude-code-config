@@ -43,7 +43,6 @@ CAMEL_CASE_WORD_PATTERN: re.Pattern[str] = re.compile(
     r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+"
 )
 MAX_BANNED_IDENTIFIER_ISSUES: int = 3
-MAX_BANNED_NOUN_WORD_ISSUES: int = 3
 BANNED_IDENTIFIER_MESSAGE_SUFFIX: str = (
     "use descriptive name (see CODE_RULES Naming section)"
 )

@@ -96,7 +96,6 @@ DOTTED_SEGMENT_PATTERN = re.compile(r"^\.[a-z][a-z0-9_]*$")
 ALL_DIFF_CHANGED_OPCODE_TAGS: tuple[str, str] = ("replace", "insert")
 
 FUNCTION_LENGTH_BLOCKING_THRESHOLD: int = 60
-MAX_FUNCTION_LENGTH_BLOCKING_ISSUES: int = 5
 FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX: str = (
     "exceeds blocking threshold - split into helpers (small functions: Robert C. "
     "Martin, Clean Code Ch. 3 'Functions'; Google Python Style Guide ~40-line "
@@ -190,7 +189,6 @@ ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT: dict[tuple[str, str], str] = {
     ("tempfile", "SpooledTemporaryFile"): "tempfile.SpooledTemporaryFile",
     ("pathlib", "Path"): "Path",
 }
-MAX_TEST_ISOLATION_ISSUES: int = 5
 TEST_ISOLATION_MESSAGE_SUFFIX: str = (
     "must take a monkeypatch fixture and route HOME/TMP env reads through "
     "monkeypatch.setenv; tmp_path / tmpdir allocate a sandbox path but do "

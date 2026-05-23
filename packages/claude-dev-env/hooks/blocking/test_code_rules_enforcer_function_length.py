@@ -104,13 +104,13 @@ def test_should_skip_when_source_does_not_parse() -> None:
 def test_edit_drops_every_out_of_scope_long_function() -> None:
     """An edit that touches none of the oversized functions reports nothing —
     every violation is out of scope (untouched code must not block a single-file
-    edit), so the cap has nothing in scope to preserve."""
+    edit)."""
     body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
     body_lines = [
         f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
     ]
     body_block = "\n".join(body_lines)
-    function_count = hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES + 3
+    function_count = 8
     chunks = [
         f"def f_{each_index}() -> None:\n{body_block}\n" for each_index in range(function_count)
     ]
@@ -126,13 +126,13 @@ def test_edit_drops_every_out_of_scope_long_function() -> None:
 
 def test_new_file_reports_every_long_function_uncapped() -> None:
     """On a new file (``all_changed_lines is None``) every line is in scope, so
-    the cap must not drop a long function — all are reported."""
+    every long function is reported with no ceiling on the count."""
     body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
     body_lines = [
         f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
     ]
     body_block = "\n".join(body_lines)
-    function_count = hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES + 3
+    function_count = 8
     chunks = [
         f"def f_{each_index}() -> None:\n{body_block}\n" for each_index in range(function_count)
     ]
@@ -186,10 +186,11 @@ def test_changed_lines_scope_keeps_touched_long_function() -> None:
     assert any("grows_now" in each_issue for each_issue in issues)
 
 
-def test_cap_does_not_drop_in_scope_violation_past_document_order_window() -> None:
-    """loop5-2: an in-scope violation appearing after the cap window of
-    out-of-scope violations must still be reported."""
-    leading_count = hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
+def test_reports_only_in_scope_violation_among_untouched_ones() -> None:
+    """loop5-2: an in-scope violation appearing after several untouched
+    out-of-scope violations is still reported, while the untouched ones stay out
+    of scope."""
+    leading_count = 5
     leading = "\n".join(_oversized_source(f"leading_{each_index}") for each_index in range(leading_count))
     target = _oversized_source("target_function")
     full_source = leading + "\n" + target
@@ -198,4 +199,4 @@ def test_cap_does_not_drop_in_scope_violation_past_document_order_window() -> No
         full_source, PRODUCTION_FILE_PATH, all_changed_lines={target_definition_line}
     )
     assert any("target_function" in each_issue for each_issue in issues)
-    assert len(issues) <= hook_module.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
+    assert not any("leading_" in each_issue for each_issue in issues)

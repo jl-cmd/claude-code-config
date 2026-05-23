@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import importlib.util
 import subprocess
 import sys
 import unittest.mock
 from pathlib import Path
-from types import ModuleType
 import pytest
 
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
@@ -13,20 +11,6 @@ if str(SCRIPT_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIRECTORY))
 
 import bugteam_code_rules_gate as gate_module
-
-
-def _load_enforcer_module() -> ModuleType:
-    package_root = gate_module.resolve_claude_dev_env_root()
-    enforcer_path = package_root / "hooks" / "blocking" / "code_rules_enforcer.py"
-    spec = importlib.util.spec_from_file_location("code_rules_enforcer", enforcer_path)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-enforcer_module = _load_enforcer_module()
 
 
 def run_git_in_repository(repository_root: Path, *arguments: str) -> str:
@@ -478,15 +462,15 @@ def _short_function_text(function_name: str) -> str:
     return f"def {function_name}() -> None:\n    keep_alive_name\n"
 
 
-def test_main_blocks_sixth_long_function_on_added_lines_past_document_order_cap(
+def test_main_blocks_sixth_long_function_on_added_lines_past_document_order(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """bugbot-2: with five pre-existing untouched long functions ahead of it in
     document order, growing the sixth function past the threshold on staged
-    lines must still block at the bugteam gate. The enforcer's per-check cap
-    must not drop the sixth (the only in-scope violation) before the gate
-    scopes by added lines."""
+    lines must still block at the bugteam gate. The gate scopes by added lines,
+    so the in-scope sixth violation blocks regardless of how many untouched
+    ones precede it."""
     leading_long_functions = "".join(
         _oversized_function_text(f"leading_long_{each_index}")
         for each_index in range(5)
@@ -520,14 +504,15 @@ def _clean_test_text(test_name: str) -> str:
     return f"def {test_name}() -> None:\n    assert 1 + 1 == 2\n"
 
 
-def test_main_blocks_sixth_isolation_probe_on_added_lines_past_document_order_cap(
+def test_main_blocks_sixth_isolation_probe_on_added_lines_past_document_order(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """bugbot-2 mirror: with five pre-existing untouched HOME probes ahead of it
     in document order, adding a HOME probe to the sixth test on staged lines
-    must still block at the bugteam gate. The isolation-check cap must not drop
-    the sixth (the only in-scope probe) before the gate scopes by added lines."""
+    must still block at the bugteam gate. The gate scopes by added lines, so the
+    in-scope sixth probe blocks regardless of how many untouched ones precede
+    it."""
     header = "from pathlib import Path\n"
     leading_probe_tests = "".join(
         _home_probe_test_text(f"test_leading_probe_{each_index}")
@@ -557,15 +542,16 @@ def _banned_noun_function_text(index: int) -> str:
     )
 
 
-def test_main_blocks_banned_noun_on_added_lines_past_document_order_cap(
+def test_main_blocks_banned_noun_on_added_lines_past_document_order(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """loop7-P1: with three pre-existing untouched banned-noun identifiers ahead
     of it in document order, introducing a fourth banned-noun on a staged line
-    must still block at the bugteam gate. The banned-noun check's cap must not
-    drop the in-scope identifier before the gate scopes by added lines."""
-    leading_count = enforcer_module.MAX_BANNED_NOUN_WORD_ISSUES
+    must still block at the bugteam gate. The gate scopes by added lines, so the
+    in-scope identifier blocks regardless of how many untouched ones precede
+    it."""
+    leading_count = 3
     leading_functions = "".join(
         _banned_noun_function_text(each_index) for each_index in range(leading_count)
     )

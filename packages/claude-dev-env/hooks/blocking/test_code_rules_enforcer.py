@@ -1861,11 +1861,11 @@ def test_isolation_edit_blocks_probe_added_on_changed_lines() -> None:
     ), f"isolation probe added on changed lines must block, got: {issues!r}"
 
 
-def test_function_length_cap_keeps_in_scope_violation_beyond_document_order() -> None:
-    """loop5-2: the cap must not drop an in-scope (changed-line) function-length
-    violation just because it appears after ``MAX_FUNCTION_LENGTH_BLOCKING_ISSUES``
-    other oversized functions in document order."""
-    leading_function_count = code_rules_enforcer.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
+def test_function_length_reports_only_in_scope_violation_on_terminal_edit() -> None:
+    """A terminal diff-scoped Edit reports only the function whose changed-line
+    span grew past the threshold; untouched oversized functions earlier in the
+    file are out of scope and dropped, regardless of how many precede it."""
+    leading_function_count = 6
     leading_functions = "\n".join(
         _oversized_function_source(f"leading_long_{each_index}")
         for each_index in range(leading_function_count)
@@ -1881,23 +1881,22 @@ def test_function_length_cap_keeps_in_scope_violation_beyond_document_order() ->
         full_file_content=post_edit_full_file,
         prior_full_file_content=prior_full_file,
     )
-    assert any(
-        "target_function" in each_issue for each_issue in issues
-    ), f"in-scope violation past the cap window must still block, got: {issues!r}"
     function_length_issues = [
         each_issue for each_issue in issues if "defined at line" in each_issue
     ]
-    assert (
-        len(function_length_issues)
-        <= code_rules_enforcer.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES
-    ), f"function-length issues must respect the cap, got: {function_length_issues!r}"
+    assert any(
+        "target_function" in each_issue for each_issue in function_length_issues
+    ), f"in-scope grown function must still block, got: {issues!r}"
+    assert not any(
+        "leading_long_" in each_issue for each_issue in function_length_issues
+    ), f"untouched functions must stay out of scope, got: {function_length_issues!r}"
 
 
 def test_new_file_write_reports_every_in_scope_long_function_uncapped() -> None:
     """loop7-bugbot: a new-file Write passes ``all_changed_lines is None``; every
-    line was just authored and is in scope, so the cap must not drop a long
-    function past the walk-order window — it trims only out-of-scope advisory."""
-    function_count = code_rules_enforcer.MAX_FUNCTION_LENGTH_BLOCKING_ISSUES + 1
+    line was just authored and is in scope, so every long function is reported
+    with no ceiling on the count."""
+    function_count = 6
     all_functions = "\n".join(
         _oversized_function_source(f"new_long_{each_index}")
         for each_index in range(function_count)
@@ -1918,8 +1917,8 @@ def test_new_file_write_reports_every_in_scope_long_function_uncapped() -> None:
 
 def test_new_file_write_reports_every_in_scope_isolation_probe_uncapped() -> None:
     """loop7-bugbot: a new test file Write passes ``all_changed_lines is None``;
-    every HOME probe is in scope, so the cap must not drop one past the window."""
-    probe_count = code_rules_enforcer.MAX_TEST_ISOLATION_ISSUES + 1
+    every HOME probe is in scope, so each one is reported with no count ceiling."""
+    probe_count = 6
     probing_tests = "".join(
         f"def test_probe_{each_index}() -> None:\n"
         f"    home_dir_{each_index} = Path.home()\n"
@@ -1941,11 +1940,11 @@ def test_new_file_write_reports_every_in_scope_isolation_probe_uncapped() -> Non
     )
 
 
-def test_banned_noun_word_defers_cap_to_caller_when_requested() -> None:
+def test_banned_noun_word_defers_scope_to_caller_when_requested() -> None:
     """loop7-P1: when the gate sets the deferral flag, the banned-noun check must
-    return every violation uncapped so ``split_violations_by_scope`` can scope by
-    added line before any cap trims an in-scope identifier."""
-    binding_count = code_rules_enforcer.MAX_BANNED_NOUN_WORD_ISSUES + 2
+    return every violation so ``split_violations_by_scope`` can scope by added
+    line before reporting the in-scope set."""
+    binding_count = 5
     source = "".join(
         f"BINDING_{each_index}_RESULT_PATH = {each_index}\n"
         for each_index in range(binding_count)
@@ -1953,19 +1952,19 @@ def test_banned_noun_word_defers_cap_to_caller_when_requested() -> None:
     issues = code_rules_enforcer.check_banned_noun_word_boundary(
         source,
         "/project/src/many_nouns.py",
-        defer_scope_and_cap_to_caller=True,
+        defer_scope_to_caller=True,
     )
     assert len(issues) == binding_count, (
-        "deferral must return every banned-noun violation uncapped, "
+        "deferral must return every banned-noun violation, "
         f"got: {issues!r}"
     )
 
 
-def test_banned_noun_word_keeps_in_scope_binding_beyond_cap_window() -> None:
+def test_banned_noun_word_keeps_in_scope_binding_among_untouched_ones() -> None:
     """loop7-P1: an Edit whose changed line introduces a banned-noun identifier
-    past ``MAX_BANNED_NOUN_WORD_ISSUES`` pre-existing ones must still report the
-    new in-scope binding rather than capping it away in walk order."""
-    leading_count = code_rules_enforcer.MAX_BANNED_NOUN_WORD_ISSUES
+    among several pre-existing untouched ones must still report the new in-scope
+    binding while leaving the untouched bindings out of scope."""
+    leading_count = 5
     leading_bindings = "".join(
         f"LEADING_{each_index}_RESULT_PATH = {each_index}\n"
         for each_index in range(leading_count)

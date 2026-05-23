@@ -510,14 +510,13 @@ def test_is_test_path_helper_matches_code_rules_patterns() -> None:
     assert not gate_module.is_test_path("packages/foo/regular_module.py")
 
 
-def test_gate_defers_function_and_isolation_cap_to_the_gate() -> None:
+def test_gate_defers_scope_to_the_gate() -> None:
     """The gate owns scope classification, so its per-file validation must call
-    validate_content with ``defer_function_and_isolation_cap_to_caller=True``.
-    Without that flag the enforcer pre-caps function-length and isolation
-    violations in walk order at five, dropping an in-scope sixth violation
-    before the gate ever scopes by added line (bugbot-2)."""
+    validate_content with ``defer_scope_to_caller=True``. Without that flag the
+    enforcer scopes function-length, isolation, and banned-noun violations
+    itself rather than returning them for the gate to classify by added line."""
     per_file_source = inspect.getsource(gate_module._scoped_violations_for_file)
-    assert "defer_function_and_isolation_cap_to_caller=True" in per_file_source
+    assert "defer_scope_to_caller=True" in per_file_source
 
 
 def test_run_gate_uses_each_path_loop_variable() -> None:
@@ -1008,15 +1007,15 @@ def _short_function_text(function_name: str) -> str:
     return f"def {function_name}() -> None:\n    keep_alive_name\n"
 
 
-def test_main_blocks_sixth_long_function_on_added_lines_past_document_order_cap(
+def test_main_blocks_sixth_long_function_on_added_lines_past_document_order(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """bugbot-2: with five pre-existing untouched long functions ahead of it in
     document order, growing the sixth function past the threshold on staged
-    lines must still block at the gate. The enforcer's per-check cap must not
-    drop the sixth (the only in-scope violation) before the gate scopes by
-    added lines."""
+    lines must still block at the gate. The gate scopes by added lines, so the
+    in-scope sixth violation blocks regardless of how many untouched ones
+    precede it."""
     leading_long_functions = "".join(
         _oversized_function_text(f"leading_long_{each_index}")
         for each_index in range(5)
@@ -1050,14 +1049,15 @@ def _clean_test_text(test_name: str) -> str:
     return f"def {test_name}() -> None:\n    assert 1 + 1 == 2\n"
 
 
-def test_main_blocks_sixth_isolation_probe_on_added_lines_past_document_order_cap(
+def test_main_blocks_sixth_isolation_probe_on_added_lines_past_document_order(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """bugbot-2 mirror: with five pre-existing untouched HOME probes ahead of it
     in document order, adding a HOME probe to the sixth test on staged lines
-    must still block at the gate. The isolation-check cap must not drop the
-    sixth (the only in-scope probe) before the gate scopes by added lines."""
+    must still block at the gate. The gate scopes by added lines, so the
+    in-scope sixth probe blocks regardless of how many untouched ones
+    precede it."""
     header = "from pathlib import Path\n"
     leading_probe_tests = "".join(
         _home_probe_test_text(f"test_leading_probe_{each_index}")
@@ -1087,15 +1087,16 @@ def _banned_noun_function_text(index: int) -> str:
     )
 
 
-def test_main_blocks_banned_noun_on_added_lines_past_document_order_cap(
+def test_main_blocks_banned_noun_on_added_lines_past_document_order(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """loop7-P1: with three pre-existing untouched banned-noun identifiers ahead
     of it in document order, introducing a fourth banned-noun on a staged line
-    must still block at the gate. The banned-noun check's cap must not drop the
-    in-scope identifier before the gate scopes by added lines."""
-    leading_count = enforcer_module.MAX_BANNED_NOUN_WORD_ISSUES
+    must still block at the gate. The gate scopes by added lines, so the
+    in-scope identifier blocks regardless of how many untouched ones precede
+    it."""
+    leading_count = 3
     leading_functions = "".join(
         _banned_noun_function_text(each_index) for each_index in range(leading_count)
     )

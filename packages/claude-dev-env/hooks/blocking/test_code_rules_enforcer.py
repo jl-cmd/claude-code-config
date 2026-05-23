@@ -1265,6 +1265,51 @@ def test_isolation_check_flags_expanduser_with_tilde_argument() -> None:
     assert any("expanduser" in each_issue for each_issue in issues)
 
 
+def test_isolation_check_flags_path_constructor_expanduser_method() -> None:
+    """`Path('~/x').expanduser()` expands the home directory through the bound
+    Path object and must fire even though it bypasses the static probe chain."""
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = Path('~/x').expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_flags_aliased_path_constructor_expanduser_method() -> None:
+    """`from pathlib import Path as P` then `P('~/x').expanduser()` resolves the
+    constructor through alias canonicalization and must fire."""
+    source = (
+        "from pathlib import Path as P\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = P('~/x').expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_flags_tempfile_named_temporary_file() -> None:
+    """`tempfile.NamedTemporaryFile()` allocates in the shared temp dir and must
+    fire as a temp-isolation probe."""
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp() -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile()\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
+
+
 def test_isolation_check_flags_class_level_probe_in_nested_class_body() -> None:
     """A Path.home() initializer in a nested class body runs at class-creation
     time during the test, so it must fire."""

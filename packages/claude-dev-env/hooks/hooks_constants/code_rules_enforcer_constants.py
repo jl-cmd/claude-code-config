@@ -114,15 +114,26 @@ ALL_HOME_DIRECTORY_ENV_VAR_NAMES: frozenset[str] = frozenset({
 ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
     "Path.home",
     "pathlib.Path.home",
+    "Path.expanduser",
+    "pathlib.Path.expanduser",
     "os.path.expanduser",
     "os.path.expandvars",
     "tempfile.gettempdir",
     "tempfile.gettempprefix",
     "tempfile.mkstemp",
     "tempfile.mkdtemp",
+    "tempfile.mktemp",
+    "tempfile.NamedTemporaryFile",
+    "tempfile.TemporaryFile",
+    "tempfile.TemporaryDirectory",
 })
 EXPANDVARS_DOTTED_NAME: str = "os.path.expandvars"
 EXPANDUSER_DOTTED_NAME: str = "os.path.expanduser"
+PATHLIB_EXPANDUSER_METHOD_NAME: str = "expanduser"
+ALL_PATHLIB_PATH_CONSTRUCTOR_CANONICAL_NAMES: frozenset[str] = frozenset({
+    "Path",
+    "pathlib.Path",
+})
 HOME_DIRECTORY_TILDE_PREFIX: str = "~"
 ENVIRONMENT_VARIABLE_REFERENCE_PATTERN: re.Pattern[str] = re.compile(
     r"\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
@@ -153,6 +164,10 @@ ALL_CANONICAL_DOTTED_NAMES_BY_BARE_IMPORT: dict[tuple[str, str], str] = {
     ("tempfile", "gettempprefix"): "tempfile.gettempprefix",
     ("tempfile", "mkstemp"): "tempfile.mkstemp",
     ("tempfile", "mkdtemp"): "tempfile.mkdtemp",
+    ("tempfile", "mktemp"): "tempfile.mktemp",
+    ("tempfile", "NamedTemporaryFile"): "tempfile.NamedTemporaryFile",
+    ("tempfile", "TemporaryFile"): "tempfile.TemporaryFile",
+    ("tempfile", "TemporaryDirectory"): "tempfile.TemporaryDirectory",
     ("pathlib", "Path"): "Path",
 }
 MAX_TEST_ISOLATION_ISSUES: int = 5

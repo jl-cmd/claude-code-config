@@ -706,3 +706,146 @@ def test_should_flag_from_pathlib_import_path_without_alias() -> None:
     )
     issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
     assert any("Path.home" in each_issue for each_issue in issues)
+
+
+def test_should_flag_path_constructor_expanduser_method_call() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = Path('~/x').expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_aliased_path_constructor_expanduser_method_call() -> None:
+    source = (
+        "from pathlib import Path as P\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = P('~/x').expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_pathlib_path_constructor_expanduser_method_call() -> None:
+    source = (
+        "import pathlib\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    target = pathlib.Path('~/x').expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_expanduser_on_path_bound_local_variable() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_dotfile() -> None:\n"
+        "    candidate = Path('~/x')\n"
+        "    target = candidate.expanduser()\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_flag_static_pathlib_path_expanduser_unbound_method() -> None:
+    source = (
+        "import pathlib\n"
+        "def test_reads_dotfile(some_path) -> None:\n"
+        "    target = pathlib.Path.expanduser(some_path)\n"
+        "    target.read_text()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("expanduser" in each_issue for each_issue in issues)
+
+
+def test_should_allow_path_constructor_expanduser_with_monkeypatch_fixture() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "def test_reads_dotfile(monkeypatch) -> None:\n"
+        "    monkeypatch.setenv('HOME', '/tmp/fake')\n"
+        "    target = Path('~/x').expanduser()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_not_flag_expanduser_on_non_path_local_variable() -> None:
+    source = (
+        "def test_reads_dotfile(some_object) -> None:\n"
+        "    target = some_object.expanduser()\n"
+        "    print(target)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_tempfile_named_temporary_file_without_isolation() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp() -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile()\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_flag_tempfile_temporary_file_without_isolation() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_temp() -> None:\n"
+        "    handle = tempfile.TemporaryFile()\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("TemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_flag_tempfile_temporary_directory_without_isolation() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_makes_temp_dir() -> None:\n"
+        "    holder = tempfile.TemporaryDirectory()\n"
+        "    print(holder.name)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("TemporaryDirectory" in each_issue for each_issue in issues)
+
+
+def test_should_flag_tempfile_mktemp_without_isolation() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_resolves_temp_name() -> None:\n"
+        "    candidate = tempfile.mktemp()\n"
+        "    print(candidate)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("mktemp" in each_issue for each_issue in issues)
+
+
+def test_should_flag_bare_imported_tempfile_named_temporary_file() -> None:
+    source = (
+        "from tempfile import NamedTemporaryFile\n"
+        "def test_writes_named_temp() -> None:\n"
+        "    handle = NamedTemporaryFile()\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_allow_tempfile_constructor_with_monkeypatch_fixture() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp(monkeypatch) -> None:\n"
+        "    monkeypatch.setenv('TMPDIR', '/tmp/fake')\n"
+        "    handle = tempfile.NamedTemporaryFile()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []

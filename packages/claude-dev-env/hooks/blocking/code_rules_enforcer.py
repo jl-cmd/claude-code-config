@@ -114,6 +114,8 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     WINDOWS_PERCENT_VARIABLE_REFERENCE_PATTERN,
     EXPANDVARS_DOTTED_NAME,
     EXPANDUSER_DOTTED_NAME,
+    PATHLIB_EXPANDUSER_METHOD_NAME,
+    ALL_PATHLIB_PATH_CONSTRUCTOR_CANONICAL_NAMES,
     HOME_DIRECTORY_TILDE_PREFIX,
     ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
     PYTEST_TEST_CLASS_NAME_PREFIX,
@@ -2551,6 +2553,86 @@ def _collect_os_environ_local_binding_names(
     return environ_bindings
 
 
+def _collect_pathlib_path_local_binding_names(
+    syntax_tree: ast.Module, all_canonical_names_by_alias: dict[str, str],
+) -> set[str]:
+    """Return local names bound to a ``pathlib.Path(...)`` construction.
+
+    Tracks ``candidate = Path('~/x')`` style assignments (resolving the
+    constructor through *all_canonical_names_by_alias* so an aliased
+    ``candidate = P('~/x')`` with ``from pathlib import Path as P`` and a
+    fully qualified ``candidate = pathlib.Path('~/x')`` are both recognized).
+    A later ``candidate.expanduser()`` call on such a name is attributed to a
+    home-directory probe.
+
+    Args:
+        syntax_tree: The parsed module to scan.
+        all_canonical_names_by_alias: Import-alias map from
+            ``_build_alias_canonicalization_map``.
+
+    Returns:
+        Set of local variable names bound to a ``pathlib.Path`` construction.
+    """
+    path_bindings: set[str] = set()
+    for each_node in ast.walk(syntax_tree):
+        if not isinstance(each_node, ast.Assign):
+            continue
+        if not _call_constructs_pathlib_path(each_node.value, all_canonical_names_by_alias):
+            continue
+        for each_target in each_node.targets:
+            if isinstance(each_target, ast.Name):
+                path_bindings.add(each_target.id)
+    return path_bindings
+
+
+def _call_constructs_pathlib_path(
+    node: ast.expr, all_canonical_names_by_alias: dict[str, str],
+) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    constructor_chain = _dotted_call_attribute_chain(node)
+    if constructor_chain is None:
+        return False
+    canonical_chain = _resolve_chain_through_aliases(
+        constructor_chain, all_canonical_names_by_alias
+    )
+    return canonical_chain in ALL_PATHLIB_PATH_CONSTRUCTOR_CANONICAL_NAMES
+
+
+def _expanduser_method_call_targets_pathlib_path(
+    call_node: ast.Call,
+    all_canonical_names_by_alias: dict[str, str],
+    all_path_local_bindings: set[str],
+) -> bool:
+    """Return True for a ``.expanduser()`` method call on a ``pathlib.Path``.
+
+    ``Path.expanduser`` takes no string argument — it expands the bound
+    ``~`` in the receiver Path — so the call is flagged whenever the receiver
+    resolves to a Path object, regardless of arguments. The receiver is a Path
+    when it is a ``pathlib.Path(...)`` construction (directly, aliased, or fully
+    qualified) or a local variable previously bound to such a construction.
+
+    Args:
+        call_node: The call whose callee attribute is ``expanduser``.
+        all_canonical_names_by_alias: Import-alias map from
+            ``_build_alias_canonicalization_map``.
+        all_path_local_bindings: Local names bound to a ``pathlib.Path``
+            construction from ``_collect_pathlib_path_local_binding_names``.
+
+    Returns:
+        True when the ``expanduser`` receiver resolves to a ``pathlib.Path``.
+    """
+    callee = call_node.func
+    if not isinstance(callee, ast.Attribute):
+        return False
+    if callee.attr != PATHLIB_EXPANDUSER_METHOD_NAME:
+        return False
+    receiver = callee.value
+    if isinstance(receiver, ast.Name):
+        return receiver.id in all_path_local_bindings
+    return _call_constructs_pathlib_path(receiver, all_canonical_names_by_alias)
+
+
 def _attribute_chain_resolves_to_os_environ(
     node: ast.expr, all_canonical_names_by_alias: dict[str, str],
 ) -> bool:
@@ -2750,6 +2832,7 @@ def _detect_home_or_temp_probes_in_body(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
     all_canonical_names_by_alias: dict[str, str],
     all_environ_local_bindings: set[str],
+    all_path_local_bindings: set[str],
 ) -> list[tuple[int, str]]:
     """Yield ``(line, probe_label)`` pairs for HOME/TMP probes in *function_node*.
 
@@ -2783,7 +2866,11 @@ def _detect_home_or_temp_probes_in_body(
     while nodes_to_visit:
         each_descendant, inside_nested_class = nodes_to_visit.pop()
         _record_home_or_temp_probe(
-            each_descendant, probes, all_canonical_names_by_alias, all_environ_local_bindings
+            each_descendant,
+            probes,
+            all_canonical_names_by_alias,
+            all_environ_local_bindings,
+            all_path_local_bindings,
         )
         for each_grandchild, each_child_inside_nested_class in _children_to_descend_into(
             each_descendant, inside_nested_class
@@ -2797,8 +2884,14 @@ def _record_home_or_temp_probe(
     all_probes: list[tuple[int, str]],
     all_canonical_names_by_alias: dict[str, str],
     all_environ_local_bindings: set[str],
+    all_path_local_bindings: set[str],
 ) -> None:
     if isinstance(node, ast.Call):
+        if _expanduser_method_call_targets_pathlib_path(
+            node, all_canonical_names_by_alias, all_path_local_bindings
+        ):
+            all_probes.append((node.lineno, f"Path.{PATHLIB_EXPANDUSER_METHOD_NAME}()"))
+            return
         raw_chain = _dotted_call_attribute_chain(node)
         if raw_chain is None:
             return
@@ -2896,12 +2989,13 @@ def check_tests_use_isolated_filesystem_paths(content: str, file_path: str) -> l
 
     all_canonical_names_by_alias = _build_alias_canonicalization_map(syntax_tree)
     all_environ_local_bindings = _collect_os_environ_local_binding_names(syntax_tree, all_canonical_names_by_alias)
+    all_path_local_bindings = _collect_pathlib_path_local_binding_names(syntax_tree, all_canonical_names_by_alias)
     issues: list[str] = []
     for each_node in _collect_pytest_collectable_test_functions(syntax_tree):
         if _function_uses_pytest_isolation_fixture(each_node):
             continue
         for each_line, each_probe_label in _detect_home_or_temp_probes_in_body(
-            each_node, all_canonical_names_by_alias, all_environ_local_bindings
+            each_node, all_canonical_names_by_alias, all_environ_local_bindings, all_path_local_bindings
         ):
             issues.append(
                 f"Line {each_line}: Test {each_node.name!r} probes {each_probe_label} - {TEST_ISOLATION_MESSAGE_SUFFIX}"

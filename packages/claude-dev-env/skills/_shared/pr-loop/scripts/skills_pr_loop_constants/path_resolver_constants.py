@@ -47,6 +47,7 @@ ALL_FIX_EXECUTION_STEPS = [
     "Write a failing test that reproduces the bug.",
     "Implement the smallest change that resolves the finding.",
     "Run the full test suite — confirm the new test and all existing tests pass.",
+    "Run the fix-push gate before committing: run `~/.claude/_shared/pr-loop/scripts/code_rules_gate.py --base origin/<base_ref>` over the PR diff, fix every flagged line (sweep the whole enumerable class per the Category-K carve-out), and re-run until it exits 0. Then write `<worktree_path>/.bugteam-pr<pr_number>.gate.json` as {passed: true, head_sha, base_ref, checked_at} so the Stop backstop confirms this commit passed.",
     "Stage and commit the fix with a descriptive message.",
     "Push the commit to the head branch.",
     "Post an inline reply on the finding thread confirming the fix.",
@@ -54,7 +55,7 @@ ALL_FIX_EXECUTION_STEPS = [
 
 ALL_FIX_CONSTRAINT_TEXTS = [
     "Work exclusively within the worktree directory.",
-    "Change only the lines directly related to each finding.",
+    "Change only the lines directly related to each finding, with one carve-out: when the finding is one instance of a mechanically enumerable class (the same naming-convention violation, the same missing case, the same docstring sibling naming a changed symbol), sweep every sibling instance within the PR diff scope in the same commit and add one parametrized test over the class.",
     "Create one commit per fix loop, each focused on a single category of findings.",
     "Every fix must have a corresponding test.",
     "Remove deprecated code directly and update all call sites.",

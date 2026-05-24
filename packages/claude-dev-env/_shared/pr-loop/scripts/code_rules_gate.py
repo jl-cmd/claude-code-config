@@ -1195,6 +1195,43 @@ def run_gate(
         one or more files could not be read (a skipped file means the gate
         could not vouch for it).
     """
+    blocking_by_file, advisory_by_file, skipped_unreadable_count = (
+        _collect_partitioned_violations(
+            validate_content,
+            all_file_paths,
+            repository_root,
+            all_added_lines_by_path,
+        )
+    )
+    return _report_partitioned_violations(
+        blocking_by_file,
+        advisory_by_file,
+        repository_root,
+        all_added_lines_by_path is None,
+        skipped_unreadable_count,
+    )
+
+
+def _collect_partitioned_violations(
+    validate_content: ValidateContentCallable,
+    all_file_paths: list[Path],
+    repository_root: Path,
+    all_added_lines_by_path: dict[Path, set[int]] | None,
+) -> tuple[dict[Path, list[str]], dict[Path, list[str]], int]:
+    """Validate every targeted file and partition results by diff scope.
+
+    Args:
+        validate_content: The enforcer ``validate_content`` callable.
+        all_file_paths: File paths to inspect.
+        repository_root: Repository root used to resolve relative paths.
+        all_added_lines_by_path: Optional per-file added-line maps used to
+            partition issues into blocking vs advisory.
+
+    Returns:
+        ``(blocking_by_file, advisory_by_file, skipped_unreadable_count)`` where
+        the skipped count increments for every changed file that could not be
+        read, so the caller can fail closed on unvalidated files.
+    """
     blocking_by_file: dict[Path, list[str]] = {}
     advisory_by_file: dict[Path, list[str]] = {}
     skipped_unreadable_count = 0
@@ -1227,13 +1264,7 @@ def run_gate(
             blocking_by_file[resolved] = blocking
         if advisory:
             advisory_by_file[resolved] = advisory
-    return _report_partitioned_violations(
-        blocking_by_file,
-        advisory_by_file,
-        repository_root,
-        all_added_lines_by_path is None,
-        skipped_unreadable_count,
-    )
+    return blocking_by_file, advisory_by_file, skipped_unreadable_count
 
 
 def _report_partitioned_violations(

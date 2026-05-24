@@ -503,9 +503,9 @@ def test_gate_defers_scope_to_the_gate() -> None:
     assert "defer_scope_to_caller=True" in per_file_source
 
 
-def test_run_gate_uses_each_path_loop_variable() -> None:
-    run_gate_source = inspect.getsource(gate_module.run_gate)
-    assert "for each_path in" in run_gate_source
+def test_collect_partitioned_violations_uses_each_path_loop_variable() -> None:
+    collect_source = inspect.getsource(gate_module._collect_partitioned_violations)
+    assert "for each_path in" in collect_source
 
 
 def test_run_gate_skips_non_utf8_source_without_crashing(
@@ -573,6 +573,38 @@ def test_run_gate_fails_closed_on_skipped_non_utf8_file_directly(
     exit_code = gate_module.run_gate(
         fake_validate,
         [non_utf8_file],
+        tmp_path,
+        all_added_lines_by_path=None,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code != 0
+    assert "skip unreadable" in captured.err
+
+
+def test_run_gate_fails_closed_when_clean_file_accompanies_unreadable_file(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A clean readable file must not mask an unreadable sibling across files.
+
+    run_gate aggregates per-file results: even when one staged file validates
+    cleanly, an accompanying file that cannot be decoded must still surface the
+    skip and force a non-zero exit so the unvalidated file is never approved.
+    """
+    clean_file = tmp_path / "clean.py"
+    clean_file.write_text("first_count = 1\nsecond_count = 2\n", encoding="utf-8")
+    unreadable_file = tmp_path / "garbled.py"
+    unreadable_file.write_bytes(b"\xff\xfe\x00bad")
+
+    def fake_validate(
+        _content: str, _path: str, _prior: str = "", **_kwargs: object
+    ) -> list[str]:
+        return []
+
+    exit_code = gate_module.run_gate(
+        fake_validate,
+        [clean_file, unreadable_file],
         tmp_path,
         all_added_lines_by_path=None,
     )

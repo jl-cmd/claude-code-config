@@ -854,3 +854,36 @@ def test_check_wrapper_plumb_through_stays_under_function_length_threshold() -> 
         f"check_wrapper_plumb_through is {declared_line_count} lines; extract "
         "helpers to keep it under the function-length blocking threshold"
     )
+
+
+def test_read_prior_committed_content_returns_head_content_for_tracked_path(
+    temporary_git_repository: Path,
+) -> None:
+    """A tracked path returns its HEAD-committed content, not the working copy."""
+    committed_text = "alpha = 1\nbeta = 2\n"
+    write_file(temporary_git_repository / "tracked.py", committed_text)
+    commit_all_files(temporary_git_repository, "commit tracked file")
+    write_file(
+        temporary_git_repository / "tracked.py",
+        committed_text + "gamma = 3\n",
+    )
+
+    prior_content = gate_module.read_prior_committed_content(
+        temporary_git_repository.resolve(), "tracked.py"
+    )
+
+    assert prior_content == committed_text
+
+
+def test_read_prior_committed_content_returns_empty_for_untracked_path(
+    temporary_git_repository: Path,
+) -> None:
+    """An untracked path yields an empty string because git show returns non-zero."""
+    write_file(temporary_git_repository / "anchor.py", "anchor = 1\n")
+    commit_all_files(temporary_git_repository, "anchor commit")
+
+    prior_content = gate_module.read_prior_committed_content(
+        temporary_git_repository.resolve(), "never_committed.py"
+    )
+
+    assert prior_content == ""

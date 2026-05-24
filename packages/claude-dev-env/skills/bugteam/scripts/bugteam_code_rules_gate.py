@@ -992,7 +992,7 @@ def read_prior_committed_content(
         The committed file content at HEAD, or an empty string when the
         path is not tracked or ``git show`` returns non-zero.
     """
-    show_result = subprocess.run(
+    git_show_process = subprocess.run(
         ["git", "show", f"HEAD:{relative_path_posix}"],
         cwd=str(repository_root),
         capture_output=True,
@@ -1001,9 +1001,9 @@ def read_prior_committed_content(
         errors="replace",
         check=False,
     )
-    if show_result.returncode != 0:
+    if git_show_process.returncode != 0:
         return ""
-    return show_result.stdout
+    return git_show_process.stdout
 
 
 def _scoped_violations_for_file(

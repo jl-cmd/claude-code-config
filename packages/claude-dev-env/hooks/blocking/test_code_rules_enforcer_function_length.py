@@ -1,8 +1,9 @@
 """Tests for ``check_function_length``.
 
-Bodies at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60 lines) block the
+Functions whose definition span (signature line through last body statement,
+inclusive) is at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60) block the
 write (small-function basis: Robert C. Martin, Clean Code Ch. 3 "Functions";
-Google Python Style Guide ~40-line function review hint). Bodies below the
+Google Python Style Guide ~40-line function review hint). Spans below the
 threshold pass silently.
 
 Cited SYNTHESIS evidence: pa#143 F4, F9, F14 (three recurrences in one PR);
@@ -62,6 +63,13 @@ def test_should_block_at_sixty_lines() -> None:
     issues = check_function_length(source, PRODUCTION_FILE_PATH)
     assert any("oversized_helper" in each_issue for each_issue in issues)
     assert any("blocking" in each_issue.lower() for each_issue in issues)
+
+
+def test_should_not_block_at_fifty_nine_line_span() -> None:
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 2
+    source = _build_function_source("boundary_helper", body_line_count=body_line_count)
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert issues == []
 
 
 def test_should_handle_async_function_definitions() -> None:

@@ -1476,10 +1476,12 @@ def check_banned_noun_word_boundary(
     """Flag identifiers containing CODE_RULES §5 banned noun words.
 
     Companion to ``check_banned_identifiers`` (exact-match cases only). This
-    check catches the wider pattern: a banned noun (``result``, ``data``,
-    ``output``, ``response``, ``value``, ``item``, ``temp``) appearing as a
-    snake_case word part or camelCase word part inside a longer identifier
-    (``canned_results``, ``HolidayPeakResult``, ``OUTPUT_DIR``,
+    check catches the wider pattern: a banned noun word from
+    ``ALL_BANNED_NOUN_WORDS`` — the singular nouns ``result``, ``data``,
+    ``output``, ``response``, ``value``, ``item``, ``temp`` plus the plural
+    forms ``results``, ``outputs``, ``responses``, ``values``, ``items`` —
+    appearing as a snake_case word part or camelCase word part inside a longer
+    identifier (``canned_results``, ``HolidayPeakResult``, ``OUTPUT_DIR``,
     ``cached_response``).
 
     Skips test files, config files, hook infrastructure, workflow registries,

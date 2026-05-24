@@ -2584,3 +2584,21 @@ def test_isolation_check_still_flags_usefixtures_without_monkeypatch() -> None:
         "usefixtures('tmp_path') does not intercept env reads, so the HOME probe "
         f"must still be flagged; got: {issues!r}"
     )
+
+
+def test_banned_noun_word_boundary_flags_plural_results_identifier() -> None:
+    """A plural banned noun ('results') embedded in an identifier must flag.
+
+    ``ALL_BANNED_NOUN_WORDS`` contains plural forms (results, outputs,
+    responses, values, items) in addition to the singular nouns, so an
+    identifier such as ``canned_results`` is flagged even though no singular
+    exact-match identifier appears.
+    """
+    source = "canned_results = []\n"
+    issues = code_rules_enforcer.check_banned_noun_word_boundary(
+        source, "/project/src/pipeline.py"
+    )
+    assert any("canned_results" in each_issue for each_issue in issues), (
+        "a plural banned-noun identifier must be flagged by the word-boundary "
+        f"check; got: {issues!r}"
+    )

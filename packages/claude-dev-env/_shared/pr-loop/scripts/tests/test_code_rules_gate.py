@@ -503,9 +503,56 @@ def test_gate_defers_scope_to_the_gate() -> None:
     assert "defer_scope_to_caller=True" in per_file_source
 
 
-def test_collect_partitioned_violations_uses_each_path_loop_variable() -> None:
-    collect_source = inspect.getsource(gate_module._collect_partitioned_violations)
-    assert "for each_path in" in collect_source
+def test_collect_partitioned_violations_returns_empty_maps_for_two_clean_files(
+    temporary_git_repository: Path,
+) -> None:
+    """Two readable, violation-free files yield empty partitions and no skips."""
+    first_clean = temporary_git_repository / "first_clean.py"
+    second_clean = temporary_git_repository / "second_clean.py"
+    first_clean.write_text("first_count = 1\n", encoding="utf-8")
+    second_clean.write_text("second_count = 2\n", encoding="utf-8")
+
+    def fake_validate(_content: str, _path: str, _prior: str = "", **_kwargs: object) -> list[str]:
+        return []
+
+    blocking_by_file, advisory_by_file, skipped_unreadable_count = (
+        gate_module._collect_partitioned_violations(
+            fake_validate,
+            [first_clean, second_clean],
+            temporary_git_repository,
+            None,
+        )
+    )
+
+    assert blocking_by_file == {}
+    assert advisory_by_file == {}
+    assert skipped_unreadable_count == 0
+
+
+def test_collect_partitioned_violations_counts_unreadable_sibling_as_skip(
+    temporary_git_repository: Path,
+) -> None:
+    """A clean file beside an unreadable file yields one skip and no violations."""
+    clean_file = temporary_git_repository / "clean.py"
+    clean_file.write_text("clean_count = 1\n", encoding="utf-8")
+    unreadable_file = temporary_git_repository / "garbled.py"
+    unreadable_file.write_bytes(b"\xff\xfe\x00bad")
+
+    def fake_validate(_content: str, _path: str, _prior: str = "", **_kwargs: object) -> list[str]:
+        return []
+
+    blocking_by_file, advisory_by_file, skipped_unreadable_count = (
+        gate_module._collect_partitioned_violations(
+            fake_validate,
+            [clean_file, unreadable_file],
+            temporary_git_repository,
+            None,
+        )
+    )
+
+    assert blocking_by_file == {}
+    assert advisory_by_file == {}
+    assert skipped_unreadable_count == 1
 
 
 def test_run_gate_skips_non_utf8_source_without_crashing(
@@ -516,7 +563,9 @@ def test_run_gate_skips_non_utf8_source_without_crashing(
 
     UnicodeDecodeError is a ValueError subclass, not OSError. A non-UTF-8
     source file in the staged set must be skipped (matching whole_file_line_set
-    behavior), not crash the gate mid-audit.
+    behavior) rather than crash the gate mid-audit, and the skip must fail
+    closed: a changed file the gate could not validate must never be silently
+    approved.
     """
     write_file(temporary_git_repository / "anchor.py", "anchor = 1\n")
     commit_all_files(temporary_git_repository, "baseline")
@@ -528,7 +577,7 @@ def test_run_gate_skips_non_utf8_source_without_crashing(
     monkeypatch.chdir(temporary_git_repository)
     exit_code = gate_module.main(["--staged"])
 
-    assert exit_code in {0, 1}
+    assert exit_code == 1
 
 
 def test_run_gate_fails_closed_when_only_changed_file_is_unreadable(

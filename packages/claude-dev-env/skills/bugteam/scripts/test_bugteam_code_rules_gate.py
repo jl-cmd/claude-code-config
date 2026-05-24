@@ -305,6 +305,27 @@ def test_whole_file_line_set_raises_system_exit_on_oserror(
     assert "denied" in captured.err or "PermissionError" in captured.err
 
 
+def test_whole_file_line_set_raises_system_exit_on_non_utf8_file(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A genuine non-UTF-8 file must fail closed as SystemExit, never crash.
+
+    ``read_text(encoding="utf-8")`` on undecodable bytes raises
+    UnicodeDecodeError, a ValueError subclass that ``OSError`` does not catch.
+    The fail-closed contract that holds for read failures holds equally here:
+    returning an empty set would route every violation to the advisory bucket,
+    so an undecodable file must propagate as SystemExit rather than escape as
+    an unhandled UnicodeDecodeError.
+    """
+    non_utf8_path = tmp_path / "garbled.py"
+    non_utf8_path.write_bytes(b"\xff\xfe\x00bad")
+    with pytest.raises(SystemExit):
+        gate_module.whole_file_line_set(non_utf8_path)
+    captured = capsys.readouterr()
+    assert str(non_utf8_path) in captured.err
+
+
 def test_check_database_column_string_magic_signals_cap_exit(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

@@ -743,8 +743,8 @@ def whole_file_line_set(file_path: Path) -> set[int]:
             "no lines changed" and silently downgrades blocking violations.
     """
     try:
-        total_lines = len(file_path.read_text().splitlines())
-    except OSError as read_error:
+        total_lines = len(file_path.read_text(encoding="utf-8").splitlines())
+    except (OSError, UnicodeDecodeError) as read_error:
         print(
             f"{BUGTEAM_CODE_RULES_GATE_PREFIX}whole_file_line_set could not read "
             f"{file_path}: {type(read_error).__name__}: {read_error}",

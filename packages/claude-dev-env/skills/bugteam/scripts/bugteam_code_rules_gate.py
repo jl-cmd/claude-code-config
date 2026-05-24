@@ -426,19 +426,52 @@ def is_code_path(file_path: Path) -> bool:
     return suffix in ALL_CODE_FILE_EXTENSIONS
 
 
+def _path_is_eligible_for_validation(
+    resolved_path: Path,
+    repository_root: Path,
+    read_staged_content_flag: bool,
+) -> bool:
+    """Decide whether *resolved_path* should be validated by the gate.
+
+    Args:
+        resolved_path: A resolved candidate path already confirmed to live
+            under *repository_root*.
+        repository_root: The repository root used to compute the relative path.
+        read_staged_content_flag: When True, require staged-index presence so
+            files staged for add or modify are validated and staged deletions
+            are skipped; when False, require working-tree presence.
+
+    Returns:
+        True when the path carries a code extension and exists in the source
+        the gate will read; False otherwise.
+    """
+    if not is_code_path(resolved_path):
+        return False
+    if read_staged_content_flag:
+        relative_posix = str(
+            resolved_path.relative_to(repository_root.resolve())
+        ).replace("\\", "/")
+        return staged_blob_exists(repository_root.resolve(), relative_posix)
+    return resolved_path.is_file()
+
+
 def _resolve_eligible_code_path(
     candidate_path: Path,
     repository_root: Path,
+    read_staged_content_flag: bool = False,
 ) -> Path | None:
     """Resolve *candidate_path* and return it only when the gate should scan it.
 
     Args:
         candidate_path: One file path from the gate's candidate set.
         repository_root: The repository root the resolved path must fall under.
+        read_staged_content_flag: When True, eligibility requires staged-index
+            presence; when False, it requires working-tree presence.
 
     Returns:
         The resolved path when it lives under *repository_root*, carries a code
-        extension, and is an existing file; otherwise None.
+        extension, and is present in the source the gate will read; otherwise
+        None.
     """
     try:
         resolved = candidate_path.resolve()
@@ -448,9 +481,9 @@ def _resolve_eligible_code_path(
         resolved.relative_to(repository_root.resolve())
     except ValueError:
         return None
-    if not is_code_path(resolved):
-        return None
-    if not resolved.is_file():
+    if not _path_is_eligible_for_validation(
+        resolved, repository_root, read_staged_content_flag
+    ):
         return None
     return resolved
 
@@ -1034,6 +1067,28 @@ def read_staged_content(
         return None
 
 
+def staged_blob_exists(
+    repository_root: Path, relative_path_posix: str
+) -> bool:
+    """Report whether *relative_path_posix* is present in the staged index.
+
+    Args:
+        repository_root: The repository root for running git commands.
+        relative_path_posix: POSIX-style relative path to probe.
+
+    Returns:
+        True when the path is staged for add or modify (its blob exists in the
+        index); False when it is absent, such as a staged deletion.
+    """
+    git_cat_file_process = subprocess.run(
+        ["git", "cat-file", "-e", f":{relative_path_posix}"],
+        cwd=str(repository_root),
+        capture_output=True,
+        check=False,
+    )
+    return git_cat_file_process.returncode == 0
+
+
 def _scoped_violations_for_file(
     validate_content: ValidateContentCallable,
     resolved_path: Path,
@@ -1118,7 +1173,9 @@ def run_gate(
     advisory_by_file: dict[Path, list[str]] = {}
     skipped_unreadable_count = 0
     for each_file_path in sorted(set(all_file_paths)):
-        resolved = _resolve_eligible_code_path(each_file_path, repository_root)
+        resolved = _resolve_eligible_code_path(
+            each_file_path, repository_root, read_staged_content_flag
+        )
         if resolved is None:
             continue
         all_added_lines_for_file = (

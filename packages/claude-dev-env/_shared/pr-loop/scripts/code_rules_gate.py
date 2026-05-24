@@ -1160,6 +1160,57 @@ def read_staged_content(
         return None
 
 
+def staged_blob_exists(
+    repository_root: Path, relative_path_posix: str
+) -> bool:
+    """Report whether *relative_path_posix* is present in the staged index.
+
+    Args:
+        repository_root: Repository root used as the ``git -C`` target.
+        relative_path_posix: Repository-relative POSIX path to probe.
+
+    Returns:
+        True when the path is staged for add or modify (its blob exists in the
+        index); False when it is absent, such as a staged deletion.
+    """
+    git_cat_file_process = subprocess.run(
+        ["git", "cat-file", "-e", f":{relative_path_posix}"],
+        cwd=str(repository_root),
+        capture_output=True,
+        check=False,
+    )
+    return git_cat_file_process.returncode == 0
+
+
+def _path_is_eligible_for_validation(
+    resolved_path: Path,
+    repository_root: Path,
+    read_staged_content_flag: bool,
+) -> bool:
+    """Decide whether *resolved_path* should be validated by the gate.
+
+    Args:
+        resolved_path: A resolved candidate path already confirmed to live
+            under *repository_root*.
+        repository_root: Repository root used to compute the relative path.
+        read_staged_content_flag: When True, require staged-index presence so
+            files staged for add or modify are validated and staged deletions
+            are skipped; when False, require working-tree presence.
+
+    Returns:
+        True when the path carries a code extension and exists in the source
+        the gate will read; False otherwise.
+    """
+    if not is_code_path(resolved_path):
+        return False
+    if read_staged_content_flag:
+        relative_posix = str(
+            resolved_path.relative_to(repository_root.resolve())
+        ).replace("\\", "/")
+        return staged_blob_exists(repository_root.resolve(), relative_posix)
+    return resolved_path.is_file()
+
+
 def _scoped_violations_for_file(
     validate_content: ValidateContentCallable,
     resolved_path: Path,
@@ -1289,9 +1340,9 @@ def _collect_partitioned_violations(
             resolved.relative_to(repository_root.resolve())
         except ValueError:
             continue
-        if not is_code_path(resolved):
-            continue
-        if not resolved.is_file():
+        if not _path_is_eligible_for_validation(
+            resolved, repository_root, read_staged_content_flag
+        ):
             continue
         all_added_lines_for_file = (
             None

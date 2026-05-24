@@ -1447,3 +1447,56 @@ def test_main_staged_mode_validates_staged_blob_not_working_tree(
         "the staged blob carries a blocking violation; the gate must block "
         "even though the working tree was edited clean afterward"
     )
+
+
+def test_main_staged_mode_blocks_when_staged_file_absent_from_working_tree(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A staged blocking violation must block even when the working tree file
+    is gone. Staging a violating file and then deleting it from the working
+    tree leaves the violation only in the staged blob; the gate must validate
+    that blob rather than skip the path for failing a working-tree existence
+    check."""
+    write_file(temporary_git_repository / "baseline.py", "first_count = 1\n")
+    commit_all_files(temporary_git_repository, "initial")
+    staged_content_with_banned_identifier = (
+        "def compute_total(operand):\n"
+        "    result = operand + 1\n"
+        "    return result\n"
+    )
+    write_file(
+        temporary_git_repository / "module.py",
+        staged_content_with_banned_identifier,
+    )
+    stage_file(temporary_git_repository, "module.py")
+    (temporary_git_repository / "module.py").unlink()
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1, (
+        "the staged blob carries a blocking violation; the gate must block "
+        "even though the file was deleted from the working tree after staging"
+    )
+
+
+def test_main_staged_mode_passes_on_staged_deletion_of_clean_file(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A staged deletion is not in the index, so its staged blob cannot be read.
+    The gate must skip such a path cleanly rather than counting it as an
+    unreadable file and failing closed. With no other staged violation, the
+    gate must exit zero."""
+    write_file(temporary_git_repository / "removable.py", "first_count = 1\n")
+    commit_all_files(temporary_git_repository, "initial")
+    run_git_in_repository(temporary_git_repository, "rm", "--", "removable.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 0, (
+        "a staged deletion has no staged blob; the gate must skip it cleanly "
+        "rather than fail closed as if the file were unreadable"
+    )

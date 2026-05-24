@@ -123,6 +123,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_PROBE_ALIASABLE_CANONICAL_PREFIXES,
     HOME_DIRECTORY_TILDE_PREFIX,
     ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES,
+    PYTEST_USEFIXTURES_MARKER_NAME,
     PYTEST_TEST_CLASS_NAME_PREFIX,
     ALL_DIFF_CHANGED_OPCODE_TAGS,
     FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
@@ -3266,6 +3267,39 @@ def _descend_within_test_scope(
         nodes_to_visit.extend(_children_to_descend_into(each_descendant))
 
 
+def _usefixtures_decorator_requests_isolation_fixture(decorator_node: ast.expr) -> bool:
+    """Report whether a decorator is ``usefixtures`` requesting an isolation fixture.
+
+    Recognizes ``@pytest.mark.usefixtures("monkeypatch")`` and the
+    ``@mark.usefixtures("monkeypatch")`` short form: an ``ast.Call`` whose callee
+    attribute chain ends in ``usefixtures`` and whose string-constant arguments
+    include any name in ``ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES``.
+
+    Args:
+        decorator_node: A single decorator expression from a test's decorator list.
+
+    Returns:
+        True when the decorator injects an isolation fixture by name.
+    """
+    if not isinstance(decorator_node, ast.Call):
+        return False
+    if not isinstance(decorator_node.func, ast.Attribute):
+        return False
+    callee_chain = _dotted_attribute_chain(decorator_node.func)
+    if callee_chain is None:
+        return False
+    if not callee_chain.endswith(PYTEST_USEFIXTURES_MARKER_NAME):
+        return False
+    for each_argument in decorator_node.args:
+        if (
+            isinstance(each_argument, ast.Constant)
+            and isinstance(each_argument.value, str)
+            and each_argument.value in ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES
+        ):
+            return True
+    return False
+
+
 def _function_uses_pytest_isolation_fixture(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
@@ -3277,6 +3311,9 @@ def _function_uses_pytest_isolation_fixture(
             return True
     for each_argument in function_node.args.kwonlyargs:
         if each_argument.arg in ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES:
+            return True
+    for each_decorator in function_node.decorator_list:
+        if _usefixtures_decorator_requests_isolation_fixture(each_decorator):
             return True
     return False
 
@@ -5579,6 +5616,10 @@ def main() -> None:
             file_path, old_content, content,
         )
         prior_full_file_content = prior_content or ""
+        if full_file_content_after_edit is None:
+            full_file_content_after_edit = _read_existing_file_content(file_path)
+            if full_file_content_after_edit is None:
+                sys.exit(0)
     else:
         content = tool_input.get("content", "") or tool_input.get("new_string", "")
         old_content = _read_existing_file_content(file_path) or ""

@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import io
+import json
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -2316,3 +2318,130 @@ def test_readable_prior_yields_consistent_prior_and_reconstruction(tmp_path) -> 
     assert post_edit_content == "alpha = 1\nbeta = 3\n"
     changed = code_rules_enforcer.changed_line_numbers(prior_content, post_edit_content)
     assert changed == {2}
+
+
+def _run_main_with_edit_payload(
+    file_path: str,
+    old_string: str,
+    new_string: str,
+    monkeypatch: object,
+    capsys: object,
+) -> str:
+    """Drive ``main()`` through its stdin entry point for an Edit and return stdout.
+
+    Args:
+        file_path: The on-disk path the Edit targets.
+        old_string: The Edit's ``old_string`` fragment.
+        new_string: The Edit's ``new_string`` fragment.
+        monkeypatch: The pytest fixture used to redirect ``sys.stdin``.
+        capsys: The pytest fixture used to capture the deny payload on stdout.
+
+    Returns:
+        The captured stdout, which holds the deny payload when violations fire.
+    """
+    edit_payload = json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": file_path,
+                "old_string": old_string,
+                "new_string": new_string,
+            },
+        }
+    )
+    getattr(monkeypatch, "setattr")(code_rules_enforcer.sys, "stdin", io.StringIO(edit_payload))
+    try:
+        code_rules_enforcer.main()
+    except SystemExit:
+        pass
+    captured = getattr(capsys, "readouterr")()
+    return captured.out
+
+
+def test_edit_with_missing_old_string_runs_whole_file_against_on_disk_content(
+    tmp_path_factory: object, monkeypatch: object, capsys: object,
+) -> None:
+    """When an Edit's old_string is absent from the file, ``prior_and_post_edit_content``
+    yields ``(None, None)``; ``main()`` must analyze the real on-disk file whole-file
+    rather than the new_string fragment, so an oversized function elsewhere in the
+    file is still reported with its true line numbers."""
+    production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
+    untouched_long_function = _oversized_function_source("untouched_long")
+    short_helper = "def short_helper() -> int:\n    return 1\n"
+    on_disk_content = untouched_long_function + "\n" + short_helper
+    source_file = production_directory / "edited_module.py"
+    source_file.write_text(on_disk_content, encoding="utf-8")
+    absent_fragment_old = "def absent_function() -> int:\n    return 0\n"
+    short_fragment_new = "def absent_function() -> int:\n    return 2\n"
+    stdout = _run_main_with_edit_payload(
+        str(source_file), absent_fragment_old, short_fragment_new, monkeypatch, capsys,
+    )
+    assert "untouched_long" in stdout, (
+        "an unreconstructable Edit must fall back to whole-file on-disk analysis, "
+        f"so the oversized function is still reported; got stdout: {stdout!r}"
+    )
+
+
+def test_edit_with_unreadable_file_does_not_analyze_fragment_as_whole_file(
+    tmp_path_factory: object, monkeypatch: object, capsys: object,
+) -> None:
+    """When the on-disk file cannot be read, no well-defined post-edit content
+    exists; ``main()`` must exit cleanly rather than analyze the new_string
+    fragment as if it were the whole file, so the fragment's own function-length
+    violation does not surface as a deny payload."""
+    production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
+    missing_path = str(production_directory / "never_created.py")
+    oversized_fragment_old = "def grows() -> int:\n    return 0\n"
+    oversized_fragment_new = _oversized_function_source("grows")
+    stdout = _run_main_with_edit_payload(
+        missing_path,
+        oversized_fragment_old,
+        oversized_fragment_new,
+        monkeypatch,
+        capsys,
+    )
+    assert stdout == "", (
+        "an unreadable Edit target has no well-defined whole-file content, so the "
+        f"fragment must not be analyzed as the whole file; got stdout: {stdout!r}"
+    )
+
+
+def test_isolation_check_exempts_usefixtures_monkeypatch_decorator() -> None:
+    """A test isolated via ``@pytest.mark.usefixtures("monkeypatch")`` injects the
+    monkeypatch fixture without a signature parameter and must be exempt from the
+    HOME/TMP probe, mirroring the signature-parameter suppression."""
+    source = (
+        "import os\n"
+        "import pytest\n"
+        "@pytest.mark.usefixtures('monkeypatch')\n"
+        "def test_reads_home() -> None:\n"
+        "    home = os.environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert issues == [], (
+        "a test decorated with usefixtures('monkeypatch') is isolated and must "
+        f"not be flagged; got: {issues!r}"
+    )
+
+
+def test_isolation_check_still_flags_usefixtures_without_monkeypatch() -> None:
+    """``@pytest.mark.usefixtures("tmp_path")`` does not inject monkeypatch, so a
+    HOME probe in its body must still be flagged."""
+    source = (
+        "import os\n"
+        "import pytest\n"
+        "@pytest.mark.usefixtures('tmp_path')\n"
+        "def test_reads_home() -> None:\n"
+        "    home = os.environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("HOME" in each_issue for each_issue in issues), (
+        "usefixtures('tmp_path') does not intercept env reads, so the HOME probe "
+        f"must still be flagged; got: {issues!r}"
+    )

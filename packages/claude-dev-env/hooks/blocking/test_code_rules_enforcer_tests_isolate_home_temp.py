@@ -1325,6 +1325,84 @@ def test_should_still_flag_gettempdir_when_factory_dir_exemption_active() -> Non
     assert any("gettempdir" in each_issue for each_issue in issues)
 
 
+def test_should_allow_home_probe_with_usefixtures_monkeypatch_decorator() -> None:
+    source = (
+        "import os\n"
+        "import pytest\n"
+        "@pytest.mark.usefixtures('monkeypatch')\n"
+        "def test_reads_home() -> None:\n"
+        "    home = os.environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_allow_path_home_probe_with_usefixtures_monkeypatch_decorator() -> None:
+    source = (
+        "from pathlib import Path\n"
+        "import pytest\n"
+        "@pytest.mark.usefixtures('monkeypatch')\n"
+        "def test_writes_dotfile() -> None:\n"
+        "    home_dir = Path.home()\n"
+        "    (home_dir / '.myapp').write_text('x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_allow_home_probe_with_bare_mark_usefixtures_monkeypatch_decorator() -> None:
+    source = (
+        "import os\n"
+        "from pytest import mark\n"
+        "@mark.usefixtures('monkeypatch')\n"
+        "def test_reads_home() -> None:\n"
+        "    home = os.environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_allow_home_probe_with_usefixtures_monkeypatch_among_other_fixtures() -> None:
+    source = (
+        "import os\n"
+        "import pytest\n"
+        "@pytest.mark.usefixtures('tmp_path', 'monkeypatch')\n"
+        "def test_reads_home() -> None:\n"
+        "    home = os.environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_home_probe_with_usefixtures_lacking_monkeypatch() -> None:
+    source = (
+        "import os\n"
+        "import pytest\n"
+        "@pytest.mark.usefixtures('tmp_path')\n"
+        "def test_reads_home() -> None:\n"
+        "    home = os.environ['HOME']\n"
+        "    print(home)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
+def test_should_flag_home_probe_with_unrelated_marker_decorator() -> None:
+    source = (
+        "import os\n"
+        "import pytest\n"
+        "@pytest.mark.parametrize('value', [1, 2])\n"
+        "def test_reads_home(value) -> None:\n"
+        "    home = os.environ['HOME']\n"
+        "    print(home, value)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("HOME" in each_issue for each_issue in issues)
+
+
 def test_should_order_mixed_probe_types_by_source_line() -> None:
     source = (
         "import os\n"

@@ -109,6 +109,7 @@ BANNED_NOUN_SPAN_FRAGMENT_TEMPLATE: str = (
 ALL_PYTEST_FILESYSTEM_ISOLATION_FIXTURE_NAMES: frozenset[str] = frozenset({
     "monkeypatch",
 })
+PYTEST_USEFIXTURES_MARKER_NAME: str = "usefixtures"
 PYTEST_TEST_CLASS_NAME_PREFIX: str = "Test"
 ALL_HOME_DIRECTORY_ENV_VAR_NAMES: frozenset[str] = frozenset({
     "HOME",

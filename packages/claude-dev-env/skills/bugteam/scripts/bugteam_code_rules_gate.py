@@ -1027,7 +1027,7 @@ def _scoped_violations_for_file(
     """
     try:
         content = resolved_path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         print(f"{BUGTEAM_CODE_RULES_GATE_PREFIX}skip unreadable {resolved_path}", file=sys.stderr)
         return None
     relative_posix = str(

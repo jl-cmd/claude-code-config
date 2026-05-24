@@ -2589,15 +2589,17 @@ def _build_alias_canonicalization_map(syntax_tree: ast.Module) -> dict[str, str]
       resolves to ``os.environ``.
 
     An import is module-scoped — and enters this shared map — when it is not
-    lexically inside any ``FunctionDef``/``AsyncFunctionDef``. That admits
-    top-level imports nested in module-level ``try``/``except``, ``if``, or
-    ``with`` blocks (the ``try: import os as o except ImportError:`` optional-
-    import idiom binds ``o`` module-wide) while still excluding function-local
-    imports. A function-local import binds its name only inside the function it
-    appears in, so it must never enter this shared, module-wide map — otherwise
-    a probe import inside one test would canonicalize a same-named reference in
-    a sibling test that never imported it. Function-local imports are scoped to
-    their own function by ``_collect_local_probe_alias_bindings``.
+    lexically inside any ``FunctionDef``/``AsyncFunctionDef``/``ClassDef`` body.
+    That admits top-level imports nested in module-level ``try``/``except``,
+    ``if``, or ``with`` blocks (the ``try: import os as o except ImportError:``
+    optional-import idiom binds ``o`` module-wide) while excluding both
+    function-local and class-body imports. A function-local import binds its
+    name only inside the function it appears in, and a class-body import binds
+    its alias only within the class namespace; neither may enter this shared,
+    module-wide map — otherwise a probe import inside one test would
+    canonicalize a same-named reference in a sibling test that never imported
+    it. Function-local imports are scoped to their own function by
+    ``_collect_local_probe_alias_bindings``.
 
     Args:
         syntax_tree: The parsed module to scan for module-scoped import

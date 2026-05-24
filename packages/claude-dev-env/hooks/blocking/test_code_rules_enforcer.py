@@ -1843,6 +1843,36 @@ def test_class_body_aliased_import_does_not_leak_into_sibling_test() -> None:
     )
 
 
+def test_build_alias_map_records_module_top_level_but_excludes_function_and_class_imports() -> None:
+    """Only true module-top-level imports enter the alias map. Imports lexically
+    inside a function body or a class body are excluded, while a module-level
+    try-guarded optional import is still recorded module-wide."""
+    source = (
+        "try:\n"
+        "    import tempfile as guarded_temp\n"
+        "except ImportError:\n"
+        "    guarded_temp = None\n"
+        "def test_function_local() -> None:\n"
+        "    import tempfile as function_temp\n"
+        "    assert function_temp is not None\n"
+        "class TestBeta:\n"
+        "    import tempfile as class_temp\n"
+        "    def test_beta_probe(self) -> None:\n"
+        "        assert self.class_temp is not None\n"
+    )
+    syntax_tree = ast.parse(source)
+    alias_map = code_rules_enforcer._build_alias_canonicalization_map(syntax_tree)
+    assert alias_map.get("guarded_temp") == "tempfile", (
+        f"module-level try-guarded alias must be recorded, got: {alias_map!r}"
+    )
+    assert "function_temp" not in alias_map, (
+        f"function-local alias must not enter the module map, got: {alias_map!r}"
+    )
+    assert "class_temp" not in alias_map, (
+        f"class-body alias must not enter the module map, got: {alias_map!r}"
+    )
+
+
 def _oversized_function_source(name: str) -> str:
     body_line_count = code_rules_enforcer.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
     body_lines = [

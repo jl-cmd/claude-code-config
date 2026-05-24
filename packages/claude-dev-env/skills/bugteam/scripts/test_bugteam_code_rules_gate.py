@@ -431,6 +431,31 @@ def test_run_gate_exits_nonzero_when_a_file_is_unreadable(
     assert "skip unreadable" in captured.err
 
 
+def test_run_gate_skips_non_utf8_file_without_crashing(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A non-UTF-8 code file is skipped, not crashed on, and forces a non-zero exit."""
+    non_utf8_file = tmp_path / "garbled.py"
+    non_utf8_file.write_bytes(b"\xff\xfe\x00bad bytes")
+
+    def fake_validate(_content: str, _path: str, **_kwargs: object) -> list[str]:
+        return []
+
+    exit_code = gate_module.run_gate(
+        fake_validate,
+        [non_utf8_file],
+        tmp_path,
+        all_added_lines_map=None,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code != 0, (
+        "A file skipped for non-UTF-8 content must produce a non-zero gate exit"
+    )
+    assert "skip unreadable" in captured.err
+
+
 def test_added_lines_for_staged_file_returns_parsed_result_when_diff_is_non_empty_even_if_parse_returns_empty(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,

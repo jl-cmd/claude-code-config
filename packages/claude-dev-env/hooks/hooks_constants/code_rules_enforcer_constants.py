@@ -133,6 +133,16 @@ ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
     "tempfile.TemporaryDirectory",
     "tempfile.SpooledTemporaryFile",
 })
+ALL_DIR_ACCEPTING_TEMPFILE_FACTORY_DOTTED_NAMES: frozenset[str] = frozenset({
+    "tempfile.mkstemp",
+    "tempfile.mkdtemp",
+    "tempfile.mktemp",
+    "tempfile.NamedTemporaryFile",
+    "tempfile.TemporaryFile",
+    "tempfile.TemporaryDirectory",
+    "tempfile.SpooledTemporaryFile",
+})
+TEMPFILE_FACTORY_ISOLATION_DIRECTORY_KEYWORD: str = "dir"
 EXPANDVARS_DOTTED_NAME: str = "os.path.expandvars"
 EXPANDUSER_DOTTED_NAME: str = "os.path.expanduser"
 ALL_PATHLIB_STATIC_EXPANDUSER_DOTTED_NAMES: frozenset[str] = frozenset({

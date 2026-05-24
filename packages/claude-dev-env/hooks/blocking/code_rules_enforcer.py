@@ -105,6 +105,8 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_CODE_EXTENSIONS,
     ALL_CAPS_WITH_UNDERSCORE_PATTERN,
     ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES,
+    ALL_DIR_ACCEPTING_TEMPFILE_FACTORY_DOTTED_NAMES,
+    TEMPFILE_FACTORY_ISOLATION_DIRECTORY_KEYWORD,
     ALL_HOME_DIRECTORY_ENV_VAR_NAMES,
     ALL_ENVIRONMENT_GETTER_DOTTED_NAMES,
     ALL_PROBE_RELEVANT_MODULE_CANONICAL_NAMES,
@@ -2986,6 +2988,28 @@ def _expanduser_argument_references_home(call_node: ast.Call) -> bool:
     return first_argument.value.startswith(HOME_DIRECTORY_TILDE_PREFIX)
 
 
+def _tempfile_factory_call_supplies_explicit_dir(call_node: ast.Call) -> bool:
+    """Return True when a tempfile factory call passes an explicit ``dir=``.
+
+    A ``dir=`` keyword sandboxes the allocation under the supplied directory
+    (typically the pytest ``tmp_path`` fixture), so the call does not leak into
+    the shared temp directory and is not an isolation violation. Only an
+    explicit ``dir=`` keyword counts; a ``**kwargs`` ``dir`` cannot be resolved
+    statically and is treated as absent, mirroring the conservative argument
+    inspection applied to ``expandvars`` and ``expanduser``.
+
+    Args:
+        call_node: The tempfile factory call node.
+
+    Returns:
+        True when one of the call's keyword arguments is named ``dir``.
+    """
+    return any(
+        each_keyword.arg == TEMPFILE_FACTORY_ISOLATION_DIRECTORY_KEYWORD
+        for each_keyword in call_node.keywords
+    )
+
+
 def _environ_key_string_from_call(
     call_node: ast.Call,
     all_canonical_names_by_alias: dict[str, str],
@@ -3185,6 +3209,11 @@ def _record_home_or_temp_probe(
                 all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
         if canonical_chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
+            if (
+                canonical_chain in ALL_DIR_ACCEPTING_TEMPFILE_FACTORY_DOTTED_NAMES
+                and _tempfile_factory_call_supplies_explicit_dir(node)
+            ):
+                return
             all_probes.append((node.lineno, f"{canonical_chain}()"))
             return
         environ_key = _environ_key_string_from_call(

@@ -1310,6 +1310,21 @@ def test_isolation_check_flags_tempfile_named_temporary_file() -> None:
     assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
 
 
+def test_isolation_check_exempts_tempfile_factory_with_explicit_dir() -> None:
+    """A tempfile factory given an explicit `dir=` argument allocates under the
+    supplied sandbox, so it must not fire as a shared-temp isolation probe."""
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp(tmp_path) -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile(dir=tmp_path)\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert issues == []
+
+
 def test_isolation_check_flags_class_level_probe_in_nested_class_body() -> None:
     """A Path.home() initializer in a nested class body runs at class-creation
     time during the test, so it must fire."""

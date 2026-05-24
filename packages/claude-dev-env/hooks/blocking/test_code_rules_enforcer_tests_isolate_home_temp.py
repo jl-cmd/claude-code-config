@@ -1281,6 +1281,50 @@ def test_should_flag_bare_imported_tempfile_spooled_temporary_file() -> None:
     assert any("SpooledTemporaryFile" in each_issue for each_issue in issues)
 
 
+def test_should_not_flag_named_temporary_file_with_explicit_dir() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp(tmp_path) -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile(dir=tmp_path)\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_not_flag_mkdtemp_with_explicit_dir() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_makes_temp_dir(tmp_path) -> None:\n"
+        "    holder = tempfile.mkdtemp(dir=tmp_path)\n"
+        "    print(holder)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_flag_named_temporary_file_without_dir() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp() -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile()\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_still_flag_gettempdir_when_factory_dir_exemption_active() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_reads_shared_temp() -> None:\n"
+        "    base = tempfile.gettempdir()\n"
+        "    print(base)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("gettempdir" in each_issue for each_issue in issues)
+
+
 def test_should_order_mixed_probe_types_by_source_line() -> None:
     source = (
         "import os\n"

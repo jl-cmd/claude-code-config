@@ -80,26 +80,26 @@ PR: feat(watchdog): use Everything CLI to enumerate watched paths
 Head SHA: (the commit that landed `_extract_paths_from_everything_cli_stdout`)
 ID prefix: `find`.
 
-The PR introduces `_extract_paths_from_everything_cli_stdout(stdout: str) -> list[Path]`, a parser that walks the stdout of `es.exe` (Everything search CLI) and emits one `Path` per line. The consumer in the same PR builds a `dict[Path, WatchedDirectoryState]` keyed by the producer's output. The audit goal: verify the producer's `list[Path]` return type matches the consumer's dict-key cardinality assumption.
+The PR introduces `_extract_paths_from_everything_cli_stdout(stdout: str) -> list[Path]`, a parser that walks the stdout of `es.exe` (Everything search CLI) and emits one `Path` per line. The consumer in the same PR iterates the producer's list and runs one `INSERT` per element against a `UNIQUE(path)` table. The audit goal: verify the producer's `list[Path]` return type matches the consumer's per-element-INSERT cardinality assumption.
 
 ## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
 
 **M1. Subprocess-stdout parsers** ⭐ canonical M case — Shape A finding F10
 - `_extract_paths_from_everything_cli_stdout` walks `subprocess.run(["es.exe", ...]).stdout` line-by-line. Return type: `list[Path]`. No `frozenset[Path]`, no `dict.fromkeys`, no "duplicates preserved" docstring.
 - `es.exe`'s stdout CAN emit the same path on multiple lines: when the search query matches both a file by name AND its alternate data stream, OR when the underlying NTFS index has stale entries that haven't been pruned. The Everything documentation does not guarantee unique output across runs.
-- The consumer `_build_watchdog_state` at `watchdog.py:142` builds a `dict[Path, WatchedDirectoryState]` from the producer's output: `state_by_path = {each_path: WatchedDirectoryState() for each_path in extract_paths(...)}`. Python dict comprehensions silently overwrite on duplicate keys — but the next line iterates `state_by_path.items()` and submits one update per entry to the SQLite writeback. The duplicate-key issue surfaces downstream as a SQLite `IntegrityError: UNIQUE constraint failed: watched_dirs.path` when the writeback's `INSERT` hits the same path twice.
+- The consumer `_write_watchdog_state` at `watchdog.py:142` iterates the producer's list directly and submits one `INSERT INTO watched_dirs(path) VALUES (...)` per element: `for each_path in extract_paths(...): cursor.execute(INSERT_WATCHED_DIR, (str(each_path),))`. The list preserves every line the producer emitted, so a duplicate path reaches the writeback twice and the second `INSERT` hits the `UNIQUE(path)` constraint. The duplicate surfaces as a SQLite `IntegrityError: UNIQUE constraint failed: watched_dirs.path`.
 - Adversarial probe (a): the `es.exe` man page does NOT state output uniqueness; verified non-unique.
 - Adversarial probe (b): the producer's tests use a single hand-crafted stdout fixture with no duplicates; the duplicate-emission case is uncovered.
-- Adversarial probe (c): the consumer dict-build is an M3 partner — set-coercion via dict-comprehension overwrite.
-- **Severity P0**: production `sqlite3.IntegrityError` (UNIQUE constraint on `watched_dirs.path`) observed in pa#143's audit trail; a plain dict assignment never raises, so the collapse stays silent until the writeback.
-- **Fix**: change the producer to return `frozenset[Path]` via `return frozenset(Path(each_line) for each_line in stdout.splitlines() if each_line.strip())`. The consumer's `{each_path: WatchedDirectoryState() for each_path in ...}` dict-comprehension already produces a unique-keyed dict from a frozenset.
+- Adversarial probe (c): the consumer's per-element `INSERT` loop is an M3 partner — `INSERT` against a `UNIQUE`-constrained column that the producer's `list[Path]` does not deduplicate.
+- **Severity P0**: production `sqlite3.IntegrityError` (UNIQUE constraint on `watched_dirs.path`) observed in pa#143's audit trail; the list carries the duplicate straight into the writeback, so the second `INSERT` crashes the watchdog.
+- **Fix**: change the producer to return `frozenset[Path]` via `return frozenset(Path(each_line) for each_line in stdout.splitlines() if each_line.strip())`. The frozenset reaches the writeback with each path exactly once, so the per-element `INSERT` loop runs one `INSERT` per distinct path.
 
 **M2. Database / registry queries**
 - The producer does not query a database. M2 is verified clean — no DB query in scope.
 
 **M3. Consumer-expects-set anti-pattern**
-- The consumer `_build_watchdog_state` builds a dict-comprehension keyed by the producer's `list[Path]` output. This is the M3 anti-pattern: the consumer is implicitly relying on path-uniqueness without expressing it in a type. F10 above covers this pair.
-- Adversarial probe: the writeback path at `watchdog.py:189` calls `state_by_path[each_path] = updated_state` — a single-key update, not a duplicate-tolerant accumulator. The writeback fails on the same path appearing twice in the producer's output.
+- The consumer `_write_watchdog_state` runs one `INSERT` per element of the producer's `list[Path]` output against a `UNIQUE(path)` column. This is the M3 anti-pattern: the consumer implicitly relies on path-uniqueness without expressing it in a type. F10 above covers this pair.
+- Adversarial probe: the writeback path at `watchdog.py:189` calls `cursor.execute(INSERT_WATCHED_DIR, (str(each_path),))` once per list element — an unconditional `INSERT`, not an `INSERT ... ON CONFLICT DO NOTHING`. The writeback fails on the same path appearing twice in the producer's output.
 
 **M4. `extend(...)` into list consumers (acceptable)**
 - No consumer in this PR uses `accumulator.extend(producer())`. M4 verified clean — no such consumer in scope.
@@ -118,7 +118,7 @@ The PR introduces `_extract_paths_from_everything_cli_stdout(stdout: str) -> lis
 
 ## Cross-bucket questions to answer at the end
 
-Q1: The producer `_extract_paths_from_everything_cli_stdout` returns `list[Path]` from a subprocess-stdout source, AND the consumer `_build_watchdog_state` builds a dict keyed by the result. Cite `watchdog.py:128` (producer) and `watchdog.py:142` (consumer) as the conflict pair.
+Q1: The producer `_extract_paths_from_everything_cli_stdout` returns `list[Path]` from a subprocess-stdout source, AND the consumer `_write_watchdog_state` runs one `INSERT` per element against a `UNIQUE(path)` column. Cite `watchdog.py:128` (producer) and `watchdog.py:142` (consumer) as the conflict pair.
 
 Q2: Worst cardinality drift: F10 — duplicate path in `es.exe` stdout causes `IntegrityError` in the SQLite writeback. P0 severity because it crashes the watchdog process and prevents recovery.
 

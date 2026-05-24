@@ -1800,6 +1800,49 @@ def test_module_level_from_os_import_environ_still_flags_every_referencing_test(
     )
 
 
+def test_build_alias_map_excludes_class_body_imports() -> None:
+    """A probe alias imported inside a class body binds only inside that class
+    scope, so it must not enter the module-wide alias canonicalization map. A
+    genuine module-level alias in the same source must still be recorded."""
+    source = (
+        "import tempfile as module_temp\n"
+        "class TestAlpha:\n"
+        "    import tempfile as t\n"
+        "    def test_alpha_probe(self) -> None:\n"
+        "        assert self.t is not None\n"
+    )
+    syntax_tree = ast.parse(source)
+    alias_map = code_rules_enforcer._build_alias_canonicalization_map(syntax_tree)
+    assert alias_map.get("module_temp") == "tempfile", (
+        f"top-level alias must be recorded, got: {alias_map!r}"
+    )
+    assert "t" not in alias_map, (
+        f"class-body `import tempfile as t` must not leak into the module map, got: {alias_map!r}"
+    )
+
+
+def test_class_body_aliased_import_does_not_leak_into_sibling_test() -> None:
+    """A class-body `import tempfile as t` aliases `t` only inside that class.
+    A sibling top-level test taking `t` as a parameter and calling `t.mkdtemp()`
+    must not be flagged, since the class-scoped alias never enters the
+    module-wide map."""
+    source = (
+        "class TestAlpha:\n"
+        "    import tempfile as t\n"
+        "    def test_alpha_probe(self) -> None:\n"
+        "        assert self.t is not None\n"
+        "def test_sibling(t) -> None:\n"
+        "    t.mkdtemp()\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert not any("test_sibling" in each_issue for each_issue in issues), (
+        "class-body alias must not leak into a sibling test through the "
+        f"module-wide map, got: {issues!r}"
+    )
+
+
 def _oversized_function_source(name: str) -> str:
     body_line_count = code_rules_enforcer.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
     body_lines = [

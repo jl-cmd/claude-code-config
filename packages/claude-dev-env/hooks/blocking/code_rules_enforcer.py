@@ -2612,21 +2612,24 @@ def _build_alias_canonicalization_map(syntax_tree: ast.Module) -> dict[str, str]
     for each_node in ast.walk(syntax_tree):
         if not isinstance(each_node, (ast.Import, ast.ImportFrom)):
             continue
-        if _node_is_lexically_inside_function(each_node, parent_by_child_id):
+        if _node_is_lexically_inside_function_or_class(each_node, parent_by_child_id):
             continue
         _record_probe_import_aliases(each_node, all_canonical_names_by_alias)
     return all_canonical_names_by_alias
 
 
-def _node_is_lexically_inside_function(
+def _node_is_lexically_inside_function_or_class(
     node: ast.AST, parent_by_child_id: dict[int, ast.AST],
 ) -> bool:
-    """Return True when *node*'s nearest enclosing scope is a function.
+    """Return True when *node* is nested inside a function or class body.
 
     Walks ancestors via *parent_by_child_id*. A node nested only inside
-    module-level ``try``/``if``/``with`` blocks (or a class body) has no
-    enclosing function and is module-scoped; a node inside a
-    ``FunctionDef``/``AsyncFunctionDef`` body is function-local.
+    module-level ``try``/``if``/``with`` blocks has no enclosing function or
+    class and is module-scoped; a node inside a
+    ``FunctionDef``/``AsyncFunctionDef``/``ClassDef`` body is scoped to that
+    enclosing definition and is not module-scoped. A class-body import binds
+    its alias only within the class namespace, so it must not enter the
+    module-wide alias map any more than a function-local import does.
 
     Args:
         node: The node whose lexical scope is being classified.
@@ -2634,11 +2637,15 @@ def _node_is_lexically_inside_function(
             ``_build_parent_map``.
 
     Returns:
-        True when an enclosing ``FunctionDef``/``AsyncFunctionDef`` exists.
+        True when an enclosing
+        ``FunctionDef``/``AsyncFunctionDef``/``ClassDef`` exists.
     """
     current_ancestor = parent_by_child_id.get(id(node))
     while current_ancestor is not None:
-        if isinstance(current_ancestor, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        if isinstance(
+            current_ancestor,
+            (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef),
+        ):
             return True
         current_ancestor = parent_by_child_id.get(id(current_ancestor))
     return False

@@ -1248,6 +1248,26 @@ def test_should_not_flag_local_class_alias_leaking_from_a_different_test() -> No
     assert not any("test_b" in each_issue for each_issue in issues)
 
 
+def test_should_not_flag_sibling_test_using_name_of_class_body_aliased_import() -> None:
+    """A probe alias imported inside one test class body binds only inside that
+    class scope. A sibling top-level test that takes the same name as a
+    parameter must not inherit the alias, so its dotted call on that name does
+    not surface a HOME/TMP isolation finding."""
+    source = (
+        "class TestAlpha:\n"
+        "    import tempfile as t\n"
+        "    def test_alpha_probe(self) -> None:\n"
+        "        assert self.t is not None\n"
+        "def test_sibling(t) -> None:\n"
+        "    t.mkdtemp()\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert not any("test_sibling" in each_issue for each_issue in issues), (
+        "a class-body aliased import must not leak into the module-wide alias "
+        f"map and flag a sibling test, got: {issues!r}"
+    )
+
+
 def test_should_flag_tempfile_gettempdirb_without_isolation() -> None:
     source = (
         "import tempfile\n"

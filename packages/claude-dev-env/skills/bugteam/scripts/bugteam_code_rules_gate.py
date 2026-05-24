@@ -979,6 +979,33 @@ def print_violation_section(
             print(f"  {each_issue}", file=sys.stderr)
 
 
+def read_prior_committed_content(
+    repository_root: Path, relative_path_posix: str
+) -> str:
+    """Return the HEAD-committed content for *relative_path_posix*.
+
+    Args:
+        repository_root: The repository root for running git commands.
+        relative_path_posix: POSIX-style relative path to read.
+
+    Returns:
+        The committed file content at HEAD, or an empty string when the
+        path is not tracked or ``git show`` returns non-zero.
+    """
+    show_result = subprocess.run(
+        ["git", "show", f"HEAD:{relative_path_posix}"],
+        cwd=str(repository_root),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if show_result.returncode != 0:
+        return ""
+    return show_result.stdout
+
+
 def _scoped_violations_for_file(
     validate_content: ValidateContentCallable,
     resolved_path: Path,
@@ -1006,10 +1033,13 @@ def _scoped_violations_for_file(
     relative_posix = str(
         resolved_path.relative_to(repository_root.resolve())
     ).replace("\\", "/")
+    prior_content = read_prior_committed_content(
+        repository_root.resolve(), relative_posix
+    )
     issues = validate_content(
         content,
         relative_posix,
-        old_content=content,
+        old_content=prior_content,
         defer_scope_to_caller=True,
     )
     issues.extend(check_database_column_string_magic(content, relative_posix))

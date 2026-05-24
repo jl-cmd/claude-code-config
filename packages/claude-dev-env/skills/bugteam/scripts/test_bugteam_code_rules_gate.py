@@ -759,6 +759,43 @@ def test_check_wrapper_plumb_through_ignores_calls_nested_inside_delegate_argume
     )
 
 
+def test_main_staged_mode_blocks_newly_staged_inline_comment(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A NEWLY STAGED inline comment must be detected as a new comment in
+    ``--staged`` mode. This proves the gate passes the HEAD-committed content as
+    ``old_content`` to the comparison validators (the prior base), not the
+    current working-tree content. When the current file content is reused as
+    ``old_content``, ``check_comment_changes`` sees identical old/new text and
+    misses the staged comment entirely, so the gate exits 0 — the regression."""
+    write_file(
+        temporary_git_repository / "module.py",
+        'def describe_state() -> str:\n    return "ready"\n',
+    )
+    commit_all_files(temporary_git_repository, "initial without comment")
+    staged_content_with_new_comment = (
+        "def describe_state() -> str:\n"
+        '    label = "ready"  # newly staged inline comment\n'
+        "    return label\n"
+    )
+    write_file(
+        temporary_git_repository / "module.py",
+        staged_content_with_new_comment,
+    )
+    stage_file(temporary_git_repository, "module.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1, (
+        "a newly staged inline comment must block; if it does not, the gate is "
+        "passing the current file content as old_content instead of the "
+        "HEAD-committed prior base, so check_comment_changes sees identical "
+        "old/new text and misses the staged comment"
+    )
+
+
 def test_check_wrapper_plumb_through_stays_under_function_length_threshold() -> None:
     """check_wrapper_plumb_through must stay under the enforcer's function-length
     blocking threshold so its signature-index, class-method-id, and per-wrapper

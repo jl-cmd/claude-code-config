@@ -34,7 +34,6 @@ BANNED_NOUN_SPAN_GROUP_INDEX: int = 2
 ALL_CODE_FILE_EXTENSIONS: frozenset[str] = frozenset(
     {".py", ".js", ".ts", ".tsx", ".jsx"}
 )
-ALL_JS_FILE_EXTENSIONS: tuple[str, ...] = (".js", ".ts", ".tsx", ".jsx")
 ALL_COLUMN_MAGIC_FALSE_VALUES: frozenset[str] = frozenset(
     {"true", "false", "none", "null"}
 )

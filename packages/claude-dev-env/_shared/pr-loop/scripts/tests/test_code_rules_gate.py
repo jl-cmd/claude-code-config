@@ -1259,3 +1259,16 @@ def test_split_violations_advises_banned_noun_when_binding_line_untouched() -> N
     )
     assert advisory == banned_noun_issues
     assert blocking == []
+
+
+def test_banned_noun_span_range_covers_only_the_binding_line() -> None:
+    """The reconstructed span is the binding line alone — one line, never the
+    enclosing function span. A parameter declared on a ``def`` line yields a
+    range covering only that line, so an unrelated body edit cannot pull the
+    pre-existing binding into scope."""
+    banned_noun_issues = _banned_noun_parameter_issues()
+    assert banned_noun_issues, "expected a banned-noun parameter issue"
+    parameter_binding_line = 1
+    span = gate_module.banned_noun_span_range(banned_noun_issues[0])
+    assert span == range(parameter_binding_line, parameter_binding_line + 1)
+    assert len(span) == 1

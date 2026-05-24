@@ -908,6 +908,8 @@ def _starts_with_bounded_token_anchored_directive(directive_body: str) -> bool:
     for each_token in ALL_TOKEN_ANCHORED_EXEMPT_COMMENT_BODIES:
         if not directive_body.startswith(each_token):
             continue
+        if each_token[-1] in ALL_TOKEN_ANCHORED_DIRECTIVE_BOUNDARY_CHARACTERS:
+            return True
         following_text = directive_body[len(each_token):]
         if not following_text:
             return True

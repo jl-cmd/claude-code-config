@@ -856,22 +856,22 @@ def isolation_span_range(violation_text: str) -> range | None:
 
 
 def banned_noun_span_range(violation_text: str) -> range | None:
-    """Return the enclosing-unit line range of a banned-noun violation, or None.
+    """Return the one-line binding span of a banned-noun violation, or None.
 
-    The enforcer's banned-noun message carries the enclosing-unit definition
-    line and span: ``Line N: Identifier 'NAME' ... (binding span at line X,
-    spanning Y lines)``. The unit occupies lines ``X`` through ``X + Y - 1``
-    inclusive — the enclosing function span where the binding sits inside one,
-    else the binding line alone — so a binding declared on a ``def`` line is
-    scoped by the same enclosing-unit span the enforcer uses rather than by the
-    ``Line N:`` binding line alone.
+    The enforcer's banned-noun message carries the binding line and a one-line
+    span: ``Line N: Identifier 'NAME' ... (binding span at line X, spanning 1
+    lines)``. A banned-noun binding is a point fact about one identifier, so the
+    span is always the binding line alone (``X`` through ``X``) — never the
+    enclosing function span. Scoping to the binding line keeps a pre-existing
+    parameter or local-name binding out of scope when an unrelated line of its
+    enclosing function is edited.
 
     Args:
         violation_text: A single violation string emitted by the enforcer.
 
     Returns:
-        A ``range`` covering the binding's enclosing-unit line span, or None
-        when the text is not a banned-noun violation.
+        A ``range`` covering the binding's one-line span, or None when the text
+        is not a banned-noun violation.
     """
     span_match = BANNED_NOUN_VIOLATION_PATTERN.search(violation_text)
     if span_match is None:

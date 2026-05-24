@@ -104,6 +104,26 @@ def test_should_flag_pylint_with_chained_inline_comment() -> None:
     assert _is_exempt_python_comment(token) is False
 
 
+def test_should_exempt_pylint_directive_without_space_after_colon() -> None:
+    token = _build_comment_token("# pylint:disable=unused-import")
+    assert _is_exempt_python_comment(token) is True
+
+
+def test_should_exempt_pragma_directive_without_space_after_colon() -> None:
+    token = _build_comment_token("# pragma:no-cover")
+    assert _is_exempt_python_comment(token) is True
+
+
+def test_should_exempt_type_ignore_without_space_after_colon() -> None:
+    token = _build_comment_token("# type:ignore")
+    assert _is_exempt_python_comment(token) is True
+
+
+def test_should_flag_noqa_glued_prose_lacking_real_boundary() -> None:
+    token = _build_comment_token("# noqaFOO")
+    assert _is_exempt_python_comment(token) is False
+
+
 def test_should_exempt_bare_pragma_directive() -> None:
     token = _build_comment_token("# pragma: no cover")
     assert _is_exempt_python_comment(token) is True

@@ -1597,6 +1597,26 @@ def test_exempt_comment_keeps_bare_and_coded_noqa_exempt() -> None:
     assert code_rules_enforcer.check_comments_python(coded_source) == []
 
 
+def test_exempt_comment_keeps_colon_terminated_markers_without_trailing_space() -> None:
+    """A colon-terminated marker (`pylint:`, `type:`, `pragma:`) is self-bounded
+    by its own colon, so the directive stays exempt even when the next character
+    follows the colon immediately."""
+    pylint_source = "import os  # pylint:disable=unused-import\n"
+    type_ignore_source = "x = compute()  # type:ignore\n"
+    pragma_source = "x = compute()  # pragma:no-cover\n"
+    assert code_rules_enforcer.check_comments_python(pylint_source) == []
+    assert code_rules_enforcer.check_comments_python(type_ignore_source) == []
+    assert code_rules_enforcer.check_comments_python(pragma_source) == []
+
+
+def test_exempt_comment_still_flags_noqa_glued_to_prose_without_boundary() -> None:
+    """The colon-terminated allowance must not loosen the boundary rule for
+    markers that do not end in a colon: `# noqaFOO` still lacks a real boundary
+    after `noqa` and stays subject to the no-new-comments rule."""
+    source = "x = compute()  # noqaFOO\n"
+    assert code_rules_enforcer.check_comments_python(source)
+
+
 def test_banned_noun_word_skips_non_aliased_upstream_import() -> None:
     """A non-aliased upstream import the author cannot rename
     (`from typing import ItemsView`) must not be flagged, while an

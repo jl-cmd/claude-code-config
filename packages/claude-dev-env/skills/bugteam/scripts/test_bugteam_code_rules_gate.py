@@ -887,3 +887,46 @@ def test_read_prior_committed_content_returns_empty_for_untracked_path(
     )
 
     assert prior_content == ""
+
+
+def test_main_staged_mode_validates_staged_blob_not_working_tree(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Staged mode validates the staged blob, not the working tree.
+
+    A blocking violation lives in the staged blob, but the working tree has
+    been edited afterward to remove it. The gate must still block because it
+    scopes added lines from the staged index and must read its content from
+    the same staged source rather than the diverged working tree.
+    """
+    write_file(temporary_git_repository / "module.py", "first_count = 1\n")
+    commit_all_files(temporary_git_repository, "initial")
+    staged_content_with_banned_identifier = (
+        "first_count = 1\n"
+        "def compute_total(operand):\n"
+        "    result = operand + 1\n"
+        "    return result\n"
+    )
+    write_file(
+        temporary_git_repository / "module.py",
+        staged_content_with_banned_identifier,
+    )
+    stage_file(temporary_git_repository, "module.py")
+    clean_working_tree_content = (
+        "first_count = 1\n"
+        "def compute_total(operand: int) -> int:\n"
+        "    return operand + 1\n"
+    )
+    write_file(
+        temporary_git_repository / "module.py",
+        clean_working_tree_content,
+    )
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code == 1, (
+        "the staged blob carries a blocking violation; the gate must block "
+        "even though the working tree was edited clean afterward"
+    )

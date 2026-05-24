@@ -1006,11 +1006,40 @@ def read_prior_committed_content(
     return git_show_process.stdout
 
 
+def read_staged_content(
+    repository_root: Path, relative_path_posix: str
+) -> str | None:
+    """Return the staged-blob content for *relative_path_posix*.
+
+    Args:
+        repository_root: The repository root for running git commands.
+        relative_path_posix: POSIX-style relative path to read.
+
+    Returns:
+        The staged blob content, or None when the path is not staged, when
+        ``git show`` returns non-zero, or when the staged bytes are not
+        decodable Unicode (the caller skips and fails closed).
+    """
+    git_show_process = subprocess.run(
+        ["git", "show", f":{relative_path_posix}"],
+        cwd=str(repository_root),
+        capture_output=True,
+        check=False,
+    )
+    if git_show_process.returncode != 0:
+        return None
+    try:
+        return git_show_process.stdout.decode(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def _scoped_violations_for_file(
     validate_content: ValidateContentCallable,
     resolved_path: Path,
     repository_root: Path,
     all_added_lines_for_file: set[int] | None,
+    read_staged_content_flag: bool = False,
 ) -> tuple[list[str], list[str]] | None:
     """Validate one resolved file and partition its violations by diff scope.
 
@@ -1020,19 +1049,28 @@ def _scoped_violations_for_file(
         repository_root: The repository root for relative path resolution.
         all_added_lines_for_file: Lines added in the current diff for this file,
             or None to treat every violation as blocking.
+        read_staged_content_flag: When True, source the content from the staged
+            blob so it matches the staged diff that scoped the added lines.
 
     Returns:
         ``(blocking, advisory)`` for the file, or None when the file could not
         be read (the caller logs the skip and counts it).
     """
-    try:
-        content = resolved_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        print(f"{BUGTEAM_CODE_RULES_GATE_PREFIX}skip unreadable {resolved_path}", file=sys.stderr)
-        return None
     relative_posix = str(
         resolved_path.relative_to(repository_root.resolve())
     ).replace("\\", "/")
+    if read_staged_content_flag:
+        staged_content = read_staged_content(repository_root.resolve(), relative_posix)
+        if staged_content is None:
+            print(f"{BUGTEAM_CODE_RULES_GATE_PREFIX}skip unreadable {resolved_path}", file=sys.stderr)
+            return None
+        content = staged_content
+    else:
+        try:
+            content = resolved_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            print(f"{BUGTEAM_CODE_RULES_GATE_PREFIX}skip unreadable {resolved_path}", file=sys.stderr)
+            return None
     prior_content = read_prior_committed_content(
         repository_root.resolve(), relative_posix
     )
@@ -1054,6 +1092,7 @@ def run_gate(
     all_file_paths: list[Path],
     repository_root: Path,
     all_added_lines_map: dict[Path, set[int]] | None,
+    read_staged_content_flag: bool = False,
 ) -> int:
     """Run the CODE_RULES gate on a set of file paths.
 
@@ -1066,6 +1105,8 @@ def run_gate(
         repository_root: The repository root for relative path resolution.
         all_added_lines_map: Optional map of resolved path to added line numbers.
             When provided, violations on added lines are blocking; others are advisory.
+        read_staged_content_flag: When True, validate each file's staged blob
+            so the content source matches the staged diff.
 
     Returns:
         Zero when every targeted file was validated and no blocking
@@ -1084,7 +1125,8 @@ def run_gate(
             None if all_added_lines_map is None else all_added_lines_map.get(resolved)
         )
         scoped_violations = _scoped_violations_for_file(
-            validate_content, resolved, repository_root, all_added_lines_for_file
+            validate_content, resolved, repository_root,
+            all_added_lines_for_file, read_staged_content_flag,
         )
         if scoped_violations is None:
             skipped_unreadable_count += 1
@@ -1253,6 +1295,7 @@ def main(all_arguments: list[str]) -> int:
             staged_file_paths,
             repository_root,
             all_added_lines_map=staged_added_lines,
+            read_staged_content_flag=True,
         )
     all_diff_paths = paths_from_git_diff(repository_root, arguments.base)
     all_diff_paths = filter_paths_under_prefixes(

@@ -144,6 +144,11 @@ ALL_DIR_ACCEPTING_TEMPFILE_FACTORY_DOTTED_NAMES: frozenset[str] = frozenset({
     "tempfile.SpooledTemporaryFile",
 })
 TEMPFILE_FACTORY_ISOLATION_DIRECTORY_KEYWORD: str = "dir"
+ALL_SHARED_TEMP_SOURCE_PROBE_DOTTED_NAMES: frozenset[str] = frozenset({
+    "tempfile.gettempdir",
+    "tempfile.gettempdirb",
+    "tempfile.gettempprefix",
+})
 EXPANDVARS_DOTTED_NAME: str = "os.path.expandvars"
 EXPANDUSER_DOTTED_NAME: str = "os.path.expanduser"
 ALL_PATHLIB_STATIC_EXPANDUSER_DOTTED_NAMES: frozenset[str] = frozenset({

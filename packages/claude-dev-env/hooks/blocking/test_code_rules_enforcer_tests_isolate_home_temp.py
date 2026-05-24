@@ -1334,6 +1334,74 @@ def test_should_flag_named_temporary_file_without_dir() -> None:
     assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
 
 
+def test_should_flag_named_temporary_file_with_dir_none() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp() -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile(dir=None)\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_flag_mkdtemp_with_dir_getenv_tmpdir() -> None:
+    source = (
+        "import os\n"
+        "import tempfile\n"
+        "def test_makes_temp_dir() -> None:\n"
+        "    holder = tempfile.mkdtemp(dir=os.getenv('TMPDIR'))\n"
+        "    print(holder)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("mkdtemp" in each_issue for each_issue in issues)
+
+
+def test_should_flag_named_temporary_file_with_dir_gettempdir() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp() -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile(dir=tempfile.gettempdir())\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_flag_named_temporary_file_with_dir_environ_subscript_tmp() -> None:
+    source = (
+        "import os\n"
+        "import tempfile\n"
+        "def test_writes_named_temp() -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile(dir=os.environ['TMP'])\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_should_not_flag_named_temporary_file_with_dir_str_tmp_path() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp(tmp_path) -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile(dir=str(tmp_path))\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
+def test_should_not_flag_mkdtemp_with_dir_str_tmp_path() -> None:
+    source = (
+        "import tempfile\n"
+        "def test_makes_temp_dir(tmp_path) -> None:\n"
+        "    holder = tempfile.mkdtemp(dir=str(tmp_path))\n"
+        "    print(holder)\n"
+    )
+    issues = check_tests_use_isolated_filesystem_paths(source, TEST_FILE_PATH)
+    assert issues == []
+
+
 def test_should_still_flag_gettempdir_when_factory_dir_exemption_active() -> None:
     source = (
         "import tempfile\n"

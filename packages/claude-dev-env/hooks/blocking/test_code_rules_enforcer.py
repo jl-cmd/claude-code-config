@@ -1327,6 +1327,52 @@ def test_isolation_check_exempts_tempfile_factory_with_explicit_dir() -> None:
     assert issues == []
 
 
+def test_isolation_check_flags_tempfile_factory_with_dir_constant_none() -> None:
+    """`dir=None` selects the default shared temp directory, so the factory
+    still allocates from shared temp and must fire."""
+    source = (
+        "import tempfile\n"
+        "def test_writes_named_temp() -> None:\n"
+        "    handle = tempfile.NamedTemporaryFile(dir=None)\n"
+        "    handle.write(b'x')\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("NamedTemporaryFile" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_flags_tempfile_factory_with_dir_getenv_tmpdir() -> None:
+    """`dir=os.getenv('TMPDIR')` resolves to a shared-temp env source, so the
+    factory still allocates from shared temp and must fire."""
+    source = (
+        "import os\n"
+        "import tempfile\n"
+        "def test_makes_temp_dir() -> None:\n"
+        "    holder = tempfile.mkdtemp(dir=os.getenv('TMPDIR'))\n"
+        "    print(holder)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert any("mkdtemp" in each_issue for each_issue in issues)
+
+
+def test_isolation_check_exempts_tempfile_factory_with_dir_tmp_path() -> None:
+    """`dir=tmp_path` allocates under the pytest sandbox, so the factory is
+    isolated and must not fire."""
+    source = (
+        "import tempfile\n"
+        "def test_makes_temp_dir(tmp_path) -> None:\n"
+        "    holder = tempfile.mkdtemp(dir=tmp_path)\n"
+        "    print(holder)\n"
+    )
+    issues = code_rules_enforcer.check_tests_use_isolated_filesystem_paths(
+        source, "/project/src/test_module.py"
+    )
+    assert issues == []
+
+
 def test_isolation_check_flags_class_level_probe_in_nested_class_body() -> None:
     """A Path.home() initializer in a nested class body runs at class-creation
     time during the test, so it must fire."""

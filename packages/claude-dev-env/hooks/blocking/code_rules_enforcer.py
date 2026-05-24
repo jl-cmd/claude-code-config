@@ -106,6 +106,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_CAPS_WITH_UNDERSCORE_PATTERN,
     ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES,
     ALL_DIR_ACCEPTING_TEMPFILE_FACTORY_DOTTED_NAMES,
+    ALL_SHARED_TEMP_SOURCE_PROBE_DOTTED_NAMES,
     TEMPFILE_FACTORY_ISOLATION_DIRECTORY_KEYWORD,
     ALL_HOME_DIRECTORY_ENV_VAR_NAMES,
     ALL_ENVIRONMENT_GETTER_DOTTED_NAMES,
@@ -3000,26 +3001,89 @@ def _expanduser_argument_references_home(call_node: ast.Call) -> bool:
     return first_argument.value.startswith(HOME_DIRECTORY_TILDE_PREFIX)
 
 
-def _tempfile_factory_call_supplies_explicit_dir(call_node: ast.Call) -> bool:
-    """Return True when a tempfile factory call passes an explicit ``dir=``.
+def _tempfile_factory_call_is_isolated_by_dir(
+    call_node: ast.Call,
+    all_canonical_names_by_alias: dict[str, str],
+    all_environ_local_bindings: set[str],
+) -> bool:
+    """Return True when a tempfile factory's ``dir=`` sandboxes the allocation.
 
-    A ``dir=`` keyword sandboxes the allocation under the supplied directory
-    (typically the pytest ``tmp_path`` fixture), so the call does not leak into
-    the shared temp directory and is not an isolation violation. Only an
-    explicit ``dir=`` keyword counts; a ``**kwargs`` ``dir`` cannot be resolved
-    statically and is treated as absent, mirroring the conservative argument
-    inspection applied to ``expandvars`` and ``expanduser``.
+    A ``dir=`` keyword sandboxes the allocation only when its value is a
+    plausibly isolated path (typically the pytest ``tmp_path`` fixture). A
+    ``dir=`` value that resolves to the shared temp directory does not isolate
+    the call and is treated as absent:
+
+    - a constant ``None`` selects the default shared temp directory; and
+    - a shared-temp source — ``os.getenv('TMPDIR'|'TEMP'|'TMP')`` /
+      ``os.environ['TMPDIR'|...]`` / ``os.environ.get('TMPDIR'|...)``, or
+      ``tempfile.gettempdir()`` / ``tempfile.gettempprefix()`` — returns the
+      shared temp directory.
+
+    Only an explicit ``dir=`` keyword counts; a ``**kwargs`` ``dir`` cannot be
+    resolved statically and is treated as absent, mirroring the conservative
+    argument inspection applied to ``expandvars`` and ``expanduser``.
 
     Args:
         call_node: The tempfile factory call node.
+        all_canonical_names_by_alias: Import-alias map used to resolve aliased
+            shared-temp sources passed as the ``dir=`` value.
+        all_environ_local_bindings: Local names bound to ``os.environ`` within
+            the test function, used to recognize aliased ``os.environ`` reads.
 
     Returns:
-        True when one of the call's keyword arguments is named ``dir``.
+        True when an explicit ``dir=`` keyword is present and its value is not
+        a recognized shared-temp source.
     """
-    return any(
-        each_keyword.arg == TEMPFILE_FACTORY_ISOLATION_DIRECTORY_KEYWORD
-        for each_keyword in call_node.keywords
-    )
+    for each_keyword in call_node.keywords:
+        if each_keyword.arg != TEMPFILE_FACTORY_ISOLATION_DIRECTORY_KEYWORD:
+            continue
+        return not _dir_value_resolves_to_shared_temp(
+            each_keyword.value,
+            all_canonical_names_by_alias,
+            all_environ_local_bindings,
+        )
+    return False
+
+
+def _dir_value_resolves_to_shared_temp(
+    dir_value: ast.expr,
+    all_canonical_names_by_alias: dict[str, str],
+    all_environ_local_bindings: set[str],
+) -> bool:
+    """Return True when a tempfile ``dir=`` value points at the shared temp dir.
+
+    Args:
+        dir_value: The expression supplied as the factory's ``dir=`` value.
+        all_canonical_names_by_alias: Import-alias map used to resolve aliased
+            ``os.getenv`` / ``os.environ`` / ``tempfile`` references.
+        all_environ_local_bindings: Local names bound to ``os.environ`` within
+            the test function.
+
+    Returns:
+        True when the value is a constant ``None`` or a recognized shared-temp
+        source that yields the default shared temp directory.
+    """
+    if isinstance(dir_value, ast.Constant) and dir_value.value is None:
+        return True
+    if isinstance(dir_value, ast.Call):
+        environ_key = _environ_key_string_from_call(
+            dir_value, all_canonical_names_by_alias, all_environ_local_bindings
+        )
+        if environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES:
+            return True
+        raw_chain = _dotted_call_attribute_chain(dir_value)
+        if raw_chain is None:
+            return False
+        canonical_chain = _resolve_chain_through_aliases(
+            raw_chain, all_canonical_names_by_alias
+        )
+        return canonical_chain in ALL_SHARED_TEMP_SOURCE_PROBE_DOTTED_NAMES
+    if isinstance(dir_value, ast.Subscript):
+        environ_key = _environ_key_string_from_subscript(
+            dir_value, all_canonical_names_by_alias, all_environ_local_bindings
+        )
+        return environ_key in ALL_HOME_DIRECTORY_ENV_VAR_NAMES
+    return False
 
 
 def _environ_key_string_from_call(
@@ -3223,7 +3287,9 @@ def _record_home_or_temp_probe(
         if canonical_chain in ALL_FILESYSTEM_HOME_PROBE_DOTTED_NAMES:
             if (
                 canonical_chain in ALL_DIR_ACCEPTING_TEMPFILE_FACTORY_DOTTED_NAMES
-                and _tempfile_factory_call_supplies_explicit_dir(node)
+                and _tempfile_factory_call_is_isolated_by_dir(
+                    node, all_canonical_names_by_alias, all_environ_local_bindings
+                )
             ):
                 return
             all_probes.append((node.lineno, f"{canonical_chain}()"))

@@ -1190,11 +1190,14 @@ def run_gate(
             partition issues into blocking vs advisory.
 
     Returns:
-        ``1`` when at least one blocking violation is reported, ``0``
-        otherwise.
+        Zero when every targeted file was validated and no blocking violation
+        was found. Non-zero when any blocking violation was reported OR when
+        one or more files could not be read (a skipped file means the gate
+        could not vouch for it).
     """
     blocking_by_file: dict[Path, list[str]] = {}
     advisory_by_file: dict[Path, list[str]] = {}
+    skipped_unreadable_count = 0
     for each_path in sorted(set(all_file_paths)):
         try:
             resolved = each_path.resolve()
@@ -1217,6 +1220,7 @@ def run_gate(
             validate_content, resolved, repository_root, all_added_lines_for_file
         )
         if scoped_violations is None:
+            skipped_unreadable_count += 1
             continue
         blocking, advisory = scoped_violations
         if blocking:
@@ -1228,6 +1232,7 @@ def run_gate(
         advisory_by_file,
         repository_root,
         all_added_lines_by_path is None,
+        skipped_unreadable_count,
     )
 
 
@@ -1236,6 +1241,7 @@ def _report_partitioned_violations(
     advisory_by_file: dict[Path, list[str]],
     repository_root: Path,
     is_whole_file_scope: bool,
+    skipped_unreadable_count: int,
 ) -> int:
     """Print the blocking and advisory sections and return the gate exit code.
 
@@ -1245,9 +1251,13 @@ def _report_partitioned_violations(
         repository_root: Repository root used to compute relative paths.
         is_whole_file_scope: True when no per-file added-line map was supplied,
             which selects the whole-file header wording.
+        skipped_unreadable_count: Count of changed files that could not be read;
+            a non-zero count forces a non-zero exit because the gate cannot
+            vouch for those files.
 
     Returns:
-        ``1`` when at least one blocking violation is reported, ``0`` otherwise.
+        Zero when no blocking violation was found and no file was skipped;
+        non-zero otherwise.
     """
     blocking_count = sum(len(each_list) for each_list in blocking_by_file.values())
     advisory_count = sum(len(each_list) for each_list in advisory_by_file.values())
@@ -1271,7 +1281,13 @@ def _report_partitioned_violations(
             advisory_by_file,
             repository_root,
         )
-    if blocking_count:
+    if skipped_unreadable_count:
+        print(
+            f"code_rules_gate: {skipped_unreadable_count} file(s) "
+            "skipped due to read errors; gate cannot vouch for those files.",
+            file=sys.stderr,
+        )
+    if blocking_count or skipped_unreadable_count:
         return 1
     return 0
 

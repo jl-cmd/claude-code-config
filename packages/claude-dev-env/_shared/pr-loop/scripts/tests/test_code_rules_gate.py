@@ -531,6 +531,57 @@ def test_run_gate_skips_non_utf8_source_without_crashing(
     assert exit_code in {0, 1}
 
 
+def test_run_gate_fails_closed_when_only_changed_file_is_unreadable(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A changed file that cannot be validated must not be silently approved.
+
+    When the only staged code file holds genuine non-UTF-8 bytes and no other
+    blocking violation exists, the gate must fail closed (non-zero) rather than
+    exit 0, because it never validated that file.
+    """
+    write_file(temporary_git_repository / "anchor.py", "anchor = 1\n")
+    commit_all_files(temporary_git_repository, "baseline")
+    non_utf8_path = temporary_git_repository / "non_utf8.py"
+    non_utf8_path.parent.mkdir(parents=True, exist_ok=True)
+    non_utf8_path.write_bytes(b"\xff\xfe\x00bad")
+    stage_file(temporary_git_repository, "non_utf8.py")
+
+    monkeypatch.chdir(temporary_git_repository)
+    exit_code = gate_module.main(["--staged"])
+
+    assert exit_code != 0
+
+
+def test_run_gate_fails_closed_on_skipped_non_utf8_file_directly(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """run_gate must fail closed when a changed file is skipped for non-UTF-8.
+
+    Mirrors the bugteam gate's parity test: a non-UTF-8 code file with no other
+    violation must surface the skip and produce a non-zero exit so an
+    unvalidated file is never silently approved.
+    """
+    non_utf8_file = tmp_path / "garbled.py"
+    non_utf8_file.write_bytes(b"\xff\xfe\x00bad")
+
+    def fake_validate(_content: str, _path: str, **_kwargs: object) -> list[str]:
+        return []
+
+    exit_code = gate_module.run_gate(
+        fake_validate,
+        [non_utf8_file],
+        tmp_path,
+        all_added_lines_by_path=None,
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code != 0
+    assert "skip unreadable" in captured.err
+
+
 def test_check_wrapper_plumb_through_accepts_positional_or_keyword_forwarder() -> None:
     """Regression: positional-or-keyword forwarders with defaults must not be flagged.
 

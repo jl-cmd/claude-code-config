@@ -301,6 +301,8 @@ After deleting or rewriting code, trace what it referenced and remove whatever i
 - **Imports** left unused (also caught by the unused-import hook)
 - **Helper files** whose only consumer you just deleted
 
+**Confirm the orphan is truly unreferenced first.** "No remaining call sites" means none *anywhere in the codebase*, not just in the file you edited. Before removing a function, method, class, or module-level name, search the whole repository for references — call sites, `import` statements, re-exports, and string-based dynamic lookups (`getattr`, entry-point names) that a plain text search can miss. If references remain in other files, the symbol is not dead: leave it if it is still used, or remove those references in the same commit (§9.6) when they are part of the same change. Deleting on the strength of one file's view breaks importers elsewhere.
+
 This is the inverse of comment preservation: existing **comments** are sacred and never removed, but dead **code** is removed in the same edit that orphans it. A function left with no callers is not "preserved" — it is litter.
 
 > **See also:** §9.6 (a renamed alias is dead code by another name), the `file_global_constants_use_count` rule (zero references → delete), and the unused-import hook check — each enforces a specific slice of this principle automatically.

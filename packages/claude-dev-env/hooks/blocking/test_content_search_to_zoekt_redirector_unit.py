@@ -61,8 +61,10 @@ class RedirectGuidanceWorktreeTests(unittest.TestCase):
 
     def test_guidance_explains_how_to_search_a_worktree(self) -> None:
         guidance = get_zoekt_redirect_guidance()
-        positive_worktree_filter = f"file:{worktree_path_filter_fragment()}"
-        self.assertIn(positive_worktree_filter, guidance)
+        positive_filter_example = (
+            f'query="your pattern file:{worktree_path_filter_fragment()}<branch>/'
+        )
+        self.assertIn(positive_filter_example, guidance)
         self.assertIn("worktree", guidance.lower())
 
     def test_worktree_filter_fragment_is_a_regex_escaped_path(self) -> None:

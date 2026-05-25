@@ -14,6 +14,7 @@ from content_search_zoekt_block_payload import build_block_payload
 from content_search_zoekt_redirect_guidance import (
     get_zoekt_redirect_guidance,
     get_zoekt_redirect_reason_brief,
+    worktree_path_display_fragment,
     worktree_path_filter_fragment,
 )
 
@@ -69,6 +70,16 @@ class RedirectGuidanceWorktreeTests(unittest.TestCase):
 
     def test_worktree_filter_fragment_is_a_regex_escaped_path(self) -> None:
         self.assertEqual(worktree_path_filter_fragment(), "\\.claude/worktrees/")
+
+    def test_guidance_describes_worktree_path_unescaped_in_prose(self) -> None:
+        guidance = get_zoekt_redirect_guidance()
+        prose_substring = (
+            f"git worktrees under {worktree_path_display_fragment()} that"
+        )
+        self.assertIn(prose_substring, guidance)
+
+    def test_worktree_display_fragment_is_the_unescaped_path(self) -> None:
+        self.assertEqual(worktree_path_display_fragment(), ".claude/worktrees/")
 
 
 if __name__ == "__main__":

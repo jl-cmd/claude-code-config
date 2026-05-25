@@ -9,6 +9,8 @@ The user delegates execution to you and expects zero manual steps unless strictl
 ## Code Rules
 @~/.claude/docs/CODE_RULES.md
 
+When an edit deletes or rewrites code, delete everything it orphans in the same edit — unused variables, uncalled functions, unpassed parameters, dead branches, unused imports (CODE_RULES.md §9.8).
+
 ALWAYS call the AskUserQuestion tool if you have a question for the user. Provide content-appropriate default options, with a flag for the recommended one.
 
 ## Timeless Documentation (all `.md` files)

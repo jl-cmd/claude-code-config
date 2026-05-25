@@ -288,6 +288,25 @@ Fallback values mask programming errors (KeyError vs RuntimeError vs AttributeEr
 
 ---
 
+## 9.8 REMOVE CODE YOU ORPHAN
+
+When an edit deletes or rewrites code, it must also remove everything that edit makes dead. The change is not complete while orphans remain.
+
+After deleting or rewriting code, trace what it referenced and remove whatever is unreachable as a result:
+
+- **Variables** with no remaining readers after the change
+- **Functions / methods** with no remaining call sites
+- **Parameters** that no caller passes
+- **Branches** made unreachable (dead `if`/`else`, conditions that are always true or always false)
+- **Imports** left unused (also caught by the unused-import hook)
+- **Helper files** whose only consumer you just deleted
+
+This is the inverse of comment preservation: existing **comments** are sacred and never removed, but dead **code** is removed in the same edit that orphans it. A function left with no callers is not "preserved" — it is litter.
+
+> **See also:** §9.6 (a renamed alias is dead code by another name), the `file_global_constants_use_count` rule (zero references → delete), and the unused-import hook check — each enforces a specific slice of this principle automatically.
+
+---
+
 ## 10. NO REDUNDANT DATA FETCHES
 
 If you already have data, don't fetch again.
@@ -384,5 +403,6 @@ Manual check:
 [ ] OCP/LSP/ISP/DIP only applied where abstractions already earn their keep (see §7.5)?
 [ ] No backwards-compatibility shims (§9.6)?
 [ ] No fallback/best-effort wrappers (§9.7)?
+[ ] No code orphaned by an edit (§9.8 — dead vars, uncalled functions, unused imports, dead branches)?
 [ ] Readability: /check
 ```

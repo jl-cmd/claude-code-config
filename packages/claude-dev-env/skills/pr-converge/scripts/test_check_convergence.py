@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -31,7 +32,8 @@ def _load_module() -> ModuleType:
     for each_cached_name in [
         each_key
         for each_key in list(sys.modules)
-        if each_key == "config" or each_key.startswith("config.")
+        if each_key == "pr_converge_skill_constants"
+        or each_key.startswith("pr_converge_skill_constants.")
     ]:
         sys.modules.pop(each_cached_name, None)
     if str(_PR_CONVERGE_DIRECTORY) in sys.path:
@@ -350,3 +352,52 @@ def should_propagate_systemexit_from_get_pr_head_sha(
         check_convergence.check_all(owner="o", repo="r", number=1, bugbot_down=False)
 
     assert exc_info.value.code == check_convergence.EXIT_CODE_GH_ERROR
+
+
+def should_render_help_through_real_subprocess_without_import_failure() -> None:
+    """Invoking the entrypoint in a fresh interpreter imports cleanly and renders --help.
+
+    A separate Python process exercises the exact ``sys.path`` bootstrap and
+    ``pr_converge_skill_constants.constants`` import the production hook relies
+    on, so a drifted constants-package path surfaces here as a
+    ModuleNotFoundError traceback and a non-zero exit rather than slipping
+    through to a runtime crash when the convergence gate runs.
+    """
+    completed = subprocess.run(
+        [sys.executable, str(_SCRIPTS_DIRECTORY / "check_convergence.py"), "--help"],
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert "Traceback" not in completed.stderr
+    assert "ModuleNotFoundError" not in completed.stderr
+    for each_flag in ("--owner", "--repo", "--pr-number", "--bugbot-down"):
+        assert each_flag in completed.stdout
+
+
+def should_exit_with_argparse_usage_error_when_required_flags_missing() -> None:
+    """Running the entrypoint with no arguments fails argparse, proving the import ran first.
+
+    A clean argparse usage error (exit code 2) is only reachable once every
+    module-level import has resolved, so this asserts the entrypoint reaches
+    its argument parser instead of dying during import.
+    """
+    completed = subprocess.run(
+        [sys.executable, str(_SCRIPTS_DIRECTORY / "check_convergence.py")],
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 2
+    assert "Traceback" not in completed.stderr
+    assert "the following arguments are required" in completed.stderr
+
+
+def should_map_documented_cli_flags_onto_namespace_through_real_parser() -> None:
+    """parse_arguments maps each documented flag onto the namespace with no mocking."""
+    namespace = check_convergence.parse_arguments(
+        ["--owner", "jl-cmd", "--repo", "claude-code-config", "--pr-number", "490"]
+    )
+    assert namespace.owner == "jl-cmd"
+    assert namespace.repo == "claude-code-config"
+    assert namespace.pr_number == 490
+    assert namespace.bugbot_down is False

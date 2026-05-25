@@ -288,7 +288,7 @@ Fallback values mask programming errors (KeyError vs RuntimeError vs AttributeEr
 
 ---
 
-## 9.8 REMOVE CODE YOU ORPHAN
+## 9.8 REMOVE CODE YOU ORPHAN (Dead Code Elimination)
 
 When an edit deletes or rewrites code, it must also remove everything that edit makes dead. The change is not complete while orphans remain.
 
@@ -308,6 +308,8 @@ After deleting or rewriting code, trace what it referenced and remove whatever i
 This is the inverse of comment preservation: existing **comments** are sacred and never removed, but dead **code** is removed in the same edit that orphans it. A function left with no callers is not "preserved" — it is litter.
 
 > **See also:** §9.6 (a renamed alias is dead code by another name), the `file_global_constants_use_count` rule (zero references → delete), and the unused-import hook check — each enforces a specific slice of this principle automatically.
+
+> **Standard terms (shorthand for this section):** the mechanical part is *dead code elimination* (compilers; Aho et al., *Compilers: Principles, Techniques, and Tools*) and *tree-shaking* (bundlers like Rollup/Webpack) — retain only what is reachable from a live entry point. The ask-when-uncertain overlay guards against the *Lava Flow* anti-pattern — dead code kept because removing it feels risky (Brown et al., *AntiPatterns*, 1998). Compare Fowler's "Remove Dead Code" refactoring (*Refactoring*, 2nd ed., 2018).
 
 ---
 

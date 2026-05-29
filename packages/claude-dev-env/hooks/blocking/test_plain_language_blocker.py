@@ -208,6 +208,22 @@ def test_edit_markdown_clean_content_passes_through(tmp_path: Path) -> None:
     assert _decision_from(completed) is None
 
 
+def test_multiedit_markdown_with_banned_term_is_denied(tmp_path: Path) -> None:
+    target = tmp_path / "notes.md"
+    payload = {
+        "tool_name": "MultiEdit",
+        "tool_input": {
+            "file_path": str(target),
+            "edits": [
+                {"old_string": "intro", "new_string": "This section reads cleanly."},
+                {"old_string": "body", "new_string": "Then we utilize the new cache."},
+            ],
+        },
+    }
+    completed = _run_hook_with_payload(payload)
+    assert _decision_from(completed) == "deny"
+
+
 def test_other_tool_is_ignored() -> None:
     payload = {"tool_name": "Bash", "tool_input": {"command": "echo utilize"}}
     completed = _run_hook_with_payload(payload)

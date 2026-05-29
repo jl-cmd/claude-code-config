@@ -243,7 +243,7 @@ REPLACEMENT_BY_TERM: dict[str, str] = {
     "it is": "(omit)",
     "deem": "believe, consider, think",
     "said": "the, this, that",
-    "some": "the, this, that",
+    "same": "the, this, that",
     "such": "the, this, that",
     "type": "(omit)",
     "vice": "instead of, versus",

@@ -275,6 +275,24 @@ def test_vague_language_in_bare_prose_still_blocks() -> None:
     assert _has_vague_language_violation(validate_pr_body(body))
 
 
+def test_vague_language_inside_heading_is_exempt() -> None:
+    body = (
+        "## Fixed bug in the allocator\n\n"
+        "The allocator rewrite removes the unbounded retry loop and adds a hard "
+        "ceiling so a single client cannot starve the connection pool.\n"
+    )
+    assert not _has_vague_language_violation(validate_pr_body(body))
+
+
+def test_vague_language_in_single_pipe_prose_line_still_blocks() -> None:
+    body = (
+        "The allocator rewrite removes the unbounded retry loop and adds a hard "
+        "ceiling so a single client cannot starve the connection pool.\n\n"
+        "| fixed bug\n"
+    )
+    assert _has_vague_language_violation(validate_pr_body(body))
+
+
 def test_validate_blocks_short_body() -> None:
     violations = validate_pr_body("Too short.")
     assert any("substantive prose" in each_violation.lower() for each_violation in violations)

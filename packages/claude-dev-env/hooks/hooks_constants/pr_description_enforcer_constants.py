@@ -20,7 +20,7 @@ BOLD_PAIR_PATTERN: re.Pattern[str] = re.compile(r"\*\*([^*]+?)\*\*")
 BULLET_MARKER_PATTERN: re.Pattern[str] = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
 BLOCKQUOTE_MARKER_PATTERN: re.Pattern[str] = re.compile(r"^\s*>\s+", re.MULTILINE)
 BLOCKQUOTE_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*>.*$", re.MULTILINE)
-TABLE_ROW_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*\|.*$", re.MULTILINE)
+TABLE_ROW_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*\|.*\|.*$", re.MULTILINE)
 LINK_TEXT_PATTERN: re.Pattern[str] = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 WHITESPACE_RUN_PATTERN: re.Pattern[str] = re.compile(r"\s+")
 

@@ -228,3 +228,20 @@ def test_other_tool_is_ignored() -> None:
     payload = {"tool_name": "Bash", "tool_input": {"command": "echo utilize"}}
     completed = _run_hook_with_payload(payload)
     assert _decision_from(completed) is None
+
+
+def test_software_allowlisted_term_is_not_flagged() -> None:
+    assert find_banned_terms("Run this command to start the worker.") == []
+
+
+def test_non_allowlisted_formal_term_still_flagged() -> None:
+    matched = find_banned_terms("Please utilize the cache now.")
+    assert any(term == "utilize" for term, _ in matched)
+
+
+def test_prose_slash_token_is_not_stripped_as_path() -> None:
+    assert "client/server" in strip_non_prose_regions("Use a client/server split here.")
+
+
+def test_real_file_path_is_still_stripped() -> None:
+    assert "initiate" not in strip_non_prose_regions("Edit src/initiate.py to wire it.")

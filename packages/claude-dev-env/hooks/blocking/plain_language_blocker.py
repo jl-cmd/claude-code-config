@@ -20,6 +20,7 @@ if _hooks_dir not in sys.path:
     sys.path.insert(0, _hooks_dir)
 
 from hooks_constants.plain_language_blocker_constants import (  # noqa: E402
+    ALL_SOFTWARE_TERMS,
     ALL_TERM_PATTERNS,
     ALL_WRITE_EDIT_TOOL_NAMES,
     ASK_USER_QUESTION_TOOL_NAME,
@@ -52,7 +53,8 @@ def find_banned_terms(text: str) -> list[tuple[str, str]]:
 
     Each term appears at most once, in first-seen order. Matching is
     case-insensitive and respects word boundaries; multi-word phrases match as
-    whole units.
+    whole units. Terms in the software-term allowlist are exempt and never
+    flagged.
     """
     prose_text = strip_non_prose_regions(text)
     all_matches: list[tuple[str, str]] = []
@@ -63,6 +65,8 @@ def find_banned_terms(text: str) -> list[tuple[str, str]]:
             continue
         normalized_term = first_match.group(0).lower()
         if normalized_term in seen_terms:
+            continue
+        if normalized_term in ALL_SOFTWARE_TERMS:
             continue
         seen_terms.add(normalized_term)
         all_matches.append((normalized_term, each_replacement))

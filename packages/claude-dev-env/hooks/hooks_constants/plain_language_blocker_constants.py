@@ -252,12 +252,37 @@ ALL_TERM_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     for each_term, each_replacement in REPLACEMENT_BY_TERM.items()
 ]
 
+ALL_SOFTWARE_TERMS: frozenset[str] = frozenset(
+    {
+        "command",
+        "function",
+        "address",
+        "parameters",
+        "interface",
+        "component",
+        "monitor",
+        "request",
+        "validate",
+        "however",
+        "forward",
+        "subject",
+        "same",
+        "such",
+        "said",
+        "type",
+        "it is",
+        "there is",
+        "there are",
+    }
+)
+
 FENCED_CODE_BLOCK_PATTERN: re.Pattern[str] = re.compile(r"```[\s\S]*?```", re.MULTILINE)
 INLINE_CODE_PATTERN: re.Pattern[str] = re.compile(r"`[^`]+`")
 BLOCKQUOTE_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*>.*$", re.MULTILINE)
 URL_PATTERN: re.Pattern[str] = re.compile(r"https?://\S+", re.IGNORECASE)
 FILE_PATH_PATTERN: re.Pattern[str] = re.compile(
-    r"(?:[A-Za-z]:[\\/]|~?[\\/]|\.{1,2}[\\/])?(?:[\w.\-]+[\\/])+[\w.\-]+"
+    r"(?<![\w/\\])(?:[A-Za-z]:[\\/]|~?[\\/]|\.{1,2}[\\/])(?:[\w.\-]+[\\/])*[\w.\-]+"
+    r"|(?:[\w.\-]+[\\/])+[\w.\-]+\.[A-Za-z0-9]+"
 )
 
 MARKDOWN_EXTENSION: str = ".md"

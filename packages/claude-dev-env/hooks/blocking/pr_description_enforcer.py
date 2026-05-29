@@ -31,6 +31,7 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     ALL_HEAVY_TESTING_HEADERS,
     ALL_READABILITY_CLI_FLAG_TOKENS,
     ATOMIC_WRITE_TEMP_SUFFIX,
+    BLOCKQUOTE_LINE_PATTERN,
     BLOCKQUOTE_MARKER_PATTERN,
     BOLD_PAIR_PATTERN,
     BULLET_MARKER_PATTERN,
@@ -63,6 +64,7 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     SELF_CLOSING_REFERENCE_MESSAGE_SUFFIX,
     SELF_REFERENCE_PATTERN_TEMPLATE,
     STANDARD_SHAPE,
+    TABLE_ROW_LINE_PATTERN,
     THIS_PR_OPENING_PATTERN,
     TRIVIAL_BODY_CHAR_THRESHOLD,
     TRIVIAL_SHAPE,
@@ -348,6 +350,19 @@ def _count_substantive_prose_chars(body: str) -> int:
     stripped_body = _strip_markdown_ceremony(body)
     body_collapsed = WHITESPACE_RUN_PATTERN.sub(' ', stripped_body).strip()
     return len(body_collapsed)
+
+
+def _extract_vague_scan_text(body: str) -> str:
+    """Return the prose to scan for vague language, with non-prose regions removed.
+
+    Strips the same Markdown ceremony as the prose-count path, then drops whole
+    blockquote lines and whole Markdown table rows. This exempts vague phrases
+    that appear only inside code fences, inline code, quoted reviewer text, or
+    bad-vs-good example tables -- those are not the author's own prose.
+    """
+    without_blockquote_lines = BLOCKQUOTE_LINE_PATTERN.sub("", body)
+    without_table_rows = TABLE_ROW_LINE_PATTERN.sub("", without_blockquote_lines)
+    return _strip_markdown_ceremony(without_table_rows)
 
 
 def _iter_section_headers(body: str) -> list[str]:
@@ -813,7 +828,8 @@ def validate_pr_body(body: str, pr_number: int | None = None) -> list[str]:
             "(Adds, Fixes, Updates, Removes, Tightens, Ports)"
         )
 
-    vague_matches = VAGUE_LANGUAGE_PATTERN.findall(body)
+    vague_scan_text = _extract_vague_scan_text(body)
+    vague_matches = VAGUE_LANGUAGE_PATTERN.findall(vague_scan_text)
     if vague_matches:
         violations.append(
             f"Vague language detected: {', '.join(vague_matches)} -- "

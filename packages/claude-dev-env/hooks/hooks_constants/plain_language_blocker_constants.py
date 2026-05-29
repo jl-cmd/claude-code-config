@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import re
 
-PLAIN_LANGUAGE_RULE_NAME: str = "plain-language"
-
 REPLACEMENT_BY_TERM: dict[str, str] = {
     "addressees are requested": "(omit), please",
     "under the provisions of": "under",

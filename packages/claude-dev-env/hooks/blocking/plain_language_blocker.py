@@ -3,7 +3,7 @@
 
 Reaches for the everyday word over the formal one: `use` over `utilize`,
 `start` over `initiate`, `enough` over `sufficient`. Two surfaces are guarded --
-AskUserQuestion (its question and option prose) and Write/Edit targeting a .md
+AskUserQuestion (its question and option prose) and Write/Edit/MultiEdit targeting a .md
 file. Code fences, inline code, blockquotes, URLs, and file paths are stripped
 before matching so exact identifiers and paths are never flagged.
 

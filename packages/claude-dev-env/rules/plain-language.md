@@ -2,7 +2,7 @@
 
 **When this applies:** All prose you write — chat responses, `AskUserQuestion` questions and options, documentation and Markdown, PR and issue bodies, and commit messages. Anything a person reads.
 
-**Hook enforcement:** `plain_language_blocker` (PreToolUse on `AskUserQuestion` and on Write|Edit of `.md` targets) blocks a heavy word and names the everyday word to swap in. Code fences, inline code, blockquotes, URLs, and file paths are skipped so exact identifiers stay untouched. See `hooks.json` for registration.
+**Hook enforcement:** `plain_language_blocker` (PreToolUse on `AskUserQuestion` and on Write|Edit|MultiEdit of `.md` targets) blocks a heavy word and names the everyday word to swap in. Code fences, inline code, blockquotes, URLs, and file paths are skipped so exact identifiers stay untouched. See `hooks.json` for registration.
 
 ## Rule
 

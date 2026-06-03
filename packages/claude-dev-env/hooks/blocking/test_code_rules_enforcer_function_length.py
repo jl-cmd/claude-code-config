@@ -229,7 +229,6 @@ def _build_docstring_function_source(
         ),
         '    """',
     ]
-    docstring_block = "\n".join(docstring_lines)
     all_source_lines = [
         f"def {name}() -> None:",
         *docstring_lines,

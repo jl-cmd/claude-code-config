@@ -1723,7 +1723,7 @@ def _is_init_file(file_path: str) -> bool:
     return file_path.replace("\\", "/").rsplit("/", 1)[-1] == "__init__.py"
 
 
-def _statement_is_module_docstring(statement_node: ast.stmt) -> bool:
+def _statement_is_docstring(statement_node: ast.stmt) -> bool:
     return (
         isinstance(statement_node, ast.Expr)
         and isinstance(statement_node.value, ast.Constant)
@@ -1778,7 +1778,7 @@ def check_thin_wrapper_files(content: str, file_path: str) -> list[str]:
 
     statements_after_docstring = (
         body_statements[1:]
-        if _statement_is_module_docstring(body_statements[0])
+        if _statement_is_docstring(body_statements[0])
         else body_statements
     )
     if not statements_after_docstring:
@@ -1937,11 +1937,7 @@ def _function_body_line_count(
     if not function_node.body:
         return 0
     first_body_index = 0
-    if (
-        isinstance(function_node.body[0], ast.Expr)
-        and isinstance(function_node.body[0].value, ast.Constant)
-        and isinstance(function_node.body[0].value.value, str)
-    ):
+    if _statement_is_docstring(function_node.body[0]):
         if len(function_node.body) == 1:
             return 0
         first_body_index = 1
@@ -2355,7 +2351,7 @@ def _statement_is_raise_not_implemented(statement_node: ast.stmt) -> bool:
 
 def _function_body_is_stub(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     body_statements = list(function_node.body)
-    if body_statements and _statement_is_module_docstring(body_statements[0]):
+    if body_statements and _statement_is_docstring(body_statements[0]):
         body_statements = body_statements[1:]
     if len(body_statements) != 1:
         return False
@@ -5640,7 +5636,7 @@ def _function_docstring_line_span(
     Args/Returns/Raises docstrings on public functions (§3.8). Counting those
     docstring lines toward the function-length gate would penalize the very
     documentation §3.8 mandates, so the gate measures executable span and
-    excludes the leading docstring statement.
+    excludes leading docstring statements.
 
     Args:
         function_node: The function or method definition node to inspect.
@@ -5653,11 +5649,7 @@ def _function_docstring_line_span(
     if not function_body:
         return 0
     first_statement = function_body[0]
-    if (
-        isinstance(first_statement, ast.Expr)
-        and isinstance(first_statement.value, ast.Constant)
-        and isinstance(first_statement.value.value, str)
-    ):
+    if _statement_is_docstring(first_statement):
         docstring_end = getattr(first_statement, "end_lineno", first_statement.lineno)
         return docstring_end - first_statement.lineno + 1
     return 0
@@ -5752,8 +5744,10 @@ def check_function_length(
     """Flag functions whose executable span exceeds cognitive-load thresholds.
 
     Function executable spans — the definition span (signature line through
-    last body statement, inclusive) minus the leading docstring's lines, per
-    ``_function_docstring_line_span`` — at or above
+    last body statement, inclusive) minus the leading docstring lines of the
+    function and of every function nested within it, per
+    ``_function_docstring_line_span`` summed over the definition's functions —
+    at or above
     ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60 lines) appear in the returned
     issues list and block the write at the gate. The threshold rests on the
     small-function guidance in Robert C. Martin, *Clean Code* Ch. 3
@@ -5812,7 +5806,14 @@ def check_function_length(
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         line_span = _function_definition_line_span(each_node)
-        executable_line_span = line_span - _function_docstring_line_span(each_node)
+        if line_span < FUNCTION_LENGTH_BLOCKING_THRESHOLD:
+            continue
+        docstring_line_total = sum(
+            _function_docstring_line_span(each_definition)
+            for each_definition in ast.walk(each_node)
+            if isinstance(each_definition, (ast.FunctionDef, ast.AsyncFunctionDef))
+        )
+        executable_line_span = line_span - docstring_line_total
         if executable_line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:
             span_range = range(each_node.lineno, each_node.lineno + line_span)
             message = (

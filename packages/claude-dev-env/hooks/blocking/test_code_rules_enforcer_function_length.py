@@ -1,7 +1,8 @@
 """Tests for ``check_function_length``.
 
 Functions whose executable span (signature line through last body statement,
-inclusive, minus the leading docstring's lines) is at or above
+inclusive, minus the leading docstring lines of the function and of every
+function nested within it) is at or above
 ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60) block the write (small-function
 basis: Robert C. Martin, Clean Code Ch. 3 "Functions"; Google Python Style
 Guide ~40-line function review hint — a measure of executable complexity,
@@ -220,10 +221,15 @@ def _build_docstring_function_source(
     """Build a function whose leading docstring spans ``docstring_line_count + 2``
     source lines (opening summary line, the counted filler lines, closing quotes)
     followed by ``body_line_count`` executable statements."""
-    docstring_filler = "\n".join(
-        f"    documentation line {each_index}." for each_index in range(docstring_line_count)
-    )
-    docstring_block = f'    """Documented helper.\n{docstring_filler}\n    """'
+    docstring_lines = [
+        '    """Documented helper.',
+        *(
+            f"    documentation line {each_index}."
+            for each_index in range(docstring_line_count)
+        ),
+        '    """',
+    ]
+    docstring_block = "\n".join(docstring_lines)
     body_lines = "\n".join(
         f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
     )
@@ -269,3 +275,33 @@ def test_executable_span_boundary_sits_one_below_threshold() -> None:
     )
     issues = check_function_length(source, PRODUCTION_FILE_PATH)
     assert issues == []
+
+
+def test_builder_zero_docstring_line_count_keeps_span_contract() -> None:
+    """The builder's docstring-span contract (``docstring_line_count + 2``) holds
+    at the zero boundary, so hand-computed span oracles in tests cannot drift."""
+    source = _build_docstring_function_source(
+        "documented_minimal_helper", docstring_line_count=0, body_line_count=3
+    )
+    expected_total_lines = 1 + (0 + 2) + 3
+    assert len(source.splitlines()) == expected_total_lines
+
+
+def test_nested_function_docstring_does_not_count_toward_outer() -> None:
+    """A nested helper's docstring is documentation too: the outer function's
+    executable span excludes every leading docstring within its declared span."""
+    nested_docstring_filler = "\n".join(
+        f"        nested documentation line {each_index}."
+        for each_index in range(hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD)
+    )
+    source = (
+        "def outer_documented_orchestrator() -> None:\n"
+        "    def nested_documented_helper() -> None:\n"
+        '        """Documented nested helper.\n'
+        f"{nested_docstring_filler}\n"
+        '        """\n'
+        "        nested_statement = 1\n"
+        "    outer_statement = 2\n"
+    )
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert issues == [], f"nested docstring lines must not count toward the gate, got: {issues!r}"

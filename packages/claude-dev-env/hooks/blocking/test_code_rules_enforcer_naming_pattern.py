@@ -308,3 +308,41 @@ def test_should_pair_positional_defaults_right_aligned() -> None:
     issues = check_boolean_naming(source, PRODUCTION_FILE_PATH)
     _assert_flags_parameter(issues, "verbose", 1)
     assert len(issues) == 1
+
+
+FULL_MODULE_WITH_TWO_UNPREFIXED_BOOL_PARAMETERS = (
+    "def pre_existing(verbose: bool) -> None:\n"
+    "    print(verbose)\n"
+    "\n\n"
+    "def edited(detailed: bool) -> None:\n"
+    "    print(detailed)\n"
+)
+PRE_EXISTING_BOOL_PARAMETER_LINE_NUMBER = 1
+EDITED_BOOL_PARAMETER_LINE_NUMBER = 5
+
+
+def test_should_flag_bool_parameter_on_changed_line() -> None:
+    issues = check_boolean_naming(
+        FULL_MODULE_WITH_TWO_UNPREFIXED_BOOL_PARAMETERS,
+        PRODUCTION_FILE_PATH,
+        {EDITED_BOOL_PARAMETER_LINE_NUMBER},
+        False,
+    )
+    _assert_flags_parameter(issues, "detailed", EDITED_BOOL_PARAMETER_LINE_NUMBER)
+    assert len(issues) == 1, (
+        "Only the bool parameter on the changed line must be flagged, got: "
+        f"{issues!r}"
+    )
+
+
+def test_should_not_flag_pre_existing_bool_parameter_on_unchanged_line() -> None:
+    issues = check_boolean_naming(
+        FULL_MODULE_WITH_TWO_UNPREFIXED_BOOL_PARAMETERS,
+        PRODUCTION_FILE_PATH,
+        {EDITED_BOOL_PARAMETER_LINE_NUMBER},
+        False,
+    )
+    assert not any("verbose" in each_issue for each_issue in issues), (
+        "A pre-existing unprefixed bool parameter on an unedited line must not block "
+        f"the edit, got: {issues!r}"
+    )

@@ -2112,7 +2112,7 @@ def _signature_parameter_names(
     return real_names - ALL_SELF_AND_CLS_PARAMETER_NAMES
 
 
-def _is_docstring_section_header(stripped_line: str) -> bool:
+def _is_docstring_terminating_section_header(stripped_line: str) -> bool:
     return stripped_line in ALL_DOCSTRING_TERMINATING_SECTION_HEADERS
 
 
@@ -2127,7 +2127,7 @@ def _documented_argument_names(docstring_text: str) -> list[str]:
         stripped_line = each_line.strip()
         if not stripped_line:
             continue
-        if _is_docstring_section_header(stripped_line):
+        if _is_docstring_terminating_section_header(stripped_line):
             break
         current_indent = len(each_line) - len(each_line.lstrip())
         if current_indent == 0:
@@ -2603,8 +2603,36 @@ def _collect_bool_parameter_names(tree: ast.Module) -> list[tuple[str, int]]:
     return bool_parameters
 
 
-def check_boolean_naming(content: str, file_path: str) -> list[str]:
-    """Flag boolean assignments whose target name lacks a required prefix."""
+def check_boolean_naming(
+    content: str,
+    file_path: str,
+    all_changed_lines: set[int] | None = None,
+    defer_scope_to_caller: bool = False,
+) -> list[str]:
+    """Flag boolean assignments and parameters whose name lacks a required prefix.
+
+    The caller passes the reconstructed full file as *content* so ``ast.parse``
+    sees a complete module rather than an Edit's ``new_string`` fragment, which is
+    rarely valid standalone Python. Findings are then scoped to *all_changed_lines*
+    so an Edit blocks on the unprefixed boolean it just introduced while a
+    pre-existing violation on an untouched line does not block the edit.
+
+    Args:
+        content: The source text to inspect — the reconstructed full file on an
+            Edit so the parse succeeds.
+        file_path: The path the source will be written to, used for exemptions.
+        all_changed_lines: Post-edit line numbers the current edit touched, or
+            None to treat the whole file as in scope. When provided, a violation
+            blocks only when its source line intersects the changed lines.
+        defer_scope_to_caller: When True, return every violation so the
+            commit/push gate's ``split_violations_by_scope`` can scope by added
+            line.
+
+    Returns:
+        One issue per unprefixed boolean assignment and parameter, scoped to the
+        changed lines unless *defer_scope_to_caller* is True or *all_changed_lines*
+        is None. This check has no module cap.
+    """
     if is_test_file(file_path):
         return []
     if is_hook_infrastructure(file_path):
@@ -2622,28 +2650,38 @@ def check_boolean_naming(content: str, file_path: str) -> list[str]:
             file=sys.stderr,
         )
         return []
-    issues: list[str] = []
-    for name, line_number, is_in_upper_snake_scope in _collect_boolean_assignments(tree):
-        if len(name) == 1:
+    all_violations_in_walk_order: list[tuple[range, str]] = []
+    for each_name, each_line_number, each_is_in_upper_snake_scope in _collect_boolean_assignments(tree):
+        if len(each_name) == 1:
             continue
-        if is_in_upper_snake_scope and UPPER_SNAKE_CONSTANT_PATTERN.match(name):
+        if each_is_in_upper_snake_scope and UPPER_SNAKE_CONSTANT_PATTERN.match(each_name):
             continue
-        if name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
+        if each_name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
             continue
-        issues.append(
-            f"Line {line_number}: Boolean {name} - prefix with "
+        message = (
+            f"Line {each_line_number}: Boolean {each_name} - prefix with "
             "is_/has_/should_/can_/was_/did_"
+        )
+        all_violations_in_walk_order.append(
+            (range(each_line_number, each_line_number + 1), message)
         )
     for each_name, each_line_number in _collect_bool_parameter_names(tree):
         if len(each_name) == 1:
             continue
         if each_name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
             continue
-        issues.append(
+        message = (
             f"Line {each_line_number}: Boolean parameter {each_name} - prefix with "
             "is_/has_/should_/can_/was_/did_"
         )
-    return issues
+        all_violations_in_walk_order.append(
+            (range(each_line_number, each_line_number + 1), message)
+        )
+    return _scope_violations_to_changed_lines(
+        all_violations_in_walk_order,
+        all_changed_lines,
+        defer_scope_to_caller,
+    )
 
 
 def _called_terminal_name(call_node: ast.Call) -> str | None:
@@ -2689,8 +2727,10 @@ def check_ignored_must_check_return(
 
     Returns:
         One issue per discarded must-check return, scoped to the changed lines
-        unless *defer_scope_to_caller* is True or *all_changed_lines* is None, and
-        capped at the module limit.
+        unless *defer_scope_to_caller* is True or *all_changed_lines* is None. When
+        *defer_scope_to_caller* is True every violation is returned uncapped so the
+        gate can scope by added line and apply its own ceiling; otherwise the
+        terminal result is capped at the module limit.
     """
     if is_test_file(file_path):
         return []
@@ -2713,7 +2753,8 @@ def check_ignored_must_check_return(
         called_name = _called_terminal_name(call_node)
         if called_name is None or called_name not in ALL_MUST_CHECK_RETURN_FUNCTION_NAMES:
             continue
-        line_span = range(each_node.lineno, each_node.lineno + 1)
+        end_line_number = each_node.end_lineno or each_node.lineno
+        line_span = range(each_node.lineno, end_line_number + 1)
         message = (
             f"Line {each_node.lineno}: return value of {called_name}() is discarded - "
             "assign and check it (the boolean/outcome is the only failure signal)"
@@ -2724,6 +2765,8 @@ def check_ignored_must_check_return(
         all_changed_lines,
         defer_scope_to_caller,
     )
+    if defer_scope_to_caller:
+        return scoped_issues
     return scoped_issues[:MAX_IGNORED_MUST_CHECK_RETURN_ISSUES]
 
 
@@ -5824,7 +5867,14 @@ def validate_content(
         all_issues.extend(check_boundary_types(effective_content, file_path))
         all_issues.extend(check_docstring_format(effective_content, file_path))
         all_issues.extend(check_docstring_args_match_signature(effective_content, file_path))
-        all_issues.extend(check_boolean_naming(content, file_path))
+        all_issues.extend(
+            check_boolean_naming(
+                effective_content,
+                file_path,
+                all_changed_lines,
+                defer_scope_to_caller,
+            )
+        )
         all_issues.extend(
             check_ignored_must_check_return(
                 effective_content,

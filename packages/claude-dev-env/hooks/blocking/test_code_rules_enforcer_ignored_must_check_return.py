@@ -190,3 +190,67 @@ def test_should_flag_edited_line_even_when_cap_worth_of_violations_precede_it() 
     assert f"Line {EDITED_BARE_CALL_LINE_NUMBER}:" in issues[0], (
         f"The single issue must name the edited line {EDITED_BARE_CALL_LINE_NUMBER}, got: {issues!r}"
     )
+
+
+def _build_module_with_more_than_cap_bare_calls() -> tuple[str, int]:
+    bare_call_count = code_rules_enforcer.MAX_IGNORED_MUST_CHECK_RETURN_ISSUES + 3
+    all_signature_lines = ["async def step() -> None:"]
+    all_call_lines = [
+        f"    await find_and_click('#x{each_index}')"
+        for each_index in range(bare_call_count)
+    ]
+    source = "\n".join(all_signature_lines + all_call_lines) + "\n"
+    return source, bare_call_count
+
+
+def test_deferred_scope_returns_every_violation_uncapped() -> None:
+    source, bare_call_count = _build_module_with_more_than_cap_bare_calls()
+    issues = code_rules_enforcer.check_ignored_must_check_return(
+        source,
+        PRODUCTION_FILE_PATH,
+        None,
+        True,
+    )
+    assert len(issues) == bare_call_count, (
+        "With defer_scope_to_caller=True the gate must see every violation uncapped "
+        f"so it can scope by added line, got: {issues!r}"
+    )
+
+
+def test_terminal_scope_caps_violations_at_the_module_limit() -> None:
+    source, _ = _build_module_with_more_than_cap_bare_calls()
+    issues = code_rules_enforcer.check_ignored_must_check_return(
+        source,
+        PRODUCTION_FILE_PATH,
+        None,
+        False,
+    )
+    assert len(issues) == code_rules_enforcer.MAX_IGNORED_MUST_CHECK_RETURN_ISSUES, (
+        "The terminal hook path with all_changed_lines=None must cap at the module "
+        f"limit, got: {issues!r}"
+    )
+
+
+WRAPPED_CALL_OPEN_PAREN_LINE_NUMBER = 2
+WRAPPED_CALL_ARGUMENT_LINE_NUMBER = 3
+
+
+def test_should_flag_when_changed_line_covers_a_later_line_of_a_wrapped_call() -> None:
+    source = (
+        "def step() -> None:\n"
+        "    find_and_click(\n"
+        "        '#submit',\n"
+        "    )\n"
+    )
+    all_changed_lines = {WRAPPED_CALL_ARGUMENT_LINE_NUMBER}
+    issues = code_rules_enforcer.check_ignored_must_check_return(
+        source,
+        PRODUCTION_FILE_PATH,
+        all_changed_lines,
+        False,
+    )
+    assert len(issues) == 1, (
+        "Editing a later line of a multi-line bare must-check call must still flag it "
+        f"because the violation span covers the whole call, got: {issues!r}"
+    )
+    assert "find_and_click" in issues[0]

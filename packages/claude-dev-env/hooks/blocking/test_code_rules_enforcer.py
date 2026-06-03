@@ -2633,3 +2633,37 @@ def test_ignored_must_check_return_exempts_consumed_awaited_call() -> None:
         code_rules_enforcer.check_ignored_must_check_return(branched, "/project/src/clicker.py")
         == []
     )
+
+
+def test_ignored_must_check_return_flags_edited_line_past_a_cap_of_earlier_violations() -> None:
+    """The cap must apply after scoping so the edited-line violation is never dropped.
+
+    Collecting only a cap's worth of violations in ``ast.walk`` order, then scoping,
+    fills the cap with earlier out-of-scope calls and discards the edited-line one —
+    the very violation the scoped enforcer exists to block. Every violation must be
+    collected before scoping so the edited line survives the diff filter.
+    """
+    pre_existing_call_count = 5
+    edited_call_line_number = pre_existing_call_count + 2
+    all_pre_existing_call_lines = [
+        f"    await find_and_click('#x{each_index}')"
+        for each_index in range(pre_existing_call_count)
+    ]
+    all_lines = (
+        ["async def step() -> None:"]
+        + all_pre_existing_call_lines
+        + ["    await find_and_click('#edited')"]
+    )
+    source = "\n".join(all_lines) + "\n"
+    issues = code_rules_enforcer.check_ignored_must_check_return(
+        source,
+        "/project/src/clicker.py",
+        {edited_call_line_number},
+        False,
+    )
+    assert len(issues) == 1, (
+        f"the edited-line violation must survive a cap's worth of earlier calls; got: {issues!r}"
+    )
+    assert f"Line {edited_call_line_number}:" in issues[0], (
+        f"the single issue must name the edited line {edited_call_line_number}; got: {issues!r}"
+    )

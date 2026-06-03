@@ -157,3 +157,36 @@ def test_should_not_flag_when_changed_line_excludes_the_bare_await() -> None:
     assert issues == [], (
         f"A pre-existing violation on an unedited line must not block the edit, got: {issues!r}"
     )
+
+
+PRE_EXISTING_BARE_CALL_COUNT = 5
+EDITED_BARE_CALL_LINE_NUMBER = PRE_EXISTING_BARE_CALL_COUNT + 2
+
+
+def _build_module_with_pre_existing_violations_before_the_edit() -> str:
+    all_signature_lines = ["async def step() -> None:"]
+    all_pre_existing_call_lines = [
+        f"    await find_and_click('#x{each_index}')"
+        for each_index in range(PRE_EXISTING_BARE_CALL_COUNT)
+    ]
+    edited_call_line = "    await find_and_click('#edited')"
+    all_lines = all_signature_lines + all_pre_existing_call_lines + [edited_call_line]
+    return "\n".join(all_lines) + "\n"
+
+
+def test_should_flag_edited_line_even_when_cap_worth_of_violations_precede_it() -> None:
+    source = _build_module_with_pre_existing_violations_before_the_edit()
+    all_changed_lines = {EDITED_BARE_CALL_LINE_NUMBER}
+    issues = code_rules_enforcer.check_ignored_must_check_return(
+        source,
+        PRODUCTION_FILE_PATH,
+        all_changed_lines,
+        False,
+    )
+    assert len(issues) == 1, (
+        "Collecting every violation before scoping must surface the edited-line "
+        f"violation even with a cap's worth of earlier out-of-scope calls, got: {issues!r}"
+    )
+    assert f"Line {EDITED_BARE_CALL_LINE_NUMBER}:" in issues[0], (
+        f"The single issue must name the edited line {EDITED_BARE_CALL_LINE_NUMBER}, got: {issues!r}"
+    )

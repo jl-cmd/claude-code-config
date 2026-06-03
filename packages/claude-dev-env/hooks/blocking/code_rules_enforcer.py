@@ -2719,8 +2719,6 @@ def check_ignored_must_check_return(
             "assign and check it (the boolean/outcome is the only failure signal)"
         )
         all_violations_in_walk_order.append((line_span, message))
-        if len(all_violations_in_walk_order) >= MAX_IGNORED_MUST_CHECK_RETURN_ISSUES:
-            break
     scoped_issues = _scope_violations_to_changed_lines(
         all_violations_in_walk_order,
         all_changed_lines,

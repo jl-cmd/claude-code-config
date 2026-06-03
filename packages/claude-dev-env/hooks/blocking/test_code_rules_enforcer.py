@@ -2602,3 +2602,34 @@ def test_banned_noun_word_boundary_flags_plural_results_identifier() -> None:
         "a plural banned-noun identifier must be flagged by the word-boundary "
         f"check; got: {issues!r}"
     )
+
+
+def test_ignored_must_check_return_flags_bare_awaited_call() -> None:
+    """A bare ``await find_and_click(...)`` statement discards its only failure signal.
+
+    The curated must-check functions are async, so the common real call site is a
+    bare ``await``-wrapped call. Unwrapping ``ast.Await`` before the Call check is
+    required for this case to be flagged.
+    """
+    source = "async def step() -> None:\n    await find_and_click('#x')\n"
+    issues = code_rules_enforcer.check_ignored_must_check_return(
+        source, "/project/src/clicker.py"
+    )
+    assert any("find_and_click" in each_issue for each_issue in issues), (
+        f"a bare awaited must-check call must be flagged; got: {issues!r}"
+    )
+    assert len(issues) == 1
+
+
+def test_ignored_must_check_return_exempts_consumed_awaited_call() -> None:
+    """An assigned or branched-on awaited must-check call consumes its outcome."""
+    assigned = "async def step() -> None:\n    clicked = await find_and_click('#x')\n    print(clicked)\n"
+    branched = "async def step() -> None:\n    if await find_and_click('#x'):\n        pass\n"
+    assert (
+        code_rules_enforcer.check_ignored_must_check_return(assigned, "/project/src/clicker.py")
+        == []
+    )
+    assert (
+        code_rules_enforcer.check_ignored_must_check_return(branched, "/project/src/clicker.py")
+        == []
+    )

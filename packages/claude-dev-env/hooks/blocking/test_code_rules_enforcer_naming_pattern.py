@@ -26,7 +26,7 @@ TEST_FILE_PATH = "src/app/test_feature.py"
 CONFIG_FILE_PATH = "src/config/settings.py"
 WORKFLOW_FILE_PATH = "src/workflow/orders_tab.py"
 HOOK_FILE_PATH = "/home/user/.claude/hooks/blocking/my_hook.py"
-EXPECTED_PREFIX_GUIDANCE = "prefix with is_/has_/should_/can_"
+EXPECTED_PREFIX_GUIDANCE = "prefix with is_/has_/should_/can_/was_/did_"
 
 
 def _assert_flags_name(issues: list[str], name: str, line_number: int) -> None:

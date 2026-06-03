@@ -73,6 +73,31 @@ def test_should_not_flag_branched_find_and_click() -> None:
     assert issues == [], f"Branched-on call must not be flagged, got: {issues!r}"
 
 
+def test_should_flag_bare_awaited_find_and_click_call() -> None:
+    source = "async def step() -> None:\n    await find_and_click('#x')\n"
+    issues = check_ignored_must_check_return(source, PRODUCTION_FILE_PATH)
+    assert any("find_and_click" in each for each in issues), (
+        f"Expected discarded-return flag for awaited find_and_click, got: {issues!r}"
+    )
+    assert len(issues) == 1
+
+
+def test_should_not_flag_assigned_awaited_find_and_click() -> None:
+    source = (
+        "async def step() -> None:\n"
+        "    clicked = await find_and_click('#x')\n"
+        "    print(clicked)\n"
+    )
+    issues = check_ignored_must_check_return(source, PRODUCTION_FILE_PATH)
+    assert issues == [], f"Assigned awaited call must not be flagged, got: {issues!r}"
+
+
+def test_should_not_flag_branched_awaited_find_and_click() -> None:
+    source = "async def step() -> None:\n    if await find_and_click('#x'):\n        pass\n"
+    issues = check_ignored_must_check_return(source, PRODUCTION_FILE_PATH)
+    assert issues == [], f"Branched-on awaited call must not be flagged, got: {issues!r}"
+
+
 def test_should_not_flag_unrelated_bare_call() -> None:
     source = "def step() -> None:\n    print('hello')\n"
     issues = check_ignored_must_check_return(source, PRODUCTION_FILE_PATH)

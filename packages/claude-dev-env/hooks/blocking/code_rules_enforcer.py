@@ -2627,7 +2627,8 @@ def check_boolean_naming(content: str, file_path: str) -> list[str]:
         if name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
             continue
         issues.append(
-            f"Line {line_number}: Boolean {name} - prefix with is_/has_/should_/can_"
+            f"Line {line_number}: Boolean {name} - prefix with "
+            "is_/has_/should_/can_/was_/did_"
         )
     for each_name, each_line_number in _collect_bool_parameter_names(tree):
         if len(each_name) == 1:
@@ -2655,8 +2656,9 @@ def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
 
     Functions in ``ALL_MUST_CHECK_RETURN_FUNCTION_NAMES`` report success or failure
     solely through their return value. A bare-statement call discards that value,
-    so the caller silently proceeds on failure. Only bare ``ast.Expr`` calls are
-    flagged; an assigned or branched-on call is exempt.
+    so the caller silently proceeds on failure. Bare ``ast.Expr`` calls are flagged,
+    including a bare ``await``-wrapped call (``await find_and_click(...)`` as a
+    statement); an assigned or branched-on call is exempt.
 
     Args:
         content: The source text to inspect.
@@ -2675,9 +2677,15 @@ def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
     for each_node in ast.walk(tree):
         if not isinstance(each_node, ast.Expr):
             continue
-        if not isinstance(each_node.value, ast.Call):
+        expression_value = each_node.value
+        call_node = (
+            expression_value.value
+            if isinstance(expression_value, ast.Await)
+            else expression_value
+        )
+        if not isinstance(call_node, ast.Call):
             continue
-        called_name = _called_terminal_name(each_node.value)
+        called_name = _called_terminal_name(call_node)
         if called_name is None or called_name not in ALL_MUST_CHECK_RETURN_FUNCTION_NAMES:
             continue
         issues.append(

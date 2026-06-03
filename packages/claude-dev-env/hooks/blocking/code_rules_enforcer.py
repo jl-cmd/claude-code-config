@@ -5626,29 +5626,30 @@ def _function_definition_line_span(
     return end_lineno - function_node.lineno + 1
 
 
-def _function_docstring_line_span(
-    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+def _definition_docstring_line_span(
+    definition_node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
 ) -> int:
-    """Return the source-line count of the function's leading docstring.
+    """Return the source-line count of the definition's leading docstring.
 
     The Google Python Style Guide pairs a small-function preference that
     targets executable complexity (§3.18) with a requirement for complete
-    Args/Returns/Raises docstrings on public functions (§3.8). Counting those
+    docstrings on public functions and classes (§3.8). Counting those
     docstring lines toward the function-length gate would penalize the very
     documentation §3.8 mandates, so the gate measures executable span and
     excludes leading docstring statements.
 
     Args:
-        function_node: The function or method definition node to inspect.
+        definition_node: The function, method, or class definition node to
+            inspect.
 
     Returns:
         The number of source lines the leading docstring statement occupies,
-        or zero when the function body does not open with a string literal.
+        or zero when the definition body does not open with a string literal.
     """
-    function_body = function_node.body
-    if not function_body:
+    definition_body = definition_node.body
+    if not definition_body:
         return 0
-    first_statement = function_body[0]
+    first_statement = definition_body[0]
     if _statement_is_docstring(first_statement):
         docstring_end = getattr(first_statement, "end_lineno", first_statement.lineno)
         return docstring_end - first_statement.lineno + 1
@@ -5745,8 +5746,8 @@ def check_function_length(
 
     Function executable spans — the definition span (signature line through
     last body statement, inclusive) minus the leading docstring lines of the
-    function and of every function nested within it, per
-    ``_function_docstring_line_span`` summed over the definition's functions —
+    function and of every function or class nested within it, per
+    ``_definition_docstring_line_span`` summed over the nested definitions —
     at or above
     ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60 lines) appear in the returned
     issues list and block the write at the gate. The threshold rests on the
@@ -5809,9 +5810,11 @@ def check_function_length(
         if line_span < FUNCTION_LENGTH_BLOCKING_THRESHOLD:
             continue
         docstring_line_total = sum(
-            _function_docstring_line_span(each_definition)
+            _definition_docstring_line_span(each_definition)
             for each_definition in ast.walk(each_node)
-            if isinstance(each_definition, (ast.FunctionDef, ast.AsyncFunctionDef))
+            if isinstance(
+                each_definition, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            )
         )
         executable_line_span = line_span - docstring_line_total
         if executable_line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:

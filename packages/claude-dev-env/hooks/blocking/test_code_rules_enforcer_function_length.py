@@ -2,7 +2,7 @@
 
 Functions whose executable span (signature line through last body statement,
 inclusive, minus the leading docstring lines of the function and of every
-function nested within it) is at or above
+function or class nested within it) is at or above
 ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60) block the write (small-function
 basis: Robert C. Martin, Clean Code Ch. 3 "Functions"; Google Python Style
 Guide ~40-line function review hint — a measure of executable complexity,
@@ -230,10 +230,15 @@ def _build_docstring_function_source(
         '    """',
     ]
     docstring_block = "\n".join(docstring_lines)
-    body_lines = "\n".join(
-        f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
-    )
-    return f"def {name}() -> None:\n{docstring_block}\n{body_lines}\n"
+    all_source_lines = [
+        f"def {name}() -> None:",
+        *docstring_lines,
+        *(
+            f"    statement_{each_index} = {each_index}"
+            for each_index in range(body_line_count)
+        ),
+    ]
+    return "\n".join(all_source_lines) + "\n"
 
 
 def test_docstring_heavy_function_with_small_body_passes() -> None:
@@ -287,6 +292,16 @@ def test_builder_zero_docstring_line_count_keeps_span_contract() -> None:
     assert len(source.splitlines()) == expected_total_lines
 
 
+def test_builder_zero_body_line_count_keeps_span_contract() -> None:
+    """The builder's span contract holds at the zero-body boundary, so a
+    docstring-only function's hand-computed span oracle cannot drift."""
+    source = _build_docstring_function_source(
+        "documented_bodyless_helper", docstring_line_count=5, body_line_count=0
+    )
+    expected_total_lines = 1 + (5 + 2) + 0
+    assert len(source.splitlines()) == expected_total_lines
+
+
 def test_nested_function_docstring_does_not_count_toward_outer() -> None:
     """A nested helper's docstring is documentation too: the outer function's
     executable span excludes every leading docstring within its declared span."""
@@ -305,3 +320,23 @@ def test_nested_function_docstring_does_not_count_toward_outer() -> None:
     )
     issues = check_function_length(source, PRODUCTION_FILE_PATH)
     assert issues == [], f"nested docstring lines must not count toward the gate, got: {issues!r}"
+
+
+def test_nested_class_docstring_does_not_count_toward_outer() -> None:
+    """A nested class's docstring is documentation too: the outer function's
+    executable span excludes leading docstrings of nested classes as well."""
+    nested_class_docstring_filler = "\n".join(
+        f"        nested class documentation line {each_index}."
+        for each_index in range(hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD)
+    )
+    source = (
+        "def outer_class_documented_orchestrator() -> None:\n"
+        "    class NestedDocumentedConfig:\n"
+        '        """Documented nested class.\n'
+        f"{nested_class_docstring_filler}\n"
+        '        """\n'
+        "        nested_field = 1\n"
+        "    outer_statement = 2\n"
+    )
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert issues == [], f"nested class docstring lines must not count toward the gate, got: {issues!r}"

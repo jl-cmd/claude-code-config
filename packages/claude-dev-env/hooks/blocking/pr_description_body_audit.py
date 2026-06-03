@@ -1,9 +1,10 @@
 """Audit PR body markdown for prose substance, shape, and structural rules.
 
 Strips Markdown ceremony to measure substantive prose, classifies the body as
-trivial, standard, or heavy, enumerates section headers, and detects vague
-language, self-closing references to the PR's own number, and the discouraged
-"This PR ..." opening.
+trivial, standard, or heavy, enumerates section headers, prepares the prose
+scanned for vague language, and flags self-closing references to the PR's own
+number and the discouraged "This PR ..." opening. Vague-language enforcement
+runs in validate_pr_body in pr_description_enforcer.py.
 """
 
 import re

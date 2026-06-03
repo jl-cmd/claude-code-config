@@ -1,9 +1,9 @@
-"""Parse gh pr create/edit/comment commands into body content and PR number.
+"""Parse gh pr create/edit/comment commands into auditable body content.
 
-Tokenizes the captured shell command, extracts the PR body that should be
-audited (resolving body-file paths and rejecting unauditable shell variables,
-stdin sentinels, and path-traversal targets), and recovers the positional PR
-number for the edit and comment subcommands.
+Tokenizes the captured shell command and extracts the PR body that should be
+audited, resolving body-file paths and rejecting unauditable shell variables,
+stdin sentinels, and path-traversal targets. Positional PR-number extraction
+lives in pr_description_pr_number.py.
 """
 
 import shlex

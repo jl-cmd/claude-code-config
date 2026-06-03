@@ -5644,7 +5644,8 @@ def _definition_docstring_line_span(
 
     Returns:
         The number of source lines the leading docstring statement occupies,
-        or zero when the definition body does not open with a string literal.
+        or zero when the definition body is empty or does not open with a
+        string literal.
     """
     definition_body = definition_node.body
     if not definition_body:

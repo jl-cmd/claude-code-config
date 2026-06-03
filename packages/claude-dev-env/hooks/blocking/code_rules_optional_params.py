@@ -4,12 +4,12 @@ import ast
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -20,6 +20,11 @@ from code_rules_shared import (  # noqa: E402
     is_migration_file,
     is_test_file,
     is_workflow_registry_file,
+)
+
+from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
+    DUPLICATED_FORMAT_MINIMUM_LITERAL_CHARACTER_COUNT,
+    DUPLICATED_FORMAT_MINIMUM_REPETITION_COUNT,
 )
 
 
@@ -179,35 +184,35 @@ def check_unused_optional_parameters(content: str, file_path: str) -> list[str]:
     ]
 
     issues: list[str] = []
-    for function_name, function_node in all_function_nodes.items():
-        param_defaults = _collect_optional_param_defaults(function_node)
+    for each_function_name, each_function_node in all_function_nodes.items():
+        param_defaults = _collect_optional_param_defaults(each_function_node)
         if not param_defaults:
             continue
 
         same_file_calls = [
             each_call
             for each_call in all_call_nodes
-            if _function_name_from_call(each_call) == function_name
+            if _function_name_from_call(each_call) == each_function_name
         ]
         if not same_file_calls:
             continue
 
-        for param_name, default_node in param_defaults.items():
-            default_value = _ast_constant_value(default_node)
+        for each_param_name, each_default_node in param_defaults.items():
+            default_value = _ast_constant_value(each_default_node)
             if _is_non_literal_default(default_value):
                 continue
             is_param_varied = any(
                 _call_passes_keyword_argument_differing_from_default(
-                    each_call, param_name, default_value
+                    each_call, each_param_name, default_value
                 )
                 or _call_passes_positional_argument_for_param(
-                    each_call, function_node, param_name, default_value
+                    each_call, each_function_node, each_param_name, default_value
                 )
                 for each_call in same_file_calls
             )
             if not is_param_varied:
                 issues.append(
-                    f"Line {function_node.lineno}: optional parameter {param_name}"
+                    f"Line {each_function_node.lineno}: optional parameter {each_param_name}"
                     f" is never varied — inline default or drop"
                 )
 
@@ -231,7 +236,7 @@ def _build_fstring_skeleton(joined_str_node: ast.JoinedStr) -> str:
 
 
 def check_duplicated_format_patterns(content: str, file_path: str) -> None:
-    """Emit stderr advisories when an f-string skeleton appears 3+ times in a production file.
+    """Emit stderr advisories when an f-string skeleton repeats in a production file.
 
     Collapses each f-string's interpolations to '<x>' placeholders, then counts
     skeleton occurrences per file. When any skeleton appears three or more times,
@@ -256,8 +261,8 @@ def check_duplicated_format_patterns(content: str, file_path: str) -> None:
     except SyntaxError:
         return
 
-    minimum_repetition_count = 3
-    minimum_literal_character_count = 5
+    minimum_repetition_count = DUPLICATED_FORMAT_MINIMUM_REPETITION_COUNT
+    minimum_literal_character_count = DUPLICATED_FORMAT_MINIMUM_LITERAL_CHARACTER_COUNT
 
     skeleton_occurrences: dict[str, list[int]] = {}
     literal_length_by_skeleton: dict[str, int] = {}
@@ -271,13 +276,13 @@ def check_duplicated_format_patterns(content: str, file_path: str) -> None:
             literal_length_by_skeleton[skeleton] = len(literal_body)
         skeleton_occurrences[skeleton].append(each_node.lineno)
 
-    for skeleton, line_numbers in skeleton_occurrences.items():
-        if len(line_numbers) < minimum_repetition_count:
+    for each_skeleton, each_line_numbers in skeleton_occurrences.items():
+        if len(each_line_numbers) < minimum_repetition_count:
             continue
-        if literal_length_by_skeleton[skeleton] < minimum_literal_character_count:
+        if literal_length_by_skeleton[each_skeleton] < minimum_literal_character_count:
             continue
         print(
-            f"[CODE_RULES advisory] f-string pattern {skeleton!r} appears"
-            f" {len(line_numbers)} times — consider encapsulating in a helper or model.",
+            f"[CODE_RULES advisory] f-string pattern {each_skeleton!r} appears"
+            f" {len(each_line_numbers)} times — consider encapsulating in a helper or model.",
             file=sys.stderr,
         )

@@ -4,12 +4,12 @@ import ast
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -33,6 +33,7 @@ from hooks_constants.hardcoded_user_path_constants import (  # noqa: E402
 from hooks_constants.sys_path_insert_constants import (  # noqa: E402
     MAX_SYS_PATH_INSERT_ISSUES,
     SYS_PATH_INSERT_GUIDANCE,
+    SYS_PATH_INSERT_MINIMUM_ARGUMENT_COUNT,
 )
 
 
@@ -128,7 +129,7 @@ def _scope_has_guard_for_insert(
             continue
         for each_inner in each_statement.body:
             if isinstance(each_inner, ast.Expr) and each_inner.value is insert_call_node:
-                if len(insert_call_node.args) < 2:
+                if len(insert_call_node.args) < SYS_PATH_INSERT_MINIMUM_ARGUMENT_COUNT:
                     return True
                 if ast.dump(membership_test.left) == ast.dump(insert_call_node.args[1]):
                     return True

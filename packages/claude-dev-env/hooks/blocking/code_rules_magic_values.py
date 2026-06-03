@@ -5,12 +5,12 @@ import re
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -20,8 +20,13 @@ from code_rules_shared import (  # noqa: E402
     is_test_file,
 )
 
-_STRING_LITERAL_PATTERN = re.compile(
-    r"(\"(?:\\.|[^\"\\])*\")|('(?:\\.|[^'\\])*')",
+from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
+    ALL_ALLOWED_MAGIC_NUMBER_LITERALS,
+    ALL_NON_MAGIC_FSTRING_STRIPPED_VALUES,
+    MAX_FSTRING_STRUCTURAL_LITERAL_ISSUES,
+    MAX_MAGIC_VALUE_ISSUES,
+    MINIMUM_FSTRING_LITERAL_LENGTH,
+    STRING_LITERAL_QUOTE_PAIR_LENGTH,
 )
 
 
@@ -37,14 +42,18 @@ def _mask_string_literals_preserving_length(source_line: str) -> str:
     Sentinel: # pragma: no-tdd-gate
     """
 
+    string_literal_pattern = re.compile(
+        r"(\"(?:\\.|[^\"\\])*\")|('(?:\\.|[^'\\])*')",
+    )
+
     def _replace_string_literal(match: re.Match[str]) -> str:
         matched_literal = match.group(0)
         opening_quote = matched_literal[0]
         closing_quote = matched_literal[-1]
-        inner_length = max(len(matched_literal) - 2, 0)
+        inner_length = max(len(matched_literal) - STRING_LITERAL_QUOTE_PAIR_LENGTH, 0)
         return f"{opening_quote}{'_' * inner_length}{closing_quote}"
 
-    return _STRING_LITERAL_PATTERN.sub(_replace_string_literal, source_line)
+    return string_literal_pattern.sub(_replace_string_literal, source_line)
 
 
 def check_magic_values(content: str, file_path: str) -> list[str]:
@@ -57,10 +66,10 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
     is_inside_function = False
 
     number_pattern = re.compile(r"(?<![.\w])(\d+\.?\d*)(?![.\w])")
-    allowed_numbers = {"0", "1", "-1", "0.0", "1.0"}
+    allowed_numbers = ALL_ALLOWED_MAGIC_NUMBER_LITERALS
 
-    for line_number, line in enumerate(lines, 1):
-        stripped = line.strip()
+    for each_line_number, each_line in enumerate(lines, 1):
+        stripped = each_line.strip()
 
         if not stripped:
             continue
@@ -82,16 +91,16 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
 
             stripped_without_string_literals = _mask_string_literals_preserving_length(stripped)
             numbers_found = number_pattern.findall(stripped_without_string_literals)
-            for number in numbers_found:
-                if number not in allowed_numbers:
+            for each_number in numbers_found:
+                if each_number not in allowed_numbers:
                     if "range(" in stripped_without_string_literals or "enumerate(" in stripped_without_string_literals:
                         continue
                     if "[" in stripped_without_string_literals and "]" in stripped_without_string_literals:
                         continue
-                    issues.append(f"Line {line_number}: Magic value {number} - extract to named constant")
+                    issues.append(f"Line {each_line_number}: Magic value {each_number} - extract to named constant")
                     break
 
-        if len(issues) >= 3:
+        if len(issues) >= MAX_MAGIC_VALUE_ISSUES:
             break
 
     return issues
@@ -149,9 +158,9 @@ def check_fstring_structural_literals(content: str, file_path: str) -> list[str]
     except SyntaxError:
         return []
 
-    minimum_literal_length = 2
-    maximum_issues_before_stop = 100
-    non_magic_stripped_values = {"", "True", "False"}
+    minimum_literal_length = MINIMUM_FSTRING_LITERAL_LENGTH
+    maximum_issues_before_stop = MAX_FSTRING_STRUCTURAL_LITERAL_ISSUES
+    non_magic_stripped_values = ALL_NON_MAGIC_FSTRING_STRIPPED_VALUES
 
     issues: list[str] = []
     for each_node in ast.walk(syntax_tree):

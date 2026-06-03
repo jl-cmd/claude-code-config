@@ -6,12 +6,12 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -51,8 +51,8 @@ def check_constants_outside_config(content: str, file_path: str) -> list[str]:
 
     constant_pattern = re.compile(r"^([A-Z][A-Z0-9_]{2,})(?:\s*:\s*[^=]+)?\s*=\s*[^=]")
 
-    for line_number, line in enumerate(lines, 1):
-        stripped = line.strip()
+    for each_line_number, each_line in enumerate(lines, 1):
+        stripped = each_line.strip()
 
         if not stripped:
             continue
@@ -66,7 +66,7 @@ def check_constants_outside_config(content: str, file_path: str) -> list[str]:
             is_inside_function = False
             continue
 
-        indent = len(line) - len(line.lstrip())
+        indent = len(each_line) - len(each_line.lstrip())
         if indent == 0 and stripped and not stripped.startswith(("#", "@", ")")):
             is_inside_function = False
             is_inside_class = False
@@ -76,7 +76,7 @@ def check_constants_outside_config(content: str, file_path: str) -> list[str]:
             if match:
                 constant_name = match.group(1)
                 if constant_name not in ("__all__",):
-                    issues.append(f"Line {line_number}: Constant {constant_name} - move to config/")
+                    issues.append(f"Line {each_line_number}: Constant {constant_name} - move to config/")
 
     return issues
 
@@ -105,13 +105,13 @@ def _scan_function_body_constants(content: str) -> list[str]:
     function_indent_stack: list[int] = []
     constant_pattern = re.compile(r"^([A-Z][A-Z0-9_]{2,})(?:\s*:\s*[^=]+)?\s*=\s*[^=]")
 
-    for line_number, line in enumerate(lines, 1):
-        stripped = line.strip()
+    for each_line_number, each_line in enumerate(lines, 1):
+        stripped = each_line.strip()
 
         if not stripped:
             continue
 
-        indent = len(line) - len(line.lstrip())
+        indent = len(each_line) - len(each_line.lstrip())
 
         while function_indent_stack and indent <= function_indent_stack[-1] and not stripped.startswith(("#", "@", ")")):
             function_indent_stack.pop()
@@ -130,7 +130,7 @@ def _scan_function_body_constants(content: str) -> list[str]:
             if match:
                 constant_name = match.group(1)
                 advisory_issues.append(
-                    f"Line {line_number}: Function-local constant {constant_name} - consider moving to config/"
+                    f"Line {each_line_number}: Function-local constant {constant_name} - consider moving to config/"
                 )
 
     return advisory_issues
@@ -242,11 +242,11 @@ def check_file_global_constants_use_count(content: str, file_path: str) -> list[
             callers_by_constant[each_node.id].add(enclosing_qname)
 
     issues: list[str] = []
-    for each_constant_name, line_number in sorted(constants_by_name.items(), key=lambda pair: pair[1]):
+    for each_constant_name, each_line_number in sorted(constants_by_name.items(), key=lambda pair: pair[1]):
         caller_count = len(callers_by_constant[each_constant_name])
         if caller_count == 1:
             issues.append(
-                f"Line {line_number}: File-global constant {each_constant_name} used by only 1 function/method - move to method scope or add a second caller"
+                f"Line {each_line_number}: File-global constant {each_constant_name} used by only 1 function/method - move to method scope or add a second caller"
             )
 
     return issues

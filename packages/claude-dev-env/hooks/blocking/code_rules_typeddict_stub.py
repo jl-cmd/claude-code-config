@@ -5,12 +5,12 @@ import re
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -27,11 +27,9 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
     MAX_TYPED_DICT_PAIR_ISSUES,
 )
 
-_PASCAL_TO_SNAKE_WORD_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
-
-
 def _pascal_to_snake_case(pascal_name: str) -> str:
-    return _PASCAL_TO_SNAKE_WORD_BOUNDARY.sub("_", pascal_name).lower()
+    pascal_to_snake_word_boundary = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+    return pascal_to_snake_word_boundary.sub("_", pascal_name).lower()
 
 
 def _class_inherits_from_typed_dict(class_node: ast.ClassDef) -> bool:

@@ -5,12 +5,12 @@ import re
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -22,6 +22,11 @@ from code_rules_shared import (  # noqa: E402
     is_test_file,
 )
 
+from hooks_constants.blocking_check_limits import (  # noqa: E402
+    MAX_E2E_TEST_NAMING_ISSUES,
+    MAX_LOGGING_FSTRING_ISSUES,
+    MAX_WINDOWS_API_NONE_ISSUES,
+)
 from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ADVISORY_LINE_THRESHOLD_HARD,
     ADVISORY_LINE_THRESHOLD_SOFT,
@@ -73,7 +78,7 @@ def check_imports_at_top(content: str) -> list[str]:
     type_checking_block_indent = NOT_INSIDE_TYPE_CHECKING_BLOCK
     active_triple_quote_delimiter: str | None = None
 
-    for line_number, each_line in enumerate(lines, 1):
+    for each_line_number, each_line in enumerate(lines, 1):
         if active_triple_quote_delimiter is not None:
             active_triple_quote_delimiter = _update_triple_quote_state_for_line(
                 each_line, active_triple_quote_delimiter
@@ -115,7 +120,7 @@ def check_imports_at_top(content: str) -> list[str]:
         is_inside_type_checking_block = type_checking_block_indent != NOT_INSIDE_TYPE_CHECKING_BLOCK
         if is_inside_function and not is_inside_type_checking_block:
             if stripped.startswith(ALL_IMPORT_STATEMENT_PREFIXES):
-                issues.append(f"Line {line_number}: Import inside function - move to top of file")
+                issues.append(f"Line {each_line_number}: Import inside function - move to top of file")
 
         active_triple_quote_delimiter = _update_triple_quote_state_for_line(
             each_line, active_triple_quote_delimiter
@@ -167,11 +172,12 @@ def check_logging_fstrings(content: str) -> list[str]:
     issues = []
     pattern = LOGGING_FSTRING_PATTERN
 
-    for line_number, line in enumerate(content.split("\n"), 1):
-        if pattern.search(line):
-            issues.append(f"Line {line_number}: f-string in log call - use format args instead")
+    maximum_issues = MAX_LOGGING_FSTRING_ISSUES
+    for each_line_number, each_line in enumerate(content.split("\n"), 1):
+        if pattern.search(each_line):
+            issues.append(f"Line {each_line_number}: f-string in log call - use format args instead")
 
-        if len(issues) >= 3:
+        if len(issues) >= maximum_issues:
             break
 
     return issues
@@ -181,7 +187,7 @@ def advise_file_line_count(content: str, file_path: str) -> None:
     """Emit non-blocking stderr advisories when a file crosses size smell thresholds.
 
     Thresholds are smell signals, not hard caps. See CODE_RULES.md "File length guidance"
-    for rationale. Soft threshold aligns with Clean Code Ch. 5 / Fowler "Large Class".
+    for rationale. Soft threshold aligns with Clean Code Chapter Five / Fowler "Large Class".
     Hard threshold matches pylint default max-module-lines and SonarQube S104 default.
     """
     line_count = len(content.splitlines())
@@ -205,11 +211,12 @@ def check_windows_api_none(content: str) -> list[str]:
     issues = []
     pattern = re.compile(r"win32gui\.\w+\s*\([^)]*,\s*None\s*\)")
 
-    for line_number, line in enumerate(content.split("\n"), 1):
-        if pattern.search(line):
-            issues.append(f"Line {line_number}: win32gui call with None - use 0 for unused int params")
+    maximum_issues = MAX_WINDOWS_API_NONE_ISSUES
+    for each_line_number, each_line in enumerate(content.split("\n"), 1):
+        if pattern.search(each_line):
+            issues.append(f"Line {each_line_number}: win32gui call with None - use 0 for unused int params")
 
-        if len(issues) >= 3:
+        if len(issues) >= maximum_issues:
             break
 
     return issues
@@ -223,11 +230,12 @@ def check_e2e_test_naming(content: str, file_path: str) -> list[str]:
     issues = []
     pattern = re.compile(r'(test|it|describe)\s*\(\s*["\'][^"\']*\b(online|offline)\b[^"\']*["\']', re.IGNORECASE)
 
-    for line_number, line in enumerate(content.split("\n"), 1):
-        if pattern.search(line):
-            issues.append(f"Line {line_number}: Test name contains online/offline - file scope defines this")
+    maximum_issues = MAX_E2E_TEST_NAMING_ISSUES
+    for each_line_number, each_line in enumerate(content.split("\n"), 1):
+        if pattern.search(each_line):
+            issues.append(f"Line {each_line_number}: Test name contains online/offline - file scope defines this")
 
-        if len(issues) >= 3:
+        if len(issues) >= maximum_issues:
             break
 
     return issues
@@ -250,19 +258,19 @@ def check_library_print(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
     issues: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, ast.Call):
             continue
-        function_reference = node.func
+        function_reference = each_node.func
         if isinstance(function_reference, ast.Name) and function_reference.id == "print":
             issues.append(
-                f"Line {node.lineno}: Library print() - route through logger or accept an explicit stream parameter"
+                f"Line {each_node.lineno}: Library print() - route through logger or accept an explicit stream parameter"
             )
         elif isinstance(function_reference, ast.Attribute) and function_reference.attr == "write":
             value_node = function_reference.value
             if isinstance(value_node, ast.Attribute) and isinstance(value_node.value, ast.Name):
                 if value_node.value.id == "sys" and value_node.attr in {"stdout", "stderr"}:
                     issues.append(
-                        f"Line {node.lineno}: sys.{value_node.attr}.write - route through logger"
+                        f"Line {each_node.lineno}: sys.{value_node.attr}.write - route through logger"
                     )
     return issues

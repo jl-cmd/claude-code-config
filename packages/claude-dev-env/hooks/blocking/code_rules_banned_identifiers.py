@@ -4,12 +4,12 @@ import ast
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -266,7 +266,7 @@ def check_banned_noun_word_boundary(
     all_changed_lines: set[int] | None = None,
     defer_scope_to_caller: bool = False,
 ) -> list[str]:
-    """Flag identifiers containing CODE_RULES §5 banned noun words.
+    """Flag identifiers containing CODE_RULES naming-rule banned noun words.
 
     Companion to ``check_banned_identifiers`` (exact-match cases only). This
     check catches the wider pattern: a banned noun word from

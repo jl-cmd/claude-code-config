@@ -4,12 +4,12 @@ import ast
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_shared import (  # noqa: E402
     _collect_annotated_arguments,
@@ -38,15 +38,15 @@ def check_parameter_annotations(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
     issues: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for each_arg in _collect_annotated_arguments(node):
+        for each_arg in _collect_annotated_arguments(each_node):
             if each_arg.arg in ALL_SELF_AND_CLS_PARAMETER_NAMES:
                 continue
             if each_arg.annotation is None:
                 issues.append(
-                    f"Line {each_arg.lineno}: parameter {each_arg.arg!r} on {node.name!r} missing type annotation (CODE_RULES §6)"
+                    f"Line {each_arg.lineno}: parameter {each_arg.arg!r} on {each_node.name!r} missing type annotation (CODE_RULES §6)"
                 )
     return issues
 
@@ -61,12 +61,12 @@ def check_return_annotations(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
     issues: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        if node.returns is None:
+        if each_node.returns is None:
             issues.append(
-                f"Line {node.lineno}: function {node.name!r} missing return type annotation (CODE_RULES §6)"
+                f"Line {each_node.lineno}: function {each_node.name!r} missing return type annotation (CODE_RULES §6)"
             )
     return issues
 
@@ -80,14 +80,14 @@ def check_function_length(
     """Flag functions whose definition span exceeds cognitive-load thresholds.
 
     Function definition spans (signature line through last body statement,
-    inclusive) at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60
-    lines) appear in the returned issues list and block the write at the
+    inclusive) at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` appear in
+    the returned issues list and block the write at the
     gate. The threshold rests on the small-function guidance in Robert C.
-    Martin, *Clean Code* Ch. 3 ("Functions") and the Google Python Style
-    Guide's ~40-line function review hint
+    Martin, *Clean Code* Chapter Three ("Functions") and the Google Python Style
+    Guide's ~forty-line function review hint
     (https://google.github.io/styleguide/pyguide.html); this gate blocks on
     body growth that pushes a function past that span. It does not derive
-    from CODE_RULES §6.5, which governs advisory file-length signals and
+    from CODE_RULES file-length guidance, which governs advisory file-length signals and
     argues against hard numeric blocks.
 
     The issue message carries ``Function NAME (defined at line X) is Y lines``

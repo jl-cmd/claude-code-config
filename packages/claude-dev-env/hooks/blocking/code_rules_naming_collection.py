@@ -4,12 +4,12 @@ import ast
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_shared import (  # noqa: E402
     _collect_annotated_arguments,
@@ -86,18 +86,18 @@ def check_collection_prefix(content: str, file_path: str) -> list[str]:
     except SyntaxError:
         return []
     issues: list[str] = []
-    for node in tree.body:
+    for each_node in tree.body:
         target_name: str | None = None
         target_line = 0
         is_collection_value = False
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            target_name = node.target.id
-            target_line = node.lineno
-            is_collection_value = _annotation_names_collection(node.annotation)
-        elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            target_name = node.targets[0].id
-            target_line = node.lineno
-            is_collection_value = isinstance(node.value, (ast.Tuple, ast.List, ast.Set, ast.Dict))
+        if isinstance(each_node, ast.AnnAssign) and isinstance(each_node.target, ast.Name):
+            target_name = each_node.target.id
+            target_line = each_node.lineno
+            is_collection_value = _annotation_names_collection(each_node.annotation)
+        elif isinstance(each_node, ast.Assign) and len(each_node.targets) == 1 and isinstance(each_node.targets[0], ast.Name):
+            target_name = each_node.targets[0].id
+            target_line = each_node.lineno
+            is_collection_value = isinstance(each_node.value, (ast.Tuple, ast.List, ast.Set, ast.Dict))
         if target_name is None or not is_collection_value:
             continue
         if not UPPER_SNAKE_CONSTANT_PATTERN.match(target_name):

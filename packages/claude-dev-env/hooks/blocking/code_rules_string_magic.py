@@ -5,12 +5,12 @@ import re
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -54,12 +54,12 @@ def _collect_docstring_node_ids(tree: ast.Module) -> set[int]:
         ast.AsyncFunctionDef,
         ast.ClassDef,
     )
-    for node in ast.walk(tree):
-        if not isinstance(node, docstring_owner_node_types):
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, docstring_owner_node_types):
             continue
-        if not node.body:
+        if not each_node.body:
             continue
-        first_statement = node.body[0]
+        first_statement = each_node.body[0]
         if not isinstance(first_statement, ast.Expr):
             continue
         first_value = first_statement.value
@@ -70,10 +70,10 @@ def _collect_docstring_node_ids(tree: ast.Module) -> set[int]:
 
 def _collect_fstring_part_node_ids(tree: ast.Module) -> set[int]:
     fstring_part_ids: set[int] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.JoinedStr):
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, ast.JoinedStr):
             continue
-        for each_value in node.values:
+        for each_value in each_node.values:
             if isinstance(each_value, ast.Constant) and isinstance(each_value.value, str):
                 fstring_part_ids.add(id(each_value))
     return fstring_part_ids
@@ -94,10 +94,10 @@ def check_string_literal_magic(content: str, file_path: str) -> list[str]:
     fstring_part_node_ids = _collect_fstring_part_node_ids(tree)
     issues: list[str] = []
     flagged_node_ids: set[int] = set()
-    for function_node in ast.walk(tree):
-        if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for each_function_node in ast.walk(tree):
+        if not isinstance(each_function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for each_body_statement in function_node.body:
+        for each_body_statement in each_function_node.body:
             for each_descendant in _walk_skipping_nested_function_defs(each_body_statement):
                 if not isinstance(each_descendant, ast.Constant):
                     continue
@@ -132,10 +132,10 @@ def check_inline_literal_collections(content: str, file_path: str) -> list[str]:
         return []
     issues: list[str] = []
     flagged_node_ids: set[int] = set()
-    for function_node in ast.walk(tree):
-        if not isinstance(function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    for each_function_node in ast.walk(tree):
+        if not isinstance(each_function_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
-        for each_body_statement in function_node.body:
+        for each_body_statement in each_function_node.body:
             for each_descendant in _walk_skipping_nested_function_defs(each_body_statement):
                 if not isinstance(each_descendant, (ast.Set, ast.List)):
                     continue

@@ -6,12 +6,12 @@ import tokenize
 from collections.abc import Iterator
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_shared import (  # noqa: E402
     get_file_extension,
@@ -115,8 +115,8 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
 
     if extension in ALL_JAVASCRIPT_EXTENSIONS:
         is_in_multiline = False
-        for line in lines:
-            stripped = line.strip()
+        for each_line in lines:
+            stripped = each_line.strip()
             if not stripped:
                 continue
             if is_in_multiline:
@@ -131,8 +131,8 @@ def extract_comment_texts(content: str, file_path: str) -> tuple[set[str], set[s
             if stripped.startswith("//"):
                 if not stripped.startswith(ALL_JAVASCRIPT_EXEMPT_COMMENT_PREFIXES):
                     standalone_comments.add(stripped)
-            elif "//" in line:
-                before_slash = line[:line.index("//")]
+            elif "//" in each_line:
+                before_slash = each_line[:each_line.index("//")]
                 if before_slash.strip():
                     comment_start = stripped.index("//")
                     comment_text = stripped[comment_start + 2 :].strip()
@@ -232,7 +232,7 @@ def _is_exempt_python_comment(comment_token: tokenize.TokenInfo) -> bool:
     shebang line is meaningful only as the first line of an executable
     file. An inline shebang-lookalike later in the file (an
     after-code occurrence on any line, or a standalone occurrence on
-    line 2 or later) is NOT a real shebang and remains subject to the
+    the second line or later) is NOT a real shebang and remains subject to the
     no-comments rule.
 
     Matches any prefix listed in the token-anchored or free-form exempt-

@@ -4,12 +4,12 @@ import ast
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
@@ -51,9 +51,9 @@ def _rhs_names_if_all_bool(value_node: ast.AST, target_node: ast.AST) -> list[st
     if not all(_is_bool_constant(element) for element in value_node.elts):
         return []
     names: list[str] = []
-    for element in target_node.elts:
-        if isinstance(element, ast.Name):
-            names.append(element.id)
+    for each_element in target_node.elts:
+        if isinstance(each_element, ast.Name):
+            names.append(each_element.id)
     return names
 
 
@@ -61,11 +61,11 @@ def _assign_target_names_for_bool(node: ast.Assign) -> list[str]:
     if not node.targets:
         return []
     names: list[str] = []
-    for target in node.targets:
-        if isinstance(target, ast.Name) and _is_bool_constant(node.value):
-            names.append(target.id)
+    for each_target in node.targets:
+        if isinstance(each_target, ast.Name) and _is_bool_constant(node.value):
+            names.append(each_target.id)
         else:
-            names.extend(_rhs_names_if_all_bool(node.value, target))
+            names.extend(_rhs_names_if_all_bool(node.value, each_target))
     return names
 
 
@@ -101,30 +101,30 @@ def _collect_boolean_assignments(tree: ast.Module) -> list[tuple[str, int, bool]
     scope tagging will silently fail for the replaced nodes.
     """
     upper_snake_scope_ids: set[int] = set()
-    for statement in tree.body:
-        upper_snake_scope_ids.add(id(statement))
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            for class_statement in node.body:
-                upper_snake_scope_ids.add(id(class_statement))
+    for each_statement in tree.body:
+        upper_snake_scope_ids.add(id(each_statement))
+    for each_node in ast.walk(tree):
+        if isinstance(each_node, ast.ClassDef):
+            for each_class_statement in each_node.body:
+                upper_snake_scope_ids.add(id(each_class_statement))
     collected: list[tuple[str, int, bool]] = []
-    for node in ast.walk(tree):
+    for each_node in ast.walk(tree):
         names: list[str] = []
         line_number = 0
-        if isinstance(node, ast.Assign):
-            names = _assign_target_names_for_bool(node)
-            line_number = node.lineno
-        elif isinstance(node, ast.AnnAssign):
-            names = _annassign_target_name_for_bool(node)
-            line_number = node.lineno
-        elif isinstance(node, ast.NamedExpr):
-            names = _walrus_name_for_bool(node)
-            line_number = node.lineno
+        if isinstance(each_node, ast.Assign):
+            names = _assign_target_names_for_bool(each_node)
+            line_number = each_node.lineno
+        elif isinstance(each_node, ast.AnnAssign):
+            names = _annassign_target_name_for_bool(each_node)
+            line_number = each_node.lineno
+        elif isinstance(each_node, ast.NamedExpr):
+            names = _walrus_name_for_bool(each_node)
+            line_number = each_node.lineno
         if not names:
             continue
-        is_in_upper_snake_scope = id(node) in upper_snake_scope_ids
-        for name in names:
-            collected.append((name, line_number, is_in_upper_snake_scope))
+        is_in_upper_snake_scope = id(each_node) in upper_snake_scope_ids
+        for each_name in names:
+            collected.append((each_name, line_number, is_in_upper_snake_scope))
     return collected
 
 
@@ -236,9 +236,10 @@ def check_boolean_naming(
             continue
         if each_name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
             continue
+        boolean_prefix_suffix = "is_/has_/should_/can_/was_/did_"
         message = (
             f"Line {each_line_number}: Boolean {each_name} - prefix with "
-            "is_/has_/should_/can_/was_/did_"
+            f"{boolean_prefix_suffix}"
         )
         all_violations_in_walk_order.append(
             (range(each_line_number, each_line_number + 1), message)
@@ -248,9 +249,10 @@ def check_boolean_naming(
             continue
         if each_name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
             continue
+        boolean_prefix_suffix = "is_/has_/should_/can_/was_/did_"
         message = (
             f"Line {each_line_number}: Boolean parameter {each_name} - prefix with "
-            "is_/has_/should_/can_/was_/did_"
+            f"{boolean_prefix_suffix}"
         )
         all_violations_in_walk_order.append(
             (range(each_line_number, each_line_number + 1), message)

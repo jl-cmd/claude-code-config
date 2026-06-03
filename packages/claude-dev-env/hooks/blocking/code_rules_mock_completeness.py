@@ -4,12 +4,12 @@ import ast
 import sys
 from pathlib import Path
 
-_BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
-_HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
-if _BLOCKING_DIRECTORY not in sys.path:
-    sys.path.insert(0, _BLOCKING_DIRECTORY)
-if _HOOKS_DIRECTORY not in sys.path:
-    sys.path.insert(0, _HOOKS_DIRECTORY)
+_blocking_directory = str(Path(__file__).resolve().parent)
+_hooks_directory = str(Path(__file__).resolve().parent.parent)
+if _blocking_directory not in sys.path:
+    sys.path.insert(0, _blocking_directory)
+if _hooks_directory not in sys.path:
+    sys.path.insert(0, _hooks_directory)
 
 from code_rules_shared import (  # noqa: E402
     is_test_file,
@@ -94,8 +94,8 @@ def _node_binds_name(node: ast.AST, variable_name: str) -> bool:
     return False
 
 
-def _body_binds_name_recursively(body_statements: list[ast.stmt], variable_name: str) -> bool:
-    """Return True when any node reachable within body_statements binds variable_name.
+def _body_binds_name_recursively(all_body_statements: list[ast.stmt], variable_name: str) -> bool:
+    """Return True when any node reachable within all_body_statements binds variable_name.
 
     Walks the body using a stack, descending into control-flow constructs
     (if/for/while/try/with) but treating nested function, async-function,
@@ -104,7 +104,7 @@ def _body_binds_name_recursively(body_statements: list[ast.stmt], variable_name:
     Function/class definitions themselves still bind their own name in
     the enclosing scope, which is handled by _node_binds_name.
     """
-    nodes_to_visit: list[ast.AST] = list(body_statements)
+    nodes_to_visit: list[ast.AST] = list(all_body_statements)
     while nodes_to_visit:
         current_node = nodes_to_visit.pop()
         if _node_binds_name(current_node, variable_name):
@@ -276,20 +276,20 @@ def check_incomplete_mocks(content: str, file_path: str) -> None:
 
     all_scoped_definitions = _collect_scoped_mock_definitions(module_tree)
 
-    for _scope_id, mock_name, declared_keys, definition_line, scope_node in all_scoped_definitions:
-        assigned_attributes = _collect_mock_attribute_assignments_in_scope(scope_node, mock_name)
-        all_known_fields = declared_keys | assigned_attributes
-        field_accesses = _collect_mock_field_accesses_in_scope(scope_node, mock_name)
+    for each_scope_id, each_mock_name, each_declared_keys, each_definition_line, each_scope_node in all_scoped_definitions:
+        assigned_attributes = _collect_mock_attribute_assignments_in_scope(each_scope_node, each_mock_name)
+        all_known_fields = each_declared_keys | assigned_attributes
+        field_accesses = _collect_mock_field_accesses_in_scope(each_scope_node, each_mock_name)
         already_advised: set[tuple[str, str]] = set()
-        for accessed_field, access_line in field_accesses:
-            if accessed_field in all_known_fields:
+        for each_accessed_field, each_access_line in field_accesses:
+            if each_accessed_field in all_known_fields:
                 continue
-            advisory_key = (mock_name, accessed_field)
+            advisory_key = (each_mock_name, each_accessed_field)
             if advisory_key in already_advised:
                 continue
             already_advised.add(advisory_key)
             print(
-                f"[CODE_RULES advisory] Line {definition_line}: mock {mock_name}"
-                f" missing field {accessed_field} accessed at line {access_line}",
+                f"[CODE_RULES advisory] Line {each_definition_line}: mock {each_mock_name}"
+                f" missing field {each_accessed_field} accessed at line {each_access_line}",
                 file=sys.stderr,
             )

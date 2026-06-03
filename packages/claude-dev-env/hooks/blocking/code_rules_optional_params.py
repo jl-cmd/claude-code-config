@@ -11,13 +11,11 @@ if _BLOCKING_DIRECTORY not in sys.path:
 if _HOOKS_DIRECTORY not in sys.path:
     sys.path.insert(0, _HOOKS_DIRECTORY)
 
-from code_rules_magic_values import (  # noqa: E402
-    _extract_fstring_literal_parts,
-)
 from code_rules_path_utils import (  # noqa: E402
     is_config_file,
 )
 from code_rules_shared import (  # noqa: E402
+    _extract_fstring_literal_parts,
     is_hook_infrastructure,
     is_migration_file,
     is_test_file,

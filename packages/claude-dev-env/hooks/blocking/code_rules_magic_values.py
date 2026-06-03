@@ -16,6 +16,7 @@ from code_rules_path_utils import (  # noqa: E402
     is_config_file,
 )
 from code_rules_shared import (  # noqa: E402
+    _extract_fstring_literal_parts,
     is_test_file,
 )
 
@@ -94,37 +95,6 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
             break
 
     return issues
-
-
-def _extract_fstring_literal_parts(
-    joined_string_node: ast.JoinedStr,
-    interpolation_placeholder: str = "INTERP",
-) -> tuple[str, str]:
-    """Return (display_body, shape_body) for an f-string node.
-
-    ``display_body`` concatenates only the literal segments for use in the
-    human-readable flag message. ``shape_body`` substitutes each interpolation
-    slot with ``interpolation_placeholder`` so callers can choose a token that
-    both preserves structural shape and does not collide with literal text in
-    the source. The default ``"INTERP"`` keeps regex patterns for path shape
-    (``\\w+/\\w+/\\w+``) matching across interpolation boundaries
-    (e.g. ``/api/v1/{id}/home`` keeps its three path segments instead of
-    collapsing to ``/api/v1//home``). Callers that will compare shape bodies
-    verbatim — such as the skeleton builder — should pass their final token
-    here directly rather than post-processing with ``.replace``, since that
-    would corrupt literal text containing the default placeholder. Escaped
-    braces (``{{`` / ``}}``) are already decoded by :mod:`ast` into their
-    literal forms.
-    """
-    display_segments: list[str] = []
-    shape_segments: list[str] = []
-    for each_part in joined_string_node.values:
-        if isinstance(each_part, ast.Constant) and isinstance(each_part.value, str):
-            display_segments.append(each_part.value)
-            shape_segments.append(each_part.value)
-        else:
-            shape_segments.append(interpolation_placeholder)
-    return "".join(display_segments), "".join(shape_segments)
 
 
 def _has_structural_shape(literal_body: str) -> bool:

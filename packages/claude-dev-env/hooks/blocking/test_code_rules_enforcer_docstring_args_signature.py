@@ -213,3 +213,24 @@ def test_validate_content_surfaces_args_drift() -> None:
     assert matching_issues, (
         f"Expected validate_content to surface the Args drift issue, got: {issues!r}"
     )
+
+
+def test_should_not_flag_deeper_indented_continuation_line() -> None:
+    source = (
+        "def fetch_user(user_id: int) -> str:\n"
+        '    """Look up a user by id.\n'
+        "\n"
+        "    Args:\n"
+        "        user_id: The user identifier. Example mapping:\n"
+        "            shadow_key: not a parameter.\n"
+        "\n"
+        "    Returns:\n"
+        "        The user name.\n"
+        '    """\n'
+        "    lookup = _registry.get(user_id)\n"
+        "    if not lookup:\n"
+        "        return ''\n"
+        "    return lookup.name\n"
+    )
+    issues = check_docstring_args_match_signature(source, PRODUCTION_FILE_PATH)
+    assert issues == [], f"Continuation lines must not be parsed as args, got: {issues!r}"

@@ -2122,14 +2122,20 @@ def _documented_argument_names(docstring_text: str) -> list[str]:
     if args_section_index is None:
         return []
     documented_names: list[str] = []
+    entry_indent: int | None = None
     for each_line in docstring_lines[args_section_index + 1:]:
         stripped_line = each_line.strip()
         if not stripped_line:
             continue
         if _is_docstring_section_header(stripped_line):
             break
-        if each_line and not each_line[0].isspace():
+        current_indent = len(each_line) - len(each_line.lstrip())
+        if current_indent == 0:
             break
+        if entry_indent is None:
+            entry_indent = current_indent
+        if current_indent > entry_indent:
+            continue
         entry_match = DOCSTRING_ARG_ENTRY_PATTERN.match(stripped_line)
         if entry_match is not None:
             documented_names.append(entry_match.group(1))

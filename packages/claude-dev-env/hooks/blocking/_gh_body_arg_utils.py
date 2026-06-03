@@ -1,4 +1,4 @@
-"""Shared gh body-arg parsing utilities for blocking hooks."""
+"""Shared shell-token and gh body-arg parsing utilities for blocking hooks."""
 
 from __future__ import annotations
 
@@ -62,21 +62,17 @@ minimum_meaningful_token_length: int = 2
 non_body_value_flags: frozenset[str] = all_value_flags - {body_file_flag, body_file_short_flag}
 
 _non_body_value_flag_equals_prefixes: tuple[str, ...] = tuple(
-    sorted(
-        (
-            prefix
-            for prefix in all_value_flag_equals_prefixes
-            if not prefix.startswith("--body")
-            and not prefix.startswith("-b=")
-            and not prefix.startswith("-F=")
-        ),
-        key=len,
-        reverse=True,
-    )
+    sorted((f"{each_flag}=" for each_flag in non_body_value_flags), key=len, reverse=True)
 )
 
 
 def is_flag_shaped_token(token: str) -> bool:
+    """Report whether a token is flag-shaped for body/PR-number extraction.
+
+    Treats any token whose second character is "-" as flag-shaped, so bare
+    "--" and "--<digit>" tokens both count as flags. `_is_flag_shaped` applies
+    a stricter rule for token-stream scanning.
+    """
     if len(token) < minimum_meaningful_token_length:
         return False
     if not token.startswith("-"):
@@ -98,25 +94,23 @@ def is_unresolvable_shell_value(token: str) -> bool:
     return token.startswith(shell_variable_sigil)
 
 
-def match_body_flag_equals_prefix(token: str) -> str | None:
-    for each_prefix in all_body_flag_prefixes:
+def _match_prefix(token: str, all_prefixes: tuple[str, ...]) -> str | None:
+    for each_prefix in all_prefixes:
         if token.startswith(each_prefix):
             return each_prefix
     return None
+
+
+def match_body_flag_equals_prefix(token: str) -> str | None:
+    return _match_prefix(token, all_body_flag_prefixes)
 
 
 def match_body_file_equals_prefix(token: str) -> str | None:
-    for each_prefix in (body_file_flag_prefix, body_file_short_flag_prefix):
-        if token.startswith(each_prefix):
-            return each_prefix
-    return None
+    return _match_prefix(token, (body_file_flag_prefix, body_file_short_flag_prefix))
 
 
 def match_non_body_value_flag_equals_prefix(token: str) -> str | None:
-    for each_prefix in _non_body_value_flag_equals_prefixes:
-        if token.startswith(each_prefix):
-            return each_prefix
-    return None
+    return _match_prefix(token, _non_body_value_flag_equals_prefixes)
 
 
 def _count_trailing_run(text: str, marker_character: str) -> int:
@@ -154,7 +148,13 @@ def get_logical_first_line(command: str) -> str:
 
 
 def _is_flag_shaped(token: str) -> bool:
-    if len(token) < 2:
+    """Report whether a token is flag-shaped for token-stream scanning.
+
+    Requires an alphabetic character after "--", so bare "--" and "--<digit>"
+    tokens are not flag-shaped. `is_flag_shaped_token` applies a looser rule
+    for body/PR-number extraction.
+    """
+    if len(token) < minimum_meaningful_token_length:
         return False
     if not token.startswith("-"):
         return False
@@ -165,7 +165,7 @@ def _is_flag_shaped(token: str) -> bool:
 
 
 def _quoted_value_starts_split(value_token: str) -> bool:
-    if len(value_token) < 2:
+    if len(value_token) < minimum_meaningful_token_length:
         return False
     first_character = value_token[0]
     if first_character not in {'"', "'"}:
@@ -189,13 +189,6 @@ def count_extra_tokens_to_skip_for_split_quoted_value(
         extra_tokens_consumed += 1
         if each_remaining_token.count(opening_quote) % 2 == 1:
             return extra_tokens_consumed
-    return None
-
-
-def _match_equals_prefix_for_skip(token: str) -> str | None:
-    for each_prefix in _all_equals_prefixes_for_skip:
-        if token.startswith(each_prefix):
-            return each_prefix
     return None
 
 
@@ -238,7 +231,7 @@ def iter_significant_tokens(
     while token_index < len(all_tokens):
         current_token = all_tokens[token_index]
         remaining_tokens = all_tokens[token_index + 1:]
-        matched_equals_prefix = _match_equals_prefix_for_skip(current_token)
+        matched_equals_prefix = _match_prefix(current_token, _all_equals_prefixes_for_skip)
         if matched_equals_prefix is not None:
             value_token = current_token[len(matched_equals_prefix):]
             split_value_extra_tokens = count_extra_tokens_to_skip_for_split_quoted_value(

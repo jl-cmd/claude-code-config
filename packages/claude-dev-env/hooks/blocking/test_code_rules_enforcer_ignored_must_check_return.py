@@ -1,6 +1,6 @@
 """Tests for check_ignored_must_check_return — discarded must-check outcomes.
 
-A bare-statement call to a function in MUST_CHECK_RETURN_FUNCTION_NAMES
+A bare-statement call to a function in ALL_MUST_CHECK_RETURN_FUNCTION_NAMES
 discards the only failure signal it produces. An assigned or branched-on
 call is exempt; only bare ``ast.Expr`` calls are flagged.
 """

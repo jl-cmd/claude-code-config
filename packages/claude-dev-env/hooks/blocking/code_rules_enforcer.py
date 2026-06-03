@@ -137,7 +137,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_DOCSTRING_ARGS_SECTION_HEADERS,
     ALL_DOCSTRING_TERMINATING_SECTION_HEADERS,
     DOCSTRING_ARG_ENTRY_PATTERN,
-    MUST_CHECK_RETURN_FUNCTION_NAMES,
+    ALL_MUST_CHECK_RETURN_FUNCTION_NAMES,
     ALL_BUILTIN_DICT_METHOD_NAMES,
     ALL_CLI_FILE_PATH_MARKERS,
     CHAINED_INLINE_COMMENT_PATTERN,
@@ -2142,10 +2142,10 @@ def _documented_argument_names(docstring_text: str) -> list[str]:
     return documented_names
 
 
-def _find_args_section_index(docstring_lines: list[str]) -> int | None:
-    for line_index, each_line in enumerate(docstring_lines):
+def _find_args_section_index(all_docstring_lines: list[str]) -> int | None:
+    for each_line_index, each_line in enumerate(all_docstring_lines):
         if each_line.strip() in ALL_DOCSTRING_ARGS_SECTION_HEADERS:
-            return line_index
+            return each_line_index
     return None
 
 
@@ -2563,8 +2563,8 @@ def _bool_parameters_for_function(
     positional_defaults = arguments.defaults
     leading_without_default = len(positional_arguments) - len(positional_defaults)
     bool_parameters: list[tuple[str, int]] = []
-    for position, each_argument in enumerate(positional_arguments):
-        default_index = position - leading_without_default
+    for each_position, each_argument in enumerate(positional_arguments):
+        default_index = each_position - leading_without_default
         default_node = (
             positional_defaults[default_index] if default_index >= 0 else None
         )
@@ -2629,13 +2629,13 @@ def check_boolean_naming(content: str, file_path: str) -> list[str]:
         issues.append(
             f"Line {line_number}: Boolean {name} - prefix with is_/has_/should_/can_"
         )
-    for name, line_number in _collect_bool_parameter_names(tree):
-        if len(name) == 1:
+    for each_name, each_line_number in _collect_bool_parameter_names(tree):
+        if len(each_name) == 1:
             continue
-        if name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
+        if each_name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
             continue
         issues.append(
-            f"Line {line_number}: Boolean parameter {name} - prefix with "
+            f"Line {each_line_number}: Boolean parameter {each_name} - prefix with "
             "is_/has_/should_/can_/was_/did_"
         )
     return issues
@@ -2653,7 +2653,7 @@ def _called_terminal_name(call_node: ast.Call) -> str | None:
 def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
     """Flag bare-expression calls whose discarded return is the only failure signal.
 
-    Functions in ``MUST_CHECK_RETURN_FUNCTION_NAMES`` report success or failure
+    Functions in ``ALL_MUST_CHECK_RETURN_FUNCTION_NAMES`` report success or failure
     solely through their return value. A bare-statement call discards that value,
     so the caller silently proceeds on failure. Only bare ``ast.Expr`` calls are
     flagged; an assigned or branched-on call is exempt.
@@ -2678,7 +2678,7 @@ def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
         if not isinstance(each_node.value, ast.Call):
             continue
         called_name = _called_terminal_name(each_node.value)
-        if called_name is None or called_name not in MUST_CHECK_RETURN_FUNCTION_NAMES:
+        if called_name is None or called_name not in ALL_MUST_CHECK_RETURN_FUNCTION_NAMES:
             continue
         issues.append(
             f"Line {each_node.lineno}: return value of {called_name}() is discarded - "

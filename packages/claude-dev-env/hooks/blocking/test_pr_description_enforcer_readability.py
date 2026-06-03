@@ -32,9 +32,9 @@ validate_pr_body = hook_module.validate_pr_body
 def _isolate_readability_state(tmp_path_factory, monkeypatch):
     """Redirect the three readability state files to per-test temp paths for every test.
 
-    Tests that need the strike-counter behavior re-monkeypatch the same attributes to a fresh
-    directory where the enabled file is absent (which defaults to enabled=True). This default
-    keeps the readability check off for every other test in the file.
+    The enabled file is written with enabled=False so the readability check stays
+    off for the readability tests, isolating them from readability scoring and the
+    live state directory.
     """
     per_test_state_dir = tmp_path_factory.mktemp("readability_state")
     strike_path = per_test_state_dir / "strikes.json"

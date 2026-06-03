@@ -62,6 +62,8 @@ These rules are automatically enforced by `code_rules_enforcer.py`. Violations b
 | Test-mode branching in production | Reading `TESTING`, `PYTEST_CURRENT_TEST`, `IS_TEST`, etc. from production code creates two parallel implementations. Use dependency injection so production stays single-path. **Test files and hook infrastructure exempt.** |
 | Thin wrapper files | A non-`__init__.py` module whose body is only imports (optionally with an `__all__` assignment) is a re-export indirection with no payload. Callers should import from the real module. `__init__.py` is the canonical re-export surface and is exempt. |
 | Docstring format (Google-style) | Public functions/methods (no leading underscore, not dunder, body > 3 lines, not `@property`/`@abstractmethod`) require Google-style `Args:` / `Returns:` (or `Yields:`) / `Raises:` sections matching the signature. **Test files exempt.** |
+| Docstring Args match signature | A public function whose docstring `Args:` section names a parameter the signature does not declare is flagged — a rename that left the adjacent `Args:` line stale. Only the `Args:` section is compared against the signature; `Raises:` is left alone because callee-propagated exceptions cause false positives. **Test files and hook infrastructure exempt.** |
+| Ignored must-check return | A bare-statement call to a function whose return value is its only failure signal (the curated `find_and_click`, `write_outcome` set) is flagged — the discarded boolean lets the caller move on silently after a failure. Assign the return and check it. Assigned (`clicked = …`) and branched-on (`if …:`) calls are exempt. **Test files exempt.** |
 
 ### Where UPPER_SNAKE is allowed
 
@@ -124,7 +126,7 @@ Full words only. No mental translation.
 
 **Extended naming rules** :
 - Loop vars: `each_order`, `each_user` (prefix `each_`)
-- Booleans: `is_valid`, `has_permission`, `should_retry` (prefix `is_`/`has_`/`should_`/`can_`)
+- Booleans: `is_valid`, `has_permission`, `should_retry`, `was_clicked`, `did_succeed` (prefix `is_`/`has_`/`should_`/`can_`/`was_`/`did_`). The hook covers both boolean assignments and boolean-typed function parameters (a parameter annotated `bool` or defaulting to a boolean literal); `self`/`cls` and single-character names are exempt.
 - Collections: `all_orders`, `all_users` (prefix `all_`)
 - Maps: `price_by_product`, `user_by_id` (pattern `X_by_Y`)
 - Preposition params: `from_path=`, `to=`, `into=`
@@ -400,6 +402,9 @@ Hook will enforce:
 [⚡] No test-mode branching in production (TESTING / PYTEST_CURRENT_TEST)
 [⚡] No thin wrapper modules (imports only, optionally with __all__, outside __init__.py)
 [⚡] Public functions have Google-style Args:/Returns:/Raises: when warranted
+[⚡] Docstring Args: names match the signature (a stale renamed param is flagged)
+[⚡] Boolean names prefixed is_/has_/should_/can_/was_/did_ (assignments AND bool-typed parameters)
+[⚡] No discarded must-check return (assign and check find_and_click/write_outcome outcomes)
 
 Manual check:
 [ ] No abbreviations?

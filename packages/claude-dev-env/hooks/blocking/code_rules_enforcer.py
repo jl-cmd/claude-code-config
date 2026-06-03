@@ -91,7 +91,9 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
     MAX_BANNED_PREFIX_ISSUES,
     MAX_BARE_EXCEPT_ISSUES,
     MAX_BOUNDARY_TYPE_ISSUES,
+    MAX_DOCSTRING_ARGS_SIGNATURE_ISSUES,
     MAX_DOCSTRING_FORMAT_ISSUES,
+    MAX_IGNORED_MUST_CHECK_RETURN_ISSUES,
     MAX_STUB_IMPLEMENTATION_ISSUES,
     MAX_TEST_BRANCHING_ISSUES,
     MAX_TYPED_DICT_PAIR_ISSUES,
@@ -132,6 +134,10 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     BANNED_NOUN_SPAN_FRAGMENT_TEMPLATE,
     BARE_EACH_TOKEN,
     ALL_BOOLEAN_NAME_PREFIXES,
+    ALL_DOCSTRING_ARGS_SECTION_HEADERS,
+    ALL_DOCSTRING_TERMINATING_SECTION_HEADERS,
+    DOCSTRING_ARG_ENTRY_PATTERN,
+    MUST_CHECK_RETURN_FUNCTION_NAMES,
     ALL_BUILTIN_DICT_METHOD_NAMES,
     ALL_CLI_FILE_PATH_MARKERS,
     CHAINED_INLINE_COMMENT_PATTERN,
@@ -2092,6 +2098,100 @@ def check_docstring_format(content: str, file_path: str) -> list[str]:
     return issues[:MAX_DOCSTRING_FORMAT_ISSUES]
 
 
+def _signature_parameter_names(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> set[str]:
+    arguments = function_node.args
+    real_names: set[str] = set()
+    for each_argument in arguments.posonlyargs + arguments.args + arguments.kwonlyargs:
+        real_names.add(each_argument.arg)
+    if arguments.vararg is not None:
+        real_names.add(arguments.vararg.arg)
+    if arguments.kwarg is not None:
+        real_names.add(arguments.kwarg.arg)
+    return real_names - ALL_SELF_AND_CLS_PARAMETER_NAMES
+
+
+def _is_docstring_section_header(stripped_line: str) -> bool:
+    return stripped_line in ALL_DOCSTRING_TERMINATING_SECTION_HEADERS
+
+
+def _documented_argument_names(docstring_text: str) -> list[str]:
+    docstring_lines = docstring_text.splitlines()
+    args_section_index = _find_args_section_index(docstring_lines)
+    if args_section_index is None:
+        return []
+    documented_names: list[str] = []
+    for each_line in docstring_lines[args_section_index + 1:]:
+        stripped_line = each_line.strip()
+        if not stripped_line:
+            continue
+        if _is_docstring_section_header(stripped_line):
+            break
+        if each_line and not each_line[0].isspace():
+            break
+        entry_match = DOCSTRING_ARG_ENTRY_PATTERN.match(stripped_line)
+        if entry_match is not None:
+            documented_names.append(entry_match.group(1))
+    return documented_names
+
+
+def _find_args_section_index(docstring_lines: list[str]) -> int | None:
+    for line_index, each_line in enumerate(docstring_lines):
+        if each_line.strip() in ALL_DOCSTRING_ARGS_SECTION_HEADERS:
+            return line_index
+    return None
+
+
+def check_docstring_args_match_signature(content: str, file_path: str) -> list[str]:
+    """Flag docstring Args: entries naming a parameter the signature lacks.
+
+    A fix that renames a parameter often leaves the adjacent ``Args:`` line
+    stale. Each documented argument name is compared to the real signature;
+    a documented name with no matching parameter is reported. Only the
+    ``Args:`` section is validated — ``Raises:`` is left alone because
+    callee-propagated exceptions cause false positives.
+
+    Args:
+        content: The source text to inspect.
+        file_path: The path the source will be written to, used for exemptions.
+
+    Returns:
+        One issue per stale documented argument, capped at the module limit.
+    """
+    if is_test_file(file_path) or is_hook_infrastructure(file_path):
+        return []
+    try:
+        parsed_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    issues: list[str] = []
+    for each_node in _walk_skipping_type_checking_blocks(parsed_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if _function_is_private_or_dunder(each_node.name):
+            continue
+        if _function_has_exempt_decorator(each_node):
+            continue
+        if _function_body_line_count(each_node) <= DOCSTRING_TRIVIAL_FUNCTION_BODY_LINE_LIMIT:
+            continue
+        documented_names = _documented_argument_names(_function_docstring_text(each_node))
+        if not documented_names:
+            continue
+        real_names = _signature_parameter_names(each_node)
+        for each_documented_name in documented_names:
+            if each_documented_name in real_names:
+                continue
+            issues.append(
+                f"Line {each_node.lineno}: {each_node.name}() docstring Args: lists "
+                f"'{each_documented_name}' which is not a parameter - update the "
+                "docstring to match the signature"
+            )
+            if len(issues) >= MAX_DOCSTRING_ARGS_SIGNATURE_ISSUES:
+                return issues[:MAX_DOCSTRING_ARGS_SIGNATURE_ISSUES]
+    return issues[:MAX_DOCSTRING_ARGS_SIGNATURE_ISSUES]
+
+
 _PASCAL_TO_SNAKE_WORD_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 
@@ -2440,6 +2540,59 @@ def _collect_boolean_assignments(tree: ast.Module) -> list[tuple[str, int, bool]
     return collected
 
 
+def _argument_is_boolean(argument_node: ast.arg, default_node: ast.expr | None) -> bool:
+    annotation_is_bool = (
+        isinstance(argument_node.annotation, ast.Name)
+        and argument_node.annotation.id == "bool"
+    )
+    default_is_bool = default_node is not None and _is_bool_constant(default_node)
+    return annotation_is_bool or default_is_bool
+
+
+def _bool_parameters_for_function(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[tuple[str, int]]:
+    arguments = function_node.args
+    positional_arguments = arguments.posonlyargs + arguments.args
+    positional_defaults = arguments.defaults
+    leading_without_default = len(positional_arguments) - len(positional_defaults)
+    bool_parameters: list[tuple[str, int]] = []
+    for position, each_argument in enumerate(positional_arguments):
+        default_index = position - leading_without_default
+        default_node = (
+            positional_defaults[default_index] if default_index >= 0 else None
+        )
+        if each_argument.arg in ALL_SELF_AND_CLS_PARAMETER_NAMES:
+            continue
+        if _argument_is_boolean(each_argument, default_node):
+            bool_parameters.append((each_argument.arg, each_argument.lineno))
+    for each_argument, each_default in zip(arguments.kwonlyargs, arguments.kw_defaults):
+        if each_argument.arg in ALL_SELF_AND_CLS_PARAMETER_NAMES:
+            continue
+        if _argument_is_boolean(each_argument, each_default):
+            bool_parameters.append((each_argument.arg, each_argument.lineno))
+    return bool_parameters
+
+
+def _collect_bool_parameter_names(tree: ast.Module) -> list[tuple[str, int]]:
+    """Collect (name, line_number) for boolean-typed function parameters.
+
+    A parameter counts as boolean when its annotation is the ``bool`` name or
+    its default is a boolean literal. ``self`` and ``cls`` are skipped.
+
+    Args:
+        tree: The parsed module to inspect.
+
+    Returns:
+        Each boolean parameter as a (name, line_number) pair.
+    """
+    bool_parameters: list[tuple[str, int]] = []
+    for each_node in ast.walk(tree):
+        if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            bool_parameters.extend(_bool_parameters_for_function(each_node))
+    return bool_parameters
+
+
 def check_boolean_naming(content: str, file_path: str) -> list[str]:
     """Flag boolean assignments whose target name lacks a required prefix."""
     if is_test_file(file_path):
@@ -2470,8 +2623,64 @@ def check_boolean_naming(content: str, file_path: str) -> list[str]:
         issues.append(
             f"Line {line_number}: Boolean {name} - prefix with is_/has_/should_/can_"
         )
+    for name, line_number in _collect_bool_parameter_names(tree):
+        if len(name) == 1:
+            continue
+        if name.startswith(ALL_BOOLEAN_NAME_PREFIXES):
+            continue
+        issues.append(
+            f"Line {line_number}: Boolean parameter {name} - prefix with "
+            "is_/has_/should_/can_/was_/did_"
+        )
     return issues
 
+
+def _called_terminal_name(call_node: ast.Call) -> str | None:
+    callee = call_node.func
+    if isinstance(callee, ast.Name):
+        return callee.id
+    if isinstance(callee, ast.Attribute):
+        return callee.attr
+    return None
+
+
+def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
+    """Flag bare-expression calls whose discarded return is the only failure signal.
+
+    Functions in ``MUST_CHECK_RETURN_FUNCTION_NAMES`` report success or failure
+    solely through their return value. A bare-statement call discards that value,
+    so the caller silently proceeds on failure. Only bare ``ast.Expr`` calls are
+    flagged; an assigned or branched-on call is exempt.
+
+    Args:
+        content: The source text to inspect.
+        file_path: The path the source will be written to, used for exemptions.
+
+    Returns:
+        One issue per discarded must-check return, capped at the module limit.
+    """
+    if is_test_file(file_path):
+        return []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    issues: list[str] = []
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, ast.Expr):
+            continue
+        if not isinstance(each_node.value, ast.Call):
+            continue
+        called_name = _called_terminal_name(each_node.value)
+        if called_name is None or called_name not in MUST_CHECK_RETURN_FUNCTION_NAMES:
+            continue
+        issues.append(
+            f"Line {each_node.lineno}: return value of {called_name}() is discarded - "
+            "assign and check it (the boolean/outcome is the only failure signal)"
+        )
+        if len(issues) >= MAX_IGNORED_MUST_CHECK_RETURN_ISSUES:
+            break
+    return issues[:MAX_IGNORED_MUST_CHECK_RETURN_ISSUES]
 
 
 def _decorator_name_contains_skip(decorator_node: ast.expr) -> bool:
@@ -5570,7 +5779,9 @@ def validate_content(
         all_issues.extend(check_thin_wrapper_files(effective_content, file_path))
         all_issues.extend(check_boundary_types(effective_content, file_path))
         all_issues.extend(check_docstring_format(effective_content, file_path))
+        all_issues.extend(check_docstring_args_match_signature(effective_content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))
+        all_issues.extend(check_ignored_must_check_return(content, file_path))
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
         all_issues.extend(
             check_tests_use_isolated_filesystem_paths(

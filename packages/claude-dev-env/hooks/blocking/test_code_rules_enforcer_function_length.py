@@ -1,10 +1,14 @@
 """Tests for ``check_function_length``.
 
-Functions whose definition span (signature line through last body statement,
-inclusive) is at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60) block the
-write (small-function basis: Robert C. Martin, Clean Code Ch. 3 "Functions";
-Google Python Style Guide ~40-line function review hint). Spans below the
-threshold pass silently.
+Functions whose executable span (signature line through last body statement,
+inclusive, minus the leading docstring's lines) is at or above
+``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60) block the write (small-function
+basis: Robert C. Martin, Clean Code Ch. 3 "Functions"; Google Python Style
+Guide ~40-line function review hint — a measure of executable complexity,
+paired with the Guide's complete-docstring mandate for public APIs). Executable
+spans below the threshold pass silently, whatever the docstring adds to the
+full declared span; the issue message keeps reporting the full declared span so
+the commit gate's span recovery holds.
 
 Cited SYNTHESIS evidence: pa#143 F4, F9, F14 (three recurrences in one PR);
 pa#136 F20.
@@ -208,3 +212,60 @@ def test_reports_only_in_scope_violation_among_untouched_ones() -> None:
     )
     assert any("target_function" in each_issue for each_issue in issues)
     assert not any("leading_" in each_issue for each_issue in issues)
+
+
+def _build_docstring_function_source(
+    name: str, docstring_line_count: int, body_line_count: int
+) -> str:
+    """Build a function whose leading docstring spans ``docstring_line_count + 2``
+    source lines (opening summary line, the counted filler lines, closing quotes)
+    followed by ``body_line_count`` executable statements."""
+    docstring_filler = "\n".join(
+        f"    documentation line {each_index}." for each_index in range(docstring_line_count)
+    )
+    docstring_block = f'    """Documented helper.\n{docstring_filler}\n    """'
+    body_lines = "\n".join(
+        f"    statement_{each_index} = {each_index}" for each_index in range(body_line_count)
+    )
+    return f"def {name}() -> None:\n{docstring_block}\n{body_lines}\n"
+
+
+def test_docstring_heavy_function_with_small_body_passes() -> None:
+    """A complete Google-style docstring must not push a small-bodied function
+    over the gate: the threshold measures executable lines only."""
+    source = _build_docstring_function_source(
+        "documented_compact_helper",
+        docstring_line_count=hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD,
+        body_line_count=5,
+    )
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert issues == [], f"docstring lines must not count toward the gate, got: {issues!r}"
+
+
+def test_oversized_executable_body_blocks_despite_docstring() -> None:
+    """A docstring does not acquit a genuinely large executable body, and the
+    issue message reports the full declared span so the commit gate's
+    ``function_length_span_range`` recovery keeps covering the whole function."""
+    docstring_line_count = 10
+    body_line_count = hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 1
+    source = _build_docstring_function_source(
+        "documented_oversized_helper",
+        docstring_line_count=docstring_line_count,
+        body_line_count=body_line_count,
+    )
+    full_declared_span = 1 + (docstring_line_count + 2) + body_line_count
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert any("documented_oversized_helper" in each_issue for each_issue in issues)
+    assert any(f"is {full_declared_span} lines" in each_issue for each_issue in issues)
+
+
+def test_executable_span_boundary_sits_one_below_threshold() -> None:
+    """With the docstring excluded, an executable span of THRESHOLD - 1 passes
+    even though the full declared span sits far above the threshold."""
+    source = _build_docstring_function_source(
+        "documented_boundary_helper",
+        docstring_line_count=20,
+        body_line_count=hook_module.FUNCTION_LENGTH_BLOCKING_THRESHOLD - 2,
+    )
+    issues = check_function_length(source, PRODUCTION_FILE_PATH)
+    assert issues == []

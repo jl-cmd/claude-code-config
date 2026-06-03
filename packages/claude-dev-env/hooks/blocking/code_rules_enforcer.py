@@ -5630,6 +5630,39 @@ def _function_definition_line_span(
     return end_lineno - function_node.lineno + 1
 
 
+def _function_docstring_line_span(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> int:
+    """Return the source-line count of the function's leading docstring.
+
+    The Google Python Style Guide pairs a small-function preference that
+    targets executable complexity (§3.18) with a requirement for complete
+    Args/Returns/Raises docstrings on public functions (§3.8). Counting those
+    docstring lines toward the function-length gate would penalize the very
+    documentation §3.8 mandates, so the gate measures executable span and
+    excludes the leading docstring statement.
+
+    Args:
+        function_node: The function or method definition node to inspect.
+
+    Returns:
+        The number of source lines the leading docstring statement occupies,
+        or zero when the function body does not open with a string literal.
+    """
+    function_body = function_node.body
+    if not function_body:
+        return 0
+    first_statement = function_body[0]
+    if (
+        isinstance(first_statement, ast.Expr)
+        and isinstance(first_statement.value, ast.Constant)
+        and isinstance(first_statement.value.value, str)
+    ):
+        docstring_end = getattr(first_statement, "end_lineno", first_statement.lineno)
+        return docstring_end - first_statement.lineno + 1
+    return 0
+
+
 def changed_line_numbers(prior_content: str, post_edit_content: str) -> set[int]:
     """Return the post-edit line numbers an edit added or replaced.
 
@@ -5716,18 +5749,21 @@ def check_function_length(
     all_changed_lines: set[int] | None = None,
     defer_scope_to_caller: bool = False,
 ) -> list[str]:
-    """Flag functions whose definition span exceeds cognitive-load thresholds.
+    """Flag functions whose executable span exceeds cognitive-load thresholds.
 
-    Function definition spans (signature line through last body statement,
-    inclusive) at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60
-    lines) appear in the returned issues list and block the write at the
-    gate. The threshold rests on the small-function guidance in Robert C.
-    Martin, *Clean Code* Ch. 3 ("Functions") and the Google Python Style
-    Guide's ~40-line function review hint
-    (https://google.github.io/styleguide/pyguide.html); this gate blocks on
-    body growth that pushes a function past that span. It does not derive
-    from CODE_RULES §6.5, which governs advisory file-length signals and
-    argues against hard numeric blocks.
+    Function executable spans — the definition span (signature line through
+    last body statement, inclusive) minus the leading docstring's lines, per
+    ``_function_docstring_line_span`` — at or above
+    ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` (60 lines) appear in the returned
+    issues list and block the write at the gate. The threshold rests on the
+    small-function guidance in Robert C. Martin, *Clean Code* Ch. 3
+    ("Functions") and the Google Python Style Guide's ~40-line function review
+    hint (https://google.github.io/styleguide/pyguide.html) — a measure of
+    executable complexity, paired with the Guide's complete-docstring mandate
+    for public APIs, so documentation lines never count against the gate; this
+    gate blocks on body growth that pushes a function past that span. It does
+    not derive from CODE_RULES §6.5, which governs advisory file-length
+    signals and argues against hard numeric blocks.
 
     The issue message carries ``Function NAME (defined at line X) is Y lines``
     precisely so the gate's ``function_length_span_range`` can recover the
@@ -5776,7 +5812,8 @@ def check_function_length(
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         line_span = _function_definition_line_span(each_node)
-        if line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:
+        executable_line_span = line_span - _function_docstring_line_span(each_node)
+        if executable_line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:
             span_range = range(each_node.lineno, each_node.lineno + line_span)
             message = (
                 f"Function {each_node.name!r} (defined at line {each_node.lineno}) "

@@ -234,3 +234,23 @@ def test_should_not_flag_deeper_indented_continuation_line() -> None:
     )
     issues = check_docstring_args_match_signature(source, PRODUCTION_FILE_PATH)
     assert issues == [], f"Continuation lines must not be parsed as args, got: {issues!r}"
+
+
+def test_should_not_flag_documented_kwargs_keys() -> None:
+    source = (
+        "def configure(timeout: int, **overrides) -> None:\n"
+        '    """Configure the client.\n'
+        "\n"
+        "    Args:\n"
+        "        timeout: Seconds to wait.\n"
+        "        max_retries: A documented keyword override.\n"
+        "\n"
+        "    Returns:\n"
+        "        None.\n"
+        '    """\n'
+        "    settings = dict(overrides)\n"
+        "    settings['timeout'] = timeout\n"
+        "    return None\n"
+    )
+    issues = check_docstring_args_match_signature(source, PRODUCTION_FILE_PATH)
+    assert issues == [], f"**kwargs-key docs must not be flagged, got: {issues!r}"

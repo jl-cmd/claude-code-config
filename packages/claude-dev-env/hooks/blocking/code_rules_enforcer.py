@@ -2156,7 +2156,9 @@ def check_docstring_args_match_signature(content: str, file_path: str) -> list[s
     stale. Each documented argument name is compared to the real signature;
     a documented name with no matching parameter is reported. Only the
     ``Args:`` section is validated — ``Raises:`` is left alone because
-    callee-propagated exceptions cause false positives.
+    callee-propagated exceptions cause false positives. Functions that
+    accept ``**kwargs`` are skipped because their documented names may be
+    keyword keys the signature cannot enumerate.
 
     Args:
         content: The source text to inspect.
@@ -2180,6 +2182,8 @@ def check_docstring_args_match_signature(content: str, file_path: str) -> list[s
         if _function_has_exempt_decorator(each_node):
             continue
         if _function_body_line_count(each_node) <= DOCSTRING_TRIVIAL_FUNCTION_BODY_LINE_LIMIT:
+            continue
+        if each_node.args.kwarg is not None:
             continue
         documented_names = _documented_argument_names(_function_docstring_text(each_node))
         if not documented_names:

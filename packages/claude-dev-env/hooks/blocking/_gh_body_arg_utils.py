@@ -55,6 +55,69 @@ _all_equals_prefixes_for_skip: tuple[str, ...] = tuple(
 bash_continuation_marker: str = "\\"
 powershell_continuation_marker: str = "`"
 
+shell_variable_sigil: str = "$"
+all_quote_characters: frozenset[str] = frozenset({'"', "'"})
+minimum_meaningful_token_length: int = 2
+
+non_body_value_flags: frozenset[str] = all_value_flags - {body_file_flag, body_file_short_flag}
+
+_non_body_value_flag_equals_prefixes: tuple[str, ...] = tuple(
+    sorted(
+        (
+            prefix
+            for prefix in all_value_flag_equals_prefixes
+            if not prefix.startswith("--body")
+            and not prefix.startswith("-b=")
+            and not prefix.startswith("-F=")
+        ),
+        key=len,
+        reverse=True,
+    )
+)
+
+
+def is_flag_shaped_token(token: str) -> bool:
+    if len(token) < minimum_meaningful_token_length:
+        return False
+    if not token.startswith("-"):
+        return False
+    return token[1] == "-" or token[1].isalpha()
+
+
+def strip_surrounding_quotes(token: str) -> str:
+    if len(token) < minimum_meaningful_token_length:
+        return token
+    first_character = token[0]
+    last_character = token[-1]
+    if first_character in all_quote_characters and first_character == last_character:
+        return token[1:-1]
+    return token
+
+
+def is_unresolvable_shell_value(token: str) -> bool:
+    return token.startswith(shell_variable_sigil)
+
+
+def match_body_flag_equals_prefix(token: str) -> str | None:
+    for each_prefix in all_body_flag_prefixes:
+        if token.startswith(each_prefix):
+            return each_prefix
+    return None
+
+
+def match_body_file_equals_prefix(token: str) -> str | None:
+    for each_prefix in (body_file_flag_prefix, body_file_short_flag_prefix):
+        if token.startswith(each_prefix):
+            return each_prefix
+    return None
+
+
+def match_non_body_value_flag_equals_prefix(token: str) -> str | None:
+    for each_prefix in _non_body_value_flag_equals_prefixes:
+        if token.startswith(each_prefix):
+            return each_prefix
+    return None
+
 
 def _count_trailing_run(text: str, marker_character: str) -> int:
     trailing_run_length = 0

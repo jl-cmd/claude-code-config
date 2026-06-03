@@ -103,7 +103,7 @@ def test_strip_markdown_ceremony_returns_stripped_prose() -> None:
             "plain prose line",
         ]
     )
-    stripped = hook_module._strip_markdown_ceremony(body)
+    stripped = hook_module.strip_markdown_ceremony(body)
     assert "Heading text" not in stripped
     assert "blockquoted content" in stripped
     assert "bullet content" in stripped
@@ -120,7 +120,7 @@ def test_strip_markdown_ceremony_used_by_substantive_prose_count() -> None:
     """_count_substantive_prose_chars is consistent with the shared stripper:
     its returned count matches len of the whitespace-collapsed stripped body."""
     body = "# Heading\n\nA single paragraph of prose with **bold** and `code` words."
-    stripped = hook_module._strip_markdown_ceremony(body)
+    stripped = hook_module.strip_markdown_ceremony(body)
     collapsed = _re.sub(r"\s+", " ", stripped).strip()
     assert hook_module._count_substantive_prose_chars(body) == len(collapsed)
 

@@ -18,7 +18,7 @@ _hooks_dir = str(Path(__file__).resolve().parent.parent)
 if _hooks_dir not in sys.path:
     sys.path.insert(0, _hooks_dir)
 
-from blocking.pr_description_body_audit import _strip_markdown_ceremony  # noqa: E402
+from blocking.pr_description_body_audit import strip_markdown_ceremony  # noqa: E402
 from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     ATOMIC_WRITE_TEMP_SUFFIX,
     DEFAULT_READABILITY_THRESHOLDS,
@@ -39,14 +39,13 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     READABILITY_THRESHOLD_OVERRIDE_FILE,
     ReadabilityThresholds,
 )
-
-file_encoding_utf8: str = "utf-8"
+from hooks_constants.setup_project_paths_constants import UTF8_ENCODING  # noqa: E402
 
 
 def _atomic_write_json(target_path: Path, all_payload_fields: dict[str, object]) -> None:
     target_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = target_path.with_suffix(target_path.suffix + ATOMIC_WRITE_TEMP_SUFFIX)
-    with open(temporary_path, "w", encoding=file_encoding_utf8) as write_handle:
+    with open(temporary_path, "w", encoding=UTF8_ENCODING) as write_handle:
         json.dump(all_payload_fields, write_handle)
     os.replace(temporary_path, target_path)
 
@@ -57,7 +56,7 @@ def _read_json_or_default(
     if not target_path.exists():
         return dict(all_default_payload_fields)
     try:
-        with open(target_path, "r", encoding=file_encoding_utf8) as read_handle:
+        with open(target_path, "r", encoding=UTF8_ENCODING) as read_handle:
             loaded_payload = json.load(read_handle)
     except (FileNotFoundError, PermissionError, OSError, json.JSONDecodeError):
         return dict(all_default_payload_fields)
@@ -190,6 +189,23 @@ def _compute_flesch_reading_ease(text: str) -> float:
 
 
 def _extract_readability_target_text(body: str) -> str:
+    """Return the ceremony-stripped prose window scored for readability.
+
+    Strips fenced code blocks, then builds a window from the body's intro
+    paragraph plus its first section's prose. The intro paragraph ends at the
+    earliest boundary among the first blank line and the first ATX header; when
+    neither boundary exists the whole body is the intro. The first section runs
+    from just after that first header to the next header (or end of body). The
+    intro and first section are joined with a blank line and returned with
+    Markdown ceremony stripped.
+
+    Args:
+        body: The raw PR body markdown text.
+
+    Returns:
+        The ceremony-stripped intro-paragraph plus first-section prose window
+        used for readability scoring.
+    """
     intro_paragraph = ""
     body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub("", body)
     body_after_strip = body_without_fences.lstrip()
@@ -218,7 +234,7 @@ def _extract_readability_target_text(body: str) -> str:
             first_body_section = remainder
 
     combined_text = f"{intro_paragraph}\n\n{first_body_section}"
-    return _strip_markdown_ceremony(combined_text)
+    return strip_markdown_ceremony(combined_text)
 
 
 def _evaluate_readability_metrics(

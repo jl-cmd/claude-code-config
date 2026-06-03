@@ -40,7 +40,7 @@ VAGUE_LANGUAGE_PATTERN = re.compile(
 )
 
 
-def _strip_markdown_ceremony(body: str) -> str:
+def strip_markdown_ceremony(body: str) -> str:
     """Return the body with Markdown ceremony stripped to leave underlying prose.
 
     Removes fenced code, inline code, heading lines, blockquote markers,
@@ -64,7 +64,7 @@ def _count_substantive_prose_chars(body: str) -> int:
     Collapses internal whitespace so a body of only headers and bullets --
     no real WHY paragraph -- registers as effectively empty.
     """
-    stripped_body = _strip_markdown_ceremony(body)
+    stripped_body = strip_markdown_ceremony(body)
     body_collapsed = WHITESPACE_RUN_PATTERN.sub(" ", stripped_body).strip()
     return len(body_collapsed)
 
@@ -83,7 +83,7 @@ def _extract_vague_scan_text(body: str) -> str:
     """
     without_blockquote_lines = BLOCKQUOTE_LINE_PATTERN.sub("", body)
     without_table_rows = TABLE_ROW_LINE_PATTERN.sub("", without_blockquote_lines)
-    return _strip_markdown_ceremony(without_table_rows)
+    return strip_markdown_ceremony(without_table_rows)
 
 
 def _iter_section_headers(body: str) -> list[str]:
@@ -98,7 +98,7 @@ def _iter_section_headers(body: str) -> list[str]:
     Fenced code blocks are stripped first so example markdown nested inside ``` fences
     (a PR body that demonstrates the Heavy shape, for instance) is not counted as a
     structural header. This keeps the shape classifier and Heavy required-header check
-    aligned with `_strip_markdown_ceremony`, which already strips fences before measuring.
+    aligned with `strip_markdown_ceremony`, which already strips fences before measuring.
     """
     body_without_fences = FENCED_CODE_BLOCK_PATTERN.sub("", body)
     all_headers: list[str] = []

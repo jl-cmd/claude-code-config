@@ -20,15 +20,13 @@ from blocking._gh_body_arg_utils import (  # noqa: E402
     body_file_short_flag,
     count_extra_tokens_to_skip_for_split_quoted_value,
     get_logical_first_line,
-)
-from blocking.pr_description_command_parser import (  # noqa: E402
-    _is_flag_shaped_token,
-    _is_unresolvable_shell_value,
-    _match_body_file_equals_prefix,
-    _match_body_flag_equals_prefix,
-    _match_non_body_value_flag_equals_prefix,
-    _non_body_value_flags,
-    _strip_surrounding_quotes,
+    is_flag_shaped_token,
+    is_unresolvable_shell_value,
+    match_body_file_equals_prefix,
+    match_body_flag_equals_prefix,
+    match_non_body_value_flag_equals_prefix,
+    non_body_value_flags,
+    strip_surrounding_quotes,
 )
 from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     GH_PR_COMMAND_MIN_TOKEN_COUNT,
@@ -42,8 +40,8 @@ def _resolve_positional_pr_number(token: str) -> int | None:
     segment is ``/pull/<number>``. The token may carry surrounding quotes;
     unresolvable shell variables are rejected.
     """
-    stripped_candidate = _strip_surrounding_quotes(token)
-    if _is_unresolvable_shell_value(stripped_candidate):
+    stripped_candidate = strip_surrounding_quotes(token)
+    if is_unresolvable_shell_value(stripped_candidate):
         return None
     url_match = re.match(
         r"^https?://[^/]+/[^/]+/[^/]+/pull/(\d+)(?:[/?#].*)?$",
@@ -88,15 +86,15 @@ def _extract_pr_number_from_command(command: str) -> int | None:
     if subcommand_token not in {"edit", "comment"}:
         return None
     all_value_taking_bare_flags: frozenset[str] = (
-        _non_body_value_flags | all_body_flags | {body_file_flag, body_file_short_flag}
+        non_body_value_flags | all_body_flags | {body_file_flag, body_file_short_flag}
     )
     token_index = GH_PR_COMMAND_MIN_TOKEN_COUNT
     while token_index < len(all_tokens):
         current_token = all_tokens[token_index]
         matched_equals_prefix = (
-            _match_non_body_value_flag_equals_prefix(current_token)
-            or _match_body_flag_equals_prefix(current_token)
-            or _match_body_file_equals_prefix(current_token)
+            match_non_body_value_flag_equals_prefix(current_token)
+            or match_body_flag_equals_prefix(current_token)
+            or match_body_file_equals_prefix(current_token)
         )
         if matched_equals_prefix is not None:
             first_value_token = current_token[len(matched_equals_prefix) :]
@@ -114,7 +112,7 @@ def _extract_pr_number_from_command(command: str) -> int | None:
             if token_index < len(all_tokens):
                 token_index += 1
             continue
-        if _is_flag_shaped_token(current_token):
+        if is_flag_shaped_token(current_token):
             token_index += 1
             continue
         resolved_pr_number = _resolve_positional_pr_number(current_token)

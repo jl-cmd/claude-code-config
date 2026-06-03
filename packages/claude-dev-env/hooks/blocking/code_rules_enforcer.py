@@ -5651,7 +5651,7 @@ def _definition_docstring_line_span(
         return 0
     first_statement = definition_body[0]
     if _statement_is_docstring(first_statement):
-        docstring_end = getattr(first_statement, "end_lineno", first_statement.lineno)
+        docstring_end = getattr(first_statement, "end_lineno", None) or first_statement.lineno
         return docstring_end - first_statement.lineno + 1
     return 0
 

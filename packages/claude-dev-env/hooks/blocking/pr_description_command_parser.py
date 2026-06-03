@@ -95,17 +95,17 @@ def _resolve_body_string_value(raw_value_token: str) -> str | None:
 
 
 def _reassemble_split_quoted_value(
-    first_value_token: str, remaining_tokens: list[str]
+    first_value_token: str, all_remaining_tokens: list[str]
 ) -> str | None:
     extra_tokens_consumed = count_extra_tokens_to_skip_for_split_quoted_value(
-        remaining_tokens,
+        all_remaining_tokens,
         first_value_token,
     )
     if extra_tokens_consumed is None:
         return None
     if extra_tokens_consumed == 0:
         return first_value_token
-    continuation_tokens = remaining_tokens[:extra_tokens_consumed]
+    continuation_tokens = all_remaining_tokens[:extra_tokens_consumed]
     return " ".join([first_value_token, *continuation_tokens])
 
 
@@ -179,7 +179,7 @@ def _scan_raw_tokens_for_body(all_raw_tokens: list[str]) -> str | None | bool:
 
 def extract_body_from_command(
     command: str,
-    pre_tokenized: tuple[str, list[str]] | None = None,
+    all_pre_tokenized: tuple[str, list[str]] | None = None,
 ) -> str | None:
     """Return the PR body content for validation, or None if unextractable.
 
@@ -188,11 +188,11 @@ def extract_body_from_command(
     For space-form body-file flags, scans the raw token list directly because
     iter_significant_tokens consumes the value token (yielding remaining-after-value).
 
-    If pre_tokenized is provided as (logical_line, raw_tokens), reuses those instead
+    If all_pre_tokenized is provided as (logical_line, raw_tokens), reuses those instead
     of recomputing the logical line and shlex split a second time.
     """
-    if pre_tokenized is not None:
-        logical_line, all_raw_tokens = pre_tokenized
+    if all_pre_tokenized is not None:
+        logical_line, all_raw_tokens = all_pre_tokenized
     else:
         logical_line = get_logical_first_line(command)
         if not logical_line:

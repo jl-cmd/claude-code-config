@@ -34,11 +34,6 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     WHITESPACE_RUN_PATTERN,
 )
 
-VAGUE_LANGUAGE_PATTERN = re.compile(
-    r"\b(fix(?:ed)? (?:bug|issue|it)|update(?:d)? code|minor changes|various (?:fixes|updates|improvements))\b",
-    re.IGNORECASE,
-)
-
 
 def strip_markdown_ceremony(body: str) -> str:
     """Return the body with Markdown ceremony stripped to leave underlying prose.

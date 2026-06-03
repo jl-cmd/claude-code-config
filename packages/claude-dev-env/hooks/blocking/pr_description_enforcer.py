@@ -17,7 +17,6 @@ if _hooks_dir not in sys.path:
     sys.path.insert(0, _hooks_dir)
 
 from blocking.pr_description_body_audit import (  # noqa: E402
-    VAGUE_LANGUAGE_PATTERN,
     _body_contains_any_header,
     _compute_pr_body_shape,
     _count_substantive_prose_chars,
@@ -53,6 +52,7 @@ from hooks_constants.pr_description_enforcer_constants import (  # noqa: E402
     SELF_CLOSING_REFERENCE_MESSAGE_PREFIX,
     SELF_CLOSING_REFERENCE_MESSAGE_SUFFIX,
     TRIVIAL_BODY_CHAR_THRESHOLD,
+    VAGUE_LANGUAGE_PATTERN,
 )
 
 

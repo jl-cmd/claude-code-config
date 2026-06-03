@@ -2,8 +2,10 @@
 
 import importlib.util
 import inspect
+import os
 import pathlib
 import sys
+from unittest.mock import patch
 
 import pytest
 
@@ -162,8 +164,6 @@ def test_extract_body_reassembles_split_quoted_equals_value() -> None:
 
 
 def test_read_body_file_rejects_relative_path_traversal(tmp_path, monkeypatch) -> None:
-    import importlib.util, pathlib, sys
-
     _HOOK_DIR = pathlib.Path(__file__).parent
     if str(_HOOK_DIR) not in sys.path:
         sys.path.insert(0, str(_HOOK_DIR))
@@ -172,7 +172,6 @@ def test_read_body_file_rejects_relative_path_traversal(tmp_path, monkeypatch) -
     )
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
-    import os, pytest
 
     sentinel_directory = tmp_path / "sentinel"
     sentinel_directory.mkdir()
@@ -188,8 +187,6 @@ def test_read_body_file_rejects_relative_path_traversal(tmp_path, monkeypatch) -
 
 
 def test_read_body_file_allows_absolute_path_outside_cwd(tmp_path) -> None:
-    import importlib.util, pathlib, sys
-
     _HOOK_DIR = pathlib.Path(__file__).parent
     spec = importlib.util.spec_from_file_location(
         "pde2", _HOOK_DIR / "pr_description_command_parser.py"
@@ -203,8 +200,6 @@ def test_read_body_file_allows_absolute_path_outside_cwd(tmp_path) -> None:
 
 
 def test_reassemble_split_quoted_value_returns_none_for_unclosed_quote() -> None:
-    import importlib.util, pathlib, sys
-
     _HOOK_DIR = pathlib.Path(__file__).parent
     spec = importlib.util.spec_from_file_location(
         "pde3", _HOOK_DIR / "pr_description_command_parser.py"
@@ -234,10 +229,6 @@ def test_body_file_shell_variable_returns_none() -> None:
 
 def test_body_file_path_traversal_returns_none() -> None:
     """Path traversal rejection must return None so enforcer does not raise false positive."""
-    import os
-    import importlib.util
-    import pathlib
-
     _HOOK_DIR = pathlib.Path(__file__).parent
     spec = importlib.util.spec_from_file_location(
         "pde_t", _HOOK_DIR / "pr_description_command_parser.py"
@@ -250,9 +241,6 @@ def test_body_file_path_traversal_returns_none() -> None:
 
 def test_read_body_file_rejects_absolute_symlink_outside_cwd(tmp_path: pathlib.Path) -> None:
     """Absolute symlink pointing outside cwd must raise PathTraversalError."""
-    import importlib.util
-    import pytest
-
     _HOOK_DIR = pathlib.Path(__file__).parent
     spec = importlib.util.spec_from_file_location(
         "pde_sym", _HOOK_DIR / "pr_description_command_parser.py"
@@ -272,8 +260,6 @@ def test_read_body_file_rejects_absolute_symlink_outside_cwd(tmp_path: pathlib.P
 
 def test_read_body_file_allows_real_absolute_file_inside_cwd(tmp_path: pathlib.Path) -> None:
     """Real absolute file path that exists must be read successfully."""
-    import importlib.util
-
     _HOOK_DIR = pathlib.Path(__file__).parent
     spec = importlib.util.spec_from_file_location(
         "pde_abs", _HOOK_DIR / "pr_description_command_parser.py"
@@ -288,9 +274,6 @@ def test_read_body_file_allows_real_absolute_file_inside_cwd(tmp_path: pathlib.P
 
 def test_read_body_file_allows_in_cwd_symlink_pointing_into_cwd(tmp_path: pathlib.Path) -> None:
     """Symlink inside cwd pointing to another file inside cwd must be readable."""
-    import importlib.util
-    from unittest.mock import patch
-
     _HOOK_DIR = pathlib.Path(__file__).parent
     spec = importlib.util.spec_from_file_location(
         "pde_inlink", _HOOK_DIR / "pr_description_command_parser.py"
@@ -303,8 +286,6 @@ def test_read_body_file_allows_in_cwd_symlink_pointing_into_cwd(tmp_path: pathli
     try:
         link_file.symlink_to(real_file)
     except (OSError, NotImplementedError):
-        import pytest
-
         pytest.skip("symlinks not supported on this platform")
     with patch("pathlib.Path.cwd", return_value=tmp_path):
         result = m._read_body_file_contents(str(link_file))
@@ -318,8 +299,6 @@ def test_iter_significant_tokens_unclosed_quote_raises_value_error() -> None:
     For space-form: shlex.split itself raises ValueError before iter_significant_tokens is entered.
     Both paths result in ValueError propagating to callers.
     """
-    import pytest
-
     with pytest.raises(ValueError):
         list(iter_significant_tokens('gh pr create --title="unclosed --body real_body'))
 

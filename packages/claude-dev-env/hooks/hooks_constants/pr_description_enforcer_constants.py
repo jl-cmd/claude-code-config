@@ -23,6 +23,10 @@ BLOCKQUOTE_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*>.*$", re.MULTILINE)
 TABLE_ROW_LINE_PATTERN: re.Pattern[str] = re.compile(r"^\s*\|.*\|.*$", re.MULTILINE)
 LINK_TEXT_PATTERN: re.Pattern[str] = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 WHITESPACE_RUN_PATTERN: re.Pattern[str] = re.compile(r"\s+")
+VAGUE_LANGUAGE_PATTERN: re.Pattern[str] = re.compile(
+    r"\b(fix(?:ed)? (?:bug|issue|it)|update(?:d)? code|minor changes|various (?:fixes|updates|improvements))\b",
+    re.IGNORECASE,
+)
 
 SUMMARY_HEADER: str = "## Summary"
 PROBLEM_HEADER: str = "## Problem"
@@ -156,5 +160,6 @@ __all__ = [
     "THIS_PR_OPENING_PATTERN",
     "TRIVIAL_BODY_CHAR_THRESHOLD",
     "TRIVIAL_SHAPE",
+    "VAGUE_LANGUAGE_PATTERN",
     "WHITESPACE_RUN_PATTERN",
 ]

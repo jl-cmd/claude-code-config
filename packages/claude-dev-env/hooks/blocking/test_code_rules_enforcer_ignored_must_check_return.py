@@ -122,3 +122,38 @@ def test_validate_content_surfaces_discarded_return() -> None:
     assert matching_issues, (
         f"Expected validate_content to surface the discarded-return issue, got: {issues!r}"
     )
+
+
+EDIT_FULL_MODULE_SOURCE = (
+    "async def step() -> None:\n"
+    "    await find_and_click('#x')\n"
+)
+AWAITED_CALL_LINE_NUMBER = 2
+UNCHANGED_LINE_NUMBER = 1
+
+
+def test_should_flag_when_changed_line_covers_the_bare_await() -> None:
+    all_changed_lines = {AWAITED_CALL_LINE_NUMBER}
+    issues = code_rules_enforcer.check_ignored_must_check_return(
+        EDIT_FULL_MODULE_SOURCE,
+        PRODUCTION_FILE_PATH,
+        all_changed_lines,
+        False,
+    )
+    assert len(issues) == 1, (
+        f"An Edit touching the bare await line must surface exactly one issue, got: {issues!r}"
+    )
+    assert "find_and_click" in issues[0]
+
+
+def test_should_not_flag_when_changed_line_excludes_the_bare_await() -> None:
+    all_changed_lines = {UNCHANGED_LINE_NUMBER}
+    issues = code_rules_enforcer.check_ignored_must_check_return(
+        EDIT_FULL_MODULE_SOURCE,
+        PRODUCTION_FILE_PATH,
+        all_changed_lines,
+        False,
+    )
+    assert issues == [], (
+        f"A pre-existing violation on an unedited line must not block the edit, got: {issues!r}"
+    )

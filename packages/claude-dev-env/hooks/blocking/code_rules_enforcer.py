@@ -2655,7 +2655,12 @@ def _called_terminal_name(call_node: ast.Call) -> str | None:
     return None
 
 
-def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
+def check_ignored_must_check_return(
+    content: str,
+    file_path: str,
+    all_changed_lines: set[int] | None = None,
+    defer_scope_to_caller: bool = False,
+) -> list[str]:
     """Flag bare-expression calls whose discarded return is the only failure signal.
 
     Functions in ``ALL_MUST_CHECK_RETURN_FUNCTION_NAMES`` report success or failure
@@ -2664,12 +2669,28 @@ def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
     including a bare ``await``-wrapped call (``await find_and_click(...)`` as a
     statement); an assigned or branched-on call is exempt.
 
+    The caller passes the reconstructed full file as *content* so ``ast.parse``
+    sees a complete module rather than an Edit's ``new_string`` fragment, which is
+    rarely valid standalone Python (a bare ``await find_and_click(...)`` line is a
+    SyntaxError on its own). Findings are then scoped to *all_changed_lines* so an
+    Edit blocks on the discarded return it just introduced while a pre-existing
+    violation on an untouched line does not block the edit.
+
     Args:
-        content: The source text to inspect.
+        content: The source text to inspect — the reconstructed full file on an
+            Edit so the parse succeeds.
         file_path: The path the source will be written to, used for exemptions.
+        all_changed_lines: Post-edit line numbers the current edit touched, or
+            None to treat the whole file as in scope. When provided, a violation
+            blocks only when the bare call's line intersects the changed lines.
+        defer_scope_to_caller: When True, return every violation so the
+            commit/push gate's ``split_violations_by_scope`` can scope by added
+            line.
 
     Returns:
-        One issue per discarded must-check return, capped at the module limit.
+        One issue per discarded must-check return, scoped to the changed lines
+        unless *defer_scope_to_caller* is True or *all_changed_lines* is None, and
+        capped at the module limit.
     """
     if is_test_file(file_path):
         return []
@@ -2677,7 +2698,7 @@ def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
         tree = ast.parse(content)
     except SyntaxError:
         return []
-    issues: list[str] = []
+    all_violations_in_walk_order: list[tuple[range, str]] = []
     for each_node in ast.walk(tree):
         if not isinstance(each_node, ast.Expr):
             continue
@@ -2692,13 +2713,20 @@ def check_ignored_must_check_return(content: str, file_path: str) -> list[str]:
         called_name = _called_terminal_name(call_node)
         if called_name is None or called_name not in ALL_MUST_CHECK_RETURN_FUNCTION_NAMES:
             continue
-        issues.append(
+        line_span = range(each_node.lineno, each_node.lineno + 1)
+        message = (
             f"Line {each_node.lineno}: return value of {called_name}() is discarded - "
             "assign and check it (the boolean/outcome is the only failure signal)"
         )
-        if len(issues) >= MAX_IGNORED_MUST_CHECK_RETURN_ISSUES:
+        all_violations_in_walk_order.append((line_span, message))
+        if len(all_violations_in_walk_order) >= MAX_IGNORED_MUST_CHECK_RETURN_ISSUES:
             break
-    return issues[:MAX_IGNORED_MUST_CHECK_RETURN_ISSUES]
+    scoped_issues = _scope_violations_to_changed_lines(
+        all_violations_in_walk_order,
+        all_changed_lines,
+        defer_scope_to_caller,
+    )
+    return scoped_issues[:MAX_IGNORED_MUST_CHECK_RETURN_ISSUES]
 
 
 def _decorator_name_contains_skip(decorator_node: ast.expr) -> bool:
@@ -5799,7 +5827,14 @@ def validate_content(
         all_issues.extend(check_docstring_format(effective_content, file_path))
         all_issues.extend(check_docstring_args_match_signature(effective_content, file_path))
         all_issues.extend(check_boolean_naming(content, file_path))
-        all_issues.extend(check_ignored_must_check_return(content, file_path))
+        all_issues.extend(
+            check_ignored_must_check_return(
+                effective_content,
+                file_path,
+                all_changed_lines,
+                defer_scope_to_caller,
+            )
+        )
         all_issues.extend(check_skip_decorators_in_tests(content, file_path))
         all_issues.extend(
             check_tests_use_isolated_filesystem_paths(

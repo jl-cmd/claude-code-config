@@ -634,6 +634,24 @@ def test_should_add_no_split_family_candidates_when_directory_has_none(
     assert all_candidates == expected_stem_candidates
 
 
+def test_should_not_offer_family_candidates_for_code_ruleset_stem(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "code_ruleset.py"
+    family_test = sandbox / "test_code_rules_enforcer_split_example.py"
+    family_test.write_text("def test_detects_example(): pass\n")
+
+    all_candidates = _PRODUCTION_MODULE.candidate_test_paths_for(production_module)
+
+    expected_stem_candidates = [
+        sandbox / "test_code_ruleset.py",
+        sandbox / "code_ruleset_test.py",
+    ]
+    assert all_candidates == expected_stem_candidates
+    assert family_test not in all_candidates
+
+
 def test_should_allow_code_rules_edit_when_fresh_split_family_sibling_exists(
     tmp_path: Path,
 ) -> None:

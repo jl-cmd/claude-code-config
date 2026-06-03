@@ -209,7 +209,7 @@ def find_nearest_tests_directory(start_directory: Path) -> Path | None:
 
 
 def _split_module_stem_prefix() -> str:
-    return "code_rules"
+    return "code_rules_"
 
 
 def _split_test_family_glob() -> str:

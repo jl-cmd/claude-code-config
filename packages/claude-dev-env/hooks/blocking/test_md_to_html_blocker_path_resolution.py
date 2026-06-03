@@ -11,7 +11,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 
 _BLOCKING_DIRECTORY = os.path.dirname(__file__)
 
@@ -23,6 +22,74 @@ from _md_to_html_blocker_test_support import (  # noqa: E402
     _get_sandbox_parent_directory,
     _run_hook,
 )
+
+_ALL_HOME_ENVIRONMENT_VARIABLE_NAMES = ("USERPROFILE", "HOME")
+_ALL_TEMP_ENVIRONMENT_VARIABLE_NAMES = ("TMPDIR", "TEMP", "TMP")
+
+
+def _redirect_home_to(monkeypatch, fake_home_directory):
+    """Point every home-directory env read at *fake_home_directory*.
+
+    The hook runs as a subprocess that inherits os.environ, so setting the
+    home env vars here propagates to the hook process. Windows ntpath reads
+    USERPROFILE while POSIX reads HOME, so both are set to keep the test's
+    expected path and the hook's resolution aligned on either platform.
+
+    Args:
+        monkeypatch: The pytest monkeypatch fixture used to set env vars.
+        fake_home_directory: An existing sandbox directory to treat as home.
+
+    Returns:
+        The canonical (realpath) form of *fake_home_directory*, matching the
+        canonicalization the exemption resolver applies before comparison.
+    """
+    for each_home_variable_name in _ALL_HOME_ENVIRONMENT_VARIABLE_NAMES:
+        monkeypatch.setenv(each_home_variable_name, fake_home_directory)
+    return os.path.realpath(fake_home_directory)
+
+
+def _redirect_temp_to(monkeypatch, fake_temp_directory):
+    """Point every temp-directory env read at *fake_temp_directory*.
+
+    tempfile.gettempdir() consults TMPDIR, then TEMP, then TMP, so all three
+    are set. The hook subprocess is a fresh process, so its
+    tempfile.gettempdir() reads these env vars rather than a cached value.
+
+    Args:
+        monkeypatch: The pytest monkeypatch fixture used to set env vars.
+        fake_temp_directory: An existing sandbox directory to treat as temp.
+
+    Returns:
+        The canonical (realpath) form of *fake_temp_directory*, matching the
+        canonicalization the exemption resolver applies before comparison.
+    """
+    for each_temp_variable_name in _ALL_TEMP_ENVIRONMENT_VARIABLE_NAMES:
+        monkeypatch.setenv(each_temp_variable_name, fake_temp_directory)
+    return os.path.realpath(fake_temp_directory)
+
+
+def _isolate_home_away_from_temp(monkeypatch, base_directory):
+    """Redirect home and temp at disjoint subdirectories under *base_directory*.
+
+    Pointing home and temp at separate trees keeps a home-relative test path
+    from also matching the temp-directory exemption, which the resolver checks
+    after the home exemption. Both env groups are set so the hook subprocess
+    and this test process resolve the same fake home and temp.
+
+    Args:
+        monkeypatch: The pytest monkeypatch fixture used to set env vars.
+        base_directory: An existing sandbox directory whose `home` and `temp`
+            subdirectories become the fake home and fake temp.
+
+    Returns:
+        The canonical (realpath) form of the fake home directory.
+    """
+    fake_home_directory = os.path.join(base_directory, "home")
+    fake_temp_directory = os.path.join(base_directory, "temp")
+    os.makedirs(fake_home_directory, exist_ok=True)
+    os.makedirs(fake_temp_directory, exist_ok=True)
+    _redirect_temp_to(monkeypatch, fake_temp_directory)
+    return _redirect_home_to(monkeypatch, fake_home_directory)
 
 
 def test_block_messages_mention_claude_dev_env_source_exemptions():
@@ -136,8 +203,8 @@ def test_denial_reason_mentions_html_redirect():
     assert ".html" in reason.lower()
 
 
-def test_passes_home_session_log_directory():
-    home_directory = os.path.expanduser("~")
+def test_passes_home_session_log_directory(monkeypatch, tmp_path):
+    home_directory = _isolate_home_away_from_temp(monkeypatch, str(tmp_path))
     session_log_path = os.path.join(home_directory, "SessionLog", "decisions", "note.md")
     result = _run_hook(
         "Write",
@@ -147,8 +214,8 @@ def test_passes_home_session_log_directory():
     assert result.stdout == ""
 
 
-def test_passes_home_claude_plans_directory():
-    home_directory = os.path.expanduser("~")
+def test_passes_home_claude_plans_directory(monkeypatch, tmp_path):
+    home_directory = _isolate_home_away_from_temp(monkeypatch, str(tmp_path))
     plans_path = os.path.join(home_directory, ".claude", "plans", "plan.md")
     result = _run_hook(
         "Write",
@@ -158,8 +225,8 @@ def test_passes_home_claude_plans_directory():
     assert result.stdout == ""
 
 
-def test_blocks_home_directory_other_md_file():
-    home_directory = os.path.expanduser("~")
+def test_blocks_home_directory_other_md_file(monkeypatch, tmp_path):
+    home_directory = _isolate_home_away_from_temp(monkeypatch, str(tmp_path))
     other_path = os.path.join(home_directory, "docs", "guide.md")
     result = _run_hook(
         "Write",
@@ -198,8 +265,9 @@ def test_blocks_tilde_other_home_md_file():
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_passes_system_temp_directory():
-    temp_md_path = os.path.join(tempfile.gettempdir(), "bugteam-scratch", "pr-body.md")
+def test_passes_system_temp_directory(monkeypatch, tmp_path):
+    temp_directory = _redirect_temp_to(monkeypatch, str(tmp_path))
+    temp_md_path = os.path.join(temp_directory, "bugteam-scratch", "pr-body.md")
     result = _run_hook(
         "Write",
         {"file_path": temp_md_path, "content": "# Scratch"},
@@ -208,8 +276,8 @@ def test_passes_system_temp_directory():
     assert result.stdout == ""
 
 
-def test_passes_relative_path_from_home_cwd():
-    home_directory = os.path.expanduser("~")
+def test_passes_relative_path_from_home_cwd(monkeypatch, tmp_path):
+    home_directory = _isolate_home_away_from_temp(monkeypatch, str(tmp_path))
     payload = json.dumps(
         {
             "tool_name": "Write",
@@ -231,8 +299,8 @@ def test_passes_relative_path_from_home_cwd():
     assert result.stdout == ""
 
 
-def test_passes_canonicalized_home_path():
-    canonical_home = os.path.realpath(os.path.expanduser("~"))
+def test_passes_canonicalized_home_path(monkeypatch, tmp_path):
+    canonical_home = _isolate_home_away_from_temp(monkeypatch, str(tmp_path))
     canonical_path = os.path.join(canonical_home, "SessionLog", "canonical-note.md")
     result = _run_hook(
         "Write",

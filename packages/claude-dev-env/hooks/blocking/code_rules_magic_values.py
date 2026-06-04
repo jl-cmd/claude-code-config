@@ -33,13 +33,11 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
 def _mask_string_literals_preserving_length(source_line: str) -> str:
     """Replace every string literal with an equal-length neutral placeholder.
 
-    The TDD-gate sentinel below opts this production file out of the hook
-    because the existing companion tests use the project's convention
-    ``test_code_rules_enforcer_<suffix>.py`` rather than the single
-    ``test_code-rules-enforcer.py`` name the hook scans for. Matching
-    tests for this change live in
-    ``test_code_rules_enforcer_magic_string_masking.py``.
-    Sentinel: # pragma: no-tdd-gate
+    Matching tests live in
+    ``test_code_rules_enforcer_magic_string_masking.py``, one of the
+    ``test_code_rules_enforcer_<suffix>.py`` family files the
+    ``tdd_enforcer.py`` hook accepts as test candidates for the
+    ``code_rules_*`` module family.
     """
 
     string_literal_pattern = re.compile(

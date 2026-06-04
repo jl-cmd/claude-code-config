@@ -29,18 +29,28 @@ ALL_AUDIT_CONSTRAINT_TEXTS = [
 ]
 
 ALL_AUDIT_CATEGORY_ENTRIES = [
-    ("A", "Documentation / API call accuracy"),
-    ("B", "Type safety / boundary types"),
-    ("C", "Magic values / hardcoded constants"),
-    ("D", "Naming / banned identifiers"),
-    ("E", "Orphans / dead code"),
-    ("F", "Error handling / bare except"),
-    ("G", "Bounds / silent cap exits"),
-    ("H", "Testing / test quality"),
-    ("I", "Control flow / logic errors"),
-    ("J", "Architecture / SOLID violations"),
-    ("K", "Codebase conflicts / DRY"),
+    ("A", "API contract verification (signatures, return types, async/await correctness)"),
+    ("B", "Selector / query / engine compatibility"),
+    ("C", "Resource cleanup and lifecycle (file handles, connections, processes, locks)"),
+    ("D", "Variable scoping, ordering, and unbound references"),
+    ("E", "Dead code: dead parameters, dead locals, dead imports, dead branches, dead returns, and unused imports"),
+    ("F", "Silent failures (catch-all excepts, unconditional success returns, missing error propagation)"),
+    ("G", "Off-by-one, bounds, and integer overflow"),
+    ("H", "Security boundaries (injection, path traversal, auth bypass, secret leakage)"),
+    ("I", "Concurrency hazards (race conditions, missing awaits, shared mutable state)"),
+    ("J", "Magic values and configuration drift"),
+    ("K", "Codebase conflicts: the diff is internally consistent but a parallel site in unchanged code stays stale"),
+    ("L", "Behavior-equivalence for refactors: compare the rewrite's edge-case handling against the sibling implementation at the same base"),
+    ("M", "Producer/consumer cardinality vs collection-type contract: returns that can contain duplicates while a consumer treats them as a set"),
+    ("N", "Test-name scenario verifier: a test whose name claims a scenario must demonstrate the named condition is in effect"),
 ]
+
+AUDIT_RUBRIC_REFERENCE_TEXT = (
+    "The category list above is a summary. The binding definition of each "
+    "category is its rubric file under $HOME/.claude/audit-rubrics/category_rubrics/ "
+    "(ready-to-send prompt variants under $HOME/.claude/audit-rubrics/prompts/). "
+    "Read the rubric files before auditing."
+)
 
 ALL_FIX_EXECUTION_STEPS = [
     "Read the finding and verify it against the current file at file:line.",

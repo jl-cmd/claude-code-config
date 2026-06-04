@@ -22,6 +22,7 @@ from _xml_utils import emit_pretty_xml
 from skills_pr_loop_constants.path_resolver_constants import (
     ALL_AUDIT_CATEGORY_ENTRIES,
     ALL_AUDIT_CONSTRAINT_TEXTS,
+    AUDIT_RUBRIC_REFERENCE_TEXT,
 )
 
 
@@ -73,6 +74,9 @@ def build_audit_prompt_xml(
     for each_category_id, each_category_label in ALL_AUDIT_CATEGORY_ENTRIES:
         cat_elem = SubElement(bug_categories, "category", {"id": each_category_id})
         cat_elem.text = each_category_label
+
+    rubric_reference = SubElement(root, "rubric_reference")
+    rubric_reference.text = AUDIT_RUBRIC_REFERENCE_TEXT
 
     constraints = SubElement(root, "constraints")
     for each_constraint in ALL_AUDIT_CONSTRAINT_TEXTS:

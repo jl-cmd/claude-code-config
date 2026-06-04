@@ -228,8 +228,11 @@ def _dir_value_resolves_to_shared_temp(
             the test function.
 
     Returns:
-        True when the value is a constant ``None`` or a recognized shared-temp
-        source that yields the default shared temp directory.
+        True when the value is a constant ``None``, a call or subscript that
+        reads a home or temp environment variable named in
+        ``ALL_HOME_DIRECTORY_ENV_VAR_NAMES``, or a call whose dotted chain is
+        a recognized shared-temp source in
+        ``ALL_SHARED_TEMP_SOURCE_PROBE_DOTTED_NAMES``.
     """
     if isinstance(dir_value, ast.Constant) and dir_value.value is None:
         return True

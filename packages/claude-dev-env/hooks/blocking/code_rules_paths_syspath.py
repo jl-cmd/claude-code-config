@@ -41,7 +41,7 @@ def check_hardcoded_user_paths(content: str, file_path: str) -> list[str]:
     """Flag string literals naming a specific user's home directory.
 
     Catches non-portable paths like `C:/Users/jon/...`, `/Users/alice/...`,
-    and `/home/bob/...` that surface in production code (PR #257 evidence).
+    and `/home/bob/...` that surface in production code.
     Test files, config/ files, workflow registry files, migration files,
     and hook infrastructure files are exempt. Hook infrastructure exemption
     matches the pattern used by check_library_print and other check
@@ -153,9 +153,9 @@ def check_sys_path_insert_deduplication_guard(content: str, file_path: str) -> l
 
     Repeated module reloads can push the same entry onto sys.path multiple
     times when the call is unguarded. The repo convention is to wrap the
-    call with `if <path> not in sys.path:`. PR #289 surfaced two scripts
-    (grant_project_claude_permissions.py, revoke_project_claude_permissions.py)
-    that bypassed the convention.
+    call with `if <path> not in sys.path:`. The grant and revoke project
+    permission scripts (grant_project_claude_permissions.py,
+    revoke_project_claude_permissions.py) bypassed the convention.
     """
     if is_test_file(file_path):
         return []

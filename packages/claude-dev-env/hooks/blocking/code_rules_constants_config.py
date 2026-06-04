@@ -202,7 +202,7 @@ def _resolve_enclosing_function_qname(
 def check_file_global_constants_use_count(content: str, file_path: str) -> list[str]:
     """Flag module-level UPPER_SNAKE constants referenced by only one function/method.
 
-    Enforces jl-cmd/claude-code-config#180: a file-global constant used by just
+    Enforces the file-global-constants use-count rule: a constant used by just
     one caller belongs in that caller's scope. Test files, config files, and
     non-Python files are exempt. Constants with zero references are out of
     scope. The enforcer entry module (``hooks/blocking/code_rules_enforcer.py``)

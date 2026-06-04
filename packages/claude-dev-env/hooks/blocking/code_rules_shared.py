@@ -175,11 +175,50 @@ def _build_parent_map(module_tree: ast.Module) -> dict[int, ast.AST]:
     return parent_by_child_id
 
 
+def _statement_is_docstring(statement_node: ast.stmt) -> bool:
+    return (
+        isinstance(statement_node, ast.Expr)
+        and isinstance(statement_node.value, ast.Constant)
+        and isinstance(statement_node.value.value, str)
+    )
+
+
 def _function_definition_line_span(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> int:
     end_lineno = getattr(function_node, "end_lineno", None) or function_node.lineno
     return end_lineno - function_node.lineno + 1
+
+
+def _definition_docstring_line_span(
+    definition_node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+) -> int:
+    """Return the source-line count of the definition's leading docstring.
+
+    The Google Python Style Guide pairs a small-function preference that
+    targets executable complexity with a requirement for complete docstrings
+    on public functions and classes. Counting those docstring lines toward the
+    function-length gate would penalize the very documentation the Guide
+    mandates, so the gate measures executable span and excludes leading
+    docstring statements.
+
+    Args:
+        definition_node: The function, method, or class definition node to
+            inspect.
+
+    Returns:
+        The number of source lines the leading docstring statement occupies,
+        or zero when the definition body is empty or does not open with a
+        string literal.
+    """
+    definition_body = definition_node.body
+    if not definition_body:
+        return 0
+    first_statement = definition_body[0]
+    if _statement_is_docstring(first_statement):
+        docstring_end = getattr(first_statement, "end_lineno", None) or first_statement.lineno
+        return docstring_end - first_statement.lineno + 1
+    return 0
 
 
 def changed_line_numbers(prior_content: str, post_edit_content: str) -> set[int]:

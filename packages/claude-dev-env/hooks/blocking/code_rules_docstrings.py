@@ -12,6 +12,7 @@ if _hooks_directory not in sys.path:
     sys.path.insert(0, _hooks_directory)
 
 from code_rules_shared import (  # noqa: E402
+    _statement_is_docstring,
     _walk_skipping_nested_functions,
     _walk_skipping_type_checking_blocks,
     is_hook_infrastructure,
@@ -69,11 +70,7 @@ def _function_body_line_count(
     if not function_node.body:
         return 0
     first_body_index = 0
-    if (
-        isinstance(function_node.body[0], ast.Expr)
-        and isinstance(function_node.body[0].value, ast.Constant)
-        and isinstance(function_node.body[0].value.value, str)
-    ):
+    if _statement_is_docstring(function_node.body[0]):
         if len(function_node.body) == 1:
             return 0
         first_body_index = 1

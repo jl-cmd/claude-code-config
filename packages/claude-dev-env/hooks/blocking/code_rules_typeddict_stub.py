@@ -16,6 +16,7 @@ from code_rules_path_utils import (  # noqa: E402
     is_config_file,
 )
 from code_rules_shared import (  # noqa: E402
+    _statement_is_docstring,
     _walk_skipping_type_checking_blocks,
     is_hook_infrastructure,
     is_test_file,
@@ -59,14 +60,6 @@ def _collect_module_function_names(parsed_tree: ast.AST) -> set[str]:
 
 def _is_init_file(file_path: str) -> bool:
     return file_path.replace("\\", "/").rsplit("/", 1)[-1] == "__init__.py"
-
-
-def _statement_is_module_docstring(statement_node: ast.stmt) -> bool:
-    return (
-        isinstance(statement_node, ast.Expr)
-        and isinstance(statement_node.value, ast.Constant)
-        and isinstance(statement_node.value.value, str)
-    )
 
 
 def _statement_is_dunder_all_assignment(statement_node: ast.stmt) -> bool:
@@ -116,7 +109,7 @@ def check_thin_wrapper_files(content: str, file_path: str) -> list[str]:
 
     statements_after_docstring = (
         body_statements[1:]
-        if _statement_is_module_docstring(body_statements[0])
+        if _statement_is_docstring(body_statements[0])
         else body_statements
     )
     if not statements_after_docstring:
@@ -250,7 +243,7 @@ def _statement_is_raise_not_implemented(statement_node: ast.stmt) -> bool:
 
 def _function_body_is_stub(function_node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     body_statements = list(function_node.body)
-    if body_statements and _statement_is_module_docstring(body_statements[0]):
+    if body_statements and _statement_is_docstring(body_statements[0]):
         body_statements = body_statements[1:]
     if len(body_statements) != 1:
         return False

@@ -13,6 +13,7 @@ if _hooks_directory not in sys.path:
 
 from code_rules_shared import (  # noqa: E402
     _collect_annotated_arguments,
+    _definition_docstring_line_span,
     _function_definition_line_span,
     _scope_violations_to_changed_lines,
     is_hook_infrastructure,
@@ -77,18 +78,23 @@ def check_function_length(
     all_changed_lines: set[int] | None = None,
     defer_scope_to_caller: bool = False,
 ) -> list[str]:
-    """Flag functions whose definition span exceeds cognitive-load thresholds.
+    """Flag functions whose executable span exceeds cognitive-load thresholds.
 
-    Function definition spans (signature line through last body statement,
-    inclusive) at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` appear in
+    Function executable spans — the definition span (signature line through
+    last body statement, inclusive) minus the leading docstring lines of the
+    function and of every function or class nested within it, per
+    ``_definition_docstring_line_span`` summed over the nested definitions —
+    at or above ``FUNCTION_LENGTH_BLOCKING_THRESHOLD`` appear in
     the returned issues list and block the write at the
     gate. The threshold rests on the small-function guidance in Robert C.
     Martin, *Clean Code* Chapter Three ("Functions") and the Google Python Style
     Guide's ~forty-line function review hint
-    (https://google.github.io/styleguide/pyguide.html); this gate blocks on
-    body growth that pushes a function past that span. It does not derive
-    from CODE_RULES file-length guidance, which governs advisory file-length signals and
-    argues against hard numeric blocks.
+    (https://google.github.io/styleguide/pyguide.html) — a measure of
+    executable complexity, paired with the Guide's complete-docstring mandate
+    for public APIs, so documentation lines never count against the gate; this
+    gate blocks on body growth that pushes a function past that span. It does
+    not derive from CODE_RULES file-length guidance, which governs advisory
+    file-length signals and argues against hard numeric blocks.
 
     The issue message carries ``Function NAME (defined at line X) is Y lines``
     precisely so the gate's ``function_length_span_range`` can recover the
@@ -137,7 +143,17 @@ def check_function_length(
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         line_span = _function_definition_line_span(each_node)
-        if line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:
+        if line_span < FUNCTION_LENGTH_BLOCKING_THRESHOLD:
+            continue
+        docstring_line_total = sum(
+            _definition_docstring_line_span(each_definition)
+            for each_definition in ast.walk(each_node)
+            if isinstance(
+                each_definition, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            )
+        )
+        executable_line_span = line_span - docstring_line_total
+        if executable_line_span >= FUNCTION_LENGTH_BLOCKING_THRESHOLD:
             span_range = range(each_node.lineno, each_node.lineno + line_span)
             message = (
                 f"Function {each_node.name!r} (defined at line {each_node.lineno}) "

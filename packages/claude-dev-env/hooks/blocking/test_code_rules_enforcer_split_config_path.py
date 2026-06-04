@@ -13,11 +13,9 @@ if _BLOCKING_DIRECTORY not in sys.path:
 if _HOOKS_DIRECTORY not in sys.path:
     sys.path.insert(0, _HOOKS_DIRECTORY)
 
-from code_rules_path_utils import (  # noqa: E402
-    is_config_file,
-)
-from code_rules_path_utils import (  # noqa: E402
-    is_config_file as path_utils_is_config_file,
+from code_rules_path_utils import is_config_file  # noqa: E402
+from validators.exempt_paths import (  # noqa: E402
+    is_config_file as exempt_paths_is_config_file,
 )
 
 code_rules_enforcer = SimpleNamespace(
@@ -38,17 +36,17 @@ def test_is_config_file_rejects_filename_only_config_pattern() -> None:
     )
 
 
-def test_is_config_file_via_path_utils_returns_same_results_as_enforcer() -> None:
-    """is_config_file from code_rules_path_utils must agree with the enforcer on all sample paths."""
+def test_is_config_file_reexported_by_exempt_paths_matches_canonical() -> None:
+    """The exempt_paths re-export of is_config_file must agree with the canonical code_rules_path_utils implementation on all sample paths."""
     all_sample_paths = [
         "scripts/db/config.py",
         "config/timing.py",
         "settings.py",
     ]
     for each_path in all_sample_paths:
-        enforcer_result = code_rules_enforcer.is_config_file(each_path)
-        path_utils_result = path_utils_is_config_file(each_path)
-        assert enforcer_result == path_utils_result, (
+        canonical_result = code_rules_enforcer.is_config_file(each_path)
+        exempt_paths_result = exempt_paths_is_config_file(each_path)
+        assert canonical_result == exempt_paths_result, (
             f"is_config_file diverged for {each_path!r}: "
-            f"enforcer={enforcer_result}, code_rules_path_utils={path_utils_result}"
+            f"code_rules_path_utils={canonical_result}, exempt_paths={exempt_paths_result}"
         )

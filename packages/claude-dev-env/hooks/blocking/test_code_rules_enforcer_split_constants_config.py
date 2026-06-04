@@ -205,3 +205,32 @@ def test_check_constants_outside_config_reports_more_than_three_constants() -> N
     assert len(issues) == expected_constant_count, (
         f"Expected all {expected_constant_count} constants reported, got {len(issues)}: {issues}"
     )
+
+
+_SINGLE_CALLER_CONSTANT_SOURCE = (
+    "TIMEOUT = 5\n"
+    "\n"
+    "def lonely_caller() -> int:\n"
+    "    return TIMEOUT\n"
+)
+
+_ENFORCER_ENTRY_FILE_PATH = "packages/claude-dev-env/hooks/blocking/code_rules_enforcer.py"
+
+
+def test_use_count_flags_single_caller_constant_for_ordinary_production_path() -> None:
+    issues = code_rules_enforcer.check_file_global_constants_use_count(
+        _SINGLE_CALLER_CONSTANT_SOURCE, PRODUCTION_FILE_PATH
+    )
+    assert any(
+        "TIMEOUT" in issue and "only 1 function/method" in issue for issue in issues
+    ), f"Expected single-caller constant flagged on an ordinary production path, got: {issues}"
+
+
+def test_use_count_exempts_enforcer_entry_module_path() -> None:
+    issues = code_rules_enforcer.check_file_global_constants_use_count(
+        _SINGLE_CALLER_CONSTANT_SOURCE, _ENFORCER_ENTRY_FILE_PATH
+    )
+    assert issues == [], (
+        "The enforcer entry module must be exempt to avoid self-blocking, "
+        f"got: {issues}"
+    )

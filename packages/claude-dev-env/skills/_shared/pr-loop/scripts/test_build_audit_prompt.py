@@ -13,12 +13,12 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-_CATEGORY_RUBRICS_DIR = _SCRIPTS_DIR.parents[3] / "audit-rubrics" / "category_rubrics"
-_HEADING_PATTERN = re.compile(r"^# Category ([A-N]) — (.+)$")
-
 from skills_pr_loop_constants.path_resolver_constants import (
     ALL_AUDIT_CATEGORY_ENTRIES,
 )
+
+_CATEGORY_RUBRICS_DIR = _SCRIPTS_DIR.parents[3] / "audit-rubrics" / "category_rubrics"
+_HEADING_PATTERN = re.compile(r"^# Category ([A-N]) — (.+)$")
 
 
 def _load_build_audit_prompt() -> ModuleType:
@@ -36,10 +36,12 @@ build_audit_prompt = _load_build_audit_prompt()
 
 
 def _rubric_label_by_letter() -> dict[str, str]:
+    assert _CATEGORY_RUBRICS_DIR.is_dir(), f"Missing rubric directory: {_CATEGORY_RUBRICS_DIR}"
     all_labels: dict[str, str] = {}
     for each_rubric_file in sorted(_CATEGORY_RUBRICS_DIR.glob("category-*.md")):
-        first_line = each_rubric_file.read_text(encoding="utf-8").splitlines()[0]
-        each_match = _HEADING_PATTERN.match(first_line)
+        all_rubric_lines = each_rubric_file.read_text(encoding="utf-8").splitlines()
+        assert all_rubric_lines, f"Empty rubric file: {each_rubric_file}"
+        each_match = _HEADING_PATTERN.match(all_rubric_lines[0])
         assert each_match is not None, f"Heading pattern not matched in {each_rubric_file}"
         all_labels[each_match.group(1)] = each_match.group(2)
     return all_labels

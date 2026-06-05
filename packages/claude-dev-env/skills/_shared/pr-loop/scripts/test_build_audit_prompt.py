@@ -90,3 +90,33 @@ def test_rubric_reference_element_names_category_rubrics_directory() -> None:
     assert rubric_reference is not None
     assert rubric_reference.text is not None
     assert "audit-rubrics/category_rubrics" in rubric_reference.text
+
+
+def test_prompt_skeleton_sub_bucket_counts_match_rubric_rows() -> None:
+    """Each prompt skeleton's numeric sub-bucket count equals its rubric's row count.
+
+    For every (letter, label) the prompts dir holds a category-<letter>- file.
+    The skeleton above the first standalone --- line states "decomposed into N
+    sub-buckets"; that N must equal the rubric's count of | <letter>N | rows.
+    Skeletons with a [N] placeholder are skipped.
+    """
+    prompts_directory = _CATEGORY_RUBRICS_DIR.parent / "prompts"
+    count_pattern = re.compile(r"decomposed into (\d+) sub-buckets")
+    for each_letter, _each_label in ALL_AUDIT_CATEGORY_ENTRIES:
+        all_prompt_matches = sorted(prompts_directory.glob(f"category-{each_letter.lower()}-*.md"))
+        assert all_prompt_matches, f"Missing prompt file for category {each_letter}"
+        all_skeleton_lines: list[str] = []
+        for each_line in all_prompt_matches[0].read_text(encoding="utf-8").splitlines():
+            if each_line == "---":
+                break
+            all_skeleton_lines.append(each_line)
+        each_count_match = count_pattern.search("\n".join(all_skeleton_lines))
+        if each_count_match is None:
+            continue
+        all_rubric_matches = sorted(_CATEGORY_RUBRICS_DIR.glob(f"category-{each_letter.lower()}-*.md"))
+        rubric_row_pattern = re.compile(r"^\| " + each_letter + r"\d+ \|", re.MULTILINE)
+        sub_bucket_row_count = len(rubric_row_pattern.findall(all_rubric_matches[0].read_text(encoding="utf-8")))
+        assert int(each_count_match.group(1)) == sub_bucket_row_count, (
+            f"Category {each_letter}: skeleton says {each_count_match.group(1)} sub-buckets "
+            f"but rubric has {sub_bucket_row_count} rows"
+        )

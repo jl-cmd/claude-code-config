@@ -1,4 +1,4 @@
-Audit [REPO/ARTIFACT] [TARGET_ID] for **Category P only** (name / regex / word-list vs behavior-contract precision). Skip A-O. Sub-bucket forced-exhaustion mode: Category P is decomposed into 7 sub-buckets below. Each sub-bucket needs at least one Shape A finding OR exactly one Shape B proof-of-absence with **at least 3 adversarial probes** specific to that sub-bucket. A sub-bucket returning neither is a protocol gap.
+Audit [REPO/ARTIFACT] [TARGET_ID] for **Category P only** (name / regex / word-list vs behavior-contract precision). Skip A–O. Sub-bucket forced-exhaustion mode: Category P is decomposed into 7 sub-buckets below. Each sub-bucket needs at least one Shape A finding OR exactly one Shape B proof-of-absence with **at least 3 adversarial probes** specific to that sub-bucket. A sub-bucket returning neither is a protocol gap.
 
 [ARTIFACT METADATA — every newly-added or renamed identifier plus the body code that implements its contract]
 

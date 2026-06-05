@@ -19,8 +19,8 @@
 - An API endpoint version bumped; the SDK in the same repo still hits the old version.
 - A docstring updated to describe new behavior; the implementation still does the old thing (or the reverse).
 
-- A new helper added alongside an existing helper in the same module that omits a defensive idiom (None-guard via `getattr(...) or default`) the sibling helper established.
-- A single document declaring a rubric letter as both hook-enforced (⚡) and in the "non-blocking, multi-file reasoning" set; the same letter cannot be both.
+- A module's existing `_resolve_base_ref` guards a missing remote with `getattr(remote, "name", "") or DEFAULT_REMOTE`; the diff adds `_resolve_head_ref` beside it that dereferences `remote.name` bare, crashing on the detached-HEAD case its sibling survives.
+- A rules reference whose enforcement table marks letter J with ⚡ (blocking hook) while its audit-surface section three paragraphs later lists J under "non-blocking, multi-file reasoning" — one letter, two contradictory enforcement claims in one document.
 - A hooks.json with the same hook registered in two parallel matcher blocks (Write|Edit + MultiEdit) when an existing Write|Edit|MultiEdit block already handles the same surface.
 
 **Companion reference:** see `../source-material-section-types.md`.
@@ -38,7 +38,7 @@ Decomposition is by the **kind of parallel site** that needs to stay in sync wit
 | K3 | Primary path vs fallback path | A behavior changed on the happy path — does the fallback / error path produce consistent behavior? |
 | K4 | Feature flag / version gate consistency | A flag flipped or version bumped — every guard, conditional branch, and consumer checked? |
 | K5 | Producer-vs-consumer type contracts | A producer's output shape changed — every consumer's expected shape still matches? |
-| K6 | Code vs documentation sync (cross-surface AND same-surface) | An implementation behavior changed — README, ADRs, skill docs, comments still describe the new behavior? Docstring-prose drift belongs to Category O (docstring / fixture-prose vs implementation drift); K6 owns documentation surfaces outside docstrings. Also: when one section of a document declares an invariant (e.g., a rubric letter is hook-enforced ⚡), every other section of the SAME document that classifies that letter must agree. |
+| K6 | Code vs documentation sync (cross-surface) | An implementation behavior changed — README, ADRs, skill docs, comments still describe the new behavior? Docstring-prose drift belongs to Category O (docstring / fixture-prose vs implementation drift); K6 owns documentation surfaces outside docstrings. |
 | K7 | Code vs test sync | An implementation behavior changed — every test (positive, negative, edge) still expresses the right contract? |
 | K8 | Cross-file / cross-language contract sync | A value or shape that lives in multiple languages or files (e.g., PowerShell + Python) — both sides reflect the change? |
 | K9 | Schema / data-shape propagation | A schema field added/removed/renamed — migrations, ORM, serializers, fixtures, API docs all updated? |

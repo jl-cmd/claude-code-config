@@ -96,7 +96,7 @@ Q3: Where would a future refactor most likely break a cross-bucket or cross-lang
 
 ## Output
 
-Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket A1–A9, produce Shape A or Shape B (with ≥3 adversarial probes). Cross-bucket Q1–Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P1 bugs across these 9 sub-buckets — find them." Open Questions section for ambiguities. Read-only. No edits, no commits.
+Lead: `Total: N (P0=N, P1=N, P2=N)`. For each sub-bucket A1–A9, produce Shape A or Shape B (with ≥3 adversarial probes). Documentation-as-contract: when the artifact asserts code facts, walk all seven checks and report each as a finding or a confirmation; for a pure-code artifact, one line of proof-of-absence. Cross-bucket Q1–Q3 answers after the per-sub-bucket walk. Adversarial second pass: "assume your first pass missed at least 3 P1 bugs across these 9 sub-buckets — find them." Open Questions section for ambiguities. Read-only. No edits, no commits.
 
 ---
 

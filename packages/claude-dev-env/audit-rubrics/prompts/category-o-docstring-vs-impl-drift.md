@@ -1,4 +1,4 @@
-Audit [REPO/ARTIFACT] [TARGET_ID] for **Category O only** (docstring / fixture-prose vs implementation drift). Skip A-N, P. Sub-bucket forced-exhaustion mode: Category O is decomposed into 7 sub-buckets below. Each sub-bucket REQUIRES at least one Shape A finding OR exactly one Shape B proof-of-absence with **at least 3 adversarial probes** specific to that sub-bucket. A sub-bucket returning neither is a protocol gap.
+Audit [REPO/ARTIFACT] [TARGET_ID] for **Category O only** (docstring / fixture-prose vs implementation drift). Skip A–N, P. Sub-bucket forced-exhaustion mode: Category O is decomposed into 7 sub-buckets below. Each sub-bucket REQUIRES at least one Shape A finding OR exactly one Shape B proof-of-absence with **at least 3 adversarial probes** specific to that sub-bucket. A sub-bucket returning neither is a protocol gap.
 
 [ARTIFACT METADATA — include every changed module's docstring AND the exported symbols of that module so the audit can compare claim vs body]
 

@@ -46,7 +46,7 @@ ID prefix: `find`.
 - Adversarial probes when types look stable: (a) check for `Any` / `unknown` / `dict[str, Any]` consumers that hide drift; (b) check for serializers (JSON, MessagePack, protobuf) whose schema lags the producer; (c) check for runtime validators (pydantic, zod, joi) whose rules now allow what should be rejected (or vice versa).
 
 **K6. Code vs documentation sync**
-- Did the diff change observable behavior? Enumerate every doc surface that describes that behavior (module/class/function docstring, README, ADR, design doc, CHANGELOG, API docs, error messages shown to the user, comments adjacent to the changed code).
+- Did the diff change observable behavior? Enumerate every doc surface that describes that behavior (README, ADR, design doc, CHANGELOG, API docs, error messages shown to the user, comments adjacent to the changed code; docstring-prose drift belongs to Category O).
 - Adversarial probes when docs look fine: (a) check for "see also" cross-references that now point to outdated explanations; (b) check for examples in the docstring that exercise the *old* behavior; (c) check for diagrams / state machines / sequence flows that depict the pre-diff path.
 
 **K7. Code vs test sync**

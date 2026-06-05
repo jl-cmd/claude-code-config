@@ -55,8 +55,13 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     override before querying the effective config, so a worktree-seeded local
     entry cannot shadow a correctly configured global setting. When
     *repository_root* is provided, queries the effective config for that
-    repository (``git -C <root> config --get``), which detects repo-level
-    overrides such as Husky or lefthook. Falls back to the current working
+    repository (``git -C <root> config --get``). When a canonical global
+    ``core.hooksPath`` is already configured, the preceding self-heal step
+    clears non-canonical local-scope entries, so repo-level overrides such
+    as Husky or lefthook at local scope are silently removed in favor of
+    the canonical global; when the global is unset or non-canonical, the
+    self-heal stands down and the ``--get`` query still surfaces those
+    overrides through the failure path. Falls back to the current working
     directory's effective config when *repository_root* is None.
 
     Args:

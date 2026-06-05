@@ -7,7 +7,7 @@ ID prefix: `find`.
 
 [INLINE THE FULL ARTIFACT HERE — see ../source-material-section-types.md for chunking guidance.]
 
-## Sub-buckets
+## Sub-buckets (each requires Shape A finding OR Shape B with ≥3 adversarial probes)
 
 **B1. CSS / DOM selector vs target browser engine**
 - Every CSS selector in the diff — verify pseudo-class support (`:has()`, `:is()`, `:where()`, `:focus-visible`, `:focus-within`) against every browser engine in the declared support matrix; flag any selector that requires an engine version newer than the declared minimum.

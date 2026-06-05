@@ -19,6 +19,10 @@
 - An API endpoint version bumped; the SDK in the same repo still hits the old version.
 - A docstring updated to describe new behavior; the implementation still does the old thing (or the reverse).
 
+- A new helper added alongside an existing helper in the same module that omits a defensive idiom (None-guard via `getattr(...) or default`) the sibling helper established.
+- A single document declaring a rubric letter as both hook-enforced (⚡) and in the "non-blocking, multi-file reasoning" set; the same letter cannot be both.
+- A hooks.json with the same hook registered in two parallel matcher blocks (Write|Edit + MultiEdit) when an existing Write|Edit|MultiEdit block already handles the same surface.
+
 **Companion reference:** see `../source-material-section-types.md`.
 
 ---
@@ -34,10 +38,12 @@ Decomposition is by the **kind of parallel site** that needs to stay in sync wit
 | K3 | Primary path vs fallback path | A behavior changed on the happy path — does the fallback / error path produce consistent behavior? |
 | K4 | Feature flag / version gate consistency | A flag flipped or version bumped — every guard, conditional branch, and consumer checked? |
 | K5 | Producer-vs-consumer type contracts | A producer's output shape changed — every consumer's expected shape still matches? |
-| K6 | Code vs documentation sync | An implementation behavior changed — docstrings, README, ADRs, comments still describe the new behavior? |
+| K6 | Code vs documentation sync (cross-surface AND same-surface) | An implementation behavior changed — docstrings, README, ADRs, comments still describe the new behavior? Also: when one section of a document declares an invariant (e.g., a rubric letter is hook-enforced ⚡), every other section of the SAME document that classifies that letter must agree. |
 | K7 | Code vs test sync | An implementation behavior changed — every test (positive, negative, edge) still expresses the right contract? |
 | K8 | Cross-file / cross-language contract sync | A value or shape that lives in multiple languages or files (e.g., PowerShell + Python) — both sides reflect the change? |
 | K9 | Schema / data-shape propagation | A schema field added/removed/renamed — migrations, ORM, serializers, fixtures, API docs all updated? |
+| K10 | Intra-file sibling-helper pattern propagation | When the diff adds a new helper alongside an existing helper in the same module, the new helper inherits the established defensive idioms (None-guards, `getattr(..., default) or fallback`, scope-exit semantics, span construction). When sibling helper A uses pattern P and newly-added helper B in the same file omits P, that omission is a K10 finding regardless of whether B is internally correct. |
+| K11 | Intra-document internal contradiction | When two sections of the same document make contradictory claims about the same subject (one paragraph says X is hook-enforced, another lists X as non-blocking; one table row says label is `Foo`, another row labels the same subject `Bar`; one example shows shape A, another shows shape B for the same input), the contradiction is a K11 finding even when each statement is locally coherent. |
 
 Customize per-artifact: for a single-file change with no parallel sites, Category K reduces to "verify there are no parallel sites we missed." For a cross-cutting change (e.g., renaming a public API), Category K may need 8+ sub-buckets to enumerate every consumer surface.
 

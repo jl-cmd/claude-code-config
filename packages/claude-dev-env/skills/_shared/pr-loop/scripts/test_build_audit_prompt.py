@@ -1,4 +1,4 @@
-"""Tests pinning build_audit_prompt's emitted A-N category taxonomy."""
+"""Tests pinning build_audit_prompt's emitted A-P category taxonomy."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from skills_pr_loop_constants.path_resolver_constants import (
 )
 
 _CATEGORY_RUBRICS_DIR = _SCRIPTS_DIR.parents[3] / "audit-rubrics" / "category_rubrics"
-_HEADING_PATTERN = re.compile(r"^# Category ([A-N]) — (.+)$")
+_HEADING_PATTERN = re.compile(r"^# Category ([A-P]) — (.+)$")
 
 
 def _load_build_audit_prompt() -> ModuleType:
@@ -60,12 +60,12 @@ def _build_audit_root() -> Element:
     )
 
 
-def test_bug_categories_carry_ids_a_through_n_in_order() -> None:
+def test_bug_categories_carry_ids_a_through_p_in_order() -> None:
     root = _build_audit_root()
     bug_categories = root.find("bug_categories")
     assert bug_categories is not None
     all_emitted_ids = [each_category.get("id") for each_category in bug_categories]
-    all_expected_ids = list("ABCDEFGHIJKLMN")
+    all_expected_ids = list("ABCDEFGHIJKLMNOP")
     assert all_emitted_ids == all_expected_ids
 
 

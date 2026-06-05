@@ -120,6 +120,7 @@ def test_prompt_skeleton_sub_bucket_counts_match_rubric_rows() -> None:
             )
             continue
         all_rubric_matches = sorted(_CATEGORY_RUBRICS_DIR.glob(f"category-{each_letter.lower()}-*.md"))
+        assert all_rubric_matches, f"Missing rubric file for category {each_letter}"
         rubric_row_pattern = re.compile(r"^\| " + each_letter + r"\d+ \|", re.MULTILINE)
         sub_bucket_row_count = len(rubric_row_pattern.findall(all_rubric_matches[0].read_text(encoding="utf-8")))
         assert int(each_count_match.group(1)) == sub_bucket_row_count, (

@@ -45,7 +45,7 @@ ID prefix: `find`.
 - Did the diff widen / narrow / reshape a producer's output (return type, response shape, dict keys, tuple arity, list element type, optional vs required field)? Enumerate every consumer — do their type annotations / destructuring / parsing still match?
 - Adversarial probes when types look stable: (a) check for `Any` / `unknown` / `dict[str, Any]` consumers that hide drift; (b) check for serializers (JSON, MessagePack, protobuf) whose schema lags the producer; (c) check for runtime validators (pydantic, zod, joi) whose rules now allow what should be rejected (or vice versa).
 
-**K6. Code vs documentation sync**
+**K6. Code vs documentation sync (cross-surface)**
 - Did the diff change observable behavior? Enumerate every doc surface that describes that behavior (README, ADR, design doc, CHANGELOG, API docs, error messages shown to the user, comments adjacent to the changed code; docstring-prose drift belongs to Category O).
 - Adversarial probes when docs look fine: (a) check for "see also" cross-references that now point to outdated explanations; (b) check for examples in those doc surfaces that exercise the *old* behavior; (c) check for diagrams / state machines / sequence flows in those doc surfaces that depict the pre-diff path.
 

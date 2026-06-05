@@ -17,7 +17,7 @@
 - A type signature widened in the producer; a consumer's type annotation still claims the narrower type.
 - A migration that adds a column; ORM model file gets the column but a raw-SQL migration query elsewhere doesn't.
 - An API endpoint version bumped; the SDK in the same repo still hits the old version.
-- A docstring updated to describe new behavior; the implementation still does the old thing (or the reverse).
+- A README section and the implementation it describes disagree after a behavior change — one surface carries the new contract, the other still describes the old one.
 
 - A module's existing `_resolve_base_ref` guards a missing remote with `getattr(remote, "name", "") or DEFAULT_REMOTE`; the diff adds `_resolve_head_ref` beside it that dereferences `remote.name` bare, crashing on the detached-HEAD case its sibling survives.
 - A rules reference whose enforcement table marks letter J with ⚡ (blocking hook) while its audit-surface section three paragraphs later lists J under "non-blocking, multi-file reasoning" — one letter, two contradictory enforcement claims in one document.

@@ -110,8 +110,13 @@ def test_prompt_skeleton_sub_bucket_counts_match_rubric_rows() -> None:
             if each_line == "---":
                 break
             all_skeleton_lines.append(each_line)
-        each_count_match = count_pattern.search("\n".join(all_skeleton_lines))
+        skeleton_text = "\n".join(all_skeleton_lines)
+        each_count_match = count_pattern.search(skeleton_text)
         if each_count_match is None:
+            assert "decomposed into [N] sub-buckets" in skeleton_text, (
+                f"Category {each_letter}: skeleton neither states a numeric "
+                "sub-bucket count nor carries the [N] placeholder"
+            )
             continue
         all_rubric_matches = sorted(_CATEGORY_RUBRICS_DIR.glob(f"category-{each_letter.lower()}-*.md"))
         rubric_row_pattern = re.compile(r"^\| " + each_letter + r"\d+ \|", re.MULTILINE)

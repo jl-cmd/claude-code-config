@@ -47,7 +47,7 @@ ID prefix: `find`.
 
 **K6. Code vs documentation sync**
 - Did the diff change observable behavior? Enumerate every doc surface that describes that behavior (README, ADR, design doc, CHANGELOG, API docs, error messages shown to the user, comments adjacent to the changed code; docstring-prose drift belongs to Category O).
-- Adversarial probes when docs look fine: (a) check for "see also" cross-references that now point to outdated explanations; (b) check for examples in the docstring that exercise the *old* behavior; (c) check for diagrams / state machines / sequence flows that depict the pre-diff path.
+- Adversarial probes when docs look fine: (a) check for "see also" cross-references that now point to outdated explanations; (b) check for examples in those doc surfaces that exercise the *old* behavior; (c) check for diagrams / state machines / sequence flows that depict the pre-diff path.
 
 **K7. Code vs test sync**
 - Did the diff change observable behavior? Enumerate every test that exercises that behavior — do positive, negative, edge, and regression tests all still express the post-diff contract?

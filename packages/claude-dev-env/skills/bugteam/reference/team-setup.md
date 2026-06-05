@@ -17,11 +17,19 @@ python "${CLAUDE_SKILL_DIR}/scripts/bugteam_preflight.py"
 Non-zero → fix before grant. `BUGTEAM_PREFLIGHT_SKIP=1` emergency only.
 `--pre-commit` if `.pre-commit-config.yaml` exists.
 
-**Auto-remediation for `core.hooksPath`:** when preflight fails with stderr
-containing `core.hooksPath` (the message starts with `bugteam_preflight:
-core.hooksPath is`, or `Git-side CODE_RULES enforcement is not active`), Claude
-must auto-invoke the fix script — do not fall through to `AskUserQuestion`, do
-not punt to the user, do not ask for confirmation:
+**Self-heal for stale local-scope `core.hooksPath`:** preflight silently
+removes any local-scope `core.hooksPath` entry whose path does not end in the
+canonical `hooks/git-hooks` suffix before checking the effective config. This
+clears the `<repo>/.git/hooks` entry that git seeds into every new worktree's
+local config, so the canonical global setting takes effect without Claude
+needing to surface a failure or invoke the fix script.
+
+**Auto-remediation for `core.hooksPath`:** when preflight still fails after
+self-heal with stderr containing `core.hooksPath` (the message starts with
+`bugteam_preflight: core.hooksPath is`, or `Git-side CODE_RULES enforcement is
+not active`) — typically because the global setting is missing or points
+elsewhere — Claude must auto-invoke the fix script. Do not fall through to
+`AskUserQuestion`, do not punt to the user, do not ask for confirmation:
 
 ```bash
 python "${CLAUDE_SKILL_DIR}/scripts/bugteam_fix_hookspath.py"

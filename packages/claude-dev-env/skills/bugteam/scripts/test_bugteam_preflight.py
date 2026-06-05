@@ -282,3 +282,109 @@ def test_main_should_halt_when_env_var_contains_uppercase_or_whitespace_bugteam_
     monkeypatch.delenv("BUGTEAM_PREFLIGHT_SKIP", raising=False)
     exit_code = bugteam_preflight.main(["--no-pytest"])
     assert exit_code == bugteam_preflight.EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
+
+
+def _was_called_with_argument_token(
+    mock_subprocess_run: MagicMock, argument_token: str
+) -> bool:
+    return any(
+        argument_token in each_call_args[0][0]
+        for each_call_args in mock_subprocess_run.call_args_list
+    )
+
+
+def test_silent_clear_is_noop_when_repository_root_is_none() -> None:
+    with patch("subprocess.run") as mock_run:
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(None)
+    assert mock_run.call_count == 0
+
+
+def test_silent_clear_is_noop_when_local_core_hooks_path_unset() -> None:
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process("", returncode=1)
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("."))
+    assert mock_run.call_count == 1, (
+        "Only the read call should fire when local core.hooksPath is unset"
+    )
+    assert not _was_called_with_argument_token(mock_run, "--unset-all"), (
+        "No unset should run when the read returned a non-zero exit"
+    )
+
+
+def test_silent_clear_is_noop_when_local_value_is_canonical(tmp_path: Path) -> None:
+    canonical_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
+    canonical_hooks_path.mkdir(parents=True)
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process(
+            str(canonical_hooks_path) + "\n", returncode=0
+        )
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("."))
+    assert not _was_called_with_argument_token(mock_run, "--unset-all"), (
+        "A canonical local value must not be removed"
+    )
+
+
+def test_silent_clear_unsets_stale_worktree_seeded_local_value() -> None:
+    """Git seeds <repo>/.git/hooks into worktree-local config; preflight must heal it."""
+    seeded_local_path_text = "/repo/.git/hooks"
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process(
+            seeded_local_path_text + "\n", returncode=0
+        )
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("/repo"))
+    assert _was_called_with_argument_token(mock_run, "--unset-all"), (
+        "Stale worktree-seeded local core.hooksPath must be unset"
+    )
+    assert _was_called_with_argument_token(mock_run, "--local"), (
+        "The unset must target --local scope so the global value is preserved"
+    )
+
+
+def test_silent_clear_unsets_when_any_local_entry_is_non_canonical(
+    tmp_path: Path,
+) -> None:
+    """Multiple local entries: a single non-canonical one triggers a full unset."""
+    canonical_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
+    canonical_hooks_path.mkdir(parents=True)
+    mixed_entries_text = f"{canonical_hooks_path}\n/some/other/path/.husky\n"
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process(mixed_entries_text, returncode=0)
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("."))
+    assert _was_called_with_argument_token(mock_run, "--unset-all"), (
+        "A single non-canonical entry among multiple must trigger the unset"
+    )
+
+
+def test_silent_clear_swallows_file_not_found_error() -> None:
+    """git missing from PATH must not raise — preflight surfaces the failure later."""
+    with patch("subprocess.run", side_effect=FileNotFoundError()):
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("."))
+
+
+def test_silent_clear_swallows_os_error() -> None:
+    """OS-level git launch failures must not raise from the silent helper."""
+    with patch("subprocess.run", side_effect=OSError("permission denied")):
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("."))
+
+
+def test_verify_git_hooks_path_invokes_self_heal_before_effective_query(
+    tmp_path: Path,
+) -> None:
+    """verify_git_hooks_path must call the self-heal helper before --get."""
+    canonical_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
+    canonical_hooks_path.mkdir(parents=True)
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = _make_completed_process(
+            str(canonical_hooks_path) + "\n", returncode=0
+        )
+        bugteam_preflight.verify_git_hooks_path(tmp_path)
+    assert _was_called_with_argument_token(mock_run, "--get-all"), (
+        "verify_git_hooks_path must run the --local --get-all read for self-heal"
+    )
+    assert _was_called_with_argument_token(mock_run, "--get"), (
+        "verify_git_hooks_path must still run the effective --get verification"
+    )
+    first_called_command = mock_run.call_args_list[0][0][0]
+    assert "--get-all" in first_called_command, (
+        "Self-heal must run BEFORE the effective config query, not after"
+    )

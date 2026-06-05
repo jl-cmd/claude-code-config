@@ -60,6 +60,14 @@ cd into `<worktree_path>` before any git or file operation.
   N. Test-name scenario verifier
 </bug_categories>
 
+<rubric_reference>
+  The category list above is a summary. The binding definition of each
+  category is its rubric file under
+  `$HOME/.claude/audit-rubrics/category_rubrics/` (ready-to-send prompt
+  variants under `$HOME/.claude/audit-rubrics/prompts/`). Read the rubric
+  files before auditing.
+</rubric_reference>
+
 <constraints>
   - Read-only on source code: the audit does not modify any source file.
   - Cite file:line for every finding.

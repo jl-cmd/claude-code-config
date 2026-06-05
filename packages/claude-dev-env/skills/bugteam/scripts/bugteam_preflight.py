@@ -14,6 +14,7 @@ if _bugteam_scripts_directory not in sys.path:
 
 from bugteam_scripts_constants.bugteam_preflight_constants import (
     ALL_DISCOVERY_IGNORE_DIRECTORIES,
+    ALL_GIT_CONFIG_GLOBAL_GET_HOOKS_PATH_COMMAND,
     ALL_GIT_CONFIG_HOOKS_PATH_ARGUMENTS,
     ALL_GIT_CONFIG_LOCAL_GET_ALL_HOOKS_PATH_ARGUMENTS,
     ALL_GIT_CONFIG_LOCAL_UNSET_ALL_HOOKS_PATH_ARGUMENTS,
@@ -62,6 +63,36 @@ def _is_canonical_hooks_path_entry(raw_hooks_path_entry: str) -> bool:
     )
 
 
+def _read_canonical_global_hooks_path_is_set() -> bool:
+    """Return True when ``git config --global core.hooksPath`` is canonical.
+
+    A canonical global setting is the safety net the self-heal step relies on;
+    without it, removing a non-canonical local entry would leave the effective
+    config empty and replace the more specific ``core.hooksPath is '<path>'``
+    diagnostic with the less specific ``enforcement is not active`` message.
+
+    Returns:
+        True when ``git config --global --get core.hooksPath`` exits zero and
+        the value normalizes to the canonical ``hooks/git-hooks`` suffix; False
+        when git is missing, the read fails, or the value is unset or
+        non-canonical.
+    """
+    try:
+        global_read_completed_process = subprocess.run(
+            list(ALL_GIT_CONFIG_GLOBAL_GET_HOOKS_PATH_COMMAND),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except (FileNotFoundError, OSError):
+        return False
+    if global_read_completed_process.returncode != 0:
+        return False
+    return _is_canonical_hooks_path_entry(global_read_completed_process.stdout.strip())
+
+
 def silently_clear_stale_local_hooks_path_override(
     repository_root: Path | None,
 ) -> None:
@@ -70,13 +101,20 @@ def silently_clear_stale_local_hooks_path_override(
     Git seeds ``core.hooksPath = <repo>/.git/hooks`` into every new worktree's
     local config. That repo-local entry shadows the correct global setting and
     breaks downstream hook-dependent skills. This helper reads the local
-    entries, and if any does not resolve to the canonical claude-dev-env hooks
-    directory, runs ``git config --local --unset-all core.hooksPath`` so the
-    effective config falls through to the canonical global setting.
+    entries, and when any does not resolve to the canonical claude-dev-env
+    hooks directory AND a canonical global setting exists, runs
+    ``git config --local --unset-all core.hooksPath`` so the effective config
+    falls through to the canonical global. When the global is unset or
+    non-canonical, the local entries are left alone so the downstream
+    ``core.hooksPath is '<path>'`` diagnostic stays informative and the
+    auto-remediation script in ``bugteam_fix_hookspath.py`` can repair the
+    global from a known starting point.
 
-    Silent on success. Suppresses git failures so an unrelated read or write
-    error cannot block preflight; the caller's subsequent verification step
-    still surfaces a final mismatch through the normal failure path.
+    Silent on success. Suppresses git read failures so an unrelated read error
+    cannot block preflight; the caller's subsequent verification step still
+    surfaces a final mismatch through the normal failure path. Write failures
+    on the ``--unset-all`` call are not suppressed — a permission error on
+    ``.git/config`` is a real bug the user needs to see.
 
     Args:
         repository_root: Repository root to operate on; a None argument is a
@@ -112,17 +150,16 @@ def silently_clear_stale_local_hooks_path_override(
     )
     if not has_non_canonical_local_hooks_path_entry:
         return
+    if not _read_canonical_global_hooks_path_is_set():
+        return
     unset_command: list[str] = ["git", "-C", str(repository_root)]
     unset_command.extend(list(ALL_GIT_CONFIG_LOCAL_UNSET_ALL_HOOKS_PATH_ARGUMENTS))
-    try:
-        subprocess.run(
-            unset_command,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (FileNotFoundError, OSError):
-        return
+    subprocess.run(
+        unset_command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def verify_git_hooks_path(repository_root: Path | None) -> int:

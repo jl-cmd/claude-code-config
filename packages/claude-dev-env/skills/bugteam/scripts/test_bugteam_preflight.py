@@ -324,13 +324,17 @@ def test_silent_clear_is_noop_when_local_value_is_canonical(tmp_path: Path) -> N
     )
 
 
-def test_silent_clear_unsets_stale_worktree_seeded_local_value() -> None:
+def test_silent_clear_unsets_stale_worktree_seeded_local_value(tmp_path: Path) -> None:
     """Git seeds <repo>/.git/hooks into worktree-local config; preflight must heal it."""
     seeded_local_path_text = "/repo/.git/hooks"
+    canonical_global_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
+    canonical_global_hooks_path.mkdir(parents=True)
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = _make_completed_process(
-            seeded_local_path_text + "\n", returncode=0
-        )
+        mock_run.side_effect = [
+            _make_completed_process(seeded_local_path_text + "\n", returncode=0),
+            _make_completed_process(str(canonical_global_hooks_path) + "\n", returncode=0),
+            _make_completed_process("", returncode=0),
+        ]
         bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("/repo"))
     assert _was_called_with_argument_token(mock_run, "--unset-all"), (
         "Stale worktree-seeded local core.hooksPath must be unset"
@@ -348,10 +352,44 @@ def test_silent_clear_unsets_when_any_local_entry_is_non_canonical(
     canonical_hooks_path.mkdir(parents=True)
     mixed_entries_text = f"{canonical_hooks_path}\n/some/other/path/.husky\n"
     with patch("subprocess.run") as mock_run:
-        mock_run.return_value = _make_completed_process(mixed_entries_text, returncode=0)
+        mock_run.side_effect = [
+            _make_completed_process(mixed_entries_text, returncode=0),
+            _make_completed_process(str(canonical_hooks_path) + "\n", returncode=0),
+            _make_completed_process("", returncode=0),
+        ]
         bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("."))
     assert _was_called_with_argument_token(mock_run, "--unset-all"), (
         "A single non-canonical entry among multiple must trigger the unset"
+    )
+
+
+def test_silent_clear_stands_down_when_global_is_unset(tmp_path: Path) -> None:
+    """When the global has no canonical value, the local entry must be left alone."""
+    seeded_local_path_text = "/repo/.git/hooks"
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            _make_completed_process(seeded_local_path_text + "\n", returncode=0),
+            _make_completed_process("", returncode=1),
+        ]
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("/repo"))
+    assert not _was_called_with_argument_token(mock_run, "--unset-all"), (
+        "Self-heal must stand down when no canonical global exists, "
+        "so the downstream diagnostic stays informative"
+    )
+
+
+def test_silent_clear_stands_down_when_global_is_non_canonical(tmp_path: Path) -> None:
+    """When the global points at a husky path, the local entry must be left alone."""
+    seeded_local_path_text = "/repo/.git/hooks"
+    non_canonical_global_text = "/some/other/path/.husky"
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            _make_completed_process(seeded_local_path_text + "\n", returncode=0),
+            _make_completed_process(non_canonical_global_text + "\n", returncode=0),
+        ]
+        bugteam_preflight.silently_clear_stale_local_hooks_path_override(Path("/repo"))
+    assert not _was_called_with_argument_token(mock_run, "--unset-all"), (
+        "Self-heal must stand down when the global itself is non-canonical"
     )
 
 

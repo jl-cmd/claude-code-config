@@ -18,11 +18,14 @@ Non-zero → fix before grant. `BUGTEAM_PREFLIGHT_SKIP=1` emergency only.
 `--pre-commit` if `.pre-commit-config.yaml` exists.
 
 **Self-heal for stale local-scope `core.hooksPath`:** preflight silently
-removes any local-scope `core.hooksPath` entry whose path does not end in the
-canonical `hooks/git-hooks` suffix before checking the effective config. This
-clears the `<repo>/.git/hooks` entry that git seeds into every new worktree's
-local config, so the canonical global setting takes effect without Claude
-needing to surface a failure or invoke the fix script.
+unsets ALL local-scope `core.hooksPath` entries on the active repository when
+any of them does not end in the canonical `hooks/git-hooks` suffix AND a
+canonical global `core.hooksPath` is already configured. Both conditions must
+hold. The check clears the `<repo>/.git/hooks` entry that git seeds into every
+new worktree's local config, so the canonical global setting takes effect
+without Claude needing to surface a failure or invoke the fix script. When
+the global is unset or non-canonical, the self-heal stands down and the
+auto-remediation flow below runs as usual.
 
 **Auto-remediation for `core.hooksPath`:** when preflight still fails after
 self-heal with stderr containing `core.hooksPath` (the message starts with

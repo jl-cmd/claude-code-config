@@ -284,7 +284,7 @@ def test_main_should_halt_when_env_var_contains_uppercase_or_whitespace_bugteam_
     assert exit_code == bugteam_preflight.EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV
 
 
-def _was_called_with_argument_token(
+def _was_called_with_argument(
     mock_subprocess_run: MagicMock, argument_token: str
 ) -> bool:
     return any(
@@ -304,10 +304,10 @@ def test_verify_git_hooks_path_invokes_self_heal_before_effective_query(
             str(canonical_hooks_path) + "\n", returncode=0
         )
         bugteam_preflight.verify_git_hooks_path(tmp_path)
-    assert _was_called_with_argument_token(mock_run, "--get-all"), (
+    assert _was_called_with_argument(mock_run, "--get-all"), (
         "verify_git_hooks_path must run the --local --get-all read for self-heal"
     )
-    assert _was_called_with_argument_token(mock_run, "--get"), (
+    assert _was_called_with_argument(mock_run, "--get"), (
         "verify_git_hooks_path must still run the effective --get verification"
     )
     first_called_command = mock_run.call_args_list[0][0][0]

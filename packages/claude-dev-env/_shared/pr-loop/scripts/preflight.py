@@ -82,7 +82,7 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
         git_command.extend(["-C", str(repository_root)])
     git_command.extend(list(ALL_GIT_CONFIG_GET_CORE_HOOKS_PATH_SUBCOMMAND))
     try:
-        query_result = subprocess.run(
+        query_completed_process = subprocess.run(
             git_command,
             capture_output=True,
             text=True,
@@ -104,13 +104,13 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
             file=sys.stderr,
         )
         return 1
-    if query_result.returncode != 0:
+    if query_completed_process.returncode != 0:
         print(
             f"bugteam_preflight: {enforcement_absent_message}",
             file=sys.stderr,
         )
         return 1
-    configured_path = query_result.stdout.strip().replace("\\", "/").rstrip("/")
+    configured_path = query_completed_process.stdout.strip().replace("\\", "/").rstrip("/")
     if not configured_path.endswith(expected_hooks_path_suffix):
         print(
             f"bugteam_preflight: core.hooksPath is '{configured_path}' — "

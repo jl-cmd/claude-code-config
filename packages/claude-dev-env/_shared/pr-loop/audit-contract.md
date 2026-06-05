@@ -21,7 +21,7 @@ Each finding an audit produces MUST be one of exactly two shapes.
   "id": "loop<N>-<K>",
   "file": "path/relative/to/repo/root.py",
   "line": 123,
-  "category": "A | B | C | D | E | F | G | H | I | J | K | L | M | N",
+  "category": "A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P",
   "severity": "P0 | P1 | P2",
   "excerpt": "verbatim code snippet from the offending line(s)",
   "failure_mode": "one sentence describing what goes wrong and when",
@@ -37,7 +37,7 @@ Used when an audit investigates a category and does NOT find a bug. Bare "verifi
 
 ```json
 {
-  "category": "A | B | C | D | E | F | G | H | I | J | K | L | M | N",
+  "category": "A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P",
   "files_opened": ["file1.py", "file2.py"],
   "lines_quoted": [
     {"file": "file1.py", "line": 88, "text": "verbatim line content"}

@@ -97,8 +97,9 @@ def test_prompt_skeleton_sub_bucket_counts_match_rubric_rows() -> None:
 
     For every (letter, label) the prompts dir holds a category-<letter>- file.
     The skeleton above the first standalone --- line states "decomposed into N
-    sub-buckets"; that N must equal the rubric's count of | <letter>N | rows.
-    Skeletons with a [N] placeholder are skipped.
+    sub-buckets"; that N must equal the rubric's count of | <letter>N | rows,
+    and a numeric walk-instruction range (For each sub-bucket X1-Xn) must end
+    at that same row count. Skeletons with a [N] placeholder are skipped.
     """
     prompts_directory = _CATEGORY_RUBRICS_DIR.parent / "prompts"
     count_pattern = re.compile(r"decomposed into (\d+) sub-buckets")
@@ -125,3 +126,13 @@ def test_prompt_skeleton_sub_bucket_counts_match_rubric_rows() -> None:
             f"Category {each_letter}: skeleton says {each_count_match.group(1)} sub-buckets "
             f"but rubric has {sub_bucket_row_count} rows"
         )
+        walk_range_pattern = re.compile(
+            rf"For each sub-bucket {each_letter}1[-–]{each_letter}(\d+)"
+        )
+        each_walk_match = walk_range_pattern.search(skeleton_text)
+        if each_walk_match is not None:
+            assert int(each_walk_match.group(1)) == sub_bucket_row_count, (
+                f"Category {each_letter}: walk instruction ends at "
+                f"{each_letter}{each_walk_match.group(1)} but rubric has "
+                f"{sub_bucket_row_count} rows"
+            )

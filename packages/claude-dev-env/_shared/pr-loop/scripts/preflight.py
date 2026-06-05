@@ -39,6 +39,7 @@ from pr_loop_shared_constants.preflight_constants import (
     PYTHON_FILE_SUFFIX,
     TESTS_DIRECTORY_NAME,
 )
+from preflight_self_heal import silently_clear_stale_local_hooks_path_override  # noqa: E402
 from reviews_disabled import (
     CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN,
     CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME,
@@ -50,7 +51,10 @@ from reviews_disabled import (
 def verify_git_hooks_path(repository_root: Path | None = None) -> int:
     """Check that core.hooksPath resolves to the claude-dev-env git-hooks directory.
 
-    When *repository_root* is provided, queries the effective config for that
+    Silently clears any stale, non-canonical local-scope core.hooksPath
+    override before querying the effective config, so a worktree-seeded local
+    entry cannot shadow a correctly configured global setting. When
+    *repository_root* is provided, queries the effective config for that
     repository (``git -C <root> config --get``), which detects repo-level
     overrides such as Husky or lefthook. Falls back to the current working
     directory's effective config when *repository_root* is None.
@@ -64,6 +68,9 @@ def verify_git_hooks_path(repository_root: Path | None = None) -> int:
         Non-zero and prints a correction message when unset or pointing elsewhere.
     """
     expected_hooks_path_suffix = HOOKS_PATH_VERIFICATION_SUFFIX
+    silently_clear_stale_local_hooks_path_override(
+        repository_root, expected_hooks_path_suffix
+    )
     enforcement_absent_message = (
         "Git-side CODE_RULES enforcement is not active on this host.\n"
         "Run: npx claude-dev-env .\n"

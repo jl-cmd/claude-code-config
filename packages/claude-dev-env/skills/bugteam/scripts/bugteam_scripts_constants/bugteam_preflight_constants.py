@@ -23,25 +23,6 @@ ALL_GIT_CONFIG_HOOKS_PATH_ARGUMENTS: tuple[str, ...] = (
     "--get",
     "core.hooksPath",
 )
-ALL_GIT_CONFIG_LOCAL_GET_ALL_HOOKS_PATH_ARGUMENTS: tuple[str, ...] = (
-    "config",
-    "--local",
-    "--get-all",
-    "core.hooksPath",
-)
-ALL_GIT_CONFIG_LOCAL_UNSET_ALL_HOOKS_PATH_ARGUMENTS: tuple[str, ...] = (
-    "config",
-    "--local",
-    "--unset-all",
-    "core.hooksPath",
-)
-ALL_GIT_CONFIG_GLOBAL_GET_HOOKS_PATH_COMMAND: tuple[str, ...] = (
-    "git",
-    "config",
-    "--global",
-    "--get",
-    "core.hooksPath",
-)
 ALL_PRE_COMMIT_ARGUMENTS: tuple[str, ...] = (
     "pre-commit",
     "run",

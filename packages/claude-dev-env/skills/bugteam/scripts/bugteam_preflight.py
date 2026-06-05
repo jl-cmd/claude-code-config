@@ -14,10 +14,7 @@ if _bugteam_scripts_directory not in sys.path:
 
 from bugteam_scripts_constants.bugteam_preflight_constants import (
     ALL_DISCOVERY_IGNORE_DIRECTORIES,
-    ALL_GIT_CONFIG_GLOBAL_GET_HOOKS_PATH_COMMAND,
     ALL_GIT_CONFIG_HOOKS_PATH_ARGUMENTS,
-    ALL_GIT_CONFIG_LOCAL_GET_ALL_HOOKS_PATH_ARGUMENTS,
-    ALL_GIT_CONFIG_LOCAL_UNSET_ALL_HOOKS_PATH_ARGUMENTS,
     ALL_PRE_COMMIT_ARGUMENTS,
     BUGTEAM_PREFLIGHT_PREFIX,
     BUGTEAM_PREFLIGHT_SKIP_ENV_VAR_NAME,
@@ -39,127 +36,13 @@ _shared_pr_loop_scripts_directory = (
 if str(_shared_pr_loop_scripts_directory) not in sys.path:
     sys.path.insert(0, str(_shared_pr_loop_scripts_directory))
 
-from reviews_disabled import (
+from preflight_self_heal import silently_clear_stale_local_hooks_path_override  # noqa: E402
+from reviews_disabled import (  # noqa: E402
     CLAUDE_REVIEWS_DISABLED_BUGTEAM_TOKEN,
     CLAUDE_REVIEWS_DISABLED_ENV_VAR_NAME,
     EXIT_CODE_BUGTEAM_DISABLED_VIA_ENV,
     is_bugteam_disabled_via_env,
 )
-
-
-def _is_canonical_hooks_path_entry(raw_hooks_path_entry: str) -> bool:
-    """Return True when *raw_hooks_path_entry* names the canonical claude-dev-env hooks directory.
-
-    Args:
-        raw_hooks_path_entry: A core.hooksPath entry as written in git config.
-
-    Returns:
-        True when, after Windows-to-POSIX separator normalization and trailing
-        slash stripping, the entry ends in the canonical
-        ``hooks/git-hooks`` suffix.
-    """
-    return (
-        raw_hooks_path_entry.replace("\\", "/").rstrip("/").endswith(EXPECTED_HOOKS_PATH_SUFFIX)
-    )
-
-
-def _read_canonical_global_hooks_path_is_set() -> bool:
-    """Return True when ``git config --global core.hooksPath`` is canonical.
-
-    A canonical global setting is the safety net the self-heal step relies on;
-    without it, removing a non-canonical local entry would leave the effective
-    config empty and replace the more specific ``core.hooksPath is '<path>'``
-    diagnostic with the less specific ``enforcement is not active`` message.
-
-    Returns:
-        True when ``git config --global --get core.hooksPath`` exits zero and
-        the value normalizes to the canonical ``hooks/git-hooks`` suffix; False
-        when git is missing, the read fails, or the value is unset or
-        non-canonical.
-    """
-    try:
-        global_read_completed_process = subprocess.run(
-            list(ALL_GIT_CONFIG_GLOBAL_GET_HOOKS_PATH_COMMAND),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-    except (FileNotFoundError, OSError):
-        return False
-    if global_read_completed_process.returncode != 0:
-        return False
-    return _is_canonical_hooks_path_entry(global_read_completed_process.stdout.strip())
-
-
-def silently_clear_stale_local_hooks_path_override(
-    repository_root: Path | None,
-) -> None:
-    """Remove every stale, non-canonical local-scope core.hooksPath override.
-
-    Git seeds ``core.hooksPath = <repo>/.git/hooks`` into every new worktree's
-    local config. That repo-local entry shadows the correct global setting and
-    breaks downstream hook-dependent skills. This helper reads the local
-    entries, and when any does not resolve to the canonical claude-dev-env
-    hooks directory AND a canonical global setting exists, runs
-    ``git config --local --unset-all core.hooksPath`` so the effective config
-    falls through to the canonical global. When the global is unset or
-    non-canonical, the local entries are left alone so the downstream
-    ``core.hooksPath is '<path>'`` diagnostic stays informative and the
-    auto-remediation script in ``bugteam_fix_hookspath.py`` can repair the
-    global from a known starting point.
-
-    Silent on success. Suppresses git read failures so an unrelated read error
-    cannot block preflight; the caller's subsequent verification step still
-    surfaces a final mismatch through the normal failure path. Write failures
-    on the ``--unset-all`` call are not suppressed — a permission error on
-    ``.git/config`` is a real bug the user needs to see.
-
-    Args:
-        repository_root: Repository root to operate on; a None argument is a
-            no-op so callers without a resolved root can call unconditionally.
-    """
-    if repository_root is None:
-        return
-    read_command: list[str] = ["git", "-C", str(repository_root)]
-    read_command.extend(list(ALL_GIT_CONFIG_LOCAL_GET_ALL_HOOKS_PATH_ARGUMENTS))
-    try:
-        read_completed_process = subprocess.run(
-            read_command,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-    except (FileNotFoundError, OSError):
-        return
-    if read_completed_process.returncode != 0:
-        return
-    all_local_hooks_path_entries = [
-        each_line.strip()
-        for each_line in read_completed_process.stdout.splitlines()
-        if each_line.strip()
-    ]
-    if not all_local_hooks_path_entries:
-        return
-    has_non_canonical_local_hooks_path_entry = any(
-        not _is_canonical_hooks_path_entry(each_local_hooks_path_entry)
-        for each_local_hooks_path_entry in all_local_hooks_path_entries
-    )
-    if not has_non_canonical_local_hooks_path_entry:
-        return
-    if not _read_canonical_global_hooks_path_is_set():
-        return
-    unset_command: list[str] = ["git", "-C", str(repository_root)]
-    unset_command.extend(list(ALL_GIT_CONFIG_LOCAL_UNSET_ALL_HOOKS_PATH_ARGUMENTS))
-    subprocess.run(
-        unset_command,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
 
 
 def verify_git_hooks_path(repository_root: Path | None) -> int:
@@ -181,13 +64,15 @@ def verify_git_hooks_path(repository_root: Path | None) -> int:
         Zero when the configured path ends with the expected hooks suffix.
         Non-zero and prints a correction message when unset or pointing elsewhere.
     """
-    silently_clear_stale_local_hooks_path_override(repository_root)
+    silently_clear_stale_local_hooks_path_override(
+        repository_root, EXPECTED_HOOKS_PATH_SUFFIX
+    )
     git_command: list[str] = ["git"]
     if repository_root is not None:
         git_command.extend(["-C", str(repository_root)])
     git_command.extend(list(ALL_GIT_CONFIG_HOOKS_PATH_ARGUMENTS))
     try:
-        query_result = subprocess.run(
+        query_completed_process = subprocess.run(
             git_command,
             capture_output=True,
             text=True,
@@ -209,13 +94,13 @@ def verify_git_hooks_path(repository_root: Path | None) -> int:
             file=sys.stderr,
         )
         return EXIT_CODE_HOOKS_PATH_CHECK_FAILED
-    if query_result.returncode != 0:
+    if query_completed_process.returncode != 0:
         print(
             f"{BUGTEAM_PREFLIGHT_PREFIX}{ENFORCEMENT_ABSENT_MESSAGE}",
             file=sys.stderr,
         )
         return EXIT_CODE_HOOKS_PATH_CHECK_FAILED
-    configured_path = query_result.stdout.strip().replace("\\", "/").rstrip("/")
+    configured_path = query_completed_process.stdout.strip().replace("\\", "/").rstrip("/")
     if not configured_path.endswith(EXPECTED_HOOKS_PATH_SUFFIX):
         print(
             f"{BUGTEAM_PREFLIGHT_PREFIX}core.hooksPath is '{configured_path}' — "
@@ -300,20 +185,20 @@ def _pytest_exit_code_no_tests_collected() -> int:
     return PYTEST_EXIT_CODE_NO_TESTS_COLLECTED
 
 
-def run_pytest(repository_root: Path, verbose: bool) -> int:
+def run_pytest(repository_root: Path, is_verbose: bool) -> int:
     """Run pytest in the repository root and return the exit code.
 
     Treats the "no tests collected" exit code as a pass (exit 0).
 
     Args:
         repository_root: The repository root for running pytest.
-        verbose: When True, pass no -q flag (shows individual test names).
+        is_verbose: When True, pass no -q flag (shows individual test names).
 
     Returns:
         The pytest exit code, or 0 when no tests were collected.
     """
     command = [sys.executable, "-m", "pytest"]
-    if not verbose:
+    if not is_verbose:
         command.append("-q")
     completed = subprocess.run(
         command,

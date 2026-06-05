@@ -429,6 +429,7 @@ def test_main_should_not_double_print_when_git_ls_fails(
     ):
         mock_run.side_effect = [
             mock_hooks_result,
+            mock_hooks_result,
             subprocess.CalledProcessError(128, ["git", "ls-files"]),
         ]
         exit_code = preflight.main([])

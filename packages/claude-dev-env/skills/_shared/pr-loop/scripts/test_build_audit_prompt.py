@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -11,6 +12,9 @@ from xml.etree.ElementTree import Element
 _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
+
+_CATEGORY_RUBRICS_DIR = _SCRIPTS_DIR.parents[3] / "audit-rubrics" / "category_rubrics"
+_HEADING_PATTERN = re.compile(r"^# Category ([A-N]) — (.+)$")
 
 from skills_pr_loop_constants.path_resolver_constants import (
     ALL_AUDIT_CATEGORY_ENTRIES,
@@ -29,6 +33,16 @@ def _load_build_audit_prompt() -> ModuleType:
 
 
 build_audit_prompt = _load_build_audit_prompt()
+
+
+def _rubric_label_by_letter() -> dict[str, str]:
+    all_labels: dict[str, str] = {}
+    for each_rubric_file in sorted(_CATEGORY_RUBRICS_DIR.glob("category-*.md")):
+        first_line = each_rubric_file.read_text(encoding="utf-8").splitlines()[0]
+        each_match = _HEADING_PATTERN.match(first_line)
+        assert each_match is not None, f"Heading pattern not matched in {each_rubric_file}"
+        all_labels[each_match.group(1)] = each_match.group(2)
+    return all_labels
 
 
 def _build_audit_root() -> Element:
@@ -51,10 +65,9 @@ def test_bug_categories_carry_ids_a_through_n_in_order() -> None:
     all_emitted_ids = [each_category.get("id") for each_category in bug_categories]
     all_expected_ids = list("ABCDEFGHIJKLMN")
     assert all_emitted_ids == all_expected_ids
-    assert len(all_emitted_ids) == 14
 
 
-def test_category_labels_match_constants_and_rubric_aligned_bindings() -> None:
+def test_emitted_category_labels_match_constant_entries() -> None:
     root = _build_audit_root()
     bug_categories = root.find("bug_categories")
     assert bug_categories is not None
@@ -63,9 +76,10 @@ def test_category_labels_match_constants_and_rubric_aligned_bindings() -> None:
     }
     for each_category_id, each_category_label in ALL_AUDIT_CATEGORY_ENTRIES:
         assert label_by_id[each_category_id] == each_category_label
-    assert "compatibility" in label_by_id["B"]
-    assert "Security" in label_by_id["H"]
-    assert "Behavior-equivalence" in label_by_id["L"]
+
+
+def test_category_labels_match_rubric_file_headings() -> None:
+    assert dict(ALL_AUDIT_CATEGORY_ENTRIES) == _rubric_label_by_letter()
 
 
 def test_rubric_reference_element_names_category_rubrics_directory() -> None:

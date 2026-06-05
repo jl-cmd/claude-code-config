@@ -29,20 +29,20 @@ ALL_AUDIT_CONSTRAINT_TEXTS = [
 ]
 
 ALL_AUDIT_CATEGORY_ENTRIES = [
-    ("A", "API contract verification (signatures, return types, async/await correctness)"),
+    ("A", "API contract verification"),
     ("B", "Selector / query / engine compatibility"),
-    ("C", "Resource cleanup and lifecycle (file handles, connections, processes, locks)"),
+    ("C", "Resource cleanup and lifecycle"),
     ("D", "Variable scoping, ordering, and unbound references"),
-    ("E", "Dead code: dead parameters, dead locals, dead imports, dead branches, dead returns, and unused imports"),
-    ("F", "Silent failures (catch-all excepts, unconditional success returns, missing error propagation)"),
-    ("G", "Off-by-one, bounds, and integer overflow"),
-    ("H", "Security boundaries (injection, path traversal, auth bypass, secret leakage)"),
-    ("I", "Concurrency hazards (race conditions, missing awaits, shared mutable state)"),
-    ("J", "Magic values and configuration drift"),
-    ("K", "Codebase conflicts: the diff is internally consistent but a parallel site in unchanged code stays stale"),
-    ("L", "Behavior-equivalence for refactors: compare the rewrite's edge-case handling against the sibling implementation at the same base"),
-    ("M", "Producer/consumer cardinality vs collection-type contract: returns that can contain duplicates while a consumer treats them as a set"),
-    ("N", "Test-name scenario verifier: a test whose name claims a scenario must demonstrate the named condition is in effect"),
+    ("E", "Dead code and unused imports"),
+    ("F", "Silent failures"),
+    ("G", "Off-by-one, bounds, integer overflow"),
+    ("H", "Security boundaries"),
+    ("I", "Concurrency hazards"),
+    ("J", "CODE_RULES.md compliance"),
+    ("K", "Codebase conflicts (incomplete propagation)"),
+    ("L", "Behavior-equivalence for refactors"),
+    ("M", "Producer/consumer cardinality vs collection-type contract"),
+    ("N", "Test-name scenario verifier"),
 ]
 
 AUDIT_RUBRIC_REFERENCE_TEXT = (

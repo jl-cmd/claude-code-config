@@ -354,7 +354,7 @@ These principles cannot be reduced to a regex or AST visitor. They live in user-
 
 ### Audit-rubric reference
 
-For multi-file architectural reviews see [`packages/claude-dev-env/audit-rubrics/`](../audit-rubrics/). Categories A–F, I, K stay as agent rubrics rather than ⚡ blocking rules because they require multi-file reasoning that single-file hooks cannot perform.
+For multi-file architectural reviews see [`packages/claude-dev-env/audit-rubrics/`](../audit-rubrics/). Categories A–N stay as agent rubrics rather than ⚡ blocking rules because they require multi-file reasoning that single-file hooks cannot perform.
 
 ---
 

@@ -1,6 +1,6 @@
 """Emit the complete AUDIT spawn prompt XML to stdout.
 
-Substitutes <context>, <scope>, <bug_categories>, <constraints>,
+Substitutes <context>, <scope>, <bug_categories>, <rubric_reference>, <constraints>,
 <comment_posting>, and <output_format> blocks from CLI args.
 
 Usage:
@@ -171,12 +171,12 @@ def main(all_arguments: list[str]) -> int:
     xml_output = emit_audit_prompt(
         owner=arguments.owner,
         repo=arguments.repo,
-        pr_number=getattr(arguments, "pr_number"),
+        pr_number=arguments.pr_number,
         loop=arguments.loop,
-        head_ref=getattr(arguments, "head_ref"),
-        base_ref=getattr(arguments, "base_ref"),
-        worktree_path=getattr(arguments, "worktree_path"),
-        run_temp_dir=getattr(arguments, "run_temp_dir"),
+        head_ref=arguments.head_ref,
+        base_ref=arguments.base_ref,
+        worktree_path=arguments.worktree_path,
+        run_temp_dir=arguments.run_temp_dir,
     )
     sys.stdout.write(xml_output)
     return 0

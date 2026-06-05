@@ -7,9 +7,10 @@ the project's no-mocks rule and exercise the production code paths directly.
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
+
+import pytest
 
 _script_dir = str(Path(__file__).resolve().parent)
 if _script_dir not in sys.path:
@@ -114,3 +115,30 @@ def should_parse_argv_with_no_emails_or_title():
     assert parsed.input == Path("some_file.pdf")
     assert parsed.email == []
     assert parsed.title is None
+
+
+def should_dedupe_recipients_case_insensitively():
+    merged = publish._merge_recipients(["Melclombardi@gmail.com"])
+    assert merged == ALL_DEFAULT_VIEWER_EMAILS
+
+
+def should_reject_directory_input(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        publish.publish(file_path=tmp_path)
+
+
+def should_return_none_for_corrupt_token_file(monkeypatch, tmp_path):
+    monkeypatch.setenv(CLAUDE_PLUGIN_DATA_ENV_NAME, str(tmp_path))
+    token_path = tmp_path / TOKEN_PATH_PLUGIN_DATA_RELATIVE
+    token_path.parent.mkdir(parents=True, exist_ok=True)
+    token_path.write_bytes(b"{not valid json")
+    assert publish._load_saved_token() is None
+
+
+def should_guess_pdf_mime_for_pdf_input():
+    assert publish._resolve_upload_mime_type(Path("x.pdf")) == "application/pdf"
+
+
+def should_fall_back_to_octet_stream_for_unknown_suffix():
+    guessed = publish._resolve_upload_mime_type(Path("x.zzzunknown"))
+    assert guessed == "application/octet-stream"

@@ -18,7 +18,7 @@ OAUTH_TOKEN_URI: str = "https://oauth2.googleapis.com/token"
 
 CALLBACK_HOST: str = "localhost"
 CALLBACK_PORT: int = 8765
-CALLBACK_REDIRECT_URI: str = "http://localhost:8765/"
+CALLBACK_REDIRECT_URI: str = f"http://{CALLBACK_HOST}:{CALLBACK_PORT}/"
 OAUTH_INSTALLED_REDIRECT_URI: str = "http://localhost"
 
 OAUTH_INSTALLED_KEY: str = "installed"
@@ -32,6 +32,7 @@ OAUTH_ACCESS_TYPE_OFFLINE: str = "offline"
 
 WSGI_QUERY_STRING_KEY: str = "QUERY_STRING"
 WSGI_AUTH_CODE_KEY: str = "code"
+WSGI_AUTH_ERROR_KEY: str = "error"
 WSGI_OK_STATUS: str = "200 OK"
 ALL_WSGI_CONTENT_TYPE_HEADERS: list[tuple[str, str]] = [("Content-Type", "text/html")]
 
@@ -61,13 +62,15 @@ LOG_FORMAT: str = "%(levelname)s %(message)s"
 OAUTHLIB_TRANSPORT_ENV_NAME: str = "OAUTHLIB_INSECURE_TRANSPORT"
 OAUTHLIB_TRANSPORT_ENV_VALUE: str = "1"
 
-PDF_MIME_TYPE: str = "application/pdf"
-HTML_MIME_TYPE: str = "text/html"
+OCTET_STREAM_MIME_TYPE: str = "application/octet-stream"
 PDF_FILE_EXTENSION: str = ".pdf"
 
 TOKEN_PATH_HOME_RELATIVE: str = ".claude/state/secure-share/drive_token.json"
 TOKEN_PATH_PLUGIN_DATA_RELATIVE: str = "secure-share/drive_token.json"
+TOKEN_FILE_PERMISSIONS: int = 0o600
 CLAUDE_PLUGIN_DATA_ENV_NAME: str = "CLAUDE_PLUGIN_DATA"
+
+CHROME_STDERR_DECODE_ERRORS: str = "replace"
 
 ALL_CHROME_PATH_CANDIDATES: list[str] = [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",

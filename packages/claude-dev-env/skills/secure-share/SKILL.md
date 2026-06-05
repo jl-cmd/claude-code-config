@@ -89,12 +89,12 @@ Chrome must be installed for HTML → PDF conversion. The script searches Window
 
 - **Required IAM role on the quota project.** The signed-in account needs `roles/serviceusage.serviceUsageConsumer` on `ynab-amazon-sync`. Grant via `gcloud projects add-iam-policy-binding ynab-amazon-sync --member=user:<email> --role=roles/serviceusage.serviceUsageConsumer --condition=None` from a terminal where gcloud is signed in as a project owner. Propagation takes a couple of minutes.
 - **HTML in Drive doesn't show as a webpage.** Drive renders raw HTML as a download preview. The script converts HTML → PDF on the way in. Pass `.pdf` directly to skip conversion.
-- **OAuth client_secret is gcloud's public installed-app client.** The `OAUTH_CLIENT_SECRET` in `config/secure_share_constants.py` is the publicly known secret for client `764086051850-...`. Per OAuth 2.0 for Installed Apps, installed-client secrets are not real secrets; security comes from the user consent screen, not the secret. Do not treat this as a credential leak.
+- **OAuth client_secret is gcloud's public installed-app client.** The `OAUTH_CLIENT_SECRET` in `packages/claude-dev-env/skills/secure-share/scripts/config/secure_share_constants.py` is the publicly known secret for client `764086051850-...`. Per OAuth 2.0 for Installed Apps, installed-client secrets are not real secrets; security comes from the user consent screen, not the secret. Do not treat this as a credential leak.
 - **Token scope mismatch forces re-auth.** Changing the `ALL_OAUTH_SCOPES` list invalidates the saved token — the script detects the mismatch and re-runs the flow.
 - **Drive API must be enabled on the quota project.** First-time setup requires `gcloud services enable drive.googleapis.com --project=ynab-amazon-sync`. Later runs reuse the enablement.
-- **Chrome path is host-specific.** The `ALL_CHROME_PATH_CANDIDATES` list in `config/secure_share_constants.py` covers Windows (`Program Files\Google\Chrome\Application\chrome.exe`), macOS (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`), and Linux (`/usr/bin/google-chrome`, `/usr/bin/chromium-browser`). Add custom paths there for non-standard installs.
+- **Chrome path is host-specific.** The `ALL_CHROME_PATH_CANDIDATES` list in `packages/claude-dev-env/skills/secure-share/scripts/config/secure_share_constants.py` covers Windows (`Program Files\Google\Chrome\Application\chrome.exe`), macOS (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`), and Linux (`/usr/bin/google-chrome`, `/usr/bin/chromium-browser`). Add custom paths there for non-standard installs.
 - **No link-shareable mode.** The skill never exposes `Anyone with the link` access by design. If link-shareable is wanted, use the `doc-gist` skill (renders as webpage, but anyone with the URL can read).
-- **Port 8765 must be free for the OAuth callback.** The local WSGI server binds `localhost:8765` during the first-run flow. Conflict with another listener fails the auth. Stop the conflicting process or update `CALLBACK_PORT` in `config/secure_share_constants.py` and re-run.
+- **Port 8765 must be free for the OAuth callback.** The local WSGI server binds `localhost:8765` during the first-run flow. Conflict with another listener fails the auth. Stop the conflicting process or update `CALLBACK_PORT` in `packages/claude-dev-env/skills/secure-share/scripts/config/secure_share_constants.py` and re-run.
 
 ## When NOT to use
 
@@ -107,10 +107,10 @@ Chrome must be installed for HTML → PDF conversion. The script searches Window
 | File | Purpose |
 |---|---|
 | `SKILL.md` | This hub — when-this-applies, defaults, dependencies, gotchas, file index. |
-| `scripts/publish.py` | The upload script. CLI entry point + `publish()` function. |
-| `scripts/config/secure_share_constants.py` | Scalar constants (OAuth scopes, Drive field keys, Chrome paths, default recipient list). |
-| `scripts/config/__init__.py` | Package marker for the config subpackage. |
-| `scripts/test_publish.py` | Behavior tests for `_merge_recipients`, `_is_html_input`, and `_resolve_token_path`. |
+| `packages/claude-dev-env/skills/secure-share/scripts/publish.py` | The upload script. CLI entry point + `publish()` function. |
+| `packages/claude-dev-env/skills/secure-share/scripts/config/secure_share_constants.py` | Scalar constants (OAuth scopes, Drive field keys, Chrome paths, default recipient list). |
+| `packages/claude-dev-env/skills/secure-share/scripts/config/__init__.py` | Package marker for the config subpackage. |
+| `packages/claude-dev-env/skills/secure-share/scripts/test_publish.py` | Behavior tests for `_merge_recipients`, `_is_html_input`, and `_resolve_token_path`. |
 
 ## Folder map
 

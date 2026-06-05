@@ -102,11 +102,12 @@ def silently_clear_stale_local_hooks_path_override(
     informative and the auto-remediation script can repair the global from a
     known starting point.
 
-    Silent on success. Suppresses git read failures so an unrelated read
-    error cannot block preflight; the caller's subsequent verification step
-    still surfaces a final mismatch through the normal failure path. Write
-    failures on the ``--unset-all`` call are not suppressed — a permission
-    error on ``.git/config`` is a real bug the user needs to see.
+    Silent on every git outcome — read errors, write errors, and process
+    launch errors are all suppressed so an unrelated git failure cannot block
+    preflight. The caller's subsequent ``--get`` verification step surfaces
+    the final config state through the normal failure path, so a real
+    misconfiguration is still reported with the canonical
+    ``core.hooksPath is '<path>'`` diagnostic.
 
     Args:
         repository_root: Repository root to operate on; a None argument is a

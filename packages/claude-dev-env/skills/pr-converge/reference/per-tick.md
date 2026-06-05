@@ -117,9 +117,9 @@ c. Decide (four branches; match first whose predicate holds):
 
 Local correctness/quality pass between BUGBOT clean and BUGTEAM. Enters
 after BUGBOT reports clean on `current_head` (or `bugbot_down == true`).
-Runs Claude Code's built-in `/code-review --fix` on the current diff; it
-produces no GitHub review artifact, so there are no code-review threads to
-resolve.
+Runs Claude Code's built-in `/code-review --fix` on the full
+`origin/main...HEAD` diff; it produces no GitHub review artifact, so there
+are no code-review threads to resolve.
 
 a. Run Claude Code's built-in `/code-review --fix` on the FULL
    `origin/main...HEAD` diff — every file the PR touches — via the

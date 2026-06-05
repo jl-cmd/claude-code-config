@@ -168,7 +168,8 @@ round as converged. This rule holds every tick, every loop, every PR.
 
       Pre-condition: `bugbot_clean_at == current_head` (or `bugbot_down == true`).
 
-      Run Claude Code's built-in `/code-review --fix` on the current diff —
+      Run Claude Code's built-in `/code-review --fix` on the full
+      `origin/main...HEAD` diff —
       the [local diff review](https://code.claude.com/docs/en/code-review#review-a-diff-locally)
       — so it reviews the diff and applies its findings to the working
       tree. Pass no effort argument, so the review uses the session's

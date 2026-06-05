@@ -102,6 +102,11 @@ The XML prompt skeleton:
   L. Behavior-equivalence for refactors
   M. Producer/consumer cardinality vs collection-type contract
   N. Test-name scenario verifier
+
+  The category list above is a summary. The binding definition of each
+  category is its rubric file under $HOME/.claude/audit-rubrics/category_rubrics/
+  (ready-to-send prompt variants under $HOME/.claude/audit-rubrics/prompts/).
+  Read the rubric files before auditing.
 </bug_categories>
 
 <constraints>
@@ -263,13 +268,13 @@ Claude: [resolves PR #42 from current branch, fetches full diff, spawns code-qua
 `1 P0 / 2 P1 / 0 P2 — 11 categories cleared`
 
 `P0 — race condition on shared cache write`
-`  src/cache.py:88 — concurrent writers can both pass the existence check before either writes (category: concurrency)`
+`  src/cache.py:88 — concurrent writers can both pass the existence check before either writes (category: I — Concurrency hazards)`
 
 `P1 — silent paste failure`
-`  utils/clipboard.py:33 — validated_paste returns success without verifying the post-paste state (category: silent failure)`
+`  utils/clipboard.py:33 — validated_paste returns success without verifying the post-paste state (category: F — Silent failures)`
 
 `P1 — unbound variable on early-exception path`
-`  src/processor.py:283 — scheduling_log referenced after try/finally where it may be unbound (category: scoping)`
+`  src/processor.py:283 — scheduling_log referenced after try/finally where it may be unbound (category: D — Variable scoping, ordering, and unbound references)`
 
 `Verified clean: API contract, selector compatibility, resource cleanup, dead code, off-by-one, security boundaries, CODE_RULES.md compliance, codebase conflicts, behavior-equivalence, producer/consumer cardinality, test-name verifier`
 

@@ -276,7 +276,7 @@ Claude: [resolves PR #42 from current branch, fetches full diff, spawns code-qua
 `P1 — unbound variable on early-exception path`
 `  src/processor.py:283 — scheduling_log referenced after try/finally where it may be unbound (category: D — Variable scoping, ordering, and unbound references)`
 
-`Verified clean: API contract, selector compatibility, resource cleanup, dead code, off-by-one, security boundaries, CODE_RULES.md compliance, codebase conflicts, behavior-equivalence, producer/consumer cardinality, test-name verifier`
+`Verified clean: API contract, selector compatibility, resource cleanup, dead code, off-by-one, security boundaries, CODE_RULES.md compliance, codebase conflicts, behavior-equivalence, producer/consumer cardinality, Test-name scenario verifier`
 
 `Open questions: none`
 

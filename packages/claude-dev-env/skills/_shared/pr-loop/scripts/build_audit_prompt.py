@@ -1,8 +1,9 @@
 """Emit the complete AUDIT spawn prompt XML to stdout.
 
 Builds <context> and <scope> from CLI args; <bug_categories>,
-<rubric_reference>, <constraints>, <comment_posting>, and <output_format>
-come from the shared constants in skills_pr_loop_constants.
+<rubric_reference>, and <constraints> come from the shared constants in
+skills_pr_loop_constants; <comment_posting> and <output_format> are built
+inline.
 
 Usage:
   python scripts/build_audit_prompt.py --owner jl-cmd --repo claude-code-config --pr-number 422 --loop 1 --head-ref feat/branch --base-ref main --worktree-path <PATH> --run-temp-dir <PATH>

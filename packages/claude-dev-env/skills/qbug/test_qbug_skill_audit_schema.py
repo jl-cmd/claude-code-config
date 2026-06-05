@@ -11,7 +11,6 @@ from pathlib import Path
 
 
 SKILL_FILE_PATH = Path(__file__).parent / "SKILL.md"
-PROMPTS_FILE_PATH = Path(__file__).parent.parent / "bugteam" / "PROMPTS.md"
 CONTRACT_FILE_PATH = (
     Path(__file__).parent.parent / "bugteam" / "reference" / "audit-contract.md"
 )
@@ -25,10 +24,6 @@ CATEGORY_E_RUBRIC_FILE_PATH = (
 
 def _load_skill_text() -> str:
     return SKILL_FILE_PATH.read_text(encoding="utf-8")
-
-
-def _load_prompts_text() -> str:
-    return PROMPTS_FILE_PATH.read_text(encoding="utf-8")
 
 
 def _load_contract_text() -> str:

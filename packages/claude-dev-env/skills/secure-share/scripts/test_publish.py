@@ -18,42 +18,33 @@ if _script_dir not in sys.path:
 
 import publish
 from config.secure_share_constants import (
-    ALL_DEFAULT_VIEWER_EMAILS,
     CLAUDE_PLUGIN_DATA_ENV_NAME,
     TOKEN_PATH_HOME_RELATIVE,
     TOKEN_PATH_PLUGIN_DATA_RELATIVE,
 )
 
-DEFAULT_RECIPIENT = "melclombardi@gmail.com"
+
+def should_return_empty_list_when_no_recipients_given():
+    assert publish._merge_recipients([]) == []
 
 
-def should_always_include_default_recipient_when_no_extras_given():
-    merged = publish._merge_recipients([])
-    assert merged == ALL_DEFAULT_VIEWER_EMAILS
-    assert DEFAULT_RECIPIENT in merged
+def should_pass_through_single_recipient():
+    assert publish._merge_recipients(["alice@example.com"]) == ["alice@example.com"]
 
 
-def should_append_extra_recipients_after_default():
+def should_preserve_order_of_multiple_recipients():
     merged = publish._merge_recipients(["alice@example.com", "bob@example.com"])
-    assert merged[0] == DEFAULT_RECIPIENT
-    assert "alice@example.com" in merged
-    assert "bob@example.com" in merged
-    assert len(merged) == 3
+    assert merged == ["alice@example.com", "bob@example.com"]
 
 
-def should_dedupe_default_recipient_passed_again():
-    merged = publish._merge_recipients([DEFAULT_RECIPIENT])
-    assert merged == [DEFAULT_RECIPIENT]
-
-
-def should_dedupe_repeated_extras():
+def should_dedupe_repeated_recipients():
     merged = publish._merge_recipients(["x@example.com", "x@example.com"])
-    assert merged == [DEFAULT_RECIPIENT, "x@example.com"]
+    assert merged == ["x@example.com"]
 
 
-def should_skip_empty_strings_in_extras():
+def should_skip_empty_strings():
     merged = publish._merge_recipients(["", "alice@example.com", ""])
-    assert merged == [DEFAULT_RECIPIENT, "alice@example.com"]
+    assert merged == ["alice@example.com"]
 
 
 def should_detect_html_input_by_extension():
@@ -118,8 +109,8 @@ def should_parse_argv_with_no_emails_or_title():
 
 
 def should_dedupe_recipients_case_insensitively():
-    merged = publish._merge_recipients(["Melclombardi@gmail.com"])
-    assert merged == ALL_DEFAULT_VIEWER_EMAILS
+    merged = publish._merge_recipients(["Alice@Example.COM", "alice@example.com"])
+    assert merged == ["Alice@Example.COM"]
 
 
 def should_reject_directory_input(tmp_path):

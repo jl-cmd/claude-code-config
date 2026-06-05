@@ -1,7 +1,5 @@
 """Scalar constants for the secure-share skill."""
 
-ALL_DEFAULT_VIEWER_EMAILS: list[str] = ["melclombardi@gmail.com"]
-
 ALL_OAUTH_SCOPES: list[str] = [
     "https://www.googleapis.com/auth/drive.file",
     "https://www.googleapis.com/auth/cloud-platform",

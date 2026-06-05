@@ -1,19 +1,18 @@
 ---
 name: secure-share
 description: >-
-  Shares a local file with Melanie (melclombardi@gmail.com) and any other
-  named recipients via Google Drive with restricted per-email access. Never
-  link-shareable. HTML inputs are rendered to PDF via Chrome headless so
-  Drive's web viewer shows them inline rather than prompting a download.
-  Triggers on `/secure-share`, "share this with family", "send to melanie",
-  "publish for family", "secure share this report", or any request to share
-  a sensitive doc that must NOT be link-public. Skill type 4 (Business
-  Process Automation).
+  Shares a local file with one or more named recipients via Google Drive
+  with restricted per-email access. Never link-shareable. HTML inputs are
+  rendered to PDF via Chrome headless so Drive's web viewer shows them
+  inline rather than prompting a download. Triggers on `/secure-share`,
+  "share this privately with [name]", "publish for [named recipients]",
+  "secure share this report", or any request to share a sensitive doc
+  that must NOT be link-public. Skill type 4 (Business Process Automation).
 ---
 
 # secure-share
 
-Share a file via Google Drive with a restricted viewer list. The default recipient is always Melanie (`melclombardi@gmail.com`); pass more emails as `--email someone@example.com` to add more viewers.
+Share a file via Google Drive with a restricted viewer list. Pass `--email someone@example.com` to grant viewer access (repeat the flag for multiple recipients). With no `--email` flag, the file uploads private to the owner.
 
 ## When this applies
 
@@ -30,7 +29,7 @@ Trigger for requests that produce a sensitive doc (a writeup, report, plan, fina
 2. If the input is HTML, renders it to PDF via Chrome headless. Drive's web viewer shows PDFs inline; raw HTML downloads instead.
 3. Reuses a saved OAuth token at `${CLAUDE_PLUGIN_DATA}/secure-share/drive_token.json` (falls back to `~/.claude/state/secure-share/drive_token.json` when the env var is unset). First run opens Chrome for sign-in; later runs are silent.
 4. Uploads to Drive against quota project `ynab-amazon-sync`.
-5. Grants per-email Viewer access to Melanie plus any extra emails passed as `--email`.
+5. Grants per-email Viewer access to each email passed via `--email`.
 6. Prints the `https://drive.google.com/file/d/<id>/view` URL on stdout. Works in any browser, renders the artifact inline.
 
 ## Execute the script
@@ -45,11 +44,11 @@ python "<repo>/packages/claude-dev-env/skills/secure-share/scripts/publish.py" \
 Sample output:
 
 ```
-INFO Rendered HTML to PDF: C:\Users\jon\Documents\viva-mexico-final-report.pdf
+INFO Rendered HTML to PDF: C:\Users\jon\Documents\example-report.pdf
 INFO Reusing saved token at C:\Users\jon\.claude\state\secure-share\drive_token.json
-INFO Shared with melclombardi@gmail.com as reader
-INFO Drive view link: https://drive.google.com/file/d/1bpsAZzpYDgjq8u4I1OFGUUzMtqKjiaMF/view
-https://drive.google.com/file/d/1bpsAZzpYDgjq8u4I1OFGUUzMtqKjiaMF/view
+INFO Shared with alice@example.com as reader
+INFO Drive view link: https://drive.google.com/file/d/<file-id>/view
+https://drive.google.com/file/d/<file-id>/view
 ```
 
 Quote the printed URL back to the user when invoking the script.
@@ -58,7 +57,6 @@ Quote the printed URL back to the user when invoking the script.
 
 | Setting | Default | Why |
 |---|---|---|
-| Always-include viewer | `melclombardi@gmail.com` | Owner's primary share recipient |
 | Viewer role | `reader` | View + download; no edit |
 | Notification email | off | Owner delivers the link |
 | Quota project | `ynab-amazon-sync` | Drive API on; owner has `serviceusage.serviceUsageConsumer` |
@@ -108,7 +106,7 @@ Chrome must be installed for HTML → PDF conversion. The script searches Window
 |---|---|
 | `SKILL.md` | This hub — when-this-applies, defaults, dependencies, gotchas, file index. |
 | `packages/claude-dev-env/skills/secure-share/scripts/publish.py` | The upload script. CLI entry point + `publish()` function. |
-| `packages/claude-dev-env/skills/secure-share/scripts/config/secure_share_constants.py` | Scalar constants (OAuth scopes, Drive field keys, Chrome paths, default recipient list). |
+| `packages/claude-dev-env/skills/secure-share/scripts/config/secure_share_constants.py` | Scalar constants (OAuth scopes, Drive field keys, Chrome paths). |
 | `packages/claude-dev-env/skills/secure-share/scripts/config/__init__.py` | Package marker for the config subpackage. |
 | `packages/claude-dev-env/skills/secure-share/scripts/test_publish.py` | Behavior tests for `_merge_recipients`, `_is_html_input`, and `_resolve_token_path`. |
 

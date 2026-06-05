@@ -1,9 +1,9 @@
 """Publish a file to Google Drive with restricted per-email access.
 
 The script accepts a local file path plus any number of recipient emails
-beyond the always-included default. HTML inputs are rendered to PDF via
-Chrome headless so they show inline in Drive's web viewer. The first run
-triggers a browser OAuth flow; later runs reuse the saved token.
+passed via --email. HTML inputs are rendered to PDF via Chrome headless
+so they show inline in Drive's web viewer. The first run triggers a
+browser OAuth flow; later runs reuse the saved token.
 
 Usage:
     python publish.py --input path/to/file.html
@@ -36,7 +36,6 @@ if _script_parent_dir not in sys.path:
 
 from config.secure_share_constants import (
     ALL_CHROME_PATH_CANDIDATES,
-    ALL_DEFAULT_VIEWER_EMAILS,
     ALL_HTML_EXTENSIONS,
     ALL_OAUTH_SCOPES,
     ALL_WSGI_CONTENT_TYPE_HEADERS,
@@ -331,7 +330,7 @@ def _share_with_recipient(
 def _merge_recipients(all_extra_recipients: Iterable[str]) -> list[str]:
     all_recipients: list[str] = []
     all_seen_casefolded: set[str] = set()
-    for each_recipient in [*ALL_DEFAULT_VIEWER_EMAILS, *all_extra_recipients]:
+    for each_recipient in all_extra_recipients:
         if not each_recipient:
             continue
         casefolded_recipient = each_recipient.casefold()
@@ -375,7 +374,8 @@ def publish(
 
     Args:
         file_path: Local path to the file to publish. HTML is converted to PDF.
-        all_extra_recipients: Emails to add on top of the default viewer list.
+        all_extra_recipients: Emails to grant viewer access. Empty leaves the
+            upload private to the owner.
         drive_title: Optional override for the Drive file title. Defaults to the
             source file's name.
 

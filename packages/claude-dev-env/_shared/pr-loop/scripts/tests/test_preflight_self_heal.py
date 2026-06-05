@@ -239,3 +239,35 @@ def test_silent_clear_swallows_os_error() -> None:
         preflight_self_heal.silently_clear_stale_local_hooks_path_override(
             Path("."), CANONICAL_SUFFIX
         )
+
+
+def test_silent_clear_swallows_file_not_found_error_on_unset_call(tmp_path: Path) -> None:
+    """A spawn-level FileNotFoundError on the unset-all write must not crash preflight."""
+    seeded_local_path_text = "/repo/.git/hooks"
+    canonical_global_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
+    canonical_global_hooks_path.mkdir(parents=True)
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            _make_completed_process(seeded_local_path_text + "\n", returncode=0),
+            _make_completed_process(str(canonical_global_hooks_path) + "\n", returncode=0),
+            FileNotFoundError(),
+        ]
+        preflight_self_heal.silently_clear_stale_local_hooks_path_override(
+            Path("/repo"), CANONICAL_SUFFIX
+        )
+
+
+def test_silent_clear_swallows_os_error_on_unset_call(tmp_path: Path) -> None:
+    """A spawn-level OSError on the unset-all write must not crash preflight."""
+    seeded_local_path_text = "/repo/.git/hooks"
+    canonical_global_hooks_path = tmp_path / ".claude" / "hooks" / "git-hooks"
+    canonical_global_hooks_path.mkdir(parents=True)
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            _make_completed_process(seeded_local_path_text + "\n", returncode=0),
+            _make_completed_process(str(canonical_global_hooks_path) + "\n", returncode=0),
+            OSError("permission denied"),
+        ]
+        preflight_self_heal.silently_clear_stale_local_hooks_path_override(
+            Path("/repo"), CANONICAL_SUFFIX
+        )

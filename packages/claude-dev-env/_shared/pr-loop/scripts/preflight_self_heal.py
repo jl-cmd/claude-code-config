@@ -151,9 +151,14 @@ def silently_clear_stale_local_hooks_path_override(
         return
     unset_command: list[str] = ["git", "-C", str(repository_root)]
     unset_command.extend(list(ALL_GIT_CONFIG_LOCAL_UNSET_ALL_HOOKS_PATH_ARGUMENTS))
-    subprocess.run(
-        unset_command,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        subprocess.run(
+            unset_command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except (FileNotFoundError, OSError):
+        return

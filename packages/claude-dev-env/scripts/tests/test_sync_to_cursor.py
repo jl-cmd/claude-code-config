@@ -174,10 +174,13 @@ def test_check_skips_optional_mapping_when_source_missing(
 def test_test_quality_glob_derived_from_testing_frontmatter() -> None:
     expected_glob = _read_paths_glob(_REAL_TESTING_RULE)
     assert expected_glob, "testing.md must declare a non-empty paths frontmatter"
+    pinned_glob = "**/test_*.py,**/*_test.py,**/*.test.*,**/*.spec.*,**/conftest.py,**/tests/**"
+    assert expected_glob == pinned_glob
     test_quality_mapping = next(
         mapping for mapping in build_mappings(_CLAUDE_DEV_ENV_DIR) if mapping.key == "test-quality"
     )
     assert test_quality_mapping.globs == expected_glob
+    assert test_quality_mapping.globs == pinned_glob
 
 
 def test_tasklings_glob_derived_from_frontmatter(tmp_path: Path) -> None:

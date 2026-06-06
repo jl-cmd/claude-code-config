@@ -56,6 +56,17 @@ def _strip_code_standards_blockquote(markdown: str) -> str:
     return "\n".join(out).strip()
 
 
+_merged_mapping_key_order = (
+    "code-standards",
+    "tasklings-preferences",
+    "right-sized-engineering",
+    "bdd",
+    "test-quality",
+    "research-mode",
+    "conservative-action",
+    "explore-thoroughly",
+)
+
 _code_standards_section_order = (
     "COMMENT PRESERVATION (ABSOLUTE RULE)",
     "CORE PRINCIPLES",
@@ -392,15 +403,10 @@ def build_mappings(claude: Path) -> tuple[RuleMapping, ...]:
     """
     rules_directory = claude / "rules"
     docs_directory = claude / "docs"
-    always_apply = _always_apply_mappings(rules_directory, docs_directory)
-    path_scoped = _path_scoped_mappings(rules_directory, docs_directory)
-    return (
-        always_apply[0],
-        path_scoped[0],
-        always_apply[1],
-        always_apply[2],
-        path_scoped[1],
-        always_apply[3],
-        always_apply[4],
-        always_apply[5],
+    all_mappings = (
+        *_always_apply_mappings(rules_directory, docs_directory),
+        *_path_scoped_mappings(rules_directory, docs_directory),
     )
+    mapping_by_key = {each_mapping.key: each_mapping for each_mapping in all_mappings}
+    assert set(mapping_by_key) == set(_merged_mapping_key_order)
+    return tuple(mapping_by_key[each_key] for each_key in _merged_mapping_key_order)

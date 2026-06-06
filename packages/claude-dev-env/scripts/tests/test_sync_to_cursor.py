@@ -39,7 +39,10 @@ def _minimal_rule_files(claude_rules: Path) -> None:
     )
     (claude_rules / "right-sized-engineering.md").write_text("# RSE\n", encoding="utf-8")
     (claude_rules / "bdd.md").write_text("# BDD\n", encoding="utf-8")
-    (claude_rules / "testing.md").write_text("# Testing\n", encoding="utf-8")
+    (claude_rules / "testing.md").write_text(
+        "---\npaths:\n  - \"**/test_*.py\"\n---\n\n# Testing\n",
+        encoding="utf-8",
+    )
     (claude_rules / "research-mode.md").write_text("# RM\n", encoding="utf-8")
     (claude_rules / "conservative-action.md").write_text("# CA\n", encoding="utf-8")
     (claude_rules / "explore-thoroughly.md").write_text("# ET\n", encoding="utf-8")
@@ -261,6 +264,15 @@ def test_merge_code_standards_raises_when_expected_section_absent(tmp_path: Path
         mod.merge_code_standards(
             (rules_directory / "code-standards.md", docs_directory / "CODE_RULES.md")
         )
+
+
+def test_build_mappings_raises_when_testing_lacks_paths_frontmatter(tmp_path: Path) -> None:
+    claude = tmp_path / ".claude"
+    _minimal_rule_files(claude / "rules")
+    _minimal_code_rules_and_test_quality(claude / "docs")
+    (claude / "rules" / "testing.md").write_text("# Testing\n", encoding="utf-8")
+    with pytest.raises(AssertionError, match="testing.md"):
+        build_mappings(claude)
 
 
 def test_merge_test_quality_raises_when_expected_section_absent(tmp_path: Path) -> None:

@@ -314,6 +314,29 @@ def _read_paths_glob(rule_file: Path) -> str | None:
     return ",".join(all_paths) if all_paths else None
 
 
+def _require_paths_glob(rule_file: Path) -> str | None:
+    """Return the path glob for an optional rule, requiring frontmatter when it exists.
+
+    Args:
+        rule_file: The Claude rule file whose frontmatter may declare `paths:`.
+
+    Returns:
+        The comma-separated glob string, or None when the rule file is absent.
+
+    Raises:
+        AssertionError: When the rule file exists but declares no `paths:`
+            frontmatter, which would silently disable the rule in Cursor.
+    """
+    if not rule_file.is_file():
+        return None
+    paths_glob = _read_paths_glob(rule_file)
+    assert paths_glob is not None, (
+        f"{rule_file.name}: path-scoped rule exists but declares no `paths:` frontmatter; "
+        "add a `paths:` list or remove the file"
+    )
+    return paths_glob
+
+
 def _always_apply_mappings(rules_directory: Path, docs_directory: Path) -> tuple[RuleMapping, ...]:
     return (
         RuleMapping(
@@ -380,7 +403,7 @@ def _path_scoped_mappings(rules_directory: Path, docs_directory: Path) -> tuple[
             (rules_directory / "tasklings-preferences.md",),
             "tasklings-preferences.mdc",
             False,
-            _read_paths_glob(rules_directory / "tasklings-preferences.md"),
+            _require_paths_glob(rules_directory / "tasklings-preferences.md"),
             "Tasklings: Prefer / Do / Always engineering preferences (scoped path)",
             "verbatim",
             True,
@@ -390,7 +413,7 @@ def _path_scoped_mappings(rules_directory: Path, docs_directory: Path) -> tuple[
             (rules_directory / "testing.md", docs_directory / "TEST_QUALITY.md"),
             "test-quality.mdc",
             False,
-            _read_paths_glob(rules_directory / "testing.md"),
+            _require_paths_glob(rules_directory / "testing.md"),
             "Testing quality for test files",
             "merge_test_quality",
         ),

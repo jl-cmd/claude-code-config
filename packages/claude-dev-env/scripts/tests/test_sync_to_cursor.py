@@ -14,10 +14,18 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 import sync_to_cursor as mod
 from sync_to_cursor.engine import run as run_sync_to_cursor
-from sync_to_cursor.rules import _read_paths_glob, build_mappings
+from sync_to_cursor.rules import (
+    _code_standards_section_order,
+    _parse_h2_sections,
+    _read_paths_glob,
+    _test_quality_section_order,
+    build_mappings,
+)
 
 _CLAUDE_DEV_ENV_DIR = _SCRIPTS_DIR.parent
 _REAL_TESTING_RULE = _CLAUDE_DEV_ENV_DIR / "rules" / "testing.md"
+_REAL_CODE_RULES_DOC = _CLAUDE_DEV_ENV_DIR / "docs" / "CODE_RULES.md"
+_REAL_TEST_QUALITY_DOC = _CLAUDE_DEV_ENV_DIR / "docs" / "TEST_QUALITY.md"
 
 
 def _minimal_rule_files(claude_rules: Path) -> None:
@@ -39,8 +47,12 @@ def _minimal_rule_files(claude_rules: Path) -> None:
 
 def _minimal_code_rules_and_test_quality(claude_docs: Path) -> tuple[bytes, bytes]:
     claude_docs.mkdir(parents=True, exist_ok=True)
-    cr = b"## CORE PRINCIPLES\n\nalpha\n"
-    tq = b"## Core Testing Principles\n\nbeta\n"
+    cr = (
+        "\n\n".join(f"## {title}\n\nalpha" for title in _code_standards_section_order) + "\n"
+    ).encode("utf-8")
+    tq = (
+        "\n\n".join(f"## {title}\n\nbeta" for title in _test_quality_section_order) + "\n"
+    ).encode("utf-8")
     (claude_docs / "CODE_RULES.md").write_bytes(cr)
     (claude_docs / "TEST_QUALITY.md").write_bytes(tq)
     return cr, tq
@@ -200,18 +212,7 @@ def test_merge_reference_headers_point_at_cursor_docs(tmp_path: Path) -> None:
     rules_directory.mkdir(parents=True, exist_ok=True)
     docs_directory.mkdir(parents=True, exist_ok=True)
     (rules_directory / "code-standards.md").write_text("# CS\n", encoding="utf-8")
-    cr_body = "\n\n".join(
-        f"## {t}\n\nbody"
-        for t in [
-            "COMMENT PRESERVATION (ABSOLUTE RULE)",
-            "CORE PRINCIPLES",
-            "⚡ HOOK-ENFORCED RULES",
-            "4. CONFIG LOCATIONS",
-            "5. NO ABBREVIATIONS",
-            "6. COMPLETE TYPE HINTS",
-            "9. SELF-CONTAINED COMPONENTS",
-        ]
-    )
+    cr_body = "\n\n".join(f"## {t}\n\nbody" for t in _code_standards_section_order)
     (docs_directory / "CODE_RULES.md").write_text(cr_body, encoding="utf-8")
     merged = mod.merge_code_standards(
         (rules_directory / "code-standards.md", docs_directory / "CODE_RULES.md")
@@ -219,18 +220,61 @@ def test_merge_reference_headers_point_at_cursor_docs(tmp_path: Path) -> None:
     assert ".cursor/docs/CODE_RULES.md" in merged
 
     (rules_directory / "testing.md").write_text("# T\n", encoding="utf-8")
-    tq_body = "\n\n".join(
-        f"## {t}\n\nbody"
-        for t in [
-            "Delete Useless Tests",
-            "Test Dependencies MUST FAIL",
-            "Core Testing Principles",
-            "React Testing Patterns",
-            "Test File Organization",
-        ]
-    )
+    tq_body = "\n\n".join(f"## {t}\n\nbody" for t in _test_quality_section_order)
     (docs_directory / "TEST_QUALITY.md").write_text(tq_body, encoding="utf-8")
     merged_tq = mod.merge_test_quality(
         (rules_directory / "testing.md", docs_directory / "TEST_QUALITY.md")
     )
     assert ".cursor/docs/TEST_QUALITY.md" in merged_tq
+
+
+def test_code_standards_section_order_titles_all_exist_in_real_doc() -> None:
+    real_headings = set(_parse_h2_sections(_REAL_CODE_RULES_DOC.read_text(encoding="utf-8")))
+    missing_titles = [title for title in _code_standards_section_order if title not in real_headings]
+    assert missing_titles == [], (
+        f"_code_standards_section_order titles absent from {_REAL_CODE_RULES_DOC.name}: "
+        f"{missing_titles}"
+    )
+
+
+def test_test_quality_section_order_titles_all_exist_in_real_doc() -> None:
+    real_headings = set(_parse_h2_sections(_REAL_TEST_QUALITY_DOC.read_text(encoding="utf-8")))
+    missing_titles = [title for title in _test_quality_section_order if title not in real_headings]
+    assert missing_titles == [], (
+        f"_test_quality_section_order titles absent from {_REAL_TEST_QUALITY_DOC.name}: "
+        f"{missing_titles}"
+    )
+
+
+def test_merge_code_standards_raises_when_expected_section_absent(tmp_path: Path) -> None:
+    rules_directory = tmp_path / "rules"
+    docs_directory = tmp_path / "docs"
+    rules_directory.mkdir(parents=True, exist_ok=True)
+    docs_directory.mkdir(parents=True, exist_ok=True)
+    (rules_directory / "code-standards.md").write_text("# CS\n", encoding="utf-8")
+    present_titles = [
+        title for title in _code_standards_section_order if title != "5. NO ABBREVIATIONS"
+    ]
+    cr_body = "\n\n".join(f"## {title}\n\nbody" for title in present_titles)
+    (docs_directory / "CODE_RULES.md").write_text(cr_body, encoding="utf-8")
+    with pytest.raises(AssertionError, match="5. NO ABBREVIATIONS"):
+        mod.merge_code_standards(
+            (rules_directory / "code-standards.md", docs_directory / "CODE_RULES.md")
+        )
+
+
+def test_merge_test_quality_raises_when_expected_section_absent(tmp_path: Path) -> None:
+    rules_directory = tmp_path / "rules"
+    docs_directory = tmp_path / "docs"
+    rules_directory.mkdir(parents=True, exist_ok=True)
+    docs_directory.mkdir(parents=True, exist_ok=True)
+    (rules_directory / "testing.md").write_text("# T\n", encoding="utf-8")
+    present_titles = [
+        title for title in _test_quality_section_order if title != "Core Testing Principles"
+    ]
+    tq_body = "\n\n".join(f"## {title}\n\nbody" for title in present_titles)
+    (docs_directory / "TEST_QUALITY.md").write_text(tq_body, encoding="utf-8")
+    with pytest.raises(AssertionError, match="Core Testing Principles"):
+        mod.merge_test_quality(
+            (rules_directory / "testing.md", docs_directory / "TEST_QUALITY.md")
+        )

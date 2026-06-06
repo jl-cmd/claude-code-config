@@ -71,7 +71,7 @@ _code_standards_section_order = (
     "COMMENT PRESERVATION (ABSOLUTE RULE)",
     "CORE PRINCIPLES",
     "⚡ HOOK-ENFORCED RULES",
-    "4. CONFIG LOCATIONS",
+    "3. REUSE CONSTANTS / 4. CONFIG LOCATIONS",
     "5. NO ABBREVIATIONS",
     "6. COMPLETE TYPE HINTS",
     "9. SELF-CONTAINED COMPONENTS",
@@ -118,7 +118,10 @@ def merge_code_standards(all_sources: tuple[Path, ...]) -> str:
         "## Reference (full text: `.cursor/docs/CODE_RULES.md`)",
     ]
     for each_title in _code_standards_section_order:
-        body = sections_by_heading.get(each_title, "")
+        assert each_title in sections_by_heading, (
+            f"merge_code_standards: expected section absent from CODE_RULES.md: {each_title}"
+        )
+        body = sections_by_heading[each_title]
         if each_title == "CORE PRINCIPLES":
             body = _filter_core_principles(body)
         if body:
@@ -141,7 +144,10 @@ def merge_test_quality(all_sources: tuple[Path, ...]) -> str:
     sections_by_heading = _parse_h2_sections(test_quality_markdown)
     chunks = [testing, "", "## Reference (full text: `.cursor/docs/TEST_QUALITY.md`)"]
     for each_title in _test_quality_section_order:
-        body = sections_by_heading.get(each_title, "")
+        assert each_title in sections_by_heading, (
+            f"merge_test_quality: expected section absent from TEST_QUALITY.md: {each_title}"
+        )
+        body = sections_by_heading[each_title]
         if body:
             chunks.append(f"## {each_title}\n\n{body}")
     merged = "\n\n".join(chunks)

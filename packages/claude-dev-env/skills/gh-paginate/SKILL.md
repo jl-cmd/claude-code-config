@@ -37,7 +37,7 @@ Single-object endpoints (e.g., `repos/<owner>/<repo>/pulls/<number>` returning o
 
 ### Preferred — `--paginate --slurp` piped to external `jq`
 
-`gh --paginate --slurp` walks every page and emits a single merged JSON array of page-arrays (`[[page1_items...], [page2_items...], ...]`). Pipe to external `jq` to flatten and filter across the full result set:
+`gh api ... --paginate --slurp` walks every page and emits a single merged JSON array of page-arrays (`[[page1_items...], [page2_items...], ...]`). Pipe to external `jq` to flatten and filter across the full result set:
 
 ```bash
 gh api 'repos/<owner>/<repo>/pulls/<number>/reviews?per_page=100' --paginate --slurp \

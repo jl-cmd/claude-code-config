@@ -20,6 +20,7 @@ from sync_to_cursor.rules import (
     _read_paths_glob,
     _test_quality_section_order,
     build_mappings,
+    strip_leading_yaml_frontmatter,
 )
 
 _CLAUDE_DEV_ENV_DIR = _SCRIPTS_DIR.parent
@@ -290,3 +291,27 @@ def test_merge_test_quality_raises_when_expected_section_absent(tmp_path: Path) 
         mod.merge_test_quality(
             (rules_directory / "testing.md", docs_directory / "TEST_QUALITY.md")
         )
+
+
+def test_merge_test_quality_strips_leading_paths_frontmatter(tmp_path: Path) -> None:
+    docs_directory = tmp_path / "docs"
+    docs_directory.mkdir(parents=True, exist_ok=True)
+    test_quality_body = "\n\n".join(
+        f"## {title}\n\nbody" for title in _test_quality_section_order
+    )
+    (docs_directory / "TEST_QUALITY.md").write_text(test_quality_body, encoding="utf-8")
+    merged = mod.merge_test_quality(
+        (_REAL_TESTING_RULE, docs_directory / "TEST_QUALITY.md")
+    )
+    testing_text = _REAL_TESTING_RULE.read_text(encoding="utf-8")
+    first_content_line = next(
+        line for line in strip_leading_yaml_frontmatter(testing_text).splitlines()
+        if line.strip()
+    )
+    merged_lines = merged.splitlines()
+    assert merged_lines[0] != "---", "merged body must not open with a leaked frontmatter fence"
+    assert merged_lines[0] == first_content_line
+    body_before_reference = "\n".join(
+        merged_lines[: merged_lines.index("## Reference (full text: `.cursor/docs/TEST_QUALITY.md`)")]
+    )
+    assert "paths:" not in body_before_reference, "testing.md paths frontmatter leaked into rule body"

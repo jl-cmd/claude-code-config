@@ -139,7 +139,9 @@ def merge_test_quality(all_sources: tuple[Path, ...]) -> str:
     Returns:
         The merged Cursor rule body, truncated to the maximum rule body length.
     """
-    testing = all_sources[0].read_text(encoding="utf-8").strip()
+    testing = strip_leading_yaml_frontmatter(
+        all_sources[0].read_text(encoding="utf-8")
+    ).strip()
     test_quality_markdown = all_sources[1].read_text(encoding="utf-8")
     sections_by_heading = _parse_h2_sections(test_quality_markdown)
     chunks = [testing, "", "## Reference (full text: `.cursor/docs/TEST_QUALITY.md`)"]

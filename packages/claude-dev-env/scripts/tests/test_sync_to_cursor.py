@@ -14,7 +14,10 @@ if str(_SCRIPTS_DIR) not in sys.path:
 
 import sync_to_cursor as mod
 from sync_to_cursor.engine import run as run_sync_to_cursor
-from sync_to_cursor.rules import _read_paths_glob
+from sync_to_cursor.rules import _read_paths_glob, build_mappings
+
+_CLAUDE_DEV_ENV_DIR = _SCRIPTS_DIR.parent
+_REAL_TESTING_RULE = _CLAUDE_DEV_ENV_DIR / "rules" / "testing.md"
 
 
 def _minimal_rule_files(claude_rules: Path) -> None:
@@ -166,6 +169,15 @@ def test_check_skips_optional_mapping_when_source_missing(
     assert run_sync_to_cursor(["--force"]) == 0
     (claude / "rules" / "tasklings-preferences.md").unlink()
     assert run_sync_to_cursor(["--check"]) == 0, "--check must pass when only optional sources are missing"
+
+
+def test_test_quality_glob_derived_from_testing_frontmatter() -> None:
+    expected_glob = _read_paths_glob(_REAL_TESTING_RULE)
+    assert expected_glob, "testing.md must declare a non-empty paths frontmatter"
+    test_quality_mapping = next(
+        mapping for mapping in build_mappings(_CLAUDE_DEV_ENV_DIR) if mapping.key == "test-quality"
+    )
+    assert test_quality_mapping.globs == expected_glob
 
 
 def test_tasklings_glob_derived_from_frontmatter(tmp_path: Path) -> None:

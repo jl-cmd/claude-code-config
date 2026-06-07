@@ -690,3 +690,202 @@ def test_should_deny_code_rules_edit_when_split_family_sibling_is_stale(
     completed = _run_hook_with_payload(payload)
 
     assert _decision_from(completed) == "deny"
+
+
+def test_should_offer_nested_package_mirroring_candidate_for_subpackage_module(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    package_root = sandbox / "pkg"
+    subpackage_directory = package_root / "services" / "mouse_movement"
+    subpackage_directory.mkdir(parents=True)
+    (package_root / "tests").mkdir()
+    production_module = subpackage_directory / "tremor.py"
+
+    all_candidates = _PRODUCTION_MODULE.candidate_test_paths_for(production_module)
+
+    assert package_root / "tests" / "services" / "test_tremor.py" in all_candidates
+    assert (
+        package_root / "tests" / "services" / "mouse_movement" / "test_tremor.py"
+        in all_candidates
+    )
+
+
+def test_should_offer_flat_candidate_alongside_nested_candidates(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    package_root = sandbox / "pkg"
+    subpackage_directory = package_root / "services" / "mouse_movement"
+    subpackage_directory.mkdir(parents=True)
+    (package_root / "tests").mkdir()
+    production_module = subpackage_directory / "tremor.py"
+
+    all_candidates = _PRODUCTION_MODULE.candidate_test_paths_for(production_module)
+
+    assert package_root / "tests" / "test_tremor.py" in all_candidates
+
+
+def test_should_allow_write_when_nested_package_mirroring_test_is_fresh(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    package_root = sandbox / "pkg"
+    subpackage_directory = package_root / "services" / "mouse_movement"
+    subpackage_directory.mkdir(parents=True)
+    nested_tests_directory = package_root / "tests" / "services" / "mouse_movement"
+    nested_tests_directory.mkdir(parents=True)
+    production_module = subpackage_directory / "tremor.py"
+    production_module.write_text("def jitter(): pass\n")
+    nested_test = nested_tests_directory / "test_tremor.py"
+    nested_test.write_text("def test_jitter(): pass\n")
+
+    completed = _run_hook_with_payload(_make_write_payload(production_module))
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_collect_tests_directories_from_every_ancestor_up_to_repo_boundary(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    package_root = sandbox / "pkg"
+    subpackage_directory = package_root / "services"
+    subpackage_directory.mkdir(parents=True)
+    (package_root / "tests").mkdir()
+    (subpackage_directory / "tests").mkdir()
+
+    all_pairs = _PRODUCTION_MODULE._ancestor_tests_directories(subpackage_directory)
+
+    collected_tests_directories = [each_tests_directory for _, each_tests_directory in all_pairs]
+    assert subpackage_directory / "tests" in collected_tests_directories
+    assert package_root / "tests" in collected_tests_directories
+
+
+def test_ancestor_tests_walk_stops_at_repo_boundary(tmp_path: Path) -> None:
+    outer_tests_directory = tmp_path / "tests"
+    outer_tests_directory.mkdir()
+    sandbox = _sandbox(tmp_path)
+    package_directory = sandbox / "pkg"
+    package_directory.mkdir()
+
+    all_pairs = _PRODUCTION_MODULE._ancestor_tests_directories(package_directory)
+
+    collected_tests_directories = [each_tests_directory for _, each_tests_directory in all_pairs]
+    assert outer_tests_directory not in collected_tests_directories
+
+
+def test_ancestor_tests_walk_honors_parent_walk_limit(tmp_path: Path) -> None:
+    walk_limit = _PRODUCTION_MODULE._parent_walk_limit()
+    deep_directory = tmp_path
+    for each_level_index in range(walk_limit + 5):
+        deep_directory = deep_directory / f"level_{each_level_index}"
+    deep_directory.mkdir(parents=True)
+    top_tests_directory = tmp_path / "tests"
+    top_tests_directory.mkdir()
+
+    all_pairs = _PRODUCTION_MODULE._ancestor_tests_directories(deep_directory)
+
+    collected_tests_directories = [each_tests_directory for _, each_tests_directory in all_pairs]
+    assert top_tests_directory not in collected_tests_directories
+
+
+def test_should_allow_edit_that_only_swaps_import_statements(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os",
+            new_string="import sys",
+        )
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_allow_edit_that_removes_an_import_statement(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os\n",
+            new_string="",
+        )
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_allow_multiedit_when_every_pair_is_import_only(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\nimport json\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_multiedit_payload(
+            production_module,
+            edits=[
+                {"old_string": "import os", "new_string": "import sys"},
+                {"old_string": "import json", "new_string": "import time"},
+            ],
+        )
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_multiedit_when_one_pair_is_not_import_only(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_multiedit_payload(
+            production_module,
+            edits=[
+                {"old_string": "import os", "new_string": "import sys"},
+                {
+                    "old_string": "def fulfill(): pass",
+                    "new_string": "def fulfill(): return 1",
+                },
+            ],
+        )
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_not_exempt_write_with_behavior_under_import_only_rule(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    write_content_with_behavior = "import os\n\ndef fulfill(): return os.getpid()\n"
+
+    completed = _run_hook_with_payload(
+        _make_write_payload(production_module, write_content_with_behavior)
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_behavior_edit_without_a_fresh_candidate_test(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("def fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="def fulfill(): pass",
+            new_string="def fulfill(): return 1",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"

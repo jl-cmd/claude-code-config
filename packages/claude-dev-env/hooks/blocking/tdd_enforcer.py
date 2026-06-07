@@ -162,6 +162,66 @@ def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_inp
     return False
 
 
+def _is_import_only_python_snippet(snippet: str) -> bool:
+    if not snippet.strip():
+        return False
+    try:
+        parsed_tree = ast.parse(snippet)
+    except SyntaxError:
+        return False
+    if not parsed_tree.body:
+        return False
+    return all(
+        isinstance(each_node, (ast.Import, ast.ImportFrom))
+        for each_node in parsed_tree.body
+    )
+
+
+def _is_import_only_replacement(old_string: str, new_string: str) -> bool:
+    if not _is_import_only_python_snippet(old_string):
+        return False
+    if not new_string.strip():
+        return True
+    return _is_import_only_python_snippet(new_string)
+
+
+def _is_import_only_edit(tool_name: str, tool_input: dict) -> bool:
+    """Report whether an Edit or MultiEdit only swaps or removes import statements.
+
+    Swapping one set of import statements for another (or removing imports)
+    introduces no new behavior in the edited file, so the RED-first gate does
+    not apply to such edits.
+
+    Args:
+        tool_name: The intercepted tool (Edit or MultiEdit).
+        tool_input: The intercepted tool's input payload.
+
+    Returns:
+        True when every old/new string pair is import statements only.
+    """
+    if tool_name == "Edit":
+        old_string = tool_input.get("old_string", "")
+        new_string = tool_input.get("new_string", "") or ""
+        return _is_import_only_replacement(old_string, new_string)
+    if tool_name == "MultiEdit":
+        all_edits = tool_input.get("edits", []) or []
+        if not all_edits:
+            return False
+        for each_edit in all_edits:
+            if not isinstance(each_edit, dict):
+                return False
+            each_old = each_edit.get("old_string", "")
+            each_new = each_edit.get("new_string", "") or ""
+            if not _is_import_only_replacement(each_old, each_new):
+                return False
+        return True
+    return False
+
+
+def _python_extension() -> str:
+    return Path("module.py").suffix
+
+
 def _tests_directory_name() -> str:
     return "tests"
 
@@ -194,18 +254,27 @@ def _is_repo_boundary(candidate_directory: Path) -> bool:
     return False
 
 
-def find_nearest_tests_directory(start_directory: Path) -> Path | None:
+def _ancestor_tests_directories(start_directory: Path) -> list[tuple[Path, Path]]:
+    """Collect each ancestor's sibling tests directory up to the repo boundary.
+
+    Args:
+        start_directory: Directory of the production file under edit.
+
+    Returns:
+        Ordered (ancestor, tests_directory) pairs; nearer ancestors first.
+    """
+    all_pairs: list[tuple[Path, Path]] = []
     current_directory = start_directory
     for _ in range(_parent_walk_limit()):
         sibling_tests = current_directory / _tests_directory_name()
         if sibling_tests.is_dir():
-            return sibling_tests
+            all_pairs.append((current_directory, sibling_tests))
         if _is_repo_boundary(current_directory):
-            return None
+            break
         if current_directory.parent == current_directory:
-            return None
+            break
         current_directory = current_directory.parent
-    return None
+    return all_pairs
 
 
 def _split_module_stem_prefix() -> str:
@@ -224,6 +293,11 @@ def _split_family_candidates(directory: Path, stem: str) -> list[Path]:
 
 def candidate_test_paths_for(production_path: Path) -> list[Path]:
     """Return the test files whose freshness can satisfy the gate for a production file.
+
+    Every ancestor ``tests`` directory contributes a flat candidate
+    (``tests/test_<stem>.py``) and package-mirroring nested candidates
+    (``tests/<subpackage path>/test_<stem>.py``), so repos that keep tests
+    either beside the package or in a category tree both resolve.
 
     For ``code_rules_*`` Python modules the candidate list is extended with the
     sibling split test family (``test_code_rules_enforcer_*.py``), because that
@@ -247,9 +321,12 @@ def candidate_test_paths_for(production_path: Path) -> list[Path]:
     if extension == ".py":
         all_candidates.append(directory / f"test_{stem}.py")
         all_candidates.append(directory / f"{stem}_test.py")
-        nearest_tests_directory = find_nearest_tests_directory(directory)
-        if nearest_tests_directory is not None:
-            all_candidates.append(nearest_tests_directory / f"test_{stem}.py")
+        for each_ancestor, each_tests_directory in _ancestor_tests_directories(directory):
+            all_candidates.append(each_tests_directory / f"test_{stem}.py")
+            nested_directory = each_tests_directory
+            for each_relative_part in directory.relative_to(each_ancestor).parts:
+                nested_directory = nested_directory / each_relative_part
+                all_candidates.append(nested_directory / f"test_{stem}.py")
         all_candidates.extend(_split_family_candidates(directory, stem))
         return all_candidates
 
@@ -418,6 +495,11 @@ def main() -> None:
     if tool_name == "Write" and ext == ".py" and _is_constants_only_python_content(written_content):
         emit_allow()
         sys.exit(0)
+
+    if tool_name in ("Edit", "MultiEdit") and ext == _python_extension():
+        if _is_import_only_edit(tool_name, tool_input):
+            emit_allow()
+            sys.exit(0)
 
     # Exempt Edit/MultiEdit on constants-only files when post-edit content remains constants-only
     if tool_name in ("Edit", "MultiEdit") and ext == ".py" and path.exists():

@@ -778,7 +778,7 @@ def test_ancestor_tests_walk_stops_at_repo_boundary(tmp_path: Path) -> None:
 def test_ancestor_tests_walk_honors_parent_walk_limit(tmp_path: Path) -> None:
     walk_limit = _PRODUCTION_MODULE._parent_walk_limit()
     deep_directory = tmp_path
-    for each_level_index in range(walk_limit + 5):
+    for each_level_index in range(walk_limit + 2):
         deep_directory = deep_directory / f"level_{each_level_index}"
     deep_directory.mkdir(parents=True)
     top_tests_directory = tmp_path / "tests"
@@ -935,6 +935,42 @@ def test_should_allow_import_only_edit_after_a_constants_assignment(tmp_path: Pa
             production_module,
             old_string="import os",
             new_string="import sys",
+        )
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_replace_all_edit_that_rewrites_call_sites(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import json\n\ndef parse(line): return json.loads(line)\n")
+
+    completed = _run_hook_with_payload(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(production_module),
+                "old_string": "json",
+                "new_string": "pickle",
+                "replace_all": True,
+            },
+        }
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_allow_edit_that_reorders_import_statements(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\nimport sys\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os\nimport sys",
+            new_string="import sys\nimport os",
         )
     )
 

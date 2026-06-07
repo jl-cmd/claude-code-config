@@ -124,8 +124,23 @@ def _is_constants_only_python_content(content: str) -> bool:
     return True
 
 
-def _apply_edit_to_content(existing_content: str, old_str: str, new_str: str) -> str:
-    """Replace the first occurrence of old_str with new_str in the content."""
+def _apply_edit_to_content(
+    existing_content: str, old_str: str, new_str: str, should_replace_all: bool
+) -> str:
+    """Apply an edit's replacement to content the way the Edit tool would.
+
+    Args:
+        existing_content: The text being edited.
+        old_str: The substring the edit replaces.
+        new_str: The replacement substring.
+        should_replace_all: Replace every occurrence when True (matching the
+            Edit tool's ``replace_all`` flag), otherwise only the first.
+
+    Returns:
+        The post-edit content.
+    """
+    if should_replace_all:
+        return existing_content.replace(old_str, new_str)
     return existing_content.replace(old_str, new_str, 1)
 
 
@@ -143,7 +158,8 @@ def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_inp
         new_str = tool_input.get("new_string", "") or ""
         if not old_str:
             return False
-        post_edit_content = _apply_edit_to_content(existing_content, old_str, new_str)
+        should_replace_all = bool(tool_input.get("replace_all", False))
+        post_edit_content = _apply_edit_to_content(existing_content, old_str, new_str, should_replace_all)
         return _is_constants_only_python_content(post_edit_content)
 
     if tool_name == "MultiEdit":
@@ -156,7 +172,10 @@ def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_inp
             each_new = each_edit.get("new_string", "") or ""
             if not each_old:
                 return False
-            post_edit_content = _apply_edit_to_content(post_edit_content, each_old, each_new)
+            should_replace_all = bool(each_edit.get("replace_all", False))
+            post_edit_content = _apply_edit_to_content(
+                post_edit_content, each_old, each_new, should_replace_all
+            )
         return _is_constants_only_python_content(post_edit_content)
 
     return False
@@ -219,7 +238,8 @@ def _is_post_edit_import_only(existing_content: str, tool_name: str, tool_input:
         new_str = tool_input.get("new_string", "") or ""
         if not old_str:
             return False
-        post_edit_content = _apply_edit_to_content(existing_content, old_str, new_str)
+        should_replace_all = bool(tool_input.get("replace_all", False))
+        post_edit_content = _apply_edit_to_content(existing_content, old_str, new_str, should_replace_all)
     elif tool_name == "MultiEdit":
         all_edits = tool_input.get("edits", []) or []
         if not all_edits:
@@ -232,7 +252,10 @@ def _is_post_edit_import_only(existing_content: str, tool_name: str, tool_input:
             each_new = each_edit.get("new_string", "") or ""
             if not each_old:
                 return False
-            post_edit_content = _apply_edit_to_content(post_edit_content, each_old, each_new)
+            should_replace_all = bool(each_edit.get("replace_all", False))
+            post_edit_content = _apply_edit_to_content(
+                post_edit_content, each_old, each_new, should_replace_all
+            )
     else:
         return False
 

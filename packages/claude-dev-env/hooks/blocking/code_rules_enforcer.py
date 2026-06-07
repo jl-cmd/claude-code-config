@@ -409,7 +409,7 @@ def _precheck_hint() -> str:
     script_path = str(Path(__file__).resolve())
     return (
         "; Pre-check a complete candidate before retrying: "
-        f'"{sys.executable}" "{script_path}" --check <candidate.py> --as <target.py>'
+        f'"{sys.executable}" "{script_path}" --check <candidate> --as <target>'
     )
 
 
@@ -456,35 +456,39 @@ def _run_precheck(
 
 
 def _precheck_arguments(all_arguments: list[str]) -> tuple[str, str] | None:
-    """Parse the pre-check command-line flags into a candidate and target pair.
+    """Parse a strict pre-check argument vector into a candidate and target pair.
+
+    Accepts exactly the two documented shapes — ``--check <candidate>`` or
+    ``--check <candidate> --as <target>`` — with the target defaulting to the
+    candidate when ``--as`` is absent. Any unrecognized or extra token, a
+    reordered flag, or a missing path value is rejected rather than silently
+    ignored, so a malformed invocation can never look like a clean verdict.
 
     Args:
-        all_arguments: An argument vector carrying the ``--check`` flag.
+        all_arguments: The argument vector following the script name, expected
+            to lead with ``--check``.
 
     Returns:
-        A ``(candidate_path, target_path)`` pair for a well-formed pre-check
-        invocation, with the target defaulting to the candidate when ``--as``
-        is absent; otherwise None — a flag is missing its path value, a
-        flag-shaped token sits where a path belongs, or a flag appears more
-        than once.
+        A ``(candidate_path, target_path)`` pair for one of the two supported
+        shapes; otherwise None — the vector does not lead with ``--check``,
+        omits a path value, places a flag-shaped token where a path belongs,
+        or carries an unrecognized or extra token.
     """
-    if all_arguments.count("--check") > 1 or all_arguments.count("--as") > 1:
+    if not all_arguments or all_arguments[0] != "--check":
         return None
-    check_index = all_arguments.index("--check")
-    if check_index + 1 >= len(all_arguments):
+    tokens_after_check = all_arguments[1:]
+    if not tokens_after_check or tokens_after_check[0].startswith("--"):
         return None
-    candidate_path = all_arguments[check_index + 1]
-    if candidate_path.startswith("--"):
+    candidate_path = tokens_after_check[0]
+    tokens_after_candidate = tokens_after_check[1:]
+    if not tokens_after_candidate:
+        return candidate_path, candidate_path
+    if tokens_after_candidate[0] != "--as":
         return None
-    target_path = candidate_path
-    if "--as" in all_arguments:
-        as_index = all_arguments.index("--as")
-        if as_index + 1 >= len(all_arguments):
-            return None
-        target_path = all_arguments[as_index + 1]
-        if target_path.startswith("--"):
-            return None
-    return candidate_path, target_path
+    target_tokens = tokens_after_candidate[1:]
+    if len(target_tokens) != 1 or target_tokens[0].startswith("--"):
+        return None
+    return candidate_path, target_tokens[0]
 
 
 def _run_precheck_command(

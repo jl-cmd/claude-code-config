@@ -422,6 +422,29 @@ def test_precheck_flag_shaped_candidate_value_exits_two_with_usage(
     )
 
 
+def test_precheck_rejects_unrecognized_trailing_token_with_usage(
+    tmp_path_factory: object,
+) -> None:
+    """A pre-check vector carrying a token beyond the supported
+    ``--check <candidate> [--as <target>]`` shape is a usage error: an extra
+    trailing token never silently passes as a clean verdict on the candidate."""
+    staging_directory = getattr(tmp_path_factory, "mktemp")("staging")
+    production_directory = getattr(tmp_path_factory, "mktemp")("scripts")
+    candidate_file = staging_directory / "candidate.py"
+    candidate_file.write_text(_CLEAN_CLI_SOURCE, encoding="utf-8")
+    target_path = str(production_directory / "announce_cli.py")
+    completed = _run_enforcer_cli(
+        ["--check", str(candidate_file), "--as", target_path, "--unexpected"]
+    )
+    assert completed.returncode == 2, (
+        f"a trailing unrecognized token must exit 2, got: {completed.returncode}, "
+        f"stdout: {completed.stdout!r}, stderr: {completed.stderr!r}"
+    )
+    assert "usage:" in completed.stderr, (
+        f"a trailing unrecognized token must print usage on stderr, got: {completed.stderr!r}"
+    )
+
+
 def test_precheck_strips_candidate_byte_order_mark_before_validation(
     tmp_path_factory: object,
 ) -> None:

@@ -724,6 +724,10 @@ def test_should_offer_flat_candidate_alongside_nested_candidates(
     all_candidates = _PRODUCTION_MODULE.candidate_test_paths_for(production_module)
 
     assert package_root / "tests" / "test_tremor.py" in all_candidates
+    assert (
+        package_root / "tests" / "services" / "mouse_movement" / "test_tremor.py"
+        in all_candidates
+    )
 
 
 def test_should_allow_write_when_nested_package_mirroring_test_is_fresh(

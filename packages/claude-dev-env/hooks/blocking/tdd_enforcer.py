@@ -212,7 +212,7 @@ def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_inp
         return False
 
     if tool_name == "Edit":
-        old_str = tool_input.get("old_string", "")
+        old_str = tool_input.get("old_string", "") or ""
         new_str = tool_input.get("new_string", "") or ""
         if not old_str:
             return False
@@ -224,7 +224,7 @@ def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_inp
         for each_edit in all_edits:
             if not isinstance(each_edit, dict):
                 return False
-            each_old = each_edit.get("old_string", "")
+            each_old = each_edit.get("old_string", "") or ""
             each_new = each_edit.get("new_string", "") or ""
             if not each_old:
                 return False

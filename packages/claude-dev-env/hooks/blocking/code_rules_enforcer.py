@@ -17,6 +17,7 @@ concern focused. The separate ``tdd_enforcer.py`` hook accepts any
 """
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import TextIO
 
@@ -121,6 +122,8 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_CODE_EXTENSIONS,
     ALL_JAVASCRIPT_EXTENSIONS,
     ALL_PYTHON_EXTENSIONS,
+    PRECHECK_USAGE_EXIT_CODE,
+    PRECHECK_USAGE_MESSAGE,
 )
 
 
@@ -311,6 +314,40 @@ def prior_and_post_edit_content(
     return existing_content, existing_content.replace(old_string, new_string, 1)
 
 
+def _is_validated_target(file_path: str) -> bool:
+    """Return whether the path is subject to code-rules validation.
+
+    Args:
+        file_path: The destination path of the write, edit, or pre-check target.
+
+    Returns:
+        True when the path is non-empty, outside hook infrastructure, and
+        carries a code extension; False for every exempt path.
+    """
+    if not file_path:
+        return False
+    if is_hook_infrastructure(file_path):
+        return False
+    return get_file_extension(file_path) in ALL_CODE_EXTENSIONS
+
+
+def _without_line_prefix(violation_text: str) -> str:
+    """Return the violation message body with its ``Line <n>: `` locator removed.
+
+    Args:
+        violation_text: A violation message, optionally carrying a leading
+            ``Line <n>: `` locator.
+
+    Returns:
+        The message body shared by fragment-scoped and full-file scans of the
+        same violation, regardless of which line numbering produced it.
+    """
+    locator, separator, message_body = violation_text.partition(": ")
+    if separator and locator.startswith("Line ") and locator[len("Line "):].isdigit():
+        return message_body
+    return violation_text
+
+
 def _forecast_full_file_violations(
     full_file_content_after_edit: str,
     file_path: str,
@@ -320,9 +357,14 @@ def _forecast_full_file_violations(
     """Return full-file violations absent from the fragment-scoped blocking list.
 
     Runs a complete, un-scoped scan of the whole post-edit file so fragment-scoped
-    checks see every line, then drops any violation already present in
-    ``all_blocking_issues`` by exact string match. The remainder are the
-    violations that survive elsewhere in the file and will block a future edit.
+    checks see every line, then drops the violations already present in
+    ``all_blocking_issues``. Matching is line-number-agnostic with
+    per-occurrence accounting: each blocking entry consumes exactly one
+    full-file entry carrying the same message body, so a violation the fragment
+    itself introduces stays out of the forecast even though the two scans
+    number its line differently, while a second same-message violation
+    elsewhere in the file still surfaces. The remainder are the violations that
+    survive elsewhere in the file and will block a future edit.
 
     Args:
         full_file_content_after_edit: The whole post-edit file content.
@@ -338,12 +380,17 @@ def _forecast_full_file_violations(
     all_full_file_issues = validate_content(
         full_file_content_after_edit, file_path, prior_full_file_content
     )
-    already_blocking = set(all_blocking_issues)
-    return [
-        each_issue
-        for each_issue in all_full_file_issues
-        if each_issue not in already_blocking
-    ]
+    remaining_blocking_counts = Counter(
+        _without_line_prefix(each_issue) for each_issue in all_blocking_issues
+    )
+    forecast_issues: list[str] = []
+    for each_issue in all_full_file_issues:
+        message_body = _without_line_prefix(each_issue)
+        if remaining_blocking_counts[message_body] > 0:
+            remaining_blocking_counts[message_body] -= 1
+            continue
+        forecast_issues.append(each_issue)
+    return forecast_issues
 
 
 def _precheck_hint() -> str:
@@ -351,7 +398,7 @@ def _precheck_hint() -> str:
     script_path = str(Path(__file__).resolve())
     return (
         "; Pre-check a complete candidate before retrying: "
-        f"python {script_path} --check <candidate.py> --as <target.py>"
+        f'"{sys.executable}" "{script_path}" --check <candidate.py> --as <target.py>'
     )
 
 
@@ -380,9 +427,7 @@ def _run_precheck(
         Exit code 1 when any violation exists or the candidate cannot be read,
         and 0 when the candidate is clean or the target is exempt.
     """
-    if is_hook_infrastructure(target_path):
-        return 0
-    if get_file_extension(target_path) not in ALL_CODE_EXTENSIONS:
+    if not _is_validated_target(target_path):
         return 0
     candidate_content = _read_existing_file_content(candidate_path)
     if candidate_content is None:
@@ -402,9 +447,11 @@ def _precheck_arguments(all_arguments: list[str]) -> tuple[str, str] | None:
         all_arguments: The argument vector following the script name.
 
     Returns:
-        A ``(candidate_path, target_path)`` pair when ``--check`` is present, with
-        the target defaulting to the candidate when ``--as`` is absent; otherwise
-        None to signal stdin-hook mode.
+        A ``(candidate_path, target_path)`` pair for a well-formed pre-check
+        invocation, with the target defaulting to the candidate when ``--as``
+        is absent; otherwise None — either no ``--check`` flag is present, or a
+        flag is missing its path value, or a flag-shaped token sits where a
+        path belongs.
     """
     if "--check" not in all_arguments:
         return None
@@ -412,21 +459,125 @@ def _precheck_arguments(all_arguments: list[str]) -> tuple[str, str] | None:
     if check_index + 1 >= len(all_arguments):
         return None
     candidate_path = all_arguments[check_index + 1]
+    if candidate_path.startswith("--"):
+        return None
     target_path = candidate_path
     if "--as" in all_arguments:
         as_index = all_arguments.index("--as")
-        if as_index + 1 < len(all_arguments):
-            target_path = all_arguments[as_index + 1]
+        if as_index + 1 >= len(all_arguments):
+            return None
+        target_path = all_arguments[as_index + 1]
+        if target_path.startswith("--"):
+            return None
     return candidate_path, target_path
 
 
-def main() -> None:
-    precheck_paths = _precheck_arguments(sys.argv[1:])
-    if precheck_paths is not None:
-        candidate_path, target_path = precheck_paths
-        sys.exit(
-            _run_precheck(candidate_path, target_path, sys.stdout, sys.stderr)
+def _run_precheck_command(
+    all_arguments: list[str],
+    violation_stream: TextIO,
+    error_stream: TextIO,
+) -> int:
+    """Run the pre-check CLI mode for an argument vector carrying ``--check``.
+
+    Args:
+        all_arguments: The argument vector following the script name.
+        violation_stream: The stream each violation line is written to.
+        error_stream: The stream usage and candidate errors are written to.
+
+    Returns:
+        The usage-error exit code for a malformed flag sequence, otherwise the
+        ``_run_precheck`` verdict for the parsed candidate and target.
+    """
+    precheck_paths = _precheck_arguments(all_arguments)
+    if precheck_paths is None:
+        error_stream.write(PRECHECK_USAGE_MESSAGE)
+        return PRECHECK_USAGE_EXIT_CODE
+    candidate_path, target_path = precheck_paths
+    return _run_precheck(candidate_path, target_path, violation_stream, error_stream)
+
+
+def _contents_for_validation(
+    tool_name: str,
+    new_string: str,
+    old_string: str,
+    written_content: str,
+    file_path: str,
+) -> tuple[str, str, str | None, str] | None:
+    """Resolve the content views the verdict needs for the given tool payload.
+
+    Args:
+        tool_name: The tool named in the PreToolUse payload.
+        new_string: The Edit payload's replacement fragment.
+        old_string: The Edit payload's fragment to replace.
+        written_content: The Write payload's whole file body.
+        file_path: The destination path of the write or edit.
+
+    Returns:
+        A ``(content, old_content, full_file_content_after_edit,
+        prior_full_file_content)`` tuple, or None when no validatable view
+        exists — an unreadable edit target, or a write over an existing file.
+    """
+    if tool_name == "Edit":
+        prior_content, full_file_content_after_edit = prior_and_post_edit_content(
+            file_path, old_string, new_string,
         )
+        if full_file_content_after_edit is None:
+            full_file_content_after_edit = _read_existing_file_content(file_path)
+            if full_file_content_after_edit is None:
+                return None
+        return new_string, old_string, full_file_content_after_edit, prior_content or ""
+    content = written_content or new_string
+    old_content = _read_existing_file_content(file_path) or ""
+    if old_content:
+        return None
+    return content, old_content, None, ""
+
+
+def _deny_reason_for_issues(
+    all_blocking_issues: list[str],
+    tool_name: str,
+    file_path: str,
+    full_file_content_after_edit: str | None,
+    prior_full_file_content: str,
+) -> str:
+    """Compose the deny reason: blocking list, optional forecast, pre-check hint.
+
+    Args:
+        all_blocking_issues: The blocking violations that decide the deny.
+        tool_name: The tool named in the PreToolUse payload.
+        file_path: The destination path used for forecast classification.
+        full_file_content_after_edit: The whole post-edit file content when the
+            edit reconstructs one, used to run the full-file forecast.
+        prior_full_file_content: The whole file content before the edit applied.
+
+    Returns:
+        The complete ``permissionDecisionReason`` text.
+    """
+    issue_list = "; ".join(all_blocking_issues[:10])
+    deny_reason = (
+        f"BLOCKED: [CODE_RULES] {len(all_blocking_issues)} violation(s): {issue_list}"
+    )
+    if tool_name == "Edit" and full_file_content_after_edit is not None:
+        forecast_issues = _forecast_full_file_violations(
+            full_file_content_after_edit,
+            file_path=file_path,
+            prior_full_file_content=prior_full_file_content,
+            all_blocking_issues=all_blocking_issues,
+        )
+        if forecast_issues:
+            forecast_list = "; ".join(forecast_issues[:10])
+            deny_reason += (
+                f"; FULL-FILE FORECAST — {len(forecast_issues)} additional "
+                "violation(s) elsewhere in this file will block future edits "
+                f"(full-file line numbers): {forecast_list}"
+            )
+    return deny_reason + _precheck_hint()
+
+
+def main() -> None:
+    all_arguments = sys.argv[1:]
+    if "--check" in all_arguments:
+        sys.exit(_run_precheck_command(all_arguments, sys.stdout, sys.stderr))
 
     try:
         input_data = json.load(sys.stdin)
@@ -437,36 +588,21 @@ def main() -> None:
     tool_input = input_data.get("tool_input", {})
     file_path = tool_input.get("file_path", "")
 
-    if not file_path:
+    if not _is_validated_target(file_path):
         sys.exit(0)
 
-    if is_hook_infrastructure(file_path):
+    validation_contents = _contents_for_validation(
+        tool_name,
+        tool_input.get("new_string", ""),
+        tool_input.get("old_string", ""),
+        tool_input.get("content", ""),
+        file_path,
+    )
+    if validation_contents is None:
         sys.exit(0)
-
-    extension = get_file_extension(file_path)
-    if extension not in ALL_CODE_EXTENSIONS:
-        sys.exit(0)
-
-    old_content = ""
-    prior_full_file_content = ""
-    full_file_content_after_edit: str | None = None
-    if tool_name == "Edit":
-        content = tool_input.get("new_string", "")
-        old_content = tool_input.get("old_string", "")
-        prior_content, full_file_content_after_edit = prior_and_post_edit_content(
-            file_path, old_content, content,
-        )
-        prior_full_file_content = prior_content or ""
-        if full_file_content_after_edit is None:
-            full_file_content_after_edit = _read_existing_file_content(file_path)
-            if full_file_content_after_edit is None:
-                sys.exit(0)
-    else:
-        content = tool_input.get("content", "") or tool_input.get("new_string", "")
-        old_content = _read_existing_file_content(file_path) or ""
-
-        if old_content:
-            sys.exit(0)
+    content, old_content, full_file_content_after_edit, prior_full_file_content = (
+        validation_contents
+    )
 
     if not content:
         sys.exit(0)
@@ -480,28 +616,17 @@ def main() -> None:
     )
 
     if issues:
-        issue_list = "; ".join(issues[:10])
-        deny_reason = f"BLOCKED: [CODE_RULES] {len(issues)} violation(s): {issue_list}"
-        if tool_name == "Edit" and full_file_content_after_edit is not None:
-            forecast_issues = _forecast_full_file_violations(
-                full_file_content_after_edit,
-                file_path,
-                prior_full_file_content,
-                issues,
-            )
-            if forecast_issues:
-                forecast_list = "; ".join(forecast_issues[:10])
-                deny_reason += (
-                    f"; FULL-FILE FORECAST — {len(forecast_issues)} additional "
-                    "violation(s) elsewhere in this file will block future edits "
-                    f"(full-file line numbers): {forecast_list}"
-                )
-        deny_reason += _precheck_hint()
         deny_payload = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
-                "permissionDecisionReason": deny_reason,
+                "permissionDecisionReason": _deny_reason_for_issues(
+                    issues,
+                    tool_name,
+                    file_path,
+                    full_file_content_after_edit,
+                    prior_full_file_content,
+                ),
             }
         }
         print(json.dumps(deny_payload))

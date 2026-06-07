@@ -41,6 +41,10 @@ _CLEAN_CLI_SOURCE = (
     "    print(payload)\n"
 )
 
+_UNTOUCHED_PRINT_VIOLATION_SOURCE = "def emit_audit_line() -> None:\n    print(99)\n"
+
+_CLEAN_FRAGMENT_BEFORE = "def short_helper() -> int:\n    return 1\n"
+
 
 def _run_precheck(
     candidate_path: str,
@@ -231,8 +235,8 @@ def test_edit_deny_reason_includes_forecast_and_precheck_hint(
     appends a full-file forecast naming the untouched violation plus the
     pre-check hint."""
     production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
-    untouched_print_violation = "def emit_audit_line() -> None:\n    print(99)\n"
-    clean_before = "def short_helper() -> int:\n    return 1\n"
+    untouched_print_violation = _UNTOUCHED_PRINT_VIOLATION_SOURCE
+    clean_before = _CLEAN_FRAGMENT_BEFORE
     introduces_banned_noun_after = (
         "def short_helper() -> int:\n    output = 0\n    return output\n"
     )
@@ -269,8 +273,8 @@ def test_edit_clean_fragment_on_dirty_file_produces_no_deny_payload(
     """A clean Edit fragment on a file that is dirty elsewhere must not block —
     the forecast never converts a clean-fragment edit into a deny."""
     production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
-    untouched_print_violation = "def emit_audit_line() -> None:\n    print(99)\n"
-    clean_before = "def short_helper() -> int:\n    return 1\n"
+    untouched_print_violation = _UNTOUCHED_PRINT_VIOLATION_SOURCE
+    clean_before = _CLEAN_FRAGMENT_BEFORE
     clean_after = "def short_helper() -> int:\n    return 0\n"
     on_disk_before = untouched_print_violation + "\n" + clean_before
     source_file = production_directory / "production_module.py"
@@ -294,7 +298,7 @@ def test_every_deny_reason_carries_the_precheck_hint(
 ) -> None:
     """A deny with no forecast still appends the pre-check hint to the reason."""
     production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
-    clean_before = "def short_helper() -> int:\n    return 1\n"
+    clean_before = _CLEAN_FRAGMENT_BEFORE
     introduces_violation_after = "def short_helper() -> int:\n    print(1)\n    return 1\n"
     source_file = production_directory / "production_module.py"
     source_file.write_text(clean_before, encoding="utf-8")
@@ -310,6 +314,92 @@ def test_every_deny_reason_carries_the_precheck_hint(
     assert "--check" in reason, (
         f"every deny reason must carry the pre-check hint, got reason: {reason!r}"
     )
-    assert str(_ENFORCER_SCRIPT_PATH.resolve()) in reason, (
-        f"hint must carry the absolute script path, got reason: {reason!r}"
+    quoted_script_path = f'"{_ENFORCER_SCRIPT_PATH.resolve()}"'
+    assert quoted_script_path in reason, (
+        f"hint must quote the script path for space-safe copy-paste, got reason: {reason!r}"
+    )
+    quoted_interpreter_path = f'"{sys.executable}"'
+    assert quoted_interpreter_path in reason, (
+        f"hint must name the running interpreter, quoted, got reason: {reason!r}"
+    )
+
+
+def test_forecast_omits_the_fragment_introduced_violation(
+    tmp_path_factory: object,
+    monkeypatch: object,
+    capsys: object,
+) -> None:
+    """An Edit that introduces the file's only print() blocks on it without the
+    forecast re-listing that same violation under its full-file line number."""
+    production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
+    padding_helper = "def first_helper() -> int:\n    return 1\n"
+    introduces_print_after = "def short_helper() -> int:\n    print(1)\n    return 1\n"
+    on_disk_before = padding_helper + "\n" + _CLEAN_FRAGMENT_BEFORE
+    source_file = production_directory / "production_module.py"
+    source_file.write_text(on_disk_before, encoding="utf-8")
+    stdout = _run_main_with_edit_payload(
+        str(source_file),
+        _CLEAN_FRAGMENT_BEFORE,
+        introduces_print_after,
+        monkeypatch,
+        capsys,
+    )
+    deny_payload = json.loads(stdout)
+    reason = deny_payload["hookSpecificOutput"]["permissionDecisionReason"]
+    blocking_section, _, forecast_section = reason.partition("FULL-FILE FORECAST")
+    assert "Library print()" in blocking_section, (
+        f"the fragment-introduced print must block, got reason: {reason!r}"
+    )
+    assert "Library print()" not in forecast_section, (
+        f"the forecast must not re-list the fragment's own violation, got reason: {reason!r}"
+    )
+
+
+def test_precheck_missing_candidate_value_exits_two_with_usage() -> None:
+    """A ``--check`` flag with no candidate path is a usage error: exit 2 with a
+    usage line on stderr, never a silent clean verdict."""
+    all_arguments = [sys.executable, str(_ENFORCER_SCRIPT_PATH), "--check"]
+    completed = subprocess.run(
+        all_arguments,
+        input="",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 2, (
+        f"missing candidate value must exit 2, got: {completed.returncode}, "
+        f"stdout: {completed.stdout!r}, stderr: {completed.stderr!r}"
+    )
+    assert "usage:" in completed.stderr, (
+        f"missing candidate value must print usage on stderr, got: {completed.stderr!r}"
+    )
+
+
+def test_precheck_flag_shaped_candidate_value_exits_two_with_usage(
+    tmp_path_factory: object,
+) -> None:
+    """``--check`` immediately followed by ``--as`` is a usage error rather than
+    an attempt to read a file literally named ``--as``."""
+    production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
+    target_path = str(production_directory / "production_module.py")
+    all_arguments = [
+        sys.executable,
+        str(_ENFORCER_SCRIPT_PATH),
+        "--check",
+        "--as",
+        target_path,
+    ]
+    completed = subprocess.run(
+        all_arguments,
+        input="",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 2, (
+        f"flag-shaped candidate value must exit 2, got: {completed.returncode}, "
+        f"stdout: {completed.stdout!r}, stderr: {completed.stderr!r}"
+    )
+    assert "usage:" in completed.stderr, (
+        f"flag-shaped candidate value must print usage on stderr, got: {completed.stderr!r}"
     )

@@ -564,6 +564,10 @@ def _deny_reason_for_issues(
         full_file_content_after_edit: The whole post-edit file content when the
             edit reconstructs one, used to run the full-file forecast.
         prior_full_file_content: The whole file content before the edit applied.
+            Empty when the edit's old_string is absent and no reliable prior
+            exists; the forecast is skipped in that case so a comment diff
+            against an empty prior cannot mislabel pre-existing comments as
+            future blockers.
 
     Returns:
         The complete ``permissionDecisionReason`` text.
@@ -572,7 +576,12 @@ def _deny_reason_for_issues(
     deny_reason = (
         f"BLOCKED: [CODE_RULES] {len(all_blocking_issues)} violation(s): {issue_list}"
     )
-    if tool_name == "Edit" and full_file_content_after_edit is not None:
+    has_reconstructed_prior = bool(prior_full_file_content)
+    if (
+        tool_name == "Edit"
+        and full_file_content_after_edit is not None
+        and has_reconstructed_prior
+    ):
         forecast_issues = _forecast_full_file_violations(
             full_file_content_after_edit,
             file_path=file_path,
@@ -650,12 +659,12 @@ def main(all_arguments: list[str]) -> None:
         sys.exit(_run_precheck_command(all_arguments, sys.stdout, sys.stderr))
 
     try:
-        input_data = json.load(sys.stdin)
+        pretooluse_payload = json.load(sys.stdin)
     except json.JSONDecodeError:
         sys.exit(0)
 
-    tool_name = input_data.get("tool_name", "")
-    tool_input = input_data.get("tool_input", {})
+    tool_name = pretooluse_payload.get("tool_name", "")
+    tool_input = pretooluse_payload.get("tool_input", {})
     file_path = tool_input.get("file_path", "")
 
     if not _is_validated_target(file_path):

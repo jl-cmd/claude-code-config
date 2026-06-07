@@ -331,6 +331,36 @@ def test_every_deny_reason_carries_the_precheck_hint(
     )
 
 
+def test_forecast_skipped_when_edit_prior_is_unreconstructable(
+    tmp_path_factory: object,
+    monkeypatch: object,
+    capsys: object,
+) -> None:
+    """An Edit whose old_string is absent from the file has no reliable prior to
+    diff against, so the full-file forecast must not run: a pre-existing inline
+    comment must never surface as an 'inline comment added' forecast entry that
+    falsely claims an untouched comment will block future edits."""
+    production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
+    commented_on_disk = "tally = 1  # pre-existing inline note\n"
+    source_file = production_directory / "production_module.py"
+    source_file.write_text(commented_on_disk, encoding="utf-8")
+    absent_old = "def absent_function() -> int:\n    return 0\n"
+    introduces_print_new = "def absent_function() -> int:\n    print(1)\n    return 2\n"
+    stdout = _run_main_with_edit_payload(
+        str(source_file),
+        absent_old,
+        introduces_print_new,
+        monkeypatch,
+        capsys,
+    )
+    deny_payload = json.loads(stdout)
+    reason = deny_payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "pre-existing inline note" not in reason, (
+        "an unreconstructable-prior Edit must not forecast a pre-existing comment "
+        f"as a future blocker, got reason: {reason!r}"
+    )
+
+
 def test_forecast_omits_the_fragment_introduced_violation(
     tmp_path_factory: object,
     monkeypatch: object,

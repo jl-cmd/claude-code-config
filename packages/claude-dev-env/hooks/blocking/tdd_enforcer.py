@@ -162,64 +162,86 @@ def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_inp
     return False
 
 
-def _is_import_only_python_snippet(snippet: str) -> bool:
-    if not snippet.strip():
-        return False
-    try:
-        parsed_tree = ast.parse(snippet)
-    except SyntaxError:
-        return False
-    if not parsed_tree.body:
-        return False
-    return all(
-        isinstance(each_node, (ast.Import, ast.ImportFrom))
-        for each_node in parsed_tree.body
-    )
-
-
-def _is_import_only_replacement(old_string: str, new_string: str) -> bool:
-    if not _is_import_only_python_snippet(old_string):
-        return False
-    if not new_string.strip():
-        return True
-    return _is_import_only_python_snippet(new_string)
-
-
-def _is_import_only_edit(tool_name: str, tool_input: dict) -> bool:
-    """Report whether an Edit or MultiEdit only swaps or removes import statements.
-
-    Swapping one set of import statements for another (or removing imports)
-    introduces no new behavior in the edited file, so the RED-first gate does
-    not apply to such edits.
+def _top_level_signatures(content: str) -> tuple[list[str], list[str]] | None:
+    """Split a module's top-level statements into import and non-import signatures.
 
     Args:
+        content: Python source text to parse.
+
+    Returns:
+        A pair ``(import_signatures, non_import_signatures)`` of ``ast.dump``
+        strings in source order, or ``None`` when the content does not parse.
+        Signatures omit line and column attributes, so statements that only
+        shift position compare equal.
+    """
+    try:
+        parsed_tree = ast.parse(content)
+    except SyntaxError:
+        return None
+    import_signatures: list[str] = []
+    non_import_signatures: list[str] = []
+    for each_node in parsed_tree.body:
+        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
+            import_signatures.append(ast.dump(each_node))
+        else:
+            non_import_signatures.append(ast.dump(each_node))
+    return import_signatures, non_import_signatures
+
+
+def _is_post_edit_import_only(existing_content: str, tool_name: str, tool_input: dict) -> bool:
+    """Check whether an Edit or MultiEdit changes only import statements.
+
+    The top-level statements are split into imports and the rest, before and
+    after applying the edit. The edit is import-only when the non-import
+    statements are unchanged and the import statements do change, so adding,
+    removing, or swapping imports is exempt while an edit that leaves the
+    parsed module identical (a comment- or whitespace-only change) still faces
+    the gate. Reading the resulting file rather than the edit fragments keeps
+    the exemption from firing on import text inside a string literal, and lets
+    it fire on edits whose old string carries surrounding context for
+    uniqueness.
+
+    Args:
+        existing_content: Current text of the file under edit.
         tool_name: The intercepted tool (Edit or MultiEdit).
         tool_input: The intercepted tool's input payload.
 
     Returns:
-        True when every old/new string pair is import statements only.
+        True when the edit leaves the non-import statements unchanged while
+        changing at least one import statement.
     """
+    existing_signatures = _top_level_signatures(existing_content)
+    if existing_signatures is None:
+        return False
+
     if tool_name == "Edit":
-        old_string = tool_input.get("old_string", "")
-        new_string = tool_input.get("new_string", "") or ""
-        return _is_import_only_replacement(old_string, new_string)
-    if tool_name == "MultiEdit":
+        old_str = tool_input.get("old_string", "") or ""
+        new_str = tool_input.get("new_string", "") or ""
+        if not old_str:
+            return False
+        post_edit_content = _apply_edit_to_content(existing_content, old_str, new_str)
+    elif tool_name == "MultiEdit":
         all_edits = tool_input.get("edits", []) or []
         if not all_edits:
             return False
+        post_edit_content = existing_content
         for each_edit in all_edits:
             if not isinstance(each_edit, dict):
                 return False
-            each_old = each_edit.get("old_string", "")
+            each_old = each_edit.get("old_string", "") or ""
             each_new = each_edit.get("new_string", "") or ""
-            if not _is_import_only_replacement(each_old, each_new):
+            if not each_old:
                 return False
-        return True
-    return False
+            post_edit_content = _apply_edit_to_content(post_edit_content, each_old, each_new)
+    else:
+        return False
 
-
-def _python_extension() -> str:
-    return Path("module.py").suffix
+    post_edit_signatures = _top_level_signatures(post_edit_content)
+    if post_edit_signatures is None:
+        return False
+    existing_imports, existing_rest = existing_signatures
+    post_imports, post_rest = post_edit_signatures
+    return post_rest == existing_rest and post_imports != existing_imports
 
 
 def _tests_directory_name() -> str:
@@ -496,15 +518,13 @@ def main() -> None:
         emit_allow()
         sys.exit(0)
 
-    if tool_name in ("Edit", "MultiEdit") and ext == _python_extension():
-        if _is_import_only_edit(tool_name, tool_input):
-            emit_allow()
-            sys.exit(0)
-
     # Exempt Edit/MultiEdit on constants-only files when post-edit content remains constants-only
     if tool_name in ("Edit", "MultiEdit") and ext == ".py" and path.exists():
         existing_content = _read_candidate_text(path)
         if existing_content is not None:
+            if _is_post_edit_import_only(existing_content, tool_name, tool_input):
+                emit_allow()
+                sys.exit(0)
             if _is_post_edit_constants_only(existing_content, tool_name, tool_input):
                 emit_allow()
                 sys.exit(0)

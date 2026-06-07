@@ -889,3 +889,53 @@ def test_should_deny_behavior_edit_without_a_fresh_candidate_test(tmp_path: Path
     )
 
     assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_edit_of_import_text_inside_a_string_literal(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text('banner = "import os is great"\n\ndef fulfill(): return banner\n')
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os",
+            new_string="import sys",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_allow_import_swap_when_old_string_carries_context_lines(
+    tmp_path: Path,
+) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os\n\ndef fulfill(): pass",
+            new_string="import sys\n\ndef fulfill(): pass",
+        )
+    )
+
+    assert _decision_from(completed) == "allow"
+
+
+def test_should_allow_import_only_edit_after_a_constants_assignment(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\nMAX_ORDERS = 5\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os",
+            new_string="import sys",
+        )
+    )
+
+    assert _decision_from(completed) == "allow"

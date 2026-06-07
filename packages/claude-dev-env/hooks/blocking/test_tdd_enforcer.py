@@ -790,7 +790,7 @@ def test_ancestor_tests_walk_honors_parent_walk_limit(tmp_path: Path) -> None:
     assert top_tests_directory not in collected_tests_directories
 
 
-def test_should_allow_edit_that_only_swaps_import_statements(tmp_path: Path) -> None:
+def test_should_deny_edit_that_swaps_an_import_target(tmp_path: Path) -> None:
     sandbox = _sandbox(tmp_path)
     production_module = sandbox / "orders.py"
     production_module.write_text("import os\n\ndef fulfill(): pass\n")
@@ -803,7 +803,7 @@ def test_should_allow_edit_that_only_swaps_import_statements(tmp_path: Path) -> 
         )
     )
 
-    assert _decision_from(completed) == "allow"
+    assert _decision_from(completed) == "deny"
 
 
 def test_should_allow_edit_that_removes_an_import_statement(tmp_path: Path) -> None:
@@ -822,17 +822,17 @@ def test_should_allow_edit_that_removes_an_import_statement(tmp_path: Path) -> N
     assert _decision_from(completed) == "allow"
 
 
-def test_should_allow_multiedit_when_every_pair_is_import_only(tmp_path: Path) -> None:
+def test_should_allow_multiedit_when_every_pair_removes_an_import(tmp_path: Path) -> None:
     sandbox = _sandbox(tmp_path)
     production_module = sandbox / "orders.py"
-    production_module.write_text("import os\nimport json\n\ndef fulfill(): pass\n")
+    production_module.write_text("import os\nimport json\nimport time\n\ndef fulfill(): pass\n")
 
     completed = _run_hook_with_payload(
         _make_multiedit_payload(
             production_module,
             edits=[
-                {"old_string": "import os", "new_string": "import sys"},
-                {"old_string": "import json", "new_string": "import time"},
+                {"old_string": "import os\n", "new_string": ""},
+                {"old_string": "import json\n", "new_string": ""},
             ],
         )
     )
@@ -907,18 +907,18 @@ def test_should_deny_edit_of_import_text_inside_a_string_literal(tmp_path: Path)
     assert _decision_from(completed) == "deny"
 
 
-def test_should_allow_import_swap_when_old_string_carries_context_lines(
+def test_should_allow_import_reorder_when_old_string_carries_context_lines(
     tmp_path: Path,
 ) -> None:
     sandbox = _sandbox(tmp_path)
     production_module = sandbox / "orders.py"
-    production_module.write_text("import os\n\ndef fulfill(): pass\n")
+    production_module.write_text("import os\nimport sys\n\ndef fulfill(): pass\n")
 
     completed = _run_hook_with_payload(
         _make_edit_payload(
             production_module,
-            old_string="import os\n\ndef fulfill(): pass",
-            new_string="import sys\n\ndef fulfill(): pass",
+            old_string="import os\nimport sys\n\ndef fulfill(): pass",
+            new_string="import sys\nimport os\n\ndef fulfill(): pass",
         )
     )
 
@@ -928,13 +928,13 @@ def test_should_allow_import_swap_when_old_string_carries_context_lines(
 def test_should_allow_import_only_edit_after_a_constants_assignment(tmp_path: Path) -> None:
     sandbox = _sandbox(tmp_path)
     production_module = sandbox / "orders.py"
-    production_module.write_text("import os\n\nMAX_ORDERS = 5\n\ndef fulfill(): pass\n")
+    production_module.write_text("import os\nimport sys\n\nMAX_ORDERS = 5\n\ndef fulfill(): pass\n")
 
     completed = _run_hook_with_payload(
         _make_edit_payload(
             production_module,
-            old_string="import os",
-            new_string="import sys",
+            old_string="import os\n",
+            new_string="",
         )
     )
 
@@ -975,3 +975,47 @@ def test_should_allow_edit_that_reorders_import_statements(tmp_path: Path) -> No
     )
 
     assert _decision_from(completed) == "allow"
+
+
+def test_should_deny_edit_that_retargets_an_import_source(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("from fast import compute\n\ndef run(): return compute()\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="from fast import compute",
+            new_string="from slow import compute",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_edit_that_adds_a_future_import(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\ndef fulfill(): return os.getpid()\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os",
+            new_string="from __future__ import annotations\nimport os",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_multiedit_with_an_empty_edits_list(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\ndef fulfill(): return os.getpid()\n")
+
+    completed = _run_hook_with_payload(
+        _make_multiedit_payload(production_module, edits=[])
+    )
+
+    assert _decision_from(completed) == "deny"

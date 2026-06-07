@@ -11,6 +11,7 @@ import json
 import re
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 
@@ -208,17 +209,20 @@ def _top_level_signatures(content: str) -> tuple[list[str], list[str]] | None:
 
 
 def _is_post_edit_import_only(existing_content: str, tool_name: str, tool_input: dict) -> bool:
-    """Check whether an Edit or MultiEdit changes only import statements.
+    """Check whether an Edit or MultiEdit only removes or reorders imports.
 
     The top-level statements are split into imports and the rest, before and
-    after applying the edit. The edit is import-only when the non-import
-    statements are unchanged and the import statements do change, so adding,
-    removing, or swapping imports is exempt while an edit that leaves the
-    parsed module identical (a comment- or whitespace-only change) still faces
-    the gate. Reading the resulting file rather than the edit fragments keeps
-    the exemption from firing on import text inside a string literal, and lets
-    it fire on edits whose old string carries surrounding context for
-    uniqueness.
+    after applying the edit. The edit is exempt only when the non-import
+    statements are unchanged and every post-edit import statement already
+    appears among the pre-edit imports, so removing or reordering imports is
+    exempt while adding, swapping, or retargeting an import stays gated: those
+    can change behavior through a new symbol in scope, a different
+    implementation bound to the same name, or `from __future__` semantics. An
+    edit that leaves the parsed module identical (a comment- or whitespace-only
+    change) also stays gated. Reading the resulting file rather than the edit
+    fragments keeps the exemption from firing on import text inside a string
+    literal, and lets it fire on edits whose old string carries surrounding
+    context for uniqueness.
 
     Args:
         existing_content: Current text of the file under edit.
@@ -226,8 +230,8 @@ def _is_post_edit_import_only(existing_content: str, tool_name: str, tool_input:
         tool_input: The intercepted tool's input payload.
 
     Returns:
-        True when the edit leaves the non-import statements unchanged while
-        changing at least one import statement.
+        True when the edit leaves the non-import statements unchanged and the
+        post-edit imports are a reordering or removal of the pre-edit imports.
     """
     existing_signatures = _top_level_signatures(existing_content)
     if existing_signatures is None:
@@ -264,7 +268,9 @@ def _is_post_edit_import_only(existing_content: str, tool_name: str, tool_input:
         return False
     existing_imports, existing_rest = existing_signatures
     post_imports, post_rest = post_edit_signatures
-    return post_rest == existing_rest and post_imports != existing_imports
+    if post_rest != existing_rest or post_imports == existing_imports:
+        return False
+    return Counter(post_imports) <= Counter(existing_imports)
 
 
 def _tests_directory_name() -> str:

@@ -145,45 +145,21 @@ def _apply_edit_to_content(
     return existing_content.replace(old_str, new_str, 1)
 
 
-def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_input: dict) -> bool:
-    """Check if post-edit content remains constants-only after Edit or MultiEdit.
-
-    Both the existing content and the post-edit result must be constants-only
-    to prevent edits on files with behavior from bypassing the TDD gate.
-    """
-    if not _is_constants_only_python_content(existing_content):
-        return False
-
-    if tool_name == "Edit":
-        old_str = tool_input.get("old_string", "")
-        new_str = tool_input.get("new_string", "") or ""
-        if not old_str:
-            return False
-        should_replace_all = bool(tool_input.get("replace_all", False))
-        post_edit_content = _apply_edit_to_content(existing_content, old_str, new_str, should_replace_all)
-        return _is_constants_only_python_content(post_edit_content)
-
-    if tool_name == "MultiEdit":
-        all_edits = tool_input.get("edits", []) or []
-        post_edit_content = existing_content
-        for each_edit in all_edits:
-            if not isinstance(each_edit, dict):
-                return False
-            each_old = each_edit.get("old_string", "")
-            each_new = each_edit.get("new_string", "") or ""
-            if not each_old:
-                return False
-            should_replace_all = bool(each_edit.get("replace_all", False))
-            post_edit_content = _apply_edit_to_content(
-                post_edit_content, each_old, each_new, should_replace_all
-            )
-        return _is_constants_only_python_content(post_edit_content)
-
-    return False
-
-
 def _future_module_name() -> str:
     return "__future__"
+
+
+def _is_future_import(node: ast.stmt) -> bool:
+    """Return whether a statement is a ``from __future__`` import.
+
+    Args:
+        node: A top-level module statement.
+
+    Returns:
+        True when the statement imports from ``__future__``, whose presence
+        affects module-wide compilation semantics.
+    """
+    return isinstance(node, ast.ImportFrom) and node.module == _future_module_name()
 
 
 def _is_removable_import(node: ast.stmt) -> bool:
@@ -202,8 +178,66 @@ def _is_removable_import(node: ast.stmt) -> bool:
     if isinstance(node, ast.Import):
         return True
     if isinstance(node, ast.ImportFrom):
-        return node.module != _future_module_name()
+        return not _is_future_import(node)
     return False
+
+
+def _future_import_signatures(content: str) -> list[str] | None:
+    """Return the ``ast.dump`` signatures of a module's ``from __future__`` imports.
+
+    Args:
+        content: Python source text to parse.
+
+    Returns:
+        The future-import signatures in source order, or ``None`` when the
+        content does not parse.
+    """
+    try:
+        parsed_tree = ast.parse(content)
+    except SyntaxError:
+        return None
+    return [ast.dump(each_node) for each_node in parsed_tree.body if _is_future_import(each_node)]
+
+
+def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_input: dict) -> bool:
+    """Check if post-edit content remains constants-only after Edit or MultiEdit.
+
+    Both the existing content and the post-edit result must be constants-only
+    to prevent edits on files with behavior from bypassing the TDD gate. Editing
+    a ``from __future__`` import also fails this check, so a future-import edit
+    on a constants-only file faces the gate rather than slipping through the
+    constants exemption.
+    """
+    if not _is_constants_only_python_content(existing_content):
+        return False
+
+    if tool_name == "Edit":
+        old_str = tool_input.get("old_string", "")
+        new_str = tool_input.get("new_string", "") or ""
+        if not old_str:
+            return False
+        should_replace_all = bool(tool_input.get("replace_all", False))
+        post_edit_content = _apply_edit_to_content(existing_content, old_str, new_str, should_replace_all)
+    elif tool_name == "MultiEdit":
+        all_edits = tool_input.get("edits", []) or []
+        post_edit_content = existing_content
+        for each_edit in all_edits:
+            if not isinstance(each_edit, dict):
+                return False
+            each_old = each_edit.get("old_string", "")
+            each_new = each_edit.get("new_string", "") or ""
+            if not each_old:
+                return False
+            should_replace_all = bool(each_edit.get("replace_all", False))
+            post_edit_content = _apply_edit_to_content(
+                post_edit_content, each_old, each_new, should_replace_all
+            )
+    else:
+        return False
+
+    if _future_import_signatures(existing_content) != _future_import_signatures(post_edit_content):
+        return False
+    return _is_constants_only_python_content(post_edit_content)
 
 
 def _top_level_signatures(content: str) -> tuple[list[str], list[str]] | None:

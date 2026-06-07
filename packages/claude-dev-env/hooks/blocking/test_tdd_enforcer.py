@@ -1069,3 +1069,19 @@ def test_should_deny_edit_that_duplicates_an_import(tmp_path: Path) -> None:
     )
 
     assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_changing_a_future_import_on_a_constants_only_file(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("from __future__ import annotations\nMAX_ORDERS = 5\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="from __future__ import annotations",
+            new_string="from __future__ import division",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"

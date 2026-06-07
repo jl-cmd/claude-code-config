@@ -1019,3 +1019,53 @@ def test_should_deny_multiedit_with_an_empty_edits_list(tmp_path: Path) -> None:
     )
 
     assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_edit_that_removes_a_future_import(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text(
+        "from __future__ import annotations\nimport os\n\ndef fulfill(): return os.getpid()\n"
+    )
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="from __future__ import annotations\n",
+            new_string="",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_edit_that_adds_an_import(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os",
+            new_string="import os\nimport sys",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"
+
+
+def test_should_deny_edit_that_duplicates_an_import(tmp_path: Path) -> None:
+    sandbox = _sandbox(tmp_path)
+    production_module = sandbox / "orders.py"
+    production_module.write_text("import os\n\ndef fulfill(): pass\n")
+
+    completed = _run_hook_with_payload(
+        _make_edit_payload(
+            production_module,
+            old_string="import os",
+            new_string="import os\nimport os",
+        )
+    )
+
+    assert _decision_from(completed) == "deny"

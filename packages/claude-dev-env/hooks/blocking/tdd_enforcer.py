@@ -182,8 +182,32 @@ def _is_post_edit_constants_only(existing_content: str, tool_name: str, tool_inp
     return False
 
 
+def _future_module_name() -> str:
+    return "__future__"
+
+
+def _is_removable_import(node: ast.stmt) -> bool:
+    """Return whether a statement is an import that removes or reorders cleanly.
+
+    Args:
+        node: A top-level module statement.
+
+    Returns:
+        True for plain ``import`` and ``from`` imports. ``from __future__``
+        imports return False because their presence affects module-wide
+        compilation semantics, so the gate treats them as behavior-bearing
+        statements rather than removable imports; every non-import statement
+        also returns False.
+    """
+    if isinstance(node, ast.Import):
+        return True
+    if isinstance(node, ast.ImportFrom):
+        return node.module != _future_module_name()
+    return False
+
+
 def _top_level_signatures(content: str) -> tuple[list[str], list[str]] | None:
-    """Split a module's top-level statements into import and non-import signatures.
+    """Split a module's top-level statements into removable-import and other signatures.
 
     Args:
         content: Python source text to parse.
@@ -191,6 +215,9 @@ def _top_level_signatures(content: str) -> tuple[list[str], list[str]] | None:
     Returns:
         A pair ``(import_signatures, non_import_signatures)`` of ``ast.dump``
         strings in source order, or ``None`` when the content does not parse.
+        Plain imports populate the first list; ``from __future__`` imports and
+        every non-import statement populate the second, so editing a future
+        import reads as a behavior edit rather than a removable-import edit.
         Signatures omit line and column attributes, so statements that only
         shift position compare equal.
     """
@@ -201,7 +228,7 @@ def _top_level_signatures(content: str) -> tuple[list[str], list[str]] | None:
     import_signatures: list[str] = []
     non_import_signatures: list[str] = []
     for each_node in parsed_tree.body:
-        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
+        if _is_removable_import(each_node):
             import_signatures.append(ast.dump(each_node))
         else:
             non_import_signatures.append(ast.dump(each_node))

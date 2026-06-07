@@ -54,7 +54,8 @@ def _run_main_with_edit_payload(
         file_path: The on-disk path the Edit targets.
         old_string: The Edit's ``old_string`` fragment.
         new_string: The Edit's ``new_string`` fragment.
-        monkeypatch: The pytest fixture used to redirect ``sys.stdin``.
+        monkeypatch: The pytest fixture used to pin ``sys.argv`` and redirect
+            ``sys.stdin``.
         capsys: The pytest fixture used to capture the deny payload on stdout.
 
     Returns:
@@ -69,6 +70,9 @@ def _run_main_with_edit_payload(
                 "new_string": new_string,
             },
         }
+    )
+    getattr(monkeypatch, "setattr")(
+        code_rules_enforcer.sys, "argv", ["code_rules_enforcer.py"]
     )
     getattr(monkeypatch, "setattr")(code_rules_enforcer.sys, "stdin", io.StringIO(edit_payload))
     try:

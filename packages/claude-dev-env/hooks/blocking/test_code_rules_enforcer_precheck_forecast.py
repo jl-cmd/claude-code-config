@@ -46,6 +46,26 @@ _UNTOUCHED_PRINT_VIOLATION_SOURCE = "def emit_audit_line() -> None:\n    print(9
 _CLEAN_FRAGMENT_BEFORE = "def short_helper() -> int:\n    return 1\n"
 
 
+def _run_enforcer_cli(
+    all_cli_arguments: list[str],
+) -> subprocess.CompletedProcess[str]:
+    """Drive the enforcer script through its real argv entry point.
+
+    Args:
+        all_cli_arguments: The argument vector appended after the script path.
+
+    Returns:
+        The completed process carrying stdout, stderr, and the exit code.
+    """
+    return subprocess.run(
+        [sys.executable, str(_ENFORCER_SCRIPT_PATH), *all_cli_arguments],
+        input="",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def _run_precheck(
     candidate_path: str,
     target_path: str,
@@ -60,20 +80,7 @@ def _run_precheck(
     Returns:
         The completed process carrying the pre-check stdout, stderr, and exit code.
     """
-    all_arguments = [
-        sys.executable,
-        str(_ENFORCER_SCRIPT_PATH),
-        "--check",
-        candidate_path,
-        "--as",
-        target_path,
-    ]
-    return subprocess.run(
-        all_arguments,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    return _run_enforcer_cli(["--check", candidate_path, "--as", target_path])
 
 
 def _run_main_with_edit_payload(
@@ -89,7 +96,8 @@ def _run_main_with_edit_payload(
         file_path: The on-disk path the Edit targets.
         old_string: The Edit's ``old_string`` fragment.
         new_string: The Edit's ``new_string`` fragment.
-        monkeypatch: The pytest fixture used to redirect ``sys.stdin``.
+        monkeypatch: The pytest fixture used to pin ``sys.argv`` and redirect
+            ``sys.stdin``.
         capsys: The pytest fixture used to capture the deny payload on stdout.
 
     Returns:
@@ -104,6 +112,9 @@ def _run_main_with_edit_payload(
                 "new_string": new_string,
             },
         }
+    )
+    getattr(monkeypatch, "setattr")(
+        code_rules_enforcer.sys, "argv", [str(_ENFORCER_SCRIPT_PATH)]
     )
     getattr(monkeypatch, "setattr")(code_rules_enforcer.sys, "stdin", io.StringIO(edit_payload))
     try:
@@ -358,14 +369,7 @@ def test_forecast_omits_the_fragment_introduced_violation(
 def test_precheck_missing_candidate_value_exits_two_with_usage() -> None:
     """A ``--check`` flag with no candidate path is a usage error: exit 2 with a
     usage line on stderr, never a silent clean verdict."""
-    all_arguments = [sys.executable, str(_ENFORCER_SCRIPT_PATH), "--check"]
-    completed = subprocess.run(
-        all_arguments,
-        input="",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_enforcer_cli(["--check"])
     assert completed.returncode == 2, (
         f"missing candidate value must exit 2, got: {completed.returncode}, "
         f"stdout: {completed.stdout!r}, stderr: {completed.stderr!r}"
@@ -382,24 +386,35 @@ def test_precheck_flag_shaped_candidate_value_exits_two_with_usage(
     an attempt to read a file literally named ``--as``."""
     production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
     target_path = str(production_directory / "production_module.py")
-    all_arguments = [
-        sys.executable,
-        str(_ENFORCER_SCRIPT_PATH),
-        "--check",
-        "--as",
-        target_path,
-    ]
-    completed = subprocess.run(
-        all_arguments,
-        input="",
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    completed = _run_enforcer_cli(["--check", "--as", target_path])
     assert completed.returncode == 2, (
         f"flag-shaped candidate value must exit 2, got: {completed.returncode}, "
         f"stdout: {completed.stdout!r}, stderr: {completed.stderr!r}"
     )
     assert "usage:" in completed.stderr, (
         f"flag-shaped candidate value must print usage on stderr, got: {completed.stderr!r}"
+    )
+
+
+def test_precheck_strips_candidate_byte_order_mark_before_validation(
+    tmp_path_factory: object,
+) -> None:
+    """A UTF-8 byte-order mark on the candidate must not hide AST-based
+    violations: the candidate is judged exactly as its decoded content would
+    arrive in a live tool payload."""
+    staging_directory = getattr(tmp_path_factory, "mktemp")("staging")
+    production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
+    candidate_file = staging_directory / "candidate.py"
+    candidate_file.write_text(
+        "\ufeff" + _VIOLATING_PRODUCTION_SOURCE, encoding="utf-8"
+    )
+    target_path = str(production_directory / "production_module.py")
+    completed = _run_precheck(str(candidate_file), target_path)
+    assert completed.returncode == 1, (
+        f"a BOM candidate must fail exactly like its no-BOM twin, got: "
+        f"{completed.returncode}, stdout: {completed.stdout!r}, "
+        f"stderr: {completed.stderr!r}"
+    )
+    assert "process_data" in completed.stdout, (
+        f"banned-prefix violation must appear on stdout, got: {completed.stdout!r}"
     )

@@ -124,6 +124,7 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_PYTHON_EXTENSIONS,
     PRECHECK_USAGE_EXIT_CODE,
     PRECHECK_USAGE_MESSAGE,
+    UTF8_BYTE_ORDER_MARK,
 )
 
 
@@ -366,6 +367,14 @@ def _forecast_full_file_violations(
     elsewhere in the file still surfaces. The remainder are the violations that
     survive elsewhere in the file and will block a future edit.
 
+    Body matching relies on an invariant of the check suite: every check that
+    embeds a secondary source position in its message body (function length,
+    banned-noun binding spans, test isolation) scans the whole post-edit file
+    in both passes, so those embedded positions are identical across scans;
+    checks that scan only the fragment carry their position solely in the
+    strippable ``Line <n>: `` locator. A fragment-scoped check that embeds a
+    position in its body would defeat the dedup and re-list its own violation.
+
     Args:
         full_file_content_after_edit: The whole post-edit file content.
         file_path: The destination path used for classification.
@@ -413,7 +422,9 @@ def _run_precheck(
     Reads the candidate's full content and runs the complete verdict (no diff
     scoping) using ``target_path`` for every path-based classification, so a
     candidate staged in a temporary directory is judged as if written to its real
-    destination.
+    destination. A leading byte-order mark on the candidate is stripped so the
+    verdict matches the one the decoded tool-payload content receives — a BOM
+    would otherwise fail AST parsing and silently skip every AST-based check.
 
     Args:
         candidate_path: The path of the candidate file to validate.
@@ -433,6 +444,7 @@ def _run_precheck(
     if candidate_content is None:
         error_stream.write(f"error: cannot read candidate file: {candidate_path}\n")
         return 1
+    candidate_content = candidate_content.removeprefix(UTF8_BYTE_ORDER_MARK)
     old_content = _read_existing_file_content(target_path) or ""
     all_issues = validate_content(candidate_content, target_path, old_content)
     for each_issue in all_issues:
@@ -444,17 +456,14 @@ def _precheck_arguments(all_arguments: list[str]) -> tuple[str, str] | None:
     """Parse the pre-check command-line flags into a candidate and target pair.
 
     Args:
-        all_arguments: The argument vector following the script name.
+        all_arguments: An argument vector carrying the ``--check`` flag.
 
     Returns:
         A ``(candidate_path, target_path)`` pair for a well-formed pre-check
         invocation, with the target defaulting to the candidate when ``--as``
-        is absent; otherwise None — either no ``--check`` flag is present, or a
-        flag is missing its path value, or a flag-shaped token sits where a
-        path belongs.
+        is absent; otherwise None — a flag is missing its path value, or a
+        flag-shaped token sits where a path belongs.
     """
-    if "--check" not in all_arguments:
-        return None
     check_index = all_arguments.index("--check")
     if check_index + 1 >= len(all_arguments):
         return None

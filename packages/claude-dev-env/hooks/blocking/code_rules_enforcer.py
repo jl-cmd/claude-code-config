@@ -18,6 +18,7 @@ concern focused. The separate ``tdd_enforcer.py`` hook accepts any
 import json
 import sys
 from pathlib import Path
+from typing import TextIO
 
 _BLOCKING_DIRECTORY = str(Path(__file__).resolve().parent)
 _HOOKS_DIRECTORY = str(Path(__file__).resolve().parent.parent)
@@ -310,7 +311,123 @@ def prior_and_post_edit_content(
     return existing_content, existing_content.replace(old_string, new_string, 1)
 
 
+def _forecast_full_file_violations(
+    full_file_content_after_edit: str,
+    file_path: str,
+    prior_full_file_content: str,
+    all_blocking_issues: list[str],
+) -> list[str]:
+    """Return full-file violations absent from the fragment-scoped blocking list.
+
+    Runs a complete, un-scoped scan of the whole post-edit file so fragment-scoped
+    checks see every line, then drops any violation already present in
+    ``all_blocking_issues`` by exact string match. The remainder are the
+    violations that survive elsewhere in the file and will block a future edit.
+
+    Args:
+        full_file_content_after_edit: The whole post-edit file content.
+        file_path: The destination path used for classification.
+        prior_full_file_content: The whole file content before the edit applied,
+            used so the comment diff reflects the real prior state.
+        all_blocking_issues: The fragment-scoped issues that already decide the
+            deny.
+
+    Returns:
+        The full-file violations not already in ``all_blocking_issues``.
+    """
+    all_full_file_issues = validate_content(
+        full_file_content_after_edit, file_path, prior_full_file_content
+    )
+    already_blocking = set(all_blocking_issues)
+    return [
+        each_issue
+        for each_issue in all_full_file_issues
+        if each_issue not in already_blocking
+    ]
+
+
+def _precheck_hint() -> str:
+    """Return the discoverability hint pointing at the script's pre-check mode."""
+    script_path = str(Path(__file__).resolve())
+    return (
+        "; Pre-check a complete candidate before retrying: "
+        f"python {script_path} --check <candidate.py> --as <target.py>"
+    )
+
+
+def _run_precheck(
+    candidate_path: str,
+    target_path: str,
+    violation_stream: TextIO,
+    error_stream: TextIO,
+) -> int:
+    """Validate a complete candidate file as if it lived at its destination.
+
+    Reads the candidate's full content and runs the complete verdict (no diff
+    scoping) using ``target_path`` for every path-based classification, so a
+    candidate staged in a temporary directory is judged as if written to its real
+    destination.
+
+    Args:
+        candidate_path: The path of the candidate file to validate.
+        target_path: The destination path used for extension dispatch and every
+            exemption decision.
+        violation_stream: The stream each violation line is written to.
+        error_stream: The stream the unreadable-candidate error line is written
+            to.
+
+    Returns:
+        Exit code 1 when any violation exists or the candidate cannot be read,
+        and 0 when the candidate is clean or the target is exempt.
+    """
+    if is_hook_infrastructure(target_path):
+        return 0
+    if get_file_extension(target_path) not in ALL_CODE_EXTENSIONS:
+        return 0
+    candidate_content = _read_existing_file_content(candidate_path)
+    if candidate_content is None:
+        error_stream.write(f"error: cannot read candidate file: {candidate_path}\n")
+        return 1
+    old_content = _read_existing_file_content(target_path) or ""
+    all_issues = validate_content(candidate_content, target_path, old_content)
+    for each_issue in all_issues:
+        violation_stream.write(f"{each_issue}\n")
+    return 1 if all_issues else 0
+
+
+def _precheck_arguments(all_arguments: list[str]) -> tuple[str, str] | None:
+    """Parse the pre-check command-line flags into a candidate and target pair.
+
+    Args:
+        all_arguments: The argument vector following the script name.
+
+    Returns:
+        A ``(candidate_path, target_path)`` pair when ``--check`` is present, with
+        the target defaulting to the candidate when ``--as`` is absent; otherwise
+        None to signal stdin-hook mode.
+    """
+    if "--check" not in all_arguments:
+        return None
+    check_index = all_arguments.index("--check")
+    if check_index + 1 >= len(all_arguments):
+        return None
+    candidate_path = all_arguments[check_index + 1]
+    target_path = candidate_path
+    if "--as" in all_arguments:
+        as_index = all_arguments.index("--as")
+        if as_index + 1 < len(all_arguments):
+            target_path = all_arguments[as_index + 1]
+    return candidate_path, target_path
+
+
 def main() -> None:
+    precheck_paths = _precheck_arguments(sys.argv[1:])
+    if precheck_paths is not None:
+        candidate_path, target_path = precheck_paths
+        sys.exit(
+            _run_precheck(candidate_path, target_path, sys.stdout, sys.stderr)
+        )
+
     try:
         input_data = json.load(sys.stdin)
     except json.JSONDecodeError:
@@ -364,11 +481,27 @@ def main() -> None:
 
     if issues:
         issue_list = "; ".join(issues[:10])
+        deny_reason = f"BLOCKED: [CODE_RULES] {len(issues)} violation(s): {issue_list}"
+        if tool_name == "Edit" and full_file_content_after_edit is not None:
+            forecast_issues = _forecast_full_file_violations(
+                full_file_content_after_edit,
+                file_path,
+                prior_full_file_content,
+                issues,
+            )
+            if forecast_issues:
+                forecast_list = "; ".join(forecast_issues[:10])
+                deny_reason += (
+                    f"; FULL-FILE FORECAST — {len(forecast_issues)} additional "
+                    "violation(s) elsewhere in this file will block future edits "
+                    f"(full-file line numbers): {forecast_list}"
+                )
+        deny_reason += _precheck_hint()
         deny_payload = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
-                "permissionDecisionReason": f"BLOCKED: [CODE_RULES] {len(issues)} violation(s): {issue_list}",
+                "permissionDecisionReason": deny_reason,
             }
         }
         print(json.dumps(deny_payload))

@@ -96,8 +96,7 @@ def _run_main_with_edit_payload(
         file_path: The on-disk path the Edit targets.
         old_string: The Edit's ``old_string`` fragment.
         new_string: The Edit's ``new_string`` fragment.
-        monkeypatch: The pytest fixture used to pin ``sys.argv`` and redirect
-            ``sys.stdin``.
+        monkeypatch: The pytest fixture used to redirect ``sys.stdin``.
         capsys: The pytest fixture used to capture the deny payload on stdout.
 
     Returns:
@@ -113,12 +112,9 @@ def _run_main_with_edit_payload(
             },
         }
     )
-    getattr(monkeypatch, "setattr")(
-        code_rules_enforcer.sys, "argv", [str(_ENFORCER_SCRIPT_PATH)]
-    )
     getattr(monkeypatch, "setattr")(code_rules_enforcer.sys, "stdin", io.StringIO(edit_payload))
     try:
-        code_rules_enforcer.main()
+        code_rules_enforcer.main([])
     except SystemExit:
         pass
     captured = getattr(capsys, "readouterr")()
@@ -417,4 +413,54 @@ def test_precheck_strips_candidate_byte_order_mark_before_validation(
     )
     assert "process_data" in completed.stdout, (
         f"banned-prefix violation must appear on stdout, got: {completed.stdout!r}"
+    )
+
+
+def test_precheck_strips_every_leading_byte_order_mark_before_validation(
+    tmp_path_factory: object,
+) -> None:
+    """Stacked byte-order marks must not hide AST-based violations: every
+    leading mark is stripped, so a double-BOM candidate fails exactly like its
+    clean-prefixed twin rather than silently skipping AST parsing."""
+    staging_directory = getattr(tmp_path_factory, "mktemp")("staging")
+    production_directory = getattr(tmp_path_factory, "mktemp")("production_pkg")
+    candidate_file = staging_directory / "candidate.py"
+    candidate_file.write_text(
+        "\ufeff\ufeff" + _VIOLATING_PRODUCTION_SOURCE, encoding="utf-8"
+    )
+    target_path = str(production_directory / "production_module.py")
+    completed = _run_precheck(str(candidate_file), target_path)
+    assert completed.returncode == 1, (
+        f"a double-BOM candidate must fail exactly like its no-BOM twin, got: "
+        f"{completed.returncode}, stdout: {completed.stdout!r}, "
+        f"stderr: {completed.stderr!r}"
+    )
+    assert "process_data" in completed.stdout, (
+        f"banned-prefix violation must appear on stdout, got: {completed.stdout!r}"
+    )
+
+
+def test_precheck_duplicate_flags_exit_two_with_usage() -> None:
+    """A repeated ``--check`` or ``--as`` flag is an ambiguous vector: the
+    pre-check rejects it with the usage exit code before reading any file,
+    never silently judging only the first occurrence."""
+    duplicate_check = _run_enforcer_cli(
+        ["--check", "first_candidate.py", "--check", "second_candidate.py"]
+    )
+    assert duplicate_check.returncode == 2, (
+        f"duplicate --check must exit 2, got: {duplicate_check.returncode}, "
+        f"stdout: {duplicate_check.stdout!r}, stderr: {duplicate_check.stderr!r}"
+    )
+    assert "usage:" in duplicate_check.stderr, (
+        f"duplicate --check must print usage on stderr, got: {duplicate_check.stderr!r}"
+    )
+    duplicate_as = _run_enforcer_cli(
+        ["--check", "candidate.py", "--as", "first_target.py", "--as", "second_target.py"]
+    )
+    assert duplicate_as.returncode == 2, (
+        f"duplicate --as must exit 2, got: {duplicate_as.returncode}, "
+        f"stdout: {duplicate_as.stdout!r}, stderr: {duplicate_as.stderr!r}"
+    )
+    assert "usage:" in duplicate_as.stderr, (
+        f"duplicate --as must print usage on stderr, got: {duplicate_as.stderr!r}"
     )

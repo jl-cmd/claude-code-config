@@ -128,7 +128,6 @@ PRECHECK_USAGE_EXIT_CODE: int = 2
 PRECHECK_USAGE_MESSAGE: str = (
     "usage: code_rules_enforcer.py --check <candidate> [--as <target>]\n"
 )
-UTF8_BYTE_ORDER_MARK: str = "\ufeff"
 
 BANNED_NOUN_SPAN_FRAGMENT_TEMPLATE: str = (
     "(binding span at line {definition_line}, spanning {line_span} lines)"

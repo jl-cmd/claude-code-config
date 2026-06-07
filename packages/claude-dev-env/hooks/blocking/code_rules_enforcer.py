@@ -124,6 +124,8 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_PYTHON_EXTENSIONS,
     PRECHECK_USAGE_EXIT_CODE,
     PRECHECK_USAGE_MESSAGE,
+)
+from hooks_constants.setup_project_paths_constants import (  # noqa: E402
     UTF8_BYTE_ORDER_MARK,
 )
 
@@ -422,9 +424,10 @@ def _run_precheck(
     Reads the candidate's full content and runs the complete verdict (no diff
     scoping) using ``target_path`` for every path-based classification, so a
     candidate staged in a temporary directory is judged as if written to its real
-    destination. A leading byte-order mark on the candidate is stripped so the
-    verdict matches the one the decoded tool-payload content receives — a BOM
-    would otherwise fail AST parsing and silently skip every AST-based check.
+    destination. Every leading byte-order mark on the candidate is stripped so
+    the verdict matches the one the decoded tool-payload content receives — a
+    BOM would otherwise fail AST parsing and silently skip every AST-based
+    check.
 
     Args:
         candidate_path: The path of the candidate file to validate.
@@ -444,7 +447,7 @@ def _run_precheck(
     if candidate_content is None:
         error_stream.write(f"error: cannot read candidate file: {candidate_path}\n")
         return 1
-    candidate_content = candidate_content.removeprefix(UTF8_BYTE_ORDER_MARK)
+    candidate_content = candidate_content.lstrip(UTF8_BYTE_ORDER_MARK)
     old_content = _read_existing_file_content(target_path) or ""
     all_issues = validate_content(candidate_content, target_path, old_content)
     for each_issue in all_issues:
@@ -461,9 +464,12 @@ def _precheck_arguments(all_arguments: list[str]) -> tuple[str, str] | None:
     Returns:
         A ``(candidate_path, target_path)`` pair for a well-formed pre-check
         invocation, with the target defaulting to the candidate when ``--as``
-        is absent; otherwise None — a flag is missing its path value, or a
-        flag-shaped token sits where a path belongs.
+        is absent; otherwise None — a flag is missing its path value, a
+        flag-shaped token sits where a path belongs, or a flag appears more
+        than once.
     """
+    if all_arguments.count("--check") > 1 or all_arguments.count("--as") > 1:
+        return None
     check_index = all_arguments.index("--check")
     if check_index + 1 >= len(all_arguments):
         return None
@@ -583,8 +589,63 @@ def _deny_reason_for_issues(
     return deny_reason + _precheck_hint()
 
 
-def main() -> None:
-    all_arguments = sys.argv[1:]
+def _report_blocking_violations(
+    content: str,
+    tool_name: str,
+    file_path: str,
+    old_content: str,
+    full_file_content_after_edit: str | None,
+    prior_full_file_content: str,
+    deny_stream: TextIO,
+) -> None:
+    """Run the verdict and write a deny payload when blocking violations fire.
+
+    Args:
+        content: The fragment or whole-file body under validation.
+        tool_name: The tool named in the PreToolUse payload.
+        file_path: The destination path of the write or edit.
+        old_content: The fragment the edit replaces, or empty for a write.
+        full_file_content_after_edit: The reconstructed post-edit file body,
+            or None when the payload is not an Edit.
+        prior_full_file_content: The on-disk content before the edit.
+        deny_stream: The stream the JSON deny payload is written to.
+    """
+    all_blocking_issues = validate_content(
+        content,
+        file_path,
+        old_content,
+        full_file_content_after_edit,
+        prior_full_file_content,
+    )
+    if not all_blocking_issues:
+        return
+    deny_payload = {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": _deny_reason_for_issues(
+                all_blocking_issues,
+                tool_name,
+                file_path,
+                full_file_content_after_edit,
+                prior_full_file_content,
+            ),
+        }
+    }
+    deny_stream.write(json.dumps(deny_payload) + "\n")
+    deny_stream.flush()
+
+
+def main(all_arguments: list[str]) -> None:
+    """Run the enforcer for the given argument vector.
+
+    Dispatches to the pre-check CLI mode when the vector carries ``--check``;
+    otherwise reads a PreToolUse payload from stdin and emits a deny payload
+    on stdout when the content violates a blocking rule.
+
+    Args:
+        all_arguments: The argument vector following the script name.
+    """
     if "--check" in all_arguments:
         sys.exit(_run_precheck_command(all_arguments, sys.stdout, sys.stderr))
 
@@ -616,33 +677,17 @@ def main() -> None:
     if not content:
         sys.exit(0)
 
-    issues = validate_content(
+    _report_blocking_violations(
         content,
+        tool_name,
         file_path,
         old_content,
         full_file_content_after_edit,
         prior_full_file_content,
+        sys.stdout,
     )
-
-    if issues:
-        deny_payload = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": _deny_reason_for_issues(
-                    issues,
-                    tool_name,
-                    file_path,
-                    full_file_content_after_edit,
-                    prior_full_file_content,
-                ),
-            }
-        }
-        print(json.dumps(deny_payload))
-        sys.stdout.flush()
-
     sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

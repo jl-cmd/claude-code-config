@@ -31,7 +31,8 @@ Run every command below in the PR worktree (the working directory routed in
 PR's fix lands in the PR's repo only when the cwd is its worktree. A spawned
 `clean-coder` does not inherit the lead's working directory — name the PR
 worktree path in its prompt and direct it to edit, stage, and commit there,
-matching bugteam's `--worktree-path` handoff.
+matching the worktree-path handoff bugteam embeds in its fix worker's spawn
+prompt.
 
 - Read each referenced file:line.
 - Write failing test first when finding has behavior to test. Pure doc /

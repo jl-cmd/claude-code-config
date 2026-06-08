@@ -55,26 +55,31 @@ directory, so the working directory must be the PR worktree before any local
 work begins. Re-resolve it every tick — a rebase or a fresh HEAD can move the
 branch tip.
 
-Read the current working tree's origin:
+Read the current working tree's origin and parse its `<owner>/<repo>`,
+accepting both the `https://github.com/<owner>/<repo>` and
+`git@github.com:<owner>/<repo>` forms and dropping any trailing `.git`:
 
 ```bash
 git remote get-url origin
 ```
 
-- **Origin owner/repo matches the PR** (case-insensitive): the `EnterWorktree`
+- **Parsed owner/repo matches the PR** (case-insensitive): the `EnterWorktree`
   pre-flight checkout is the PR worktree. Check out the PR head branch and
   fast-forward it to `origin/<headRef>` when it sits elsewhere. The working
   directory already points here — no change.
 
-- **Origin owner/repo differs** (the session is rooted in another repo — for
+- **Parsed owner/repo differs** (the session is rooted in another repo — for
   example, the PR lives in `llm-settings` while the session runs from
   `claude-code-config`): route the working directory into a checkout of the
   PR's repo. This is routine and automatic — never pause, and never raise it as
   a fork (see [ground-rules.md](ground-rules.md)). `EnterWorktree` is scoped to
   the session's own repo and cannot re-root into the PR's repo.
 
-  `<run_temp_dir>` is a `pr-converge-pr-<N>` directory under the system temp
-  directory. Reuse its `checkout` across ticks; create it once when it is
+  `<run_temp_dir>` is pr-converge's own `pr-converge-pr-<N>` directory under the
+  system temp directory — named apart from bugteam's `bugteam-pr-<N>` run dir so
+  the two never share a checkout when Step 6 runs bugteam on the same PR.
+  pr-converge fills this path by hand; it does not route through bugteam's
+  `_path_resolver`. Reuse its `checkout` across ticks; create it once when it is
   absent. A fresh clone honors the global `core.hooksPath`, so git-side
   CODE_RULES enforcement covers the fix commit.
 
@@ -105,7 +110,8 @@ git remote get-url origin
      `current_head`.
 
   Spawn every `clean-coder` fix worker with the PR worktree path in its prompt
-  so its edits land in the PR's repo, matching bugteam's worktree handoff. The
+  so its edits land in the PR's repo — the same worktree-path handoff bugteam
+  gives its fix worker. The
   GitHub API steps (BUGBOT fetch, convergence gates) and the bugteam Skill
   invocation are URL-driven and need no local checkout.
 

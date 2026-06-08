@@ -82,7 +82,10 @@ git remote get-url origin
      ```bash
      gh repo clone <owner>/<repo> "<run_temp_dir>/checkout" -- --branch <headRef>
      ```
-  2. Bring it to the PR head:
+  2. Bring it to the PR head. On a reused checkout, confirm it carries no
+     uncommitted edits first — a non-empty `git -C "<run_temp_dir>/checkout"
+     status --porcelain` means a prior tick left a fix mid-flight, so escalate
+     as a hard blocker rather than discard it. On a clean tree:
      ```bash
      git -C "<run_temp_dir>/checkout" fetch origin
      git -C "<run_temp_dir>/checkout" checkout <headRef>
@@ -105,6 +108,13 @@ git remote get-url origin
   so its edits land in the PR's repo, matching bugteam's worktree handoff. The
   GitHub API steps (BUGBOT fetch, convergence gates) and the bugteam Skill
   invocation are URL-driven and need no local checkout.
+
+  Capture the session worktree path (the `EnterWorktree` checkout) before
+  routing away. Step 0 grant, Step 8 working-tree cleanup, and Step 10 revoke
+  read the current working directory and target the session repo, so `cd` back
+  to the session worktree before Step 8 and remove `<run_temp_dir>` there with
+  a Windows-safe recursive remove (per
+  `~/.claude/rules/windows-filesystem-safe.md`).
 
 ## Step 2: Branch on `phase`
 

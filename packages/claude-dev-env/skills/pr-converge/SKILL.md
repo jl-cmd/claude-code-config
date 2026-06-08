@@ -37,7 +37,10 @@ runs. When the PR lives in a different repo, `EnterWorktree` cannot
 re-root into it; Step 1 resolves a **PR worktree** — a checkout of the
 PR's repo on its head branch — and routes the working directory into it.
 Routing the working directory into the PR's repo is routine and
-automatic, never a fork to pause on. See
+automatic, never a fork to pause on. The Pre-flight `.claude/worktrees/`
+gate covers the session repo's own isolation; for a cross-repo PR the
+working directory routes into the PR's repo for local work and returns to
+the session worktree before teardown. See
 [`reference/per-tick.md` § Step 1.5](reference/per-tick.md).
 
 ## State persistence

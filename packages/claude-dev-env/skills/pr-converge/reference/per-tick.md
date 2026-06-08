@@ -56,8 +56,9 @@ work begins. Re-resolve it every tick — a rebase or a fresh HEAD can move the
 branch tip.
 
 Read the current working tree's origin and parse its `<owner>/<repo>`,
-accepting both the `https://github.com/<owner>/<repo>` and
-`git@github.com:<owner>/<repo>` forms and dropping any trailing `.git`:
+accepting the `https://github.com/<owner>/<repo>`,
+`git@github.com:<owner>/<repo>`, and `ssh://git@github.com/<owner>/<repo>`
+forms and dropping any trailing `.git`:
 
 ```bash
 git remote get-url origin
@@ -93,8 +94,7 @@ git remote get-url origin
      as a hard blocker rather than discard it. On a clean tree:
      ```bash
      git -C "<run_temp_dir>/checkout" fetch origin
-     git -C "<run_temp_dir>/checkout" checkout <headRef>
-     git -C "<run_temp_dir>/checkout" reset --hard origin/<headRef>
+     git -C "<run_temp_dir>/checkout" checkout -B <headRef> origin/<headRef>
      ```
   3. Change into it in a standalone Bash call so the working directory persists
      into the `/code-review` invocation that follows:

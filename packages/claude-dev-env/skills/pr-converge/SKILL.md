@@ -34,7 +34,7 @@ and stop; do not continue in place.
 `EnterWorktree` isolates the session's **own** repo. When the PR under
 convergence shares that repo, its worktree is where the CODE_REVIEW phase
 runs. When the PR lives in a different repo, `EnterWorktree` cannot
-re-root into it; Step 1 resolves a **PR worktree** — a checkout of the
+re-root into it; Step 1.5 resolves a **PR worktree** — a checkout of the
 PR's repo on its head branch — and routes the working directory into it.
 Routing the working directory into the PR's repo is routine and
 automatic, never a fork to pause on. The Pre-flight `.claude/worktrees/`
@@ -193,7 +193,7 @@ round as converged. This rule holds every tick, every loop, every PR.
 
       Pre-condition: `bugbot_clean_at == current_head` (or `bugbot_down == true`).
 
-      Pre-condition: the working directory is the Step 1 PR worktree on
+      Pre-condition: the working directory is the Step 1.5 PR worktree on
       `current_head` (`git rev-parse --show-toplevel` is that checkout).
       When the session is rooted in a different repo than the PR, `cd`
       into the PR worktree first — `/code-review` audits the repo of the

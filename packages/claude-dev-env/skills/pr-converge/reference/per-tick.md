@@ -65,9 +65,15 @@ git remote get-url origin
 ```
 
 - **Parsed owner/repo matches the PR** (case-insensitive): the `EnterWorktree`
-  pre-flight checkout is the PR worktree. Check out the PR head branch and
-  fast-forward it to `origin/<headRef>` when it sits elsewhere. The working
-  directory already points here — no change.
+  pre-flight checkout is the PR worktree, and the working directory already
+  points here, so no `cd` is needed. Bring the branch to the PR head with the
+  same deterministic `checkout -B` the cross-repo case uses, after confirming
+  the tree carries no uncommitted edits — a non-empty `git status --porcelain`
+  means a prior tick left a fix mid-flight, so escalate as a hard blocker:
+  ```bash
+  git fetch origin
+  git checkout -B <branch> origin/<branch>
+  ```
 
 - **Parsed owner/repo differs** (the session is rooted in another repo — for
   example, the PR lives in `llm-settings` while the session runs from
@@ -86,7 +92,7 @@ git remote get-url origin
 
   1. Clone the PR branch when the checkout is absent:
      ```bash
-     gh repo clone <owner>/<repo> "<run_temp_dir>/checkout" -- --branch <headRef>
+     gh repo clone <owner>/<repo> "<run_temp_dir>/checkout" -- --branch <branch>
      ```
   2. Bring it to the PR head. On a reused checkout, confirm it carries no
      uncommitted edits first — a non-empty `git -C "<run_temp_dir>/checkout"
@@ -94,7 +100,7 @@ git remote get-url origin
      as a hard blocker rather than discard it. On a clean tree:
      ```bash
      git -C "<run_temp_dir>/checkout" fetch origin
-     git -C "<run_temp_dir>/checkout" checkout -B <headRef> origin/<headRef>
+     git -C "<run_temp_dir>/checkout" checkout -B <branch> origin/<branch>
      ```
   3. Change into it in a standalone Bash call so the working directory persists
      into the `/code-review` invocation that follows:

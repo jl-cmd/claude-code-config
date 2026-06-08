@@ -79,9 +79,9 @@ git remote get-url origin
   `<run_temp_dir>` is pr-converge's own `pr-converge-pr-<N>` directory under the
   system temp directory — named apart from bugteam's `bugteam-pr-<N>` run dir so
   the two never share a checkout when Step 6 runs bugteam on the same PR.
-  pr-converge fills this path by hand; it does not route through bugteam's
-  `_path_resolver`. Reuse its `checkout` across ticks; create it once when it is
-  absent. A fresh clone honors the global `core.hooksPath`, so git-side
+  pr-converge fills this path by hand; it does not route through the shared
+  `_path_resolver` that bugteam uses. Reuse its `checkout` across ticks; create
+  it once when it is absent. A fresh clone honors the global `core.hooksPath`, so git-side
   CODE_RULES enforcement covers the fix commit.
 
   1. Clone the PR branch when the checkout is absent:
@@ -120,7 +120,7 @@ git remote get-url origin
   read the current working directory and target the session repo, so `cd` back
   to the session worktree before Step 8 and remove `<run_temp_dir>` there with
   a Windows-safe recursive remove (per
-  `~/.claude/rules/windows-filesystem-safe.md`).
+  `$HOME/.claude/rules/windows-filesystem-safe.md`).
 
 ## Step 2: Branch on `phase`
 

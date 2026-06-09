@@ -5,9 +5,9 @@ fails in a new way.
 
 - **The workflow script cannot sleep.** `Date.now`, `Math.random`, and timers
   are unavailable in the script body, and a foreground sleep is blocked. Every
-  reviewer wait lives inside an `agent`'s own poll loop (a single PowerShell
-  `Start-Sleep` loop, or `gh` check polling). Never try to wait in the script
-  itself.
+  reviewer wait lives inside an `agent`'s own poll loop — a shell-agnostic `sleep`
+  loop (PowerShell `Start-Sleep` is an allowed alternative), or `gh` check
+  polling. Never try to wait in the script itself.
 
 - **Workflow agents start blank.** Spawned agents do not inherit CLAUDE.md,
   rules, or this skill's context. Each agent prompt is self-contained: it names

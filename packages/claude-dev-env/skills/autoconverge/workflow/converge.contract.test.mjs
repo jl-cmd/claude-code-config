@@ -66,3 +66,65 @@ test('gotchas doc states parallel lenses must avoid concurrent git operations', 
   assert.doesNotMatch(gotchasSource, /cannot race on git state/);
   assert.match(gotchasSource, /fetch.*once.*before/i);
 });
+
+test('repair-convergence filters unresolved threads to bot authors and skips human threads', () => {
+  const repairPrompt = lensPromptBody('repairConvergence');
+  assert.match(
+    repairPrompt,
+    /cursor.*claude.*copilot|copilot.*cursor.*claude|claude.*cursor.*copilot/is,
+    'expected the bot-author allowlist (Cursor/Claude/Copilot) to be named',
+  );
+  assert.match(
+    repairPrompt,
+    /skip.*human|human.*skip/is,
+    'expected an explicit instruction to skip human reviewer threads',
+  );
+});
+
+test('repair-convergence no longer instructs resolving every unresolved thread without an author filter', () => {
+  const repairPrompt = lensPromptBody('repairConvergence');
+  assert.doesNotMatch(
+    repairPrompt,
+    /fetch every thread where isResolved is false/,
+    'the unfiltered instruction could resolve human reviewer threads',
+  );
+});
+
+test('bugbot lens delay instructions are shell-agnostic with PowerShell as an alternative', () => {
+  const bugbotPrompt = lensPromptBody('runBugbotLens');
+  assert.match(bugbotPrompt, /sleep 60/, 'expected a shell-agnostic 60-second poll delay');
+  assert.match(bugbotPrompt, /sleep 8/, 'expected a concrete 8-second delay command');
+  assert.match(
+    bugbotPrompt,
+    /Start-Sleep[\s\S]*alternative|alternative[\s\S]*Start-Sleep/i,
+    'expected PowerShell to be named only as an allowed alternative',
+  );
+  assert.doesNotMatch(
+    bugbotPrompt,
+    /wait 8 seconds(?!,)/,
+    'the vague "wait 8 seconds" phrasing must carry a concrete command',
+  );
+});
+
+test('copilot gate delay instruction is shell-agnostic with PowerShell as an alternative', () => {
+  const copilotPrompt = lensPromptBody('runCopilotGate');
+  assert.match(copilotPrompt, /sleep 360/, 'expected a shell-agnostic 360-second poll delay');
+  assert.match(
+    copilotPrompt,
+    /Start-Sleep[\s\S]*alternative|alternative[\s\S]*Start-Sleep/i,
+    'expected PowerShell to be named only as an allowed alternative',
+  );
+});
+
+test('gotchas doc describes the reviewer wait as shell-agnostic', () => {
+  assert.match(
+    gotchasSource,
+    /\bsleep\b/i,
+    'expected the wait guidance to name a shell-agnostic sleep',
+  );
+  assert.doesNotMatch(
+    gotchasSource,
+    /a single PowerShell\s*`?Start-Sleep`?\s*loop/i,
+    'PowerShell Start-Sleep must be an alternative, not the sole mechanism',
+  );
+});

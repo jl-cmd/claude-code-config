@@ -1,4 +1,9 @@
-import { dedupeFindings, resolveBugbotDown } from './converge_helpers.mjs'
+import {
+  resolveBugbotDown,
+  resolveRoundOutcome,
+  detectFixProgress,
+  collectFindingThreadIds,
+} from './converge_helpers.mjs'
 
 export const meta = {
   name: 'autoconverge',
@@ -176,14 +181,16 @@ function runAuditLens(head) {
  */
 function applyFixes(head, findings, sourceLabel) {
   const findingsBlock = findings
-    .map(
-      (each, position) =>
-        `${position + 1}. [${each.severity}] ${each.file}:${each.line} — ${each.title}\n   ${each.detail}` +
-        (each.replyToCommentId ? `\n   (GitHub review comment id: ${each.replyToCommentId})` : ''),
-    )
+    .map((each, position) => {
+      const eachThreadIds = collectFindingThreadIds(each)
+      const threadNote = eachThreadIds.length
+        ? `\n   (GitHub review comment ids: ${eachThreadIds.join(', ')})`
+        : ''
+      return `${position + 1}. [${each.severity}] ${each.file}:${each.line} — ${each.title}\n   ${each.detail}${threadNote}`
+    })
     .join('\n')
   const threadIds = findings
-    .map((each) => each.replyToCommentId)
+    .flatMap((each) => collectFindingThreadIds(each))
     .filter((each) => typeof each === 'number')
   return agent(
     `You are fixing ${findings.length} finding(s) (${sourceLabel}) on ${prCoordinates}, HEAD ${head}.\n\n` +
@@ -305,13 +312,22 @@ while (rounds < CONFIG.maxRounds) {
       () => runCodeReviewLens(head),
       () => runAuditLens(head),
     ])
-    const live = lenses.filter(Boolean)
     bugbotDown = resolveBugbotDown(lenses[0], args.bugbotDisabled || false)
-    const findings = dedupeFindings(live.flatMap((each) => each.findings || []))
+    const roundOutcome = resolveRoundOutcome(lenses)
+    if (roundOutcome.allLensesDead) {
+      log(`Round ${rounds}: every lens agent died — retrying without posting a clean artifact`)
+      continue
+    }
+    const findings = roundOutcome.findings
     if (findings.length > 0) {
       log(`Round ${rounds}: ${findings.length} finding(s) — applying fixes`)
       const fixResult = await applyFixes(head, findings, 'converge-round')
-      head = fixResult?.newSha || head
+      const fixProgress = detectFixProgress(fixResult, head)
+      if (!fixProgress.progressed) {
+        blocker = `fix lens landed no push for ${findings.length} finding(s) on HEAD ${head}`
+        break
+      }
+      head = fixProgress.newSha
       continue
     }
     log(`Round ${rounds}: all lenses clean on ${head?.slice(0, 7)} — posting clean audit artifact`)

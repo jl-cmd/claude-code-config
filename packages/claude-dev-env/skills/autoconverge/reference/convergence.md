@@ -19,10 +19,15 @@ rounds.
    - **Bug-audit lens** — the bug-audit (`code-quality-agent`) applying the
      shared A–P rubric from `bugteam/reference/audit-contract.md`, reporting
      findings without editing.
-3. Dedup findings across the three lenses by file, line, and title.
+3. Dedup findings across the three lenses by file, line, and title. A collision
+   keeps the most severe duplicate's severity (P0 > P1 > P2), unions the detail
+   text, and collects every distinct bot thread id so the fix lens resolves all
+   colliding threads.
 4. **Any findings** → one `clean-coder` applies every fix in a single test-first
    commit, pushes, then replies to and resolves each finding that carries a
-   GitHub review thread. The next round re-verifies on the new HEAD.
+   GitHub review thread. The fix lens must land a push that moves HEAD; a round
+   whose fix lens reports no push ends the run with a fix-stalled blocker. The
+   next round re-verifies on the new HEAD.
 5. **Zero findings on a stable HEAD** → post the CLEAN bugteam audit artifact
    for that HEAD, then move to the Copilot gate.
 

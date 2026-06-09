@@ -262,21 +262,26 @@ function normalizeShaForComparison(sha) {
  * Decide whether a fix lens actually advanced the round: a pushed fix that moved
  * HEAD progressed, and so did an all-stale round whose findings were every one
  * already addressed — the fix lens makes no commit but resolves each thread and
- * reports resolvedWithoutCommit:true, leaving HEAD unchanged on purpose. A null
- * result, a no-push round that did not resolve every thread, or a SHA equal to
- * the prior HEAD on a case-folded common prefix did not progress and must surface
- * a distinct fix-stalled blocker. Comparing on a normalized prefix keeps a no-op
- * fix that reports an abbreviated SHA of the unchanged HEAD from masquerading as
- * a moved-HEAD push.
+ * reports resolvedWithoutCommit:true, leaving HEAD unchanged on purpose. That
+ * unchanged-HEAD resolve counts as progress only when the round carried at least
+ * one thread-bearing finding to resolve; an all-null-thread round whose fix
+ * reports resolvedWithoutCommit:true moved nothing and bounded nothing — its
+ * vacuously-satisfied resolve would otherwise re-converge on the same HEAD until
+ * the iteration cap — so it does not progress and surfaces a fix-stalled blocker.
+ * A null result, a no-push round that did not resolve every thread, or a SHA
+ * equal to the prior HEAD on a case-folded common prefix likewise did not
+ * progress. Comparing on a normalized prefix keeps a no-op fix that reports an
+ * abbreviated SHA of the unchanged HEAD from masquerading as a moved-HEAD push.
  * @param {object|null} fixResult the FIX_SCHEMA result, or null on agent failure
  * @param {string} priorHead the HEAD the fix was applied against
+ * @param {boolean} hadThreadBearingFinding true when at least one finding in the round carried a GitHub thread id
  * @returns {{progressed: boolean, newSha: string}} progress decision and resulting HEAD
  */
-function detectFixProgress(fixResult, priorHead) {
+function detectFixProgress(fixResult, priorHead, hadThreadBearingFinding) {
   if (fixResult == null) return { progressed: false, newSha: priorHead }
   const newSha = fixResult.newSha || priorHead
   if (fixResult.resolvedWithoutCommit === true) {
-    return { progressed: true, newSha: priorHead }
+    return { progressed: hadThreadBearingFinding === true, newSha: priorHead }
   }
   const movedHead = normalizeShaForComparison(newSha) !== normalizeShaForComparison(priorHead)
   const progressed = fixResult.pushed === true && movedHead
@@ -623,9 +628,12 @@ while (iterations < CONFIG.maxIterations) {
     if (findings.length > 0) {
       log(`Round ${rounds}: ${findings.length} finding(s) — applying fixes`)
       const fixResult = await applyFixes(head, findings, 'converge-round')
-      const fixProgress = detectFixProgress(fixResult, head)
+      const hadThreadBearingFinding = findings.some((each) => collectFindingThreadIds(each).length > 0)
+      const fixProgress = detectFixProgress(fixResult, head, hadThreadBearingFinding)
       if (!fixProgress.progressed) {
-        blocker = `fix lens landed no push for ${findings.length} finding(s) on HEAD ${head}`
+        blocker = fixResult?.resolvedWithoutCommit === true && !hadThreadBearingFinding
+          ? `fix stalled: converge round raised ${findings.length} in-memory finding(s) with no GitHub thread, the fix judged them all stale (resolvedWithoutCommit) and moved no code on HEAD ${head} — re-raising would loop to the iteration cap`
+          : `fix lens landed no push for ${findings.length} finding(s) on HEAD ${head}`
         break
       }
       head = fixProgress.newSha
@@ -655,9 +663,12 @@ while (iterations < CONFIG.maxIterations) {
     if (copilotOutcome.kind === 'fix') {
       log(`Copilot raised ${copilotOutcome.findings.length} finding(s) — fixing and re-converging`)
       const fixResult = await applyFixes(head, copilotOutcome.findings, 'copilot')
-      const fixProgress = detectFixProgress(fixResult, head)
+      const hadThreadBearingFinding = copilotOutcome.findings.some((each) => collectFindingThreadIds(each).length > 0)
+      const fixProgress = detectFixProgress(fixResult, head, hadThreadBearingFinding)
       if (!fixProgress.progressed) {
-        blocker = `copilot fix lens landed no push for ${copilotOutcome.findings.length} finding(s) on HEAD ${head}`
+        blocker = fixResult?.resolvedWithoutCommit === true && !hadThreadBearingFinding
+          ? `fix stalled: copilot round raised ${copilotOutcome.findings.length} in-memory finding(s) with no GitHub thread, the fix judged them all stale (resolvedWithoutCommit) and moved no code on HEAD ${head} — re-raising would loop to the iteration cap`
+          : `copilot fix lens landed no push for ${copilotOutcome.findings.length} finding(s) on HEAD ${head}`
         break
       }
       head = fixProgress.newSha

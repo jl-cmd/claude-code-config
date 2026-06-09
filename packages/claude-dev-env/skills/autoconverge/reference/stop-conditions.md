@@ -20,10 +20,15 @@ skill still runs teardown (revoke permissions, final report).
   both count), or returns null for a round's findings. HEAD did not move and the
   threads were not all resolved, so the next round would re-raise the same
   findings. The run ends with a `blocker` that names the finding count and the
+  stalled HEAD. A round whose every finding carries no GitHub thread
+  (`replyToCommentId: null` on each) and whose fix reports
+  `resolvedWithoutCommit: true` is also a stall: it moves no code and resolves no
+  thread, so re-converging on the unchanged HEAD would loop the same finding to
+  the iteration cap. The `blocker` names the in-memory finding count and the
   stalled HEAD. An all-stale round that makes no commit but resolves every
-  finding thread (`resolvedWithoutCommit: true`) is not a stall — the run
-  re-converges on the unchanged HEAD and reaches the Copilot and convergence
-  gates.
+  finding thread (`resolvedWithoutCommit: true` with at least one thread-bearing
+  finding) is not a stall — the run re-converges on the unchanged HEAD and
+  reaches the Copilot and convergence gates.
 - **Mark-ready failed** — the convergence check passes but the mark-ready step
   cannot confirm the PR left draft state (`gh pr ready` errored, or the draft
   re-query still reports true). The workflow does not report `converged: true`;

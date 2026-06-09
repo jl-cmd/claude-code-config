@@ -9,6 +9,7 @@ import {
     isResolvedHeadUsable,
     classifyCopilotOutcome,
     classifyReadyOutcome,
+    normalizeRunInput,
 } from './converge_helpers.mjs';
 
 
@@ -470,4 +471,25 @@ test('classifyReadyOutcome blocks convergence when the mark-ready agent died', (
 
     assert.equal(outcome.converged, false);
     assert.ok(outcome.blocker.length > 0);
+});
+
+
+test('normalizeRunInput parses a JSON-string args payload into run coordinates', () => {
+    const stringifiedArgs = JSON.stringify({ owner: 'jl-cmd', repo: 'claude-code-config', prNumber: 543, bugbotDisabled: false });
+
+    const runInput = normalizeRunInput(stringifiedArgs);
+
+    assert.equal(runInput.owner, 'jl-cmd');
+    assert.equal(runInput.repo, 'claude-code-config');
+    assert.equal(runInput.prNumber, 543);
+    assert.equal(runInput.bugbotDisabled, false);
+});
+
+
+test('normalizeRunInput passes an object args payload through unchanged', () => {
+    const objectArgs = { owner: 'jl-cmd', repo: 'claude-code-config', prNumber: 543, bugbotDisabled: false };
+
+    const runInput = normalizeRunInput(objectArgs);
+
+    assert.equal(runInput, objectArgs);
 });

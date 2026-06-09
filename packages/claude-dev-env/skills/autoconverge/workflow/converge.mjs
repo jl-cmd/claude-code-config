@@ -6,6 +6,7 @@ import {
   isResolvedHeadUsable,
   classifyCopilotOutcome,
   classifyReadyOutcome,
+  normalizeRunInput,
 } from './converge_helpers.mjs'
 
 export const meta = {
@@ -104,7 +105,8 @@ const READY_SCHEMA = {
   required: ['ready'],
 }
 
-const prCoordinates = `owner=${args.owner} repo=${args.repo} PR #${args.prNumber} (https://github.com/${args.owner}/${args.repo}/pull/${args.prNumber})`
+const input = normalizeRunInput(args)
+const prCoordinates = `owner=${input.owner} repo=${input.repo} PR #${input.prNumber} (https://github.com/${input.owner}/${input.repo}/pull/${input.prNumber})`
 
 /**
  * Resolve the current PR HEAD SHA from GitHub.
@@ -113,7 +115,7 @@ const prCoordinates = `owner=${args.owner} repo=${args.repo} PR #${args.prNumber
 async function resolveHead() {
   const head = await agent(
     `Print the current HEAD SHA of ${prCoordinates}. Run exactly:\n` +
-      `gh api repos/${args.owner}/${args.repo}/pulls/${args.prNumber} --jq .head.sha\n` +
+      `gh api repos/${input.owner}/${input.repo}/pulls/${input.prNumber} --jq .head.sha\n` +
       `Return the full 40-character SHA in the sha field. Do not modify any files.`,
     { label: 'resolve-head', phase: 'Converge', schema: HEAD_SCHEMA, agentType: 'Explore' },
   )
@@ -127,22 +129,22 @@ async function resolveHead() {
  * @returns {Promise<object>} LENS_SCHEMA result
  */
 function runBugbotLens(head) {
-  if (args.bugbotDisabled) {
+  if (input.bugbotDisabled) {
     return Promise.resolve({ sha: head, clean: true, down: true, findings: [] })
   }
   return agent(
     `You are the Cursor Bugbot lens for ${prCoordinates}, HEAD ${head}. Cursor Bugbot participates this run.\n\n` +
       `Goal: return Bugbot's verdict on HEAD ${head}. Do not edit code, commit, or push. You may post the literal trigger comment described below.\n\n` +
-      `Procedure (use the existing scripts; pass --owner ${args.owner} --repo ${args.repo}):\n` +
+      `Procedure (use the existing scripts; pass --owner ${input.owner} --repo ${input.repo}):\n` +
       `1. Opt-out: python "${CONFIG.prLoopScripts}/reviews_disabled.py" --reviewer bugbot. Exit 0 means disabled -> return {sha, clean:true, down:true, findings:[]}.\n` +
-      `2. Silent pass: python "${CONFIG.sharedScripts}/check_bugbot_ci.py" --owner ${args.owner} --repo ${args.repo} --sha ${head} --check-clean. Exit 0 means the CI check completed clean with no review -> return clean with no findings.\n` +
+      `2. Silent pass: python "${CONFIG.sharedScripts}/check_bugbot_ci.py" --owner ${input.owner} --repo ${input.repo} --sha ${head} --check-clean. Exit 0 means the CI check completed clean with no review -> return clean with no findings.\n` +
       `3. Fetch any Bugbot review + inline comments on HEAD ${head} with gh api (Bugbot's GitHub login contains "cursor", case-insensitive). Use --paginate --slurp piped to external jq:\n` +
-      `   gh api "repos/${args.owner}/${args.repo}/pulls/${args.prNumber}/reviews" --paginate --slurp  (top-level review body + state)\n` +
-      `   gh api "repos/${args.owner}/${args.repo}/pulls/${args.prNumber}/comments" --paginate --slurp  (inline review comments + their ids)\n` +
+      `   gh api "repos/${input.owner}/${input.repo}/pulls/${input.prNumber}/reviews" --paginate --slurp  (top-level review body + state)\n` +
+      `   gh api "repos/${input.owner}/${input.repo}/pulls/${input.prNumber}/comments" --paginate --slurp  (inline review comments + their ids)\n` +
       `   Only count entries whose commit_id starts with ${head}.\n` +
       `   - If findings exist on HEAD -> return them (each with its inline comment id in replyToCommentId when present, else null).\n` +
       `   - If a clean review exists on HEAD -> return clean.\n` +
-      `4. No review yet on HEAD: check_bugbot_ci.py --check-active. If active (exit 0), poll: repeat check_bugbot_ci.py --check-clean / --check-active every 60 seconds (use a single PowerShell loop with Start-Sleep -Seconds 60) for up to 25 iterations, then re-fetch the review. If not active (exit 1), post the literal comment "bugbot run" (no @mention, no other text) via python "${CONFIG.sharedScripts}/post_fix_reply.py" --owner ${args.owner} --repo ${args.repo} --pr-number ${args.prNumber} --body "bugbot run", wait 8 seconds, then poll as above.\n` +
+      `4. No review yet on HEAD: check_bugbot_ci.py --check-active. If active (exit 0), poll: repeat check_bugbot_ci.py --check-clean / --check-active every 60 seconds (use a single PowerShell loop with Start-Sleep -Seconds 60) for up to 25 iterations, then re-fetch the review. If not active (exit 1), post the literal comment "bugbot run" (no @mention, no other text) via python "${CONFIG.sharedScripts}/post_fix_reply.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber} --body "bugbot run", wait 8 seconds, then poll as above.\n` +
       `5. If after the full poll budget Bugbot has neither a check run nor a review on HEAD -> return {sha:${'`'}${head}${'`'}, clean:true, down:true, findings:[]} (treat as down).\n\n` +
       `Scope is the whole PR; you are only reading Bugbot's own output here. Return strictly the schema.`,
     { label: 'lens:bugbot', phase: 'Converge', schema: LENS_SCHEMA },
@@ -209,7 +211,7 @@ function applyFixes(head, findings, sourceLabel) {
       `- Confirm the working tree is on the PR branch at HEAD ${head} with no unrelated edits before you start.\n` +
       `- Fix every finding test-first (failing test, then minimum code to pass) per CODE_RULES. Verify each concern against current code; a finding whose concern no longer applies needs no code change but still needs its thread resolved.\n` +
       `- Make ONE commit for all fixes, then push to the PR branch.\n` +
-      `- For each finding that carries a GitHub review comment id (${threadIds.length ? threadIds.join(', ') : 'none this batch'}): post an inline reply with python "${CONFIG.sharedScripts}/post_fix_reply.py" --owner ${args.owner} --repo ${args.repo} --pr-number ${args.prNumber} --in-reply-to <id> --body "<what changed>", then resolve that thread (use the github MCP pull_request_review_write method=resolve_thread, or gh api graphql resolveReviewThread).\n` +
+      `- For each finding that carries a GitHub review comment id (${threadIds.length ? threadIds.join(', ') : 'none this batch'}): post an inline reply with python "${CONFIG.sharedScripts}/post_fix_reply.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber} --in-reply-to <id> --body "<what changed>", then resolve that thread (use the github MCP pull_request_review_write method=resolve_thread, or gh api graphql resolveReviewThread).\n` +
       `- Findings with replyToCommentId null are in-memory audit findings: fix them, no reply needed.\n\n` +
       `Return values:\n` +
       `- When you commit and push a fix: newSha=the new HEAD SHA after your push, pushed=true, resolvedWithoutCommit=false.\n` +
@@ -229,7 +231,7 @@ function postCleanAudit(head) {
   return agent(
     `Post a CLEAN bugteam audit review on ${prCoordinates} at commit ${head}. All review lenses are clean on this HEAD.\n\n` +
       `Write an empty findings file: create a temp file containing exactly [] (an empty JSON array). Then run:\n` +
-      `python "${CONFIG.prLoopScripts}/post_audit_thread.py" --skill bugteam --owner ${args.owner} --repo ${args.repo} --pr-number ${args.prNumber} --commit ${head} --state CLEAN --findings-json <temp-file>\n` +
+      `python "${CONFIG.prLoopScripts}/post_audit_thread.py" --skill bugteam --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber} --commit ${head} --state CLEAN --findings-json <temp-file>\n` +
       `Run the script with --help first if any flag name differs. This posts the APPROVE review body that check_convergence.py reads for the bugteam gate. Do not edit code, commit, or push.`,
     { label: 'post-clean-audit', phase: 'Converge', agentType: 'general-purpose' },
   )
@@ -244,9 +246,9 @@ function postCleanAudit(head) {
 function runCopilotGate(head) {
   return agent(
     `You are the Copilot gate for ${prCoordinates}, HEAD ${head}. Do not edit code, commit, or push.\n\n` +
-      `1. Skip a duplicate request: python "${CONFIG.sharedScripts}/check_pending_reviews.py" --owner ${args.owner} --repo ${args.repo} --pr-number ${args.prNumber} --user copilot. Exit 0 means a request is already pending; otherwise request one:\n` +
-      `   gh api --method POST repos/${args.owner}/${args.repo}/pulls/${args.prNumber}/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'\n` +
-      `2. Poll for Copilot's review on HEAD ${head}: up to ${CONFIG.copilotMaxPolls} attempts, 360 seconds apart (one PowerShell loop with Start-Sleep -Seconds 360). Each attempt: python "${CONFIG.sharedScripts}/fetch_copilot_reviews.py" --owner ${args.owner} --repo ${args.repo} --pr-number ${args.prNumber} for the top-level review state, plus gh api "repos/${args.owner}/${args.repo}/pulls/${args.prNumber}/comments" --paginate --slurp for inline comment ids (Copilot's login contains "copilot", case-insensitive). Only count entries whose commit_id starts with ${head}.\n` +
+      `1. Skip a duplicate request: python "${CONFIG.sharedScripts}/check_pending_reviews.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber} --user copilot. Exit 0 means a request is already pending; otherwise request one:\n` +
+      `   gh api --method POST repos/${input.owner}/${input.repo}/pulls/${input.prNumber}/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'\n` +
+      `2. Poll for Copilot's review on HEAD ${head}: up to ${CONFIG.copilotMaxPolls} attempts, 360 seconds apart (one PowerShell loop with Start-Sleep -Seconds 360). Each attempt: python "${CONFIG.sharedScripts}/fetch_copilot_reviews.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber} for the top-level review state, plus gh api "repos/${input.owner}/${input.repo}/pulls/${input.prNumber}/comments" --paginate --slurp for inline comment ids (Copilot's login contains "copilot", case-insensitive). Only count entries whose commit_id starts with ${head}.\n` +
       `   - Copilot review present and clean/approved on HEAD -> return {sha:${'`'}${head}${'`'}, clean:true, findings:[], blocker:null}.\n` +
       `   - Copilot findings on HEAD -> return them (each with its inline comment id in replyToCommentId), clean:false, blocker:null.\n` +
       `   - No review after ${CONFIG.copilotMaxPolls} attempts -> return {sha:${'`'}${head}${'`'}, clean:false, findings:[], blocker:"Copilot did not surface a review on HEAD after ${CONFIG.copilotMaxPolls} polls"}.\n\n` +
@@ -264,7 +266,7 @@ function checkConvergence(bugbotDown) {
   const bugbotDownFlag = bugbotDown ? ' --bugbot-down' : ''
   return agent(
     `Run the convergence gate for ${prCoordinates} and report the result. Do not edit code.\n\n` +
-      `Run: python "${CONFIG.sharedScripts}/check_convergence.py" --owner ${args.owner} --repo ${args.repo} --pr-number ${args.prNumber}${bugbotDownFlag}\n\n` +
+      `Run: python "${CONFIG.sharedScripts}/check_convergence.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber}${bugbotDownFlag}\n\n` +
       `Exit 0 -> every gate passed: return {pass:true, failures:[]}.\n` +
       `Exit 1 -> return {pass:false, failures:[<each printed FAIL line verbatim>]}.\n` +
       `Exit 2 -> retry once; if it still errors, return {pass:false, failures:["check_convergence gh error"]}.`,
@@ -280,8 +282,8 @@ function checkConvergence(bugbotDown) {
 function markReady(head) {
   return agent(
     `All convergence gates pass for ${prCoordinates} on HEAD ${head}. Mark the PR ready, then confirm it left draft state. Do not edit code.\n\n` +
-      `1. Run: gh pr ready ${args.prNumber} --repo ${args.owner}/${args.repo}\n` +
-      `2. Re-query the draft state: gh api repos/${args.owner}/${args.repo}/pulls/${args.prNumber} --jq .draft\n` +
+      `1. Run: gh pr ready ${input.prNumber} --repo ${input.owner}/${input.repo}\n` +
+      `2. Re-query the draft state: gh api repos/${input.owner}/${input.repo}/pulls/${input.prNumber} --jq .draft\n` +
       `Return {ready:true} only when step 2 prints false (the PR is no longer a draft). If step 1 errors or step 2 still prints true, return {ready:false}.`,
     { label: 'mark-ready', phase: 'Finalize', schema: READY_SCHEMA, agentType: 'general-purpose' },
   )
@@ -315,7 +317,7 @@ let head = null
 let rounds = 0
 let iterations = 0
 let blocker = null
-let bugbotDown = args.bugbotDisabled || false
+let bugbotDown = input.bugbotDisabled || false
 
 while (iterations < CONFIG.maxIterations) {
   iterations += 1
@@ -332,7 +334,7 @@ while (iterations < CONFIG.maxIterations) {
       () => runCodeReviewLens(head),
       () => runAuditLens(head),
     ])
-    bugbotDown = resolveBugbotDown(lenses[0], args.bugbotDisabled || false)
+    bugbotDown = resolveBugbotDown(lenses[0], input.bugbotDisabled || false)
     const roundOutcome = resolveRoundOutcome(lenses)
     if (roundOutcome.allLensesDead) {
       log(`Round ${rounds}: every lens agent died — retrying without posting a clean artifact`)

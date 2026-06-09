@@ -222,3 +222,16 @@ export function classifyReadyOutcome(readyResult) {
     blocker: 'mark-ready step did not confirm the PR left draft state (gh pr ready failed or the agent died)',
   }
 }
+
+/**
+ * Normalize the workflow's raw args global into a run-coordinates object. The
+ * Workflow runtime delivers args as a JSON-encoded string, so a string payload
+ * is parsed; an object payload passes through unchanged. Reading args.owner off
+ * an unparsed string yields undefined and strands every GitHub call on invalid
+ * coordinates, so every entry point reads coordinates through this function.
+ * @param {string|object} rawArgs the workflow args global (JSON string or object)
+ * @returns {object} the run coordinates ({owner, repo, prNumber, bugbotDisabled})
+ */
+export function normalizeRunInput(rawArgs) {
+  return typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs
+}

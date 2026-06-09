@@ -6,6 +6,8 @@ import {
     resolveBugbotDown,
     resolveRoundOutcome,
     detectFixProgress,
+    isResolvedHeadUsable,
+    classifyCopilotOutcome,
 } from './converge_helpers.mjs';
 
 
@@ -245,4 +247,86 @@ test('detectFixProgress accepts a pushed fix that moved HEAD', () => {
 
     assert.equal(progress.progressed, true);
     assert.equal(progress.newSha, 'newheadsha');
+});
+
+
+test('detectFixProgress flags a Copilot fix lens that never pushed', () => {
+    const copilotFixNotPushed = { newSha: '', pushed: false, summary: '' };
+
+    assert.equal(detectFixProgress(copilotFixNotPushed, 'copilotheadsha').progressed, false);
+});
+
+
+test('detectFixProgress accepts a pushed Copilot fix that moved HEAD to a new SHA', () => {
+    const copilotFixMoved = { newSha: 'copilotnewsha', pushed: true, summary: 'fixed copilot finding' };
+
+    const progress = detectFixProgress(copilotFixMoved, 'copilotoldsha');
+
+    assert.equal(progress.progressed, true);
+    assert.equal(progress.newSha, 'copilotnewsha');
+});
+
+
+test('isResolvedHeadUsable rejects an undefined HEAD from a dead resolve-head agent', () => {
+    assert.equal(isResolvedHeadUsable(undefined), false);
+});
+
+
+test('isResolvedHeadUsable rejects a null HEAD', () => {
+    assert.equal(isResolvedHeadUsable(null), false);
+});
+
+
+test('isResolvedHeadUsable rejects an empty-string HEAD', () => {
+    assert.equal(isResolvedHeadUsable(''), false);
+});
+
+
+test('isResolvedHeadUsable accepts a real 40-character HEAD SHA', () => {
+    const fortyCharacterSha = 'a58fee90c20dbe2441b1079175c11eb08d674fa6';
+
+    assert.equal(isResolvedHeadUsable(fortyCharacterSha), true);
+});
+
+
+test('classifyCopilotOutcome marks a dead Copilot gate (null result) for retry', () => {
+    const deadGate = null;
+
+    const outcome = classifyCopilotOutcome(deadGate);
+
+    assert.equal(outcome.kind, 'retry');
+});
+
+
+test('classifyCopilotOutcome surfaces a Copilot blocker', () => {
+    const timedOut = { sha: 'abc', clean: false, findings: [], blocker: 'Copilot did not surface a review on HEAD after 3 polls' };
+
+    const outcome = classifyCopilotOutcome(timedOut);
+
+    assert.equal(outcome.kind, 'blocker');
+    assert.equal(outcome.blocker, 'Copilot did not surface a review on HEAD after 3 polls');
+});
+
+
+test('classifyCopilotOutcome routes Copilot findings into a fix step', () => {
+    const withFindings = {
+        sha: 'abc',
+        clean: false,
+        findings: [{ file: 'a.py', line: 1, severity: 'P1', title: 'One', detail: 'd', replyToCommentId: 99 }],
+        blocker: null,
+    };
+
+    const outcome = classifyCopilotOutcome(withFindings);
+
+    assert.equal(outcome.kind, 'fix');
+    assert.equal(outcome.findings.length, 1);
+});
+
+
+test('classifyCopilotOutcome treats a clean Copilot review as approved', () => {
+    const cleanGate = { sha: 'abc', clean: true, findings: [], blocker: null };
+
+    const outcome = classifyCopilotOutcome(cleanGate);
+
+    assert.equal(outcome.kind, 'approved');
 });

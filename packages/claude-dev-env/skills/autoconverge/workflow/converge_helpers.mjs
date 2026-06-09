@@ -132,3 +132,31 @@ export function detectFixProgress(fixResult, priorHead) {
   const progressed = fixResult.pushed === true && newSha !== priorHead
   return { progressed, newSha }
 }
+
+/**
+ * Decide whether a resolved HEAD SHA is safe to spawn lenses against. A dead
+ * resolve-head agent or a malformed result yields a falsy SHA; spawning lenses
+ * against it interpolates the literal string 'HEAD undefined' into their prompts
+ * and produces a spurious clean verdict on a non-existent commit.
+ * @param {string|null|undefined} resolvedHead the SHA from resolveHead()
+ * @returns {boolean} true only when the SHA is a non-empty string
+ */
+export function isResolvedHeadUsable(resolvedHead) {
+  return typeof resolvedHead === 'string' && resolvedHead.length > 0
+}
+
+/**
+ * Classify a Copilot gate result into the loop's next action. A dead gate agent
+ * (null result) is a retry rather than an approval, mirroring the converge
+ * lenses' dead-agent convention so a failed gate is never mistaken for a clean
+ * Copilot review. A non-null blocker ends the run; findings route to a fix step;
+ * a clean result approves the gate.
+ * @param {object|null|undefined} copilot the COPILOT_SCHEMA result, or null on agent failure
+ * @returns {{kind: string, blocker?: string, findings?: Array<object>}} the next action
+ */
+export function classifyCopilotOutcome(copilot) {
+  if (copilot == null) return { kind: 'retry' }
+  if (copilot.blocker) return { kind: 'blocker', blocker: copilot.blocker }
+  if (copilot.findings.length > 0) return { kind: 'fix', findings: copilot.findings }
+  return { kind: 'approved' }
+}

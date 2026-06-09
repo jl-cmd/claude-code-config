@@ -3,6 +3,8 @@ import {
   resolveRoundOutcome,
   detectFixProgress,
   collectFindingThreadIds,
+  isResolvedHeadUsable,
+  classifyCopilotOutcome,
 } from './converge_helpers.mjs'
 
 export const meta = {
@@ -306,6 +308,10 @@ while (rounds < CONFIG.maxRounds) {
   if (phase === 'CONVERGE') {
     rounds += 1
     head = await resolveHead()
+    if (!isResolvedHeadUsable(head)) {
+      log(`Round ${rounds}: resolve-head agent returned no SHA — retrying without spawning lenses`)
+      continue
+    }
     log(`Round ${rounds}: parallel Bugbot + code-review + bug-audit on ${head?.slice(0, 7)}`)
     const lenses = await parallel([
       () => runBugbotLens(head),
@@ -338,14 +344,24 @@ while (rounds < CONFIG.maxRounds) {
 
   if (phase === 'COPILOT') {
     const copilot = await runCopilotGate(head)
-    if (copilot?.blocker) {
-      blocker = copilot.blocker
+    const copilotOutcome = classifyCopilotOutcome(copilot)
+    if (copilotOutcome.kind === 'retry') {
+      log('Copilot gate agent died — re-running the gate on the same HEAD')
+      continue
+    }
+    if (copilotOutcome.kind === 'blocker') {
+      blocker = copilotOutcome.blocker
       break
     }
-    if (copilot && copilot.findings.length > 0) {
-      log(`Copilot raised ${copilot.findings.length} finding(s) — fixing and re-converging`)
-      const fixResult = await applyFixes(head, copilot.findings, 'copilot')
-      head = fixResult?.newSha || head
+    if (copilotOutcome.kind === 'fix') {
+      log(`Copilot raised ${copilotOutcome.findings.length} finding(s) — fixing and re-converging`)
+      const fixResult = await applyFixes(head, copilotOutcome.findings, 'copilot')
+      const fixProgress = detectFixProgress(fixResult, head)
+      if (!fixProgress.progressed) {
+        blocker = `copilot fix lens landed no push for ${copilotOutcome.findings.length} finding(s) on HEAD ${head}`
+        break
+      }
+      head = fixProgress.newSha
       phase = 'CONVERGE'
       continue
     }

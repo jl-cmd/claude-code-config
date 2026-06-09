@@ -361,17 +361,49 @@ function classifyConvergenceOutcome(convergence) {
 /**
  * Normalize the workflow's raw args global into a run-coordinates object. The
  * Workflow runtime delivers args as a JSON-encoded string, so a string payload
- * is parsed; an object payload passes through unchanged. Reading args.owner off
- * an unparsed string yields undefined and strands every GitHub call on invalid
+ * is parsed; an object payload passes through unchanged. A non-JSON or empty
+ * string yields null rather than throwing, so a malformed payload becomes a
+ * structured blocker instead of aborting the run. Reading args.owner off an
+ * unparsed string yields undefined and strands every GitHub call on invalid
  * coordinates, so every entry point reads coordinates through this function.
  * @param {string|object} rawArgs the workflow args global (JSON string or object)
- * @returns {object} the run coordinates ({owner, repo, prNumber, bugbotDisabled})
+ * @returns {object|null} the run coordinates, or null when a string payload fails to parse
  */
 function normalizeRunInput(rawArgs) {
-  return typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs
+  if (typeof rawArgs !== 'string') return rawArgs
+  try {
+    return JSON.parse(rawArgs)
+  } catch {
+    return null
+  }
 }
 
-const input = normalizeRunInput(args)
+/**
+ * Validate the normalized run input into either usable coordinates or a
+ * structured blocker. The run cannot build a single GitHub call without owner,
+ * repo, and prNumber, so a null payload (failed parse or missing args) or a
+ * payload missing any coordinate yields a blocker the top-level run reports as
+ * {converged:false, blocker} rather than throwing on input.owner at startup.
+ * @param {string|object} rawArgs the workflow args global (JSON string or object)
+ * @returns {{input: object|null, blocker: string|null}} usable coordinates or a blocker
+ */
+function classifyRunInput(rawArgs) {
+  const candidate = normalizeRunInput(rawArgs)
+  const hasUsableCoordinates =
+    candidate != null && candidate.owner && candidate.repo && candidate.prNumber
+  if (hasUsableCoordinates) return { input: candidate, blocker: null }
+  return {
+    input: null,
+    blocker:
+      'invalid run coordinates: the workflow args did not parse into an object carrying owner, repo, and prNumber',
+  }
+}
+
+const runInput = classifyRunInput(args)
+if (runInput.blocker) {
+  return { converged: false, rounds: 0, finalSha: null, blocker: runInput.blocker }
+}
+const input = runInput.input
 const prCoordinates = `owner=${input.owner} repo=${input.repo} PR #${input.prNumber} (https://github.com/${input.owner}/${input.repo}/pull/${input.prNumber})`
 
 /**

@@ -450,7 +450,7 @@ function runBugbotLens(head) {
   return agent(
     `You are the Cursor Bugbot lens for ${prCoordinates}, HEAD ${head}. Cursor Bugbot participates this run.\n\n` +
       `Goal: return Bugbot's verdict on HEAD ${head}. Do not edit code, commit, or push. You may post the literal trigger comment described below.\n\n` +
-      `Procedure (use the existing scripts; pass --owner ${input.owner} --repo ${input.repo}):\n` +
+      `Procedure (use the existing scripts; each step below shows the exact flags that script accepts):\n` +
       `1. Opt-out: python "${CONFIG.prLoopScripts}/reviews_disabled.py" --reviewer bugbot. Exit 0 means disabled -> return {sha, clean:true, down:true, findings:[]}.\n` +
       `2. Silent pass: python "${CONFIG.sharedScripts}/check_bugbot_ci.py" --owner ${input.owner} --repo ${input.repo} --sha ${head} --check-clean. Exit 0 means the CI check completed clean with no review -> return clean with no findings.\n` +
       `3. Fetch any Bugbot review + inline comments on HEAD ${head} with gh api (Bugbot's GitHub login contains "cursor", case-insensitive). Use --paginate --slurp piped to external jq:\n` +

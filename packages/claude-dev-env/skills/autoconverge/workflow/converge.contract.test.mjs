@@ -39,6 +39,29 @@ test('a single round-level prefetch step fetches origin/main before the parallel
   );
 });
 
+test('bugbot lens preamble does not blanket-instruct passing --owner/--repo to every script', () => {
+  const bugbotPrompt = lensPromptBody('runBugbotLens');
+  assert.doesNotMatch(
+    bugbotPrompt,
+    /use the existing scripts; pass --owner/,
+    'the blanket clause breaks reviews_disabled.py, which accepts only --reviewer',
+  );
+});
+
+test('bugbot lens invokes reviews_disabled.py with only --reviewer', () => {
+  const bugbotPrompt = lensPromptBody('runBugbotLens');
+  const reviewsDisabledIndex = bugbotPrompt.indexOf('reviews_disabled.py');
+  assert.notEqual(reviewsDisabledIndex, -1, 'expected reviews_disabled.py invocation');
+  const invocationLineEnd = bugbotPrompt.indexOf('\\n', reviewsDisabledIndex);
+  const invocationLine = bugbotPrompt.slice(reviewsDisabledIndex, invocationLineEnd);
+  assert.match(invocationLine, /--reviewer bugbot/);
+  assert.doesNotMatch(
+    invocationLine,
+    /--owner|--repo/,
+    'reviews_disabled.py argparse rejects --owner/--repo with SystemExit(2)',
+  );
+});
+
 test('gotchas doc states parallel lenses must avoid concurrent git operations', () => {
   assert.doesNotMatch(gotchasSource, /cannot race on git state/);
   assert.match(gotchasSource, /fetch.*once.*before/i);

@@ -1,4 +1,5 @@
 const SEVERITY_RANK = { P0: 0, P1: 1, P2: 2 }
+const SHA_COMPARISON_PREFIX_LENGTH = 7
 
 /**
  * Dedup findings across lenses by file + line + lowercased title, reconciling
@@ -106,22 +107,57 @@ export function resolveBugbotDown(bugbotLens, bugbotDisabled) {
 }
 
 /**
+ * Decide whether a single surviving lens calls the HEAD clean. A lens is clean
+ * when it explicitly reports clean:true, or when it is bypassed (down:true) so it
+ * has no verdict to withhold. A lens reporting clean:false with no findings — a
+ * Bugbot lens awaiting a pending CI verdict, or a reviewer that reports 'not
+ * clean' without pinning a file:line — keeps the round in the converge phase.
+ * @param {object} lens a surviving LENS_SCHEMA result
+ * @returns {boolean} true when this lens does not hold the round back
+ */
+function lensCallsHeadClean(lens) {
+  return lens.clean === true || lens.down === true
+}
+
+/**
  * Decide the outcome of a converge round from its raw parallel lens results:
  * whether every lens agent died (a failed round that must not post a clean
- * artifact) and the deduped findings from the surviving lenses.
+ * artifact), the deduped findings from the surviving lenses, and whether the
+ * round is clean. A round is clean only when at least one lens survived, every
+ * surviving lens calls the HEAD clean, and the deduped findings are empty — so a
+ * clean:false lens with zero findings keeps the round converging rather than
+ * advancing to the Copilot gate on a HEAD a lens did not call clean.
  * @param {Array<object|null>} lensResults raw parallel results, null per dead lens
- * @returns {{allLensesDead: boolean, findings: Array<object>}} round outcome
+ * @returns {{allLensesDead: boolean, findings: Array<object>, roundClean: boolean}} round outcome
  */
 export function resolveRoundOutcome(lensResults) {
   const liveLenses = lensResults.filter(Boolean)
   const findings = dedupeFindings(liveLenses.flatMap((eachLens) => eachLens.findings || []))
-  return { allLensesDead: liveLenses.length === 0, findings }
+  const allLensesDead = liveLenses.length === 0
+  const everyLensClean = liveLenses.every(lensCallsHeadClean)
+  const roundClean = !allLensesDead && everyLensClean && findings.length === 0
+  return { allLensesDead, findings, roundClean }
+}
+
+/**
+ * Reduce a SHA to a case-folded common prefix so a full 40-char HEAD and an
+ * abbreviated SHA reported by a fix agent (git rev-parse --short) for the same
+ * commit compare equal. A non-string SHA folds to the empty string.
+ * @param {string} sha a full or abbreviated commit SHA
+ * @returns {string} the lowercased leading prefix used for comparison
+ */
+function normalizeShaForComparison(sha) {
+  if (typeof sha !== 'string') return ''
+  return sha.slice(0, SHA_COMPARISON_PREFIX_LENGTH).toLowerCase()
 }
 
 /**
  * Decide whether a fix lens actually landed a fix on the PR branch: a pushed fix
- * that moved HEAD progressed; a null result, an unpushed result, or an unchanged
- * SHA did not and must surface a distinct fix-stalled blocker.
+ * that moved HEAD progressed; a null result, an unpushed result, or a SHA equal
+ * to the prior HEAD on a case-folded common prefix did not and must surface a
+ * distinct fix-stalled blocker. Comparing on a normalized prefix keeps a no-op
+ * fix that reports an abbreviated SHA of the unchanged HEAD from masquerading as
+ * progress.
  * @param {object|null} fixResult the FIX_SCHEMA result, or null on agent failure
  * @param {string} priorHead the HEAD the fix was applied against
  * @returns {{progressed: boolean, newSha: string}} progress decision and resulting HEAD
@@ -129,7 +165,8 @@ export function resolveRoundOutcome(lensResults) {
 export function detectFixProgress(fixResult, priorHead) {
   if (fixResult == null) return { progressed: false, newSha: priorHead }
   const newSha = fixResult.newSha || priorHead
-  const progressed = fixResult.pushed === true && newSha !== priorHead
+  const movedHead = normalizeShaForComparison(newSha) !== normalizeShaForComparison(priorHead)
+  const progressed = fixResult.pushed === true && movedHead
   return { progressed, newSha }
 }
 
@@ -159,4 +196,23 @@ export function classifyCopilotOutcome(copilot) {
   if (copilot.blocker) return { kind: 'blocker', blocker: copilot.blocker }
   if (copilot.findings.length > 0) return { kind: 'fix', findings: copilot.findings }
   return { kind: 'approved' }
+}
+
+/**
+ * Decide whether the mark-ready step actually cleared the draft state. The run
+ * reports converged only when the mark-ready agent confirms ready:true; a dead
+ * agent (null result) or a ready:false report means `gh pr ready` did not land
+ * (auth or token drift, a transient gh failure), so the PR is still a draft and
+ * the run must surface a blocker rather than claim success.
+ * @param {object|null|undefined} readyResult the READY_SCHEMA result, or null on agent failure
+ * @returns {{converged: boolean, blocker: string|null}} convergence decision
+ */
+export function classifyReadyOutcome(readyResult) {
+  if (readyResult != null && readyResult.ready === true) {
+    return { converged: true, blocker: null }
+  }
+  return {
+    converged: false,
+    blocker: 'mark-ready step did not confirm the PR left draft state (gh pr ready failed or the agent died)',
+  }
 }

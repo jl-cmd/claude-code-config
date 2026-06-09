@@ -5,6 +5,7 @@ import {
   collectFindingThreadIds,
   isResolvedHeadUsable,
   classifyCopilotOutcome,
+  classifyReadyOutcome,
 } from './converge_helpers.mjs'
 
 export const meta = {
@@ -91,6 +92,15 @@ const CONVERGENCE_SCHEMA = {
     failures: { type: 'array', items: { type: 'string' }, description: 'FAIL lines from check_convergence.py when pass is false' },
   },
   required: ['pass', 'failures'],
+}
+
+const READY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    ready: { type: 'boolean', description: 'true only when isDraft is confirmed false after gh pr ready' },
+  },
+  required: ['ready'],
 }
 
 const prCoordinates = `owner=${args.owner} repo=${args.repo} PR #${args.prNumber} (https://github.com/${args.owner}/${args.repo}/pull/${args.prNumber})`
@@ -262,16 +272,17 @@ function checkConvergence(bugbotDown) {
 }
 
 /**
- * Mark the PR ready for review (draft=false).
+ * Mark the PR ready for review (draft=false) and confirm the transition landed.
  * @param {string} head converged PR HEAD SHA
- * @returns {Promise<string>} agent transcript (unused)
+ * @returns {Promise<object>} READY_SCHEMA result
  */
 function markReady(head) {
   return agent(
-    `All convergence gates pass for ${prCoordinates} on HEAD ${head}. Mark the PR ready: run\n` +
-      `gh pr ready ${args.prNumber} --repo ${args.owner}/${args.repo}\n` +
-      `Do not edit code.`,
-    { label: 'mark-ready', phase: 'Finalize', agentType: 'general-purpose' },
+    `All convergence gates pass for ${prCoordinates} on HEAD ${head}. Mark the PR ready, then confirm it left draft state. Do not edit code.\n\n` +
+      `1. Run: gh pr ready ${args.prNumber} --repo ${args.owner}/${args.repo}\n` +
+      `2. Re-query the draft state: gh api repos/${args.owner}/${args.repo}/pulls/${args.prNumber} --jq .draft\n` +
+      `Return {ready:true} only when step 2 prints false (the PR is no longer a draft). If step 1 errors or step 2 still prints true, return {ready:false}.`,
+    { label: 'mark-ready', phase: 'Finalize', schema: READY_SCHEMA, agentType: 'general-purpose' },
   )
 }
 
@@ -301,10 +312,12 @@ function repairConvergence(head, failures) {
 let phase = 'CONVERGE'
 let head = null
 let rounds = 0
+let iterations = 0
 let blocker = null
 let bugbotDown = args.bugbotDisabled || false
 
-while (rounds < CONFIG.maxRounds) {
+while (iterations < CONFIG.maxRounds) {
+  iterations += 1
   if (phase === 'CONVERGE') {
     rounds += 1
     head = await resolveHead()
@@ -334,6 +347,10 @@ while (rounds < CONFIG.maxRounds) {
         break
       }
       head = fixProgress.newSha
+      continue
+    }
+    if (!roundOutcome.roundClean) {
+      log(`Round ${rounds}: a lens reported not-clean with no findings on ${head?.slice(0, 7)} — re-converging without a clean artifact`)
       continue
     }
     log(`Round ${rounds}: all lenses clean on ${head?.slice(0, 7)} — posting clean audit artifact`)
@@ -372,8 +389,13 @@ while (rounds < CONFIG.maxRounds) {
   if (phase === 'FINALIZE') {
     const convergence = await checkConvergence(bugbotDown)
     if (convergence?.pass) {
-      await markReady(head)
-      return { converged: true, rounds, finalSha: head, blocker: null }
+      const readyResult = await markReady(head)
+      const readyOutcome = classifyReadyOutcome(readyResult)
+      if (readyOutcome.converged) {
+        return { converged: true, rounds, finalSha: head, blocker: null }
+      }
+      blocker = readyOutcome.blocker
+      break
     }
     log(`Convergence check failed: ${(convergence?.failures || []).join('; ') || 'unknown'} — repairing then re-converging`)
     const repair = await repairConvergence(head, convergence?.failures || [])

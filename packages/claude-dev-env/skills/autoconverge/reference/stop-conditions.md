@@ -8,14 +8,22 @@ skill still runs teardown (revoke permissions, final report).
 
 - **Copilot no-show** — Copilot surfaces no review on the current HEAD after
   three polls (360 seconds apart). `blocker` names the Copilot timeout.
-- **Round cap** — 20 rounds pass without a full convergence-check pass. A
-  convergence-check gate that no round can clear (for example a `mergeable_state`
-  stuck at `blocked`, `behind`, or `unknown` that a rebase does not fix) reaches
-  the cap this way. `blocker` reports the cap.
-- **Fix stalled** — the fix lens reports no push (`pushed: false`), returns the
-  unchanged HEAD SHA, or returns null for a round's findings. HEAD did not move,
-  so the next round would re-raise the same findings. The run ends with a
-  `blocker` that names the finding count and the stalled HEAD.
+- **Round cap** — 20 loop iterations pass without a full convergence-check pass.
+  The counter is shared across every phase, so a convergence-check gate that no
+  round can clear (for example a `mergeable_state` stuck at `blocked`, `behind`,
+  or `unknown` that a rebase does not fix) and a Copilot gate agent that keeps
+  dying and retrying on the same HEAD both reach the cap this way. `blocker`
+  reports the cap.
+- **Fix stalled** — the fix lens reports no push (`pushed: false`), returns a SHA
+  equal to the prior HEAD on a case-folded common prefix (a full or abbreviated
+  SHA of the unchanged commit both count), or returns null for a round's
+  findings. HEAD did not move, so the next round would re-raise the same
+  findings. The run ends with a `blocker` that names the finding count and the
+  stalled HEAD.
+- **Mark-ready failed** — the convergence check passes but the mark-ready step
+  cannot confirm the PR left draft state (`gh pr ready` errored, or the draft
+  re-query still reports true). The workflow does not report `converged: true`;
+  the run ends with a `blocker` naming the failed ready transition.
 
 ## Not a blocker (the run continues)
 

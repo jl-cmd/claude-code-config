@@ -8,6 +8,7 @@ import {
     detectFixProgress,
     isResolvedHeadUsable,
     classifyCopilotOutcome,
+    classifyReadyOutcome,
 } from './converge_helpers.mjs';
 
 
@@ -221,6 +222,57 @@ test('resolveRoundOutcome dedupes findings across the surviving lenses', () => {
 });
 
 
+test('resolveRoundOutcome calls a round clean only when every surviving lens reports clean or down', () => {
+    const everyLensClean = [
+        { clean: true, down: false, findings: [] },
+        { clean: true, down: false, findings: [] },
+        { clean: true, down: true, findings: [] },
+    ];
+
+    const outcome = resolveRoundOutcome(everyLensClean);
+
+    assert.equal(outcome.roundClean, true);
+    assert.equal(outcome.findings.length, 0);
+});
+
+
+test('resolveRoundOutcome keeps a not-clean lens with zero findings in the converge phase', () => {
+    const oneLensNotCleanWithoutFindings = [
+        { clean: true, down: false, findings: [] },
+        { clean: false, down: false, findings: [] },
+        { clean: true, down: false, findings: [] },
+    ];
+
+    const outcome = resolveRoundOutcome(oneLensNotCleanWithoutFindings);
+
+    assert.equal(outcome.roundClean, false);
+    assert.equal(outcome.findings.length, 0);
+});
+
+
+test('resolveRoundOutcome reports a round with findings as not clean', () => {
+    const oneLensWithFindings = [
+        { clean: false, down: false, findings: [{ file: 'a.py', line: 1, severity: 'P1', title: 'One', detail: 'd', replyToCommentId: null }] },
+        { clean: true, down: false, findings: [] },
+        { clean: true, down: false, findings: [] },
+    ];
+
+    const outcome = resolveRoundOutcome(oneLensWithFindings);
+
+    assert.equal(outcome.roundClean, false);
+    assert.equal(outcome.findings.length, 1);
+});
+
+
+test('resolveRoundOutcome reports a total lens wipeout as not clean', () => {
+    const allLensesDead = [null, null, null];
+
+    const outcome = resolveRoundOutcome(allLensesDead);
+
+    assert.equal(outcome.roundClean, false);
+});
+
+
 test('detectFixProgress flags a fix lens that never pushed', () => {
     const notPushed = { newSha: 'sameheadsha', pushed: false, summary: '' };
 
@@ -258,12 +310,43 @@ test('detectFixProgress flags a Copilot fix lens that never pushed', () => {
 
 
 test('detectFixProgress accepts a pushed Copilot fix that moved HEAD to a new SHA', () => {
-    const copilotFixMoved = { newSha: 'copilotnewsha', pushed: true, summary: 'fixed copilot finding' };
+    const copilotFixMoved = { newSha: 'b1c2d3e4f5a6978cabbee01234567890deadbeef', pushed: true, summary: 'fixed copilot finding' };
 
-    const progress = detectFixProgress(copilotFixMoved, 'copilotoldsha');
+    const progress = detectFixProgress(copilotFixMoved, 'a58fee90c20dbe2441b1079175c11eb08d674fa6');
 
     assert.equal(progress.progressed, true);
-    assert.equal(progress.newSha, 'copilotnewsha');
+    assert.equal(progress.newSha, 'b1c2d3e4f5a6978cabbee01234567890deadbeef');
+});
+
+
+test('detectFixProgress treats an abbreviated SHA of the unchanged HEAD as a no-op stall', () => {
+    const fullPriorHead = 'a58fee90c20dbe2441b1079175c11eb08d674fa6';
+    const abbreviatedSameCommit = { newSha: 'a58fee9', pushed: true, summary: 'no code change, thread resolved' };
+
+    const progress = detectFixProgress(abbreviatedSameCommit, fullPriorHead);
+
+    assert.equal(progress.progressed, false);
+});
+
+
+test('detectFixProgress ignores SHA case when comparing the new HEAD against the prior HEAD', () => {
+    const fullPriorHead = 'A58FEE90C20DBE2441B1079175C11EB08D674FA6';
+    const lowercaseSameCommit = { newSha: 'a58fee90c20dbe2441b1079175c11eb08d674fa6', pushed: true, summary: 'noop' };
+
+    const progress = detectFixProgress(lowercaseSameCommit, fullPriorHead);
+
+    assert.equal(progress.progressed, false);
+});
+
+
+test('detectFixProgress accepts an abbreviated SHA that differs from the prior HEAD prefix', () => {
+    const fullPriorHead = 'a58fee90c20dbe2441b1079175c11eb08d674fa6';
+    const abbreviatedNewCommit = { newSha: 'b1c2d3e', pushed: true, summary: 'real fix' };
+
+    const progress = detectFixProgress(abbreviatedNewCommit, fullPriorHead);
+
+    assert.equal(progress.progressed, true);
+    assert.equal(progress.newSha, 'b1c2d3e');
 });
 
 
@@ -329,4 +412,31 @@ test('classifyCopilotOutcome treats a clean Copilot review as approved', () => {
     const outcome = classifyCopilotOutcome(cleanGate);
 
     assert.equal(outcome.kind, 'approved');
+});
+
+
+test('classifyReadyOutcome confirms convergence when the PR is marked ready', () => {
+    const markedReady = { ready: true };
+
+    assert.equal(classifyReadyOutcome(markedReady).converged, true);
+});
+
+
+test('classifyReadyOutcome blocks convergence when the mark-ready agent reports not ready', () => {
+    const stillDraft = { ready: false };
+
+    const outcome = classifyReadyOutcome(stillDraft);
+
+    assert.equal(outcome.converged, false);
+    assert.ok(outcome.blocker.length > 0);
+});
+
+
+test('classifyReadyOutcome blocks convergence when the mark-ready agent died', () => {
+    const deadAgent = null;
+
+    const outcome = classifyReadyOutcome(deadAgent);
+
+    assert.equal(outcome.converged, false);
+    assert.ok(outcome.blocker.length > 0);
 });

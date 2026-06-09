@@ -2,7 +2,7 @@
 name: bugteam
 description: >-
   Open pull request audit–fix until convergence: CODE_RULES gate, clean-room
-  audit (`code-quality-agent`, opus) and fix (`clean-coder`, opus), per-loop
+  audit (`code-quality-agent`, opus) and fix (`clean-coder`, fable), per-loop
   GitHub reviews, 10-audit cap; grant then revoke `.claude/**`. Spawns
   background subagents (`Agent(..., run_in_background=true)`). Triggers: '/bugteam', 'run
   the bug team', 'auto-fix the PR until clean', 'loop audit and fix'.
@@ -392,7 +392,7 @@ The sibling-output paths in [`PROMPTS.md`](PROMPTS.md) must cover the full
 Agent(
   subagent_type="clean-coder",
   name="bugfix-pr<N>-loop<L>",
-  model="opus",
+  model="fable",
   run_in_background=true,
   description="Bugfix PR <N> loop <L>",
   prompt="<fix XML; see PROMPTS.md>"

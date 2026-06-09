@@ -32,7 +32,7 @@ Capture `<owner>/<repo>`, head branch, base branch, PR number, PR URL. This scop
 
 - **Subagent roles (spawned per loop, not at invocation start):**
   - `bugfind` — `code-quality-agent`, model opus (Opus 4.7 at default xhigh effort)
-  - `bugfix` — `clean-coder`, model opus (Opus 4.7 at default xhigh effort)
+  - `bugfix` — `clean-coder`, model fable
 
 ### Loop state block
 

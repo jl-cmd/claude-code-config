@@ -55,7 +55,7 @@ The harness does not yet exist; this document defines its contract.
 1. `Bash("python .../grant_project_claude_permissions.py")` runs (Step 0).
 2. `Agent(subagent_type="code-quality-agent", name="bugfind-pr...-loop1", run_in_background=true, model="opus", ...)` spawned for AUDIT.
 3. Lead awaits background-completion notification, then `Read(".bugteam-pr42-loop1.outcomes.xml")`.
-4. `Agent(subagent_type="clean-coder", name="bugfix-pr...-loop1", run_in_background=true, model="opus", ...)` spawned for FIX (if findings).
+4. `Agent(subagent_type="clean-coder", name="bugfix-pr...-loop1", run_in_background=true, model="fable", ...)` spawned for FIX (if findings).
 5. `Bash("python .../revoke_project_claude_permissions.py")` on exit.
 
 **Pass criteria.**
@@ -110,7 +110,7 @@ The harness does not yet exist; this document defines its contract.
 | 6 | `Agent(subagent_type="code-quality-agent", name="bugfind-pr42-loop1", run_in_background=true, model="opus", description=..., prompt=<audit XML loop 1>)` | `SKILL.md` § AUDIT action |
 | 7 | Lead awaits background-completion notification | `SKILL.md` § AUDIT action |
 | 8 | `Read(".bugteam-pr42-loop1.outcomes.xml")` | `SKILL.md` § AUDIT action |
-| 9 | `Agent(subagent_type="clean-coder", name="bugfix-pr42-loop1", run_in_background=true, model="opus", description=..., prompt=<fix XML loop 1>)` | `SKILL.md` § FIX action |
+| 9 | `Agent(subagent_type="clean-coder", name="bugfix-pr42-loop1", run_in_background=true, model="fable", description=..., prompt=<fix XML loop 1>)` | `SKILL.md` § FIX action |
 | 10 | Lead awaits background-completion notification | `SKILL.md` § FIX action |
 | 11 | `Read(".bugteam-pr42-loop1.outcomes.xml")` — bugfix outcome XML | `SKILL.md` § FIX action |
 | 12 | `Bash("git -C \"<run_temp_dir>/pr-42/worktree\" rev-parse HEAD")` → verify HEAD advanced | `SKILL.md` § FIX action (**Verify**) |
@@ -306,4 +306,4 @@ A minimal Python harness under `packages/claude-dev-env/skills/bugteam/evals/`:
 
 1. **GitHub REST review-POST payload shape.** Eval 9 and Eval 10 depend on the exact body shape of `POST /pulls/<number>/reviews`. The `jq -n --rawfile ... --argjson ... | gh api ... --input -` fence lives in `SKILL.md` § Step 2.5 (**Review POST**); expanded copy in `reference/github-pr-reviews.md` § **Per-loop review**. Before running Eval 9/10 for real, fetch the current GitHub REST reference to confirm the request schema (fields `commit_id`, `event`, `body`, `comments[]`) and the multi-line anchor `{path, start_line, start_side, line, side, body}` shape still apply. Record the confirmed version and URL here.
 2. **Background subagent completion signal.** Real-run observation (loop 1 of eval run 2026-04-18) confirmed: background subagents self-terminate when their task is complete — the background-completion notification arrives and the lead reads the outcomes XML. No shutdown handshake required. `SKILL.md` § AUDIT / FIX actions document this flow. Layer A **I-4** encodes “fresh subagent per loop.”
-3. **Model override redundancy.** `clean-coder` pins `model: opus` in its agent definition, while `code-quality-agent` currently uses `model: inherit`. The explicit `model="opus"` in every spawn is insurance against frontmatter drift; on the first real run, confirm the resolved model is `claude-opus-4-7` and that effort defaults to `xhigh` (Claude Code shows the active effort next to the spinner per the model-config docs). If a teammate's frontmatter ever pins a non-default `effort:` value, that frontmatter overrides the model default for that subagent (https://code.claude.com/docs/en/model-config — *"Frontmatter effort applies when that skill or subagent is active, overriding the session level but not the environment variable."*).
+3. **Model override redundancy.** `clean-coder` pins `model: fable` in its agent definition, while `code-quality-agent` currently uses `model: inherit`. The explicit `model="fable"` on clean-coder FIX spawns is insurance against frontmatter drift; on the first real run, confirm the resolved model is fable (Claude Code shows the active model next to the spinner per the model-config docs). If a teammate's frontmatter ever pins a non-default `effort:` value, that frontmatter overrides the model default for that subagent (https://code.claude.com/docs/en/model-config — *"Frontmatter effort applies when that skill or subagent is active, overriding the session level but not the environment variable."*).

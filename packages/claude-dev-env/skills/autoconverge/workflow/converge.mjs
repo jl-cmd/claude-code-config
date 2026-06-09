@@ -1,3 +1,5 @@
+import { dedupeFindings, resolveBugbotDown } from './converge_helpers.mjs'
+
 export const meta = {
   name: 'autoconverge',
   description: 'Drive one draft PR to convergence in a single autonomous run: parallel Bugbot + code-review + bug-audit lenses on the same HEAD each round, dedup findings, fix once, re-verify, then a Copilot wait-gate and a final convergence check that marks the PR ready.',
@@ -12,9 +14,7 @@ export const meta = {
 const CONFIG = {
   maxRounds: 20,
   copilotMaxPolls: 3,
-  skillsHome: '$HOME/.claude/skills',
   sharedScripts: '$HOME/.claude/skills/pr-converge/scripts',
-  bugteamScripts: '$HOME/.claude/skills/bugteam/scripts',
   prLoopScripts: '$HOME/.claude/_shared/pr-loop/scripts',
   bugteamRubric: '$HOME/.claude/skills/bugteam/reference/audit-contract.md',
 }
@@ -289,25 +289,8 @@ function repairConvergence(head, failures) {
   )
 }
 
-/**
- * Dedup findings across lenses by file + line + lowercased title.
- * @param {Array<object>} allFindings concatenated lens findings
- * @returns {Array<object>} unique findings
- */
-function dedupeFindings(allFindings) {
-  const seen = new Set()
-  const unique = []
-  for (const each of allFindings) {
-    const fingerprint = `${each.file}:${each.line}:${(each.title || '').toLowerCase()}`
-    if (seen.has(fingerprint)) continue
-    seen.add(fingerprint)
-    unique.push(each)
-  }
-  return unique
-}
-
 let phase = 'CONVERGE'
-let head = await resolveHead()
+let head = null
 let rounds = 0
 let blocker = null
 let bugbotDown = args.bugbotDisabled || false
@@ -323,7 +306,7 @@ while (rounds < CONFIG.maxRounds) {
       () => runAuditLens(head),
     ])
     const live = lenses.filter(Boolean)
-    if (lenses[0]?.down === true) bugbotDown = true
+    bugbotDown = resolveBugbotDown(lenses[0], args.bugbotDisabled || false)
     const findings = dedupeFindings(live.flatMap((each) => each.findings || []))
     if (findings.length > 0) {
       log(`Round ${rounds}: ${findings.length} finding(s) — applying fixes`)

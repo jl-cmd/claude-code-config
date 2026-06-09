@@ -152,3 +152,26 @@ test('the CONVERGE branch re-resolves HEAD from GitHub on every entry', () => {
   const resolveHeadIndex = convergeSource.indexOf('head = await resolveHead()', convergeBranchStart);
   assert.notEqual(resolveHeadIndex, -1, 'expected CONVERGE to re-resolve HEAD via resolveHead()');
 });
+
+test('fix prompt resolves threads by PRRT thread node id looked up from the comment databaseId', () => {
+  const fixPrompt = lensPromptBody('applyFixes');
+  assert.match(fixPrompt, /PRRT/, 'expected the thread node id form (PRRT_...) to be named');
+  assert.match(
+    fixPrompt,
+    /databaseId/,
+    'expected the GraphQL lookup matching comment databaseId to be named',
+  );
+  assert.match(
+    fixPrompt,
+    /not the numeric comment id/,
+    'expected an explicit guard against passing the numeric comment id to resolve_thread',
+  );
+});
+
+test('fix prompt does not pass the numeric comment id straight to resolve_thread', () => {
+  assert.doesNotMatch(
+    lensPromptBody('applyFixes'),
+    /then resolve that thread \(use the github MCP pull_request_review_write/,
+    'resolve_thread and resolveReviewThread require a PRRT_... thread node id, not the comment id',
+  );
+});

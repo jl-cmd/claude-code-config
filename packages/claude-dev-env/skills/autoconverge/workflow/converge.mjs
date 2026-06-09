@@ -1,3 +1,5 @@
+import { classifyCopilotOutcome, classifyConvergenceOutcome } from './decisions.mjs'
+
 export const meta = {
   name: 'autoconverge',
   description: 'Drive one draft PR to convergence in a single autonomous run: parallel Bugbot + code-review + bug-audit lenses on the same HEAD each round, dedup findings, fix once, re-verify, then a Copilot wait-gate and a final convergence check that marks the PR ready.',
@@ -285,22 +287,6 @@ function isResolvedHeadUsable(resolvedHead) {
 }
 
 /**
- * Classify a Copilot gate result into the loop's next action. A dead gate agent
- * (null result) is a retry rather than an approval, mirroring the converge
- * lenses' dead-agent convention so a failed gate is never mistaken for a clean
- * Copilot review. A non-null blocker ends the run; findings route to a fix step;
- * a clean result approves the gate.
- * @param {object|null|undefined} copilot the COPILOT_SCHEMA result, or null on agent failure
- * @returns {{kind: string, blocker?: string, findings?: Array<object>}} the next action
- */
-function classifyCopilotOutcome(copilot) {
-  if (copilot == null) return { kind: 'retry' }
-  if (copilot.blocker) return { kind: 'blocker', blocker: copilot.blocker }
-  if (copilot.findings.length > 0) return { kind: 'fix', findings: copilot.findings }
-  return { kind: 'approved' }
-}
-
-/**
  * Decide whether the mark-ready step actually cleared the draft state. The run
  * reports converged only when the mark-ready agent confirms ready:true; a dead
  * agent (null result) or a ready:false report means `gh pr ready` did not land
@@ -350,6 +336,23 @@ async function resolveHead() {
 }
 
 /**
+ * Fetch origin/main once per round before the parallel lenses spawn. The
+ * code-review and bug-audit lenses both diff against origin/main; running their
+ * own git fetch in parallel contends on the worktree .git lock and fails
+ * intermittently, so a single serial fetch here keeps the ref current and the
+ * parallel lenses do no git fetch of their own.
+ * @returns {Promise<string>} agent transcript (unused)
+ */
+function prefetchMainForRound() {
+  return agent(
+    `Refresh the base ref for ${prCoordinates} so the parallel review lenses can diff against an up-to-date origin/main without each running its own fetch. Run exactly:\n` +
+      `git fetch origin main\n` +
+      `Do not edit, commit, push, rebase, or modify any files — fetch only.`,
+    { label: 'prefetch-main', phase: 'Converge', agentType: 'Explore' },
+  )
+}
+
+/**
  * Bugbot lens: ensure Cursor Bugbot has rendered a verdict on the given HEAD,
  * triggering and polling its CI check run when needed, and return its findings.
  * @param {string} head PR HEAD SHA to evaluate
@@ -387,7 +390,7 @@ function runBugbotLens(head) {
 function runCodeReviewLens(head) {
   return agent(
     `You are the code-review lens for ${prCoordinates}, HEAD ${head}.\n\n` +
-      `Review the FULL origin/main...HEAD diff — every file the PR touches. Do NOT delta-scope to recent commits or to a single file. First run: git fetch origin main; git diff --name-only origin/main...HEAD to enumerate the changed files, then review the complete diff of each.\n\n` +
+      `Review the FULL origin/main...HEAD diff — every file the PR touches. Do NOT delta-scope to recent commits or to a single file. The workflow already fetched origin/main this round, so do NOT run git fetch; run git diff --name-only origin/main...HEAD to enumerate the changed files, then review the complete diff of each.\n\n` +
       `Apply correctness-focused review: real bugs, broken logic, incorrect error handling, data-loss or security risks, contract mismatches, and reuse/simplification problems. Report only defensible findings with concrete file:line evidence.\n\n` +
       `Do NOT edit, commit, or push — reporting only. Return strictly the schema: clean=true with empty findings when the diff is sound, otherwise one entry per finding (severity P0/P1/P2, replyToCommentId=null since these are not yet GitHub threads). Set sha=${'`'}${head}${'`'}, down=false.`,
     { label: 'lens:code-review', phase: 'Converge', schema: LENS_SCHEMA, agentType: 'code-quality-agent' },
@@ -403,7 +406,7 @@ function runCodeReviewLens(head) {
 function runAuditLens(head) {
   return agent(
     `You are the second-opinion bug-audit lens for ${prCoordinates}, HEAD ${head}.\n\n` +
-      `Read the audit rubric at ${CONFIG.bugteamRubric} and apply its categories (A through P) against the FULL origin/main...HEAD diff — every file the PR touches, never a delta cut. Run git fetch origin main; git diff --name-only origin/main...HEAD first to enumerate scope.\n\n` +
+      `Read the audit rubric at ${CONFIG.bugteamRubric} and apply its categories (A through P) against the FULL origin/main...HEAD diff — every file the PR touches, never a delta cut. The workflow already fetched origin/main this round, so do NOT run git fetch; run git diff --name-only origin/main...HEAD first to enumerate scope.\n\n` +
       `This is a clean-room audit: assume nothing from other lenses. Report only findings backed by concrete file:line evidence. Do NOT edit, commit, or push.\n\n` +
       `Return strictly the schema: clean=true with empty findings when the diff passes every category, otherwise one entry per finding (severity P0/P1/P2, replyToCommentId=null). Set sha=${'`'}${head}${'`'}, down=false.`,
     { label: 'lens:bug-audit', phase: 'Converge', schema: LENS_SCHEMA, agentType: 'code-quality-agent' },
@@ -555,6 +558,7 @@ while (iterations < CONFIG.maxIterations) {
       log(`Round ${rounds}: resolve-head agent returned no SHA — retrying without spawning lenses`)
       continue
     }
+    await prefetchMainForRound()
     log(`Round ${rounds}: parallel Bugbot + code-review + bug-audit on ${head?.slice(0, 7)}`)
     const lenses = await parallel([
       () => runBugbotLens(head),
@@ -593,7 +597,7 @@ while (iterations < CONFIG.maxIterations) {
     const copilot = await runCopilotGate(head)
     const copilotOutcome = classifyCopilotOutcome(copilot)
     if (copilotOutcome.kind === 'retry') {
-      log('Copilot gate agent died — re-running the gate on the same HEAD')
+      log('Copilot gate agent died or returned an unreliable not-clean result with no findings — re-running the gate on the same HEAD')
       continue
     }
     if (copilotOutcome.kind === 'blocker') {
@@ -618,7 +622,12 @@ while (iterations < CONFIG.maxIterations) {
 
   if (phase === 'FINALIZE') {
     const convergence = await checkConvergence(bugbotDown)
-    if (convergence?.pass) {
+    const convergenceOutcome = classifyConvergenceOutcome(convergence)
+    if (convergenceOutcome.kind === 'retry') {
+      log('Convergence check agent died or returned no FAIL lines — re-running the check on the same HEAD')
+      continue
+    }
+    if (convergenceOutcome.kind === 'ready') {
       const readyResult = await markReady(head)
       const readyOutcome = classifyReadyOutcome(readyResult)
       if (readyOutcome.converged) {
@@ -627,8 +636,8 @@ while (iterations < CONFIG.maxIterations) {
       blocker = readyOutcome.blocker
       break
     }
-    log(`Convergence check failed: ${(convergence?.failures || []).join('; ') || 'unknown'} — repairing then re-converging`)
-    const repair = await repairConvergence(head, convergence?.failures || [])
+    log(`Convergence check failed: ${convergenceOutcome.failures.join('; ')} — repairing then re-converging`)
+    const repair = await repairConvergence(head, convergenceOutcome.failures)
     head = repair?.newSha || head
     phase = 'CONVERGE'
     continue

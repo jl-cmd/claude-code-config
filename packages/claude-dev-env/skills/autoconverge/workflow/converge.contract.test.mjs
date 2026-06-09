@@ -128,3 +128,27 @@ test('gotchas doc describes the reviewer wait as shell-agnostic', () => {
     'PowerShell Start-Sleep must be an alternative, not the sole mechanism',
   );
 });
+
+function finalizeRepairBranch() {
+  const repairCallIndex = convergeSource.indexOf('await repairConvergence(');
+  assert.notEqual(repairCallIndex, -1, 'expected the FINALIZE repair call to exist');
+  const transitionIndex = convergeSource.indexOf("phase = 'CONVERGE'", repairCallIndex);
+  assert.notEqual(transitionIndex, -1, 'expected a CONVERGE transition after the repair call');
+  const branchEnd = convergeSource.indexOf('continue', transitionIndex) + 'continue'.length;
+  return convergeSource.slice(repairCallIndex, branchEnd);
+}
+
+test('the FINALIZE repair branch does not re-assign head from the repair before re-converging', () => {
+  assert.doesNotMatch(
+    finalizeRepairBranch(),
+    /head\s*=\s*repair/,
+    'the next CONVERGE pass re-resolves HEAD from GitHub, so assigning the repair SHA here is dead',
+  );
+});
+
+test('the CONVERGE branch re-resolves HEAD from GitHub on every entry', () => {
+  const convergeBranchStart = convergeSource.indexOf("if (phase === 'CONVERGE')");
+  assert.notEqual(convergeBranchStart, -1, 'expected the CONVERGE branch to exist');
+  const resolveHeadIndex = convergeSource.indexOf('head = await resolveHead()', convergeBranchStart);
+  assert.notEqual(resolveHeadIndex, -1, 'expected CONVERGE to re-resolve HEAD via resolveHead()');
+});

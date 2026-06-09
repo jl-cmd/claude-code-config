@@ -728,8 +728,7 @@ while (iterations < CONFIG.maxIterations) {
       break
     }
     log(`Convergence check failed: ${convergenceOutcome.failures.join('; ')} — repairing then re-converging`)
-    const repair = await repairConvergence(head, convergenceOutcome.failures)
-    head = repair?.newSha || head
+    await repairConvergence(head, convergenceOutcome.failures)
     phase = 'CONVERGE'
     continue
   }

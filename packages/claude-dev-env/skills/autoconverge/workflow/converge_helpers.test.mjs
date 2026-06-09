@@ -350,6 +350,37 @@ test('detectFixProgress accepts an abbreviated SHA that differs from the prior H
 });
 
 
+test('detectFixProgress treats an all-stale round that resolved threads without a commit as progress', () => {
+    const fullPriorHead = 'a58fee90c20dbe2441b1079175c11eb08d674fa6';
+    const resolvedWithoutCommit = {
+        newSha: fullPriorHead,
+        pushed: false,
+        resolvedWithoutCommit: true,
+        summary: 'every finding was already addressed; threads resolved, no code change',
+    };
+
+    const progress = detectFixProgress(resolvedWithoutCommit, fullPriorHead);
+
+    assert.equal(progress.progressed, true);
+    assert.equal(progress.newSha, fullPriorHead);
+});
+
+
+test('detectFixProgress still stalls a no-push round that did not resolve every thread', () => {
+    const fullPriorHead = 'a58fee90c20dbe2441b1079175c11eb08d674fa6';
+    const unresolvedNoPush = {
+        newSha: fullPriorHead,
+        pushed: false,
+        resolvedWithoutCommit: false,
+        summary: 'fix failed',
+    };
+
+    const progress = detectFixProgress(unresolvedNoPush, fullPriorHead);
+
+    assert.equal(progress.progressed, false);
+});
+
+
 test('isResolvedHeadUsable rejects an undefined HEAD from a dead resolve-head agent', () => {
     assert.equal(isResolvedHeadUsable(undefined), false);
 });

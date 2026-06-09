@@ -20,7 +20,7 @@ export const meta = {
 }
 
 const CONFIG = {
-  maxRounds: 20,
+  maxIterations: 20,
   copilotMaxPolls: 3,
   sharedScripts: '$HOME/.claude/skills/pr-converge/scripts',
   prLoopScripts: '$HOME/.claude/_shared/pr-loop/scripts',
@@ -77,11 +77,12 @@ const FIX_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    newSha: { type: 'string', description: 'HEAD SHA after the fix commit was pushed' },
+    newSha: { type: 'string', description: 'HEAD SHA after the fix commit was pushed, or the unchanged HEAD when no commit was needed' },
     pushed: { type: 'boolean' },
+    resolvedWithoutCommit: { type: 'boolean', description: 'true when every finding was already addressed so no code change was made, yet each finding thread was still resolved — the round advances rather than stalling' },
     summary: { type: 'string' },
   },
-  required: ['newSha', 'pushed', 'summary'],
+  required: ['newSha', 'pushed', 'resolvedWithoutCommit', 'summary'],
 }
 
 const CONVERGENCE_SCHEMA = {
@@ -104,9 +105,6 @@ const READY_SCHEMA = {
 }
 
 const prCoordinates = `owner=${args.owner} repo=${args.repo} PR #${args.prNumber} (https://github.com/${args.owner}/${args.repo}/pull/${args.prNumber})`
-const bugbotDisabledNote = args.bugbotDisabled
-  ? 'Cursor Bugbot is opted out for this run; treat the Bugbot lens as down without triggering or polling it.'
-  : 'Cursor Bugbot participates this run.'
 
 /**
  * Resolve the current PR HEAD SHA from GitHub.
@@ -133,7 +131,7 @@ function runBugbotLens(head) {
     return Promise.resolve({ sha: head, clean: true, down: true, findings: [] })
   }
   return agent(
-    `You are the Cursor Bugbot lens for ${prCoordinates}, HEAD ${head}. ${bugbotDisabledNote}\n\n` +
+    `You are the Cursor Bugbot lens for ${prCoordinates}, HEAD ${head}. Cursor Bugbot participates this run.\n\n` +
       `Goal: return Bugbot's verdict on HEAD ${head}. Do not edit code, commit, or push. You may post the literal trigger comment described below.\n\n` +
       `Procedure (use the existing scripts; pass --owner ${args.owner} --repo ${args.repo}):\n` +
       `1. Opt-out: python "${CONFIG.prLoopScripts}/reviews_disabled.py" --reviewer bugbot. Exit 0 means disabled -> return {sha, clean:true, down:true, findings:[]}.\n` +
@@ -213,7 +211,10 @@ function applyFixes(head, findings, sourceLabel) {
       `- Make ONE commit for all fixes, then push to the PR branch.\n` +
       `- For each finding that carries a GitHub review comment id (${threadIds.length ? threadIds.join(', ') : 'none this batch'}): post an inline reply with python "${CONFIG.sharedScripts}/post_fix_reply.py" --owner ${args.owner} --repo ${args.repo} --pr-number ${args.prNumber} --in-reply-to <id> --body "<what changed>", then resolve that thread (use the github MCP pull_request_review_write method=resolve_thread, or gh api graphql resolveReviewThread).\n` +
       `- Findings with replyToCommentId null are in-memory audit findings: fix them, no reply needed.\n\n` +
-      `Return the new HEAD SHA after your push in newSha, pushed=true, and a one-line summary.`,
+      `Return values:\n` +
+      `- When you commit and push a fix: newSha=the new HEAD SHA after your push, pushed=true, resolvedWithoutCommit=false.\n` +
+      `- When every finding was already addressed so no code change is needed — yet you still resolved each GitHub review thread above: newSha=${head} (the unchanged HEAD), pushed=false, resolvedWithoutCommit=true. Only set this when every thread that carries a comment id is resolved; otherwise the round is treated as stalled.\n` +
+      `Always include a one-line summary.`,
     { label: `fix:${sourceLabel}`, phase: 'Converge', schema: FIX_SCHEMA, agentType: 'clean-coder' },
   )
 }
@@ -304,7 +305,7 @@ function repairConvergence(head, failures) {
       `- Unresolved bot review threads: fetch every thread where isResolved is false (gh api graphql, or the github MCP pull_request_read get_review_comments). For each, verify the concern against current code; if it still applies, fix it test-first; either way post an inline reply and resolve the thread.\n` +
       `- PR not mergeable: rebase onto origin/main and force-push (git fetch origin main; git rebase origin/main; resolve conflicts; git push --force-with-lease).\n` +
       `- A dirty bot review or a still-pending requested reviewer: leave it; the next round re-runs that reviewer.\n` +
-      `Make at most one commit for any code fix. Return the HEAD SHA after any push in newSha (the unchanged ${head} when nothing was pushed), pushed true/false, and a one-line summary.`,
+      `Make at most one commit for any code fix. Return the HEAD SHA after any push in newSha (the unchanged ${head} when nothing was pushed), pushed true/false, resolvedWithoutCommit=false (this gate already accepts an unchanged HEAD), and a one-line summary.`,
     { label: 'repair-convergence', phase: 'Finalize', schema: FIX_SCHEMA, agentType: 'clean-coder' },
   )
 }
@@ -316,7 +317,7 @@ let iterations = 0
 let blocker = null
 let bugbotDown = args.bugbotDisabled || false
 
-while (iterations < CONFIG.maxRounds) {
+while (iterations < CONFIG.maxIterations) {
   iterations += 1
   if (phase === 'CONVERGE') {
     rounds += 1
@@ -409,5 +410,5 @@ return {
   converged: false,
   rounds,
   finalSha: head,
-  blocker: blocker || `round cap reached (${CONFIG.maxRounds})`,
+  blocker: blocker || `iteration cap reached (${CONFIG.maxIterations})`,
 }

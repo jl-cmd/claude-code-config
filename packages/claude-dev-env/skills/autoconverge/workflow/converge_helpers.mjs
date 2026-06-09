@@ -152,12 +152,15 @@ function normalizeShaForComparison(sha) {
 }
 
 /**
- * Decide whether a fix lens actually landed a fix on the PR branch: a pushed fix
- * that moved HEAD progressed; a null result, an unpushed result, or a SHA equal
- * to the prior HEAD on a case-folded common prefix did not and must surface a
- * distinct fix-stalled blocker. Comparing on a normalized prefix keeps a no-op
+ * Decide whether a fix lens actually advanced the round: a pushed fix that moved
+ * HEAD progressed, and so did an all-stale round whose findings were every one
+ * already addressed — the fix lens makes no commit but resolves each thread and
+ * reports resolvedWithoutCommit:true, leaving HEAD unchanged on purpose. A null
+ * result, a no-push round that did not resolve every thread, or a SHA equal to
+ * the prior HEAD on a case-folded common prefix did not progress and must surface
+ * a distinct fix-stalled blocker. Comparing on a normalized prefix keeps a no-op
  * fix that reports an abbreviated SHA of the unchanged HEAD from masquerading as
- * progress.
+ * a moved-HEAD push.
  * @param {object|null} fixResult the FIX_SCHEMA result, or null on agent failure
  * @param {string} priorHead the HEAD the fix was applied against
  * @returns {{progressed: boolean, newSha: string}} progress decision and resulting HEAD
@@ -165,6 +168,9 @@ function normalizeShaForComparison(sha) {
 export function detectFixProgress(fixResult, priorHead) {
   if (fixResult == null) return { progressed: false, newSha: priorHead }
   const newSha = fixResult.newSha || priorHead
+  if (fixResult.resolvedWithoutCommit === true) {
+    return { progressed: true, newSha: priorHead }
+  }
   const movedHead = normalizeShaForComparison(newSha) !== normalizeShaForComparison(priorHead)
   const progressed = fixResult.pushed === true && movedHead
   return { progressed, newSha }

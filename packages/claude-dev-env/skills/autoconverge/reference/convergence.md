@@ -3,8 +3,9 @@
 ## The round loop
 
 The workflow holds three states and moves between them until the PR is ready or
-a blocker ends the run. The round counter is shared and caps the whole run at 20
-rounds.
+a blocker ends the run. A single iteration counter increments on every pass
+through any phase and caps the whole run at 20 loop iterations; the round counter
+tracks CONVERGE passes only and is never the cap.
 
 **CONVERGE** (one round = one parallel sweep):
 
@@ -25,9 +26,13 @@ rounds.
    colliding threads.
 4. **Any findings** → one `clean-coder` applies every fix in a single test-first
    commit, pushes, then replies to and resolves each finding that carries a
-   GitHub review thread. The fix lens must land a push that moves HEAD; a round
-   whose fix lens reports no push ends the run with a fix-stalled blocker. The
-   next round re-verifies on the new HEAD.
+   GitHub review thread. A round progresses when the fix lens lands a push that
+   moves HEAD, or when every finding was already addressed so no code change is
+   needed yet each finding thread is still resolved (the fix lens reports
+   `resolvedWithoutCommit` and the run re-converges on the unchanged HEAD). A
+   round whose fix lens reports neither a moved-HEAD push nor a full
+   thread-resolution ends the run with a fix-stalled blocker. The next round
+   re-verifies on the current HEAD.
 5. **Zero findings on a stable HEAD** → post the CLEAN bugteam audit artifact
    for that HEAD, then move to the Copilot gate.
 

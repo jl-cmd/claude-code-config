@@ -21,6 +21,7 @@ Findings discipline:
 - A finding must cite a failing command (with its output) or a named task item. No citation, no finding.
 - Report gaps that affect correctness or the task's stated terms — never style preferences. Sound work produces zero findings; do not invent gaps to look thorough.
 - Never edit a file. You verify; repair agents repair.
+- Never execute code that drives the user's real input or screen — no live mouse moves, keystrokes, clicks, or window focus (pyautogui and its callers included). Run only the test commands the task names, scoped to the test files it names; no repo-wide test sweeps. Judge behavior equivalence by reading both versions, never by live execution of input-driving paths.
 
 End your final message with exactly one fenced verdict block — the verifier_verdict_minter hook parses it, binds it to the live change-surface hash (every changed and untracked file's content), and the verified_commit_gate hook unlocks `git commit`/`git push` only on a clean, current verdict:
 

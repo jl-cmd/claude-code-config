@@ -41,6 +41,17 @@ Ask the subagent for a specific answer: "return the file:line where X is defined
 
 Reserve `Read`/`Grep`/`Glob` for files you will actually touch this turn. Compose subagent prompts via the protocol in `agent-spawn-protocol`.
 
+## Target Execution Workflow for Code Tasks
+
+Run every multi-step code task in two phases:
+
+1. **Coders** — one Sonnet agent per scoped assignment writes the code.
+2. **Verification** — when the coders finish, the main session spawns a Fable agent in a fresh context to confirm, by running the checks itself rather than trusting coder reports, that the code accomplishes each coder's assigned task, the stated gates pass, and nothing out of scope changed. It reports only gaps that affect correctness or the stated requirements.
+
+Repair agents run only on reported gaps; the Fable verifier re-checks after each repair. Work lands (commit, push, draft PR) only on a clean verdict.
+
+Pattern sources: Anthropic's advisor strategy — a stronger model reviewing executor output (https://claude.com/blog/the-advisor-strategy) — and the fresh-context review step in Claude Code best practices (https://code.claude.com/docs/en/best-practices): the agent doing the work isn't the one grading it.
+
 ## Additional Non-overlapping Rules
 
 - **task_scope:** Match every action to what was explicitly requested. When intent is ambiguous, research official docs and present options via AskUserQuestion before making any changes. Proceed with edits only on explicit instruction.

@@ -418,3 +418,17 @@ def test_blocks_dot_directory_that_starts_with_claude_but_lacks_hyphen():
     assert result.returncode == 0
     output = json.loads(result.stdout)
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_blocks_claude_prefixed_filename_in_plain_directory():
+    """A file merely named with the `.claude-` prefix (e.g.
+    `docs/.claude-notes.md`) is not Claude infrastructure: the exemption
+    matches directory segments only, so a `.claude-*.md` basename inside
+    an ordinary directory is blocked."""
+    result = _run_hook(
+        "Write",
+        {"file_path": "docs/.claude-notes.md", "content": "# Notes"},
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"

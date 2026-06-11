@@ -98,14 +98,21 @@ def _has_claude_infrastructure_segment(lower_normalized_path: str) -> bool:
     plugin directories) holds Claude infrastructure; any path inside one
     is exempt.
 
+    Only directory segments are matched. The final segment is always the
+    file's basename (``normpath`` strips any trailing slash), so a file
+    merely named with the ``.claude-`` prefix in an ordinary directory
+    stays subject to the policy.
+
     Args:
         lower_normalized_path: Lowercased path with separators normalized
             to forward slashes.
 
     Returns:
-        True when any path segment names a Claude infrastructure directory.
+        True when any directory segment names a Claude infrastructure
+        directory.
     """
-    for each_segment in lower_normalized_path.split("/"):
+    all_directory_segments = lower_normalized_path.split("/")[:-1]
+    for each_segment in all_directory_segments:
         if each_segment == CLAUDE_DIRECTORY_NAME:
             return True
         if each_segment.startswith(CLAUDE_PROFILE_DIRECTORY_NAME_PREFIX):

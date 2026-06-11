@@ -36,7 +36,7 @@ def is_exempt_path(file_path: str) -> bool:
     """Return True when the .md file path is exempt from the blocker policy.
 
     Exemption sources, in order of evaluation:
-    - Any path segment named `.claude` or prefixed `.claude-`
+    - Any directory segment named `.claude` or prefixed `.claude-`
       (case-insensitive): project infrastructure, profile directories like
       `.claude-mel/`, and `.claude-plugin/`
     - Basename in `ALL_EXEMPT_ANYWHERE_FILENAMES` (e.g. SKILL.md)

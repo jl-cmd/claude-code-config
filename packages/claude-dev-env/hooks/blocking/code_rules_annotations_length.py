@@ -54,6 +54,37 @@ def check_parameter_annotations(content: str, file_path: str) -> list[str]:
     return issues
 
 
+def _is_pytest_fixture_injection_site(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    """Return True when a function node is a valid pytest fixture injection site.
+
+    A function qualifies as a fixture injection site when either its name begins
+    with the ``test`` prefix (matching pytest's default ``python_functions = test*``
+    collection rule) or it carries a ``@pytest.fixture`` / ``@fixture`` decorator,
+    with or without call arguments.  Ordinary helper functions that happen to share
+    a parameter name with a known pytest fixture are excluded by this predicate so
+    that ``check_known_pytest_fixture_annotations`` only enforces annotation
+    requirements on the functions where pytest actually performs fixture injection.
+
+    Args:
+        node: The function definition AST node to inspect.
+
+    Returns:
+        True when the node is a pytest test function or a fixture-decorated
+        function; False otherwise.
+    """
+    if node.name.startswith("test"):
+        return True
+    for each_decorator in node.decorator_list:
+        unwrapped = each_decorator.func if isinstance(each_decorator, ast.Call) else each_decorator
+        if isinstance(unwrapped, ast.Name) and unwrapped.id == "fixture":
+            return True
+        if isinstance(unwrapped, ast.Attribute) and unwrapped.attr == "fixture":
+            return True
+    return False
+
+
 def check_known_pytest_fixture_annotations(content: str, file_path: str) -> list[str]:
     """Flag well-known pytest fixture parameters lacking their type annotation.
 
@@ -87,6 +118,8 @@ def check_known_pytest_fixture_annotations(content: str, file_path: str) -> list
     issues: list[str] = []
     for each_node in ast.walk(tree):
         if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not _is_pytest_fixture_injection_site(each_node):
             continue
         for each_arg in _collect_annotated_arguments(each_node):
             expected_annotation = ANNOTATION_BY_PYTEST_FIXTURE.get(

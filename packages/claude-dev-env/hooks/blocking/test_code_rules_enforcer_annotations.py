@@ -150,3 +150,28 @@ def test_should_flag_unannotated_monkeypatch_fixture() -> None:
     ), f"Expected unannotated monkeypatch fixture flagged, got: {issues}"
 
 
+def test_should_not_flag_known_fixture_in_non_test_helper() -> None:
+    source = "def render_view(request):\n    return request.path\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"Ordinary helper (non-test, non-fixture) must not be flagged, got: {issues}"
+    )
+
+
+def test_should_flag_unannotated_fixture_in_decorated_fixture() -> None:
+    source = (
+        "import pytest\n"
+        "@pytest.fixture\n"
+        "def board(tmp_path):\n"
+        "    return tmp_path\n"
+    )
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert any(
+        "tmp_path" in each_issue and "Path" in each_issue for each_issue in issues
+    ), f"Expected unannotated tmp_path in @pytest.fixture-decorated function flagged, got: {issues}"
+
+

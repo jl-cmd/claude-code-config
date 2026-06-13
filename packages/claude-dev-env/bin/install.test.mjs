@@ -11,6 +11,7 @@ import {
     pythonCandidatesForPlatform,
     managedHookScriptRelativePaths,
     commandReferencesManagedHook,
+    mergeHooksIntoSettings,
 } from './install.mjs';
 
 
@@ -250,4 +251,102 @@ test('commandReferencesManagedHook leaves user hooks outside the managed set unt
     const managedPaths = new Set(['notification/attention_needed_notify.py']);
     assert.equal(commandReferencesManagedHook('python /home/me/custom-tools/my_own_hook.py', managedPaths), false);
     assert.equal(commandReferencesManagedHook('py -3 ~/.claude/hooks/blocking/some_unmanaged_user_hook.py', managedPaths), false);
+});
+
+
+test('commandReferencesManagedHook matches the rewritten inline validators-runner hook that carries no script tail', () => {
+    const managedPaths = new Set(['blocking/code_rules_enforcer.py']);
+    const rewrittenInlineCommand =
+        "py -3 -c \"import sys; sys.path.insert(0, r'C:/Users/jonlo/.claude/hooks'); from validators.run_all_validators import main; sys.exit(main())\"";
+    assert.ok(commandReferencesManagedHook(rewrittenInlineCommand, managedPaths));
+});
+
+
+test('commandReferencesManagedHook leaves an unmanaged inline -c command that imports a different module untouched', () => {
+    const managedPaths = new Set(['blocking/code_rules_enforcer.py']);
+    const userInlineCommand =
+        "python -c \"import sys; sys.path.insert(0, r'/home/me/tools'); from my_tools.runner import main; sys.exit(main())\"";
+    assert.equal(commandReferencesManagedHook(userInlineCommand, managedPaths), false);
+});
+
+
+function countManagedRunAllValidatorsHooks(settings) {
+    const writeEditGroups = (settings.hooks.PreToolUse || []).filter(
+        group => group.matcher === 'Write|Edit'
+    );
+    let runAllValidatorsCount = 0;
+    for (const group of writeEditGroups) {
+        for (const hook of group.hooks) {
+            if (hook.command.includes('run_all_validators')) {
+                runAllValidatorsCount++;
+            }
+        }
+    }
+    return runAllValidatorsCount;
+}
+
+
+test('mergeHooksIntoSettings is idempotent for the inline -c validators hook across two installs', () => {
+    const hooksConfig = {
+        hooks: {
+            'PreToolUse': [
+                {
+                    matcher: 'Write|Edit',
+                    hooks: [
+                        { command: 'python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/code_rules_enforcer.py', timeout: 30 },
+                        {
+                            command:
+                                'python3 -c "import sys; sys.path.insert(0, r\'${CLAUDE_PLUGIN_ROOT}/hooks\'); from validators.run_all_validators import main; sys.exit(main())"',
+                            timeout: 15,
+                        },
+                    ],
+                },
+            ],
+        },
+    };
+    const settings = {};
+    const pluginRootDir = 'C:/Users/jonlo/.claude';
+
+    mergeHooksIntoSettings(settings, hooksConfig, pluginRootDir, 'py -3');
+    mergeHooksIntoSettings(settings, hooksConfig, pluginRootDir, 'py -3');
+
+    assert.equal(countManagedRunAllValidatorsHooks(settings), 1);
+    const writeEditGroup = settings.hooks.PreToolUse.find(group => group.matcher === 'Write|Edit');
+    assert.equal(writeEditGroup.hooks.length, 2);
+});
+
+
+test('mergeHooksIntoSettings preserves user hooks in a managed matcher group across re-merges', () => {
+    const hooksConfig = {
+        hooks: {
+            'PreToolUse': [
+                {
+                    matcher: 'Write|Edit',
+                    hooks: [
+                        {
+                            command:
+                                'python3 -c "import sys; sys.path.insert(0, r\'${CLAUDE_PLUGIN_ROOT}/hooks\'); from validators.run_all_validators import main; sys.exit(main())"',
+                            timeout: 15,
+                        },
+                    ],
+                },
+            ],
+        },
+    };
+    const userHookCommand = 'python /home/me/custom-tools/my_own_hook.py';
+    const settings = {
+        hooks: {
+            PreToolUse: [
+                { matcher: 'Write|Edit', hooks: [{ command: userHookCommand, timeout: 5 }] },
+            ],
+        },
+    };
+
+    mergeHooksIntoSettings(settings, hooksConfig, 'C:/Users/jonlo/.claude', 'py -3');
+    mergeHooksIntoSettings(settings, hooksConfig, 'C:/Users/jonlo/.claude', 'py -3');
+
+    const writeEditGroup = settings.hooks.PreToolUse.find(group => group.matcher === 'Write|Edit');
+    const userHookSurvivors = writeEditGroup.hooks.filter(hook => hook.command === userHookCommand);
+    assert.equal(userHookSurvivors.length, 1);
+    assert.equal(countManagedRunAllValidatorsHooks(settings), 1);
 });

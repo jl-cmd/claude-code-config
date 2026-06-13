@@ -293,6 +293,9 @@ export function managedHookScriptRelativePaths(hooksConfig) {
  */
 export function commandReferencesManagedHook(commandString, managedHookRelativePaths) {
     const normalizedCommand = commandString.replace(/\\/g, '/');
+    if (commandIsInlineManagedValidatorRunner(normalizedCommand)) {
+        return true;
+    }
     for (const relativePath of managedHookRelativePaths) {
         if (normalizedCommand.includes(`/.claude/hooks/${relativePath}`)) {
             return true;
@@ -301,22 +304,41 @@ export function commandReferencesManagedHook(commandString, managedHookRelativeP
     return false;
 }
 
-function mergeHooks(hooksSourceRoot, pythonCommand) {
-    const hooksJsonPath = join(hooksSourceRoot, 'hooks', 'hooks.json');
-    if (!existsSync(hooksJsonPath)) return 0;
-    const hooksConfig = JSON.parse(readFileSync(hooksJsonPath, 'utf8'));
+/**
+ * Reports whether a settings.json hook command is the inline validators-runner
+ * the installer writes in place of a standalone script. That hook inserts the
+ * managed hooks directory onto sys.path and imports run_all_validators, so it
+ * carries no `<script>.py` tail for managedHookScriptRelativePaths to record.
+ * Matching its shape lets a reinstall prune the prior copy before appending the
+ * freshly rewritten one, keeping the merge idempotent.
+ *
+ * @param {string} normalizedCommand Forward-slash-normalized hook command.
+ * @returns {boolean} True when the command is the inline validators runner.
+ */
+export function commandIsInlineManagedValidatorRunner(normalizedCommand) {
+    const inlineValidatorRunnerMarker = /sys\.path\.insert\([^)]*\.claude\/hooks[^)]*\)[\s\S]*run_all_validators/;
+    return (
+        normalizedCommand.includes('/.claude/hooks') &&
+        inlineValidatorRunnerMarker.test(normalizedCommand)
+    );
+}
+
+/**
+ * Merges the installer's managed hook groups into a settings object in memory,
+ * pruning every prior managed hook (standalone script or inline validators
+ * runner) from each matcher group before appending the freshly rewritten copies
+ * so repeated merges stay idempotent. User-authored hooks in the same group are
+ * preserved untouched.
+ *
+ * @param {object} settings The parsed settings.json object (mutated in place).
+ * @param {{hooks: object}} hooksConfig Parsed hooks.json.
+ * @param {string} pluginRootDir Directory ${CLAUDE_PLUGIN_ROOT} resolves to.
+ * @param {string} pythonCommand Interpreter command that replaces python3.
+ * @returns {number} Count of matcher groups merged.
+ */
+export function mergeHooksIntoSettings(settings, hooksConfig, pluginRootDir, pythonCommand) {
     const managedHookRelativePaths = managedHookScriptRelativePaths(hooksConfig);
-    const settingsPath = join(CLAUDE_HOME, 'settings.json');
-    let settings = {};
-    if (existsSync(settingsPath)) {
-        const raw = readFileSync(settingsPath, 'utf8').trim();
-        if (raw) {
-            try { settings = JSON.parse(raw); }
-            catch { console.error('  ERROR: settings.json is malformed JSON. Fix it and rerun.'); process.exit(1); }
-        }
-    }
     if (!settings.hooks) settings.hooks = {};
-    const pluginRootDir = CLAUDE_HOME;
     let groupCount = 0;
     for (const [eventType, matcherGroups] of Object.entries(hooksConfig.hooks)) {
         if (!settings.hooks[eventType]) settings.hooks[eventType] = [];
@@ -345,6 +367,23 @@ function mergeHooks(hooksSourceRoot, pythonCommand) {
             groupCount++;
         }
     }
+    return groupCount;
+}
+
+function mergeHooks(hooksSourceRoot, pythonCommand) {
+    const hooksJsonPath = join(hooksSourceRoot, 'hooks', 'hooks.json');
+    if (!existsSync(hooksJsonPath)) return 0;
+    const hooksConfig = JSON.parse(readFileSync(hooksJsonPath, 'utf8'));
+    const settingsPath = join(CLAUDE_HOME, 'settings.json');
+    let settings = {};
+    if (existsSync(settingsPath)) {
+        const raw = readFileSync(settingsPath, 'utf8').trim();
+        if (raw) {
+            try { settings = JSON.parse(raw); }
+            catch { console.error('  ERROR: settings.json is malformed JSON. Fix it and rerun.'); process.exit(1); }
+        }
+    }
+    const groupCount = mergeHooksIntoSettings(settings, hooksConfig, CLAUDE_HOME, pythonCommand);
     writeFileSync(settingsPath, JSON.stringify(settings, null, 4) + '\n');
     return groupCount;
 }

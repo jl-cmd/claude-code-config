@@ -10,9 +10,11 @@ The scan is deliberately conservative to keep false positives near zero:
 
 - Only module-scope ``def`` / ``async def`` bodies are compared (the copied-helper
   case), never methods nested in a class.
-- Bodies are compared by their normalized AST structure, so reformatting,
-  renamed local variables, and comment differences do not hide a copy, while two
-  genuinely different functions never collide.
+- Bodies are compared by their normalized AST structure with the leading
+  docstring dropped, so reformatting and comment differences do not hide a copy.
+  The comparison keeps identifier names, so a match requires the body statements,
+  including local variable names, to be structurally identical; it does not
+  consider the parameter list, decorators, or whether the function is ``async``.
 - A body must contain at least ``MINIMUM_DUPLICATE_BODY_STATEMENTS`` statements;
   trivial one- or two-line helpers (``return None``, a single delegation) are too
   common to flag.

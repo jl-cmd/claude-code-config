@@ -1163,6 +1163,72 @@ def test_interpreter_execution_asks_when_benign_command_precedes_python_dash_c()
     )
 
 
+def test_launcher_execution_asks_when_timeout_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("timeout 5 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_nohup_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("nohup bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_nice_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("nice -n 10 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_stdbuf_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("stdbuf -oL bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_time_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("time bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_setsid_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("setsid bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_ionice_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("ionice bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_chrt_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("chrt 1 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_taskset_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("taskset -c 0 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_stacked_wrappers_precede_bash_dash_c() -> None:
+    _assert_hook_asks("nice -n 5 timeout 5 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_timeout_wraps_python_dash_c() -> None:
+    _assert_hook_asks(
+        """timeout 5 python -c "import os; os.system('rm -rf /etc')\""""
+    )
+
+
+def test_launcher_execution_asks_when_timeout_wraps_bash_after_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && timeout 5 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_allows_when_timeout_wraps_ephemeral_rm() -> None:
+    _assert_hook_allows("timeout 5 rm -rf /tmp/scratch")
+
+
+def test_newline_separated_interpreter_asks_when_bash_dash_c_runs_quoted_rm() -> None:
+    _assert_hook_asks("echo safe\nbash -c 'rm -rf /etc'")
+
+
+def test_carriage_return_separated_interpreter_asks_when_bash_dash_c_runs_quoted_rm() -> None:
+    _assert_hook_asks("echo hi\rbash -c 'rm -rf /etc'")
+
+
+def test_brace_group_newline_interpreter_asks_when_bash_dash_c_runs_quoted_rm() -> None:
+    _assert_hook_asks("{ echo hi\nbash -c 'rm -rf /etc'; }")
+
+
 # --- convergence branch exemption unit tests ---
 
 import importlib.util

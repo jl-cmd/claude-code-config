@@ -370,6 +370,34 @@ export function mergeHooksIntoSettings(settings, hooksConfig, pluginRootDir, pyt
     return groupCount;
 }
 
+/**
+ * Removes every managed hook (standalone script or inline validators runner)
+ * from a settings object in memory, matching each command through
+ * commandReferencesManagedHook so entries written with any home-path style
+ * ($HOME, ~, ${HOME}, or absolute) and any path separator are pruned. Matcher
+ * groups left empty are dropped, and an empty hooks map is removed entirely.
+ * User-authored hooks outside the managed set are preserved untouched.
+ *
+ * @param {object} settings The parsed settings.json object (mutated in place).
+ * @param {Set<string>} managedHookRelativePaths Managed script paths under hooks/.
+ * @returns {void}
+ */
+export function pruneManagedHooksFromSettings(settings, managedHookRelativePaths) {
+    if (!settings.hooks) return;
+    for (const [eventType, matcherGroups] of Object.entries(settings.hooks)) {
+        settings.hooks[eventType] = matcherGroups
+            .map(group => ({
+                ...group,
+                hooks: group.hooks.filter(
+                    hook => !commandReferencesManagedHook(hook.command, managedHookRelativePaths)
+                ),
+            }))
+            .filter(group => group.hooks.length > 0);
+        if (settings.hooks[eventType].length === 0) delete settings.hooks[eventType];
+    }
+    if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+}
+
 function mergeHooks(hooksSourceRoot, pythonCommand) {
     const hooksJsonPath = join(hooksSourceRoot, 'hooks', 'hooks.json');
     if (!existsSync(hooksJsonPath)) return 0;
@@ -669,17 +697,11 @@ function purgeManagedInstallation({ requireManifest }) {
     if (existsSync(settingsPath)) {
         const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
         if (settings.hooks) {
-            const installedHooksDir = join(CLAUDE_HOME, 'hooks').replace(/\\/g, '/');
-            for (const [eventType, matcherGroups] of Object.entries(settings.hooks)) {
-                settings.hooks[eventType] = matcherGroups
-                    .map(group => ({
-                        ...group,
-                        hooks: group.hooks.filter(hook => !hook.command.includes(installedHooksDir)),
-                    }))
-                    .filter(group => group.hooks.length > 0);
-                if (settings.hooks[eventType].length === 0) delete settings.hooks[eventType];
-            }
-            if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+            const hooksJsonPath = join(CLAUDE_HOME, 'hooks', 'hooks.json');
+            const managedHookRelativePaths = existsSync(hooksJsonPath)
+                ? managedHookScriptRelativePaths(JSON.parse(readFileSync(hooksJsonPath, 'utf8')))
+                : new Set();
+            pruneManagedHooksFromSettings(settings, managedHookRelativePaths);
             writeFileSync(settingsPath, JSON.stringify(settings, null, 4) + '\n');
             console.log('  Hook entries removed from settings.json');
         }

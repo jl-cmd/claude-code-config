@@ -12,6 +12,7 @@ import {
     managedHookScriptRelativePaths,
     commandReferencesManagedHook,
     mergeHooksIntoSettings,
+    pruneManagedHooksFromSettings,
 } from './install.mjs';
 
 
@@ -350,3 +351,51 @@ test('mergeHooksIntoSettings preserves user hooks in a managed matcher group acr
     assert.equal(userHookSurvivors.length, 1);
     assert.equal(countManagedRunAllValidatorsHooks(settings), 1);
 });
+
+test('pruneManagedHooksFromSettings removes a managed hook command written with the ~ home-path style', () => {
+    const managedPaths = new Set(['blocking/code_rules_enforcer.py']);
+    const settings = {
+        hooks: {
+            PreToolUse: [
+                {
+                    matcher: 'Write|Edit',
+                    hooks: [
+                        { command: 'python ~/.claude/hooks/blocking/code_rules_enforcer.py', timeout: 30 },
+                    ],
+                },
+            ],
+        },
+    };
+
+    pruneManagedHooksFromSettings(settings, managedPaths);
+
+    assert.equal(settings.hooks, undefined);
+});
+
+
+test('pruneManagedHooksFromSettings removes managed hooks in every home-path and separator style while keeping user hooks', () => {
+    const managedPaths = new Set(['notification/attention_needed_notify.py']);
+    const userHookCommand = 'python /home/me/custom-tools/my_own_hook.py';
+    const settings = {
+        hooks: {
+            Stop: [
+                {
+                    matcher: '',
+                    hooks: [
+                        { command: 'python $HOME/.claude/hooks/notification/attention_needed_notify.py', timeout: 15 },
+                        { command: 'python ${HOME}/.claude/hooks/notification/attention_needed_notify.py', timeout: 15 },
+                        { command: 'py -3 C:\\Users\\jonlo\\.claude\\hooks\\notification\\attention_needed_notify.py', timeout: 15 },
+                        { command: userHookCommand, timeout: 5 },
+                    ],
+                },
+            ],
+        },
+    };
+
+    pruneManagedHooksFromSettings(settings, managedPaths);
+
+    const stopGroup = settings.hooks.Stop.find(group => group.matcher === '');
+    assert.equal(stopGroup.hooks.length, 1);
+    assert.equal(stopGroup.hooks[0].command, userHookCommand);
+});
+

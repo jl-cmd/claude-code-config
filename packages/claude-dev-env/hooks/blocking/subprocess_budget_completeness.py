@@ -27,6 +27,8 @@ import json
 import sys
 from pathlib import Path
 
+FunctionDefinition = ast.FunctionDef | ast.AsyncFunctionDef
+
 _blocking_dir = str(Path(__file__).resolve().parent)
 _hooks_dir = str(Path(__file__).resolve().parent.parent)
 if _blocking_dir not in sys.path:
@@ -101,7 +103,7 @@ def collect_reachable_subprocess_timeout_values(
 
 
 def subprocess_timeout_values_in_function(
-    function_node: ast.FunctionDef, value_by_constant_name: dict[str, int]
+    function_node: FunctionDefinition, value_by_constant_name: dict[str, int]
 ) -> set[int]:
     all_timeout_values: set[int] = set()
     for each_node in ast.walk(function_node):
@@ -118,8 +120,12 @@ def subprocess_timeout_values_in_function(
     return all_timeout_values
 
 
-def iter_function_definitions(tree: ast.Module) -> list[ast.FunctionDef]:
-    return [each_node for each_node in ast.walk(tree) if isinstance(each_node, ast.FunctionDef)]
+def iter_function_definitions(tree: ast.Module) -> list[FunctionDefinition]:
+    return [
+        each_node
+        for each_node in ast.walk(tree)
+        if isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    ]
 
 
 def callees_by_function_name(tree: ast.Module) -> dict[str, set[str]]:
@@ -129,7 +135,7 @@ def callees_by_function_name(tree: ast.Module) -> dict[str, set[str]]:
     return callee_names_by_caller
 
 
-def called_function_names(function_node: ast.FunctionDef) -> set[str]:
+def called_function_names(function_node: FunctionDefinition) -> set[str]:
     all_called_names: set[str] = set()
     for each_node in ast.walk(function_node):
         if isinstance(each_node, ast.Call) and isinstance(each_node.func, ast.Name):
@@ -166,7 +172,7 @@ def _attribute_root_name(attribute_node: ast.Attribute) -> str | None:
     return None
 
 
-def summed_integer_literals(function_node: ast.FunctionDef) -> set[int]:
+def summed_integer_literals(function_node: FunctionDefinition) -> set[int]:
     all_summed_literals: set[int] = set()
     for each_node in ast.walk(function_node):
         literal_value = (
@@ -177,7 +183,7 @@ def summed_integer_literals(function_node: ast.FunctionDef) -> set[int]:
     return all_summed_literals
 
 
-def is_budget_function(function_node: ast.FunctionDef) -> bool:
+def is_budget_function(function_node: FunctionDefinition) -> bool:
     all_name_tokens = underscore_tokens(function_node.name.lower())
     return any(
         marker_anchored_to_name_boundary(underscore_tokens(each_marker), all_name_tokens)
@@ -214,7 +220,7 @@ def find_undercounted_budget(content: str) -> tuple[str, set[int]] | None:
         return None
 
     for each_node in ast.walk(tree):
-        if not isinstance(each_node, ast.FunctionDef):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         if not is_budget_function(each_node):
             continue
@@ -245,7 +251,7 @@ def collect_module_constant_values(tree: ast.Module) -> dict[str, int]:
 
 
 def budget_named_constant_values(
-    function_node: ast.FunctionDef, value_by_constant_name: dict[str, int]
+    function_node: FunctionDefinition, value_by_constant_name: dict[str, int]
 ) -> set[int]:
     all_referenced_values: set[int] = set()
     for each_node in ast.walk(function_node):
@@ -255,10 +261,10 @@ def budget_named_constant_values(
 
 
 def format_block_message(file_path: str, function_name: str, all_omitted_values: set[int]) -> str:
-    omitted_text = ", ".join(str(each_value) for each_value in sorted(all_omitted_values))
+    omitted_text = ", ".join(f"{each_value}s" for each_value in sorted(all_omitted_values))
     return (
         f"SUBPROCESS BUDGET INCOMPLETE: {function_name}() in {file_path} sums a subset of the "
-        f"subprocess timeouts reachable in one invocation and omits timeout value(s) {omitted_text}s that "
+        f"subprocess timeouts reachable in one invocation and omits timeout value(s) {omitted_text} that "
         "one invocation can reach. A named worst-case/budget helper must account for every subprocess timeout reachable "
         "in a single invocation, so its reported margin against the harness timeout is real. Either add the "
         f"omitted timeout(s) to the modeled total, or rename the helper to name the phases it actually covers "

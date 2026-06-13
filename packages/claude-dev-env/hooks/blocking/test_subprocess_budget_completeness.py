@@ -20,6 +20,7 @@ hook_module = importlib.util.module_from_spec(hook_spec)
 hook_spec.loader.exec_module(hook_module)
 
 find_undercounted_budget = hook_module.find_undercounted_budget
+format_block_message = hook_module.format_block_message
 
 _BUDGET_FLAGS_GIT_TIMEOUT_OMISSION = """
 import subprocess
@@ -184,6 +185,101 @@ def run_auditor() -> int:
 def main() -> int:
     return audit_budget_report()
 """
+
+
+_ASYNC_BUDGET_OMITS_ASYNC_WRAPPER_TIMEOUT = """
+import subprocess
+
+PYTHON_FORMAT_TIMEOUT_SECONDS = 12
+
+
+def worst_case_python_format_seconds() -> int:
+    fix_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    format_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    return fix_phase_seconds + format_phase_seconds
+
+
+async def is_untracked_in_git(file_path: str) -> bool:
+    git_check = subprocess.run(["git", "ls-files", file_path], timeout=5)
+    return git_check.returncode != 0
+
+
+def run_format(file_path: str) -> None:
+    subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+
+
+async def main(file_path: str) -> None:
+    if await is_untracked_in_git(file_path):
+        return
+    run_format(file_path)
+"""
+
+_ASYNC_BUDGET_HELPER_OMITS_A_TIMEOUT = """
+import subprocess
+
+
+def run_auditor() -> int:
+    completed_audit = subprocess.run(["auditor"], timeout=30)
+    return completed_audit.returncode
+
+
+async def worst_case_seconds() -> int:
+    return 5
+
+
+def main() -> int:
+    return run_auditor()
+"""
+
+_ASYNC_MAIN_NARROWS_REACHABLE_SET = """
+import subprocess
+
+PYTHON_FORMAT_TIMEOUT_SECONDS = 12
+
+
+def worst_case_format_phase_seconds() -> int:
+    fix_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    format_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    return fix_phase_seconds + format_phase_seconds
+
+
+def run_format(file_path: str) -> None:
+    subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+
+
+def unrelated_network_probe() -> int:
+    completed_probe = subprocess.run(["curl", "https://example.test"], timeout=30)
+    return completed_probe.returncode
+
+
+async def main(file_path: str) -> None:
+    run_format(file_path)
+"""
+
+
+def test_flags_async_subprocess_wrapper_that_omits_a_reachable_timeout() -> None:
+    undercounted_budget = find_undercounted_budget(_ASYNC_BUDGET_OMITS_ASYNC_WRAPPER_TIMEOUT)
+    assert undercounted_budget is not None
+    function_name, omitted_values = undercounted_budget
+    assert function_name == "worst_case_python_format_seconds"
+    assert omitted_values == {5}
+
+
+def test_flags_async_budget_helper_that_omits_a_reachable_timeout() -> None:
+    undercounted_budget = find_undercounted_budget(_ASYNC_BUDGET_HELPER_OMITS_A_TIMEOUT)
+    assert undercounted_budget is not None
+    function_name, omitted_values = undercounted_budget
+    assert function_name == "worst_case_seconds"
+    assert omitted_values == {30}
+
+
+def test_async_main_narrows_the_reachable_set() -> None:
+    assert find_undercounted_budget(_ASYNC_MAIN_NARROWS_REACHABLE_SET) is None
+
+
+def test_block_message_appends_the_seconds_unit_to_every_omitted_value() -> None:
+    block_message = format_block_message("module.py", "worst_case_seconds", {5, 12, 30})
+    assert "5s, 12s, 30s" in block_message
 
 
 def test_flags_budget_helper_that_omits_a_reachable_subprocess_timeout() -> None:

@@ -256,6 +256,25 @@ test('commandReferencesManagedHook leaves user hooks outside the managed set unt
 });
 
 
+test('commandReferencesManagedHook leaves a user hook whose path is a managed tail plus a suffix untouched', () => {
+    const managedPaths = new Set(['blocking/code_rules_enforcer.py']);
+    assert.equal(commandReferencesManagedHook('python ~/.claude/hooks/blocking/code_rules_enforcer.py.bak', managedPaths), false);
+    assert.equal(commandReferencesManagedHook('python ~/.claude/hooks/blocking/code_rules_enforcer.py2', managedPaths), false);
+});
+
+
+test('commandReferencesManagedHook leaves a command whose managed tail is mid-path untouched', () => {
+    const managedPaths = new Set(['blocking/a.py']);
+    assert.equal(commandReferencesManagedHook('python /x/.claude/hooks/blocking/a.py/extra/thing.py', managedPaths), false);
+});
+
+
+test('commandReferencesManagedHook matches a managed script followed by a whitespace-separated argument', () => {
+    const managedPaths = new Set(['blocking/code_rules_enforcer.py']);
+    assert.ok(commandReferencesManagedHook('python ~/.claude/hooks/blocking/code_rules_enforcer.py PreToolUse', managedPaths));
+});
+
+
 test('commandReferencesManagedHook matches the rewritten inline validators-runner hook that carries no script tail', () => {
     const managedPaths = new Set(['blocking/code_rules_enforcer.py']);
     const rewrittenInlineCommand =

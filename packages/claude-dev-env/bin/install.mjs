@@ -336,9 +336,34 @@ export function commandReferencesManagedHook(commandString, managedHookRelativeP
         return true;
     }
     for (const relativePath of managedHookRelativePaths) {
-        if (normalizedCommand.includes(`/.claude/hooks/${relativePath}`)) {
+        if (commandTailEndsAtManagedHook(normalizedCommand, relativePath)) {
             return true;
         }
+    }
+    return false;
+}
+
+/**
+ * Reports whether a command contains the `/.claude/hooks/<relative>` tail ending
+ * at a path boundary: end of string, or an argument separator (whitespace, quote,
+ * or semicolon). Anchoring the tail keeps a user hook whose path is the managed
+ * tail plus a suffix (`code_rules_enforcer.py.bak`, `a.py/extra/thing.py`) outside
+ * the managed set, so it is never pruned.
+ *
+ * @param {string} normalizedCommand Forward-slash-normalized hook command.
+ * @param {string} relativePath Managed script path under hooks/.
+ * @returns {boolean} True when the managed tail ends at a path boundary.
+ */
+function commandTailEndsAtManagedHook(normalizedCommand, relativePath) {
+    const commandArgumentBoundary = /[\s'";]/;
+    const managedTail = `/.claude/hooks/${relativePath}`;
+    let searchStart = normalizedCommand.indexOf(managedTail);
+    while (searchStart !== -1) {
+        const characterAfterTail = normalizedCommand[searchStart + managedTail.length];
+        if (characterAfterTail === undefined || commandArgumentBoundary.test(characterAfterTail)) {
+            return true;
+        }
+        searchStart = normalizedCommand.indexOf(managedTail, searchStart + 1);
     }
     return false;
 }

@@ -272,6 +272,48 @@ def test_should_suppress_check_when_vars_consumes_instance() -> None:
     assert _check(source, PRODUCTION_FILE_PATH) == []
 
 
+def test_should_suppress_check_when_replace_consumes_instance() -> None:
+    source = (
+        "from dataclasses import dataclass, replace\n"
+        "\n"
+        "@dataclass(frozen=True)\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def build() -> Row:\n"
+        "    return replace(Row(url='x'), url='y')\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_suppress_check_when_dotted_replace_consumes_instance() -> None:
+    source = (
+        "import dataclasses\n"
+        "\n"
+        "@dataclasses.dataclass(frozen=True)\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def build() -> Row:\n"
+        "    return dataclasses.replace(Row(url='x'), url='y')\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_suppress_check_when_instance_dict_consumes_instance() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def build() -> dict:\n"
+        "    return Row(url='x').__dict__\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
 def test_should_not_flag_field_read_via_multi_argument_attrgetter() -> None:
     source = (
         "from dataclasses import dataclass\n"

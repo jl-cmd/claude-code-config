@@ -25,6 +25,7 @@ from hooks_constants.dead_dataclass_field_constants import (  # noqa: E402
     GETATTR_NAME_ARGUMENT_MINIMUM,
     MAX_DEAD_DATACLASS_FIELD_ISSUES,
     ALL_REFLECTIVE_FIELD_CONSUMER_NAMES,
+    WHOLE_INSTANCE_DICT_ATTRIBUTE_NAME,
 )
 
 
@@ -127,13 +128,24 @@ def _dynamic_access_names(tree: ast.Module) -> tuple[set[str], bool]:
     return literal_names, should_suppress_check
 
 
-def _attribute_read_names(tree: ast.Module) -> set[str]:
-    """Return every attribute name read (Load context) anywhere in the module."""
+def _attribute_read_names(tree: ast.Module) -> tuple[set[str], bool]:
+    """Return literal attribute-name reads and whether the check must be suppressed.
+
+    Walks every attribute read (Load context) in the module, contributing each
+    attribute name as a read name. A read of ``__dict__`` consumes every field
+    of an instance at once, so it cannot prove any single field unread and the
+    boolean signals the caller to suppress the check for the whole file.
+    """
     read_names: set[str] = set()
+    should_suppress_check = False
     for each_node in ast.walk(tree):
-        if isinstance(each_node, ast.Attribute) and isinstance(each_node.ctx, ast.Load):
-            read_names.add(each_node.attr)
-    return read_names
+        if not isinstance(each_node, ast.Attribute) or not isinstance(each_node.ctx, ast.Load):
+            continue
+        if each_node.attr == WHOLE_INSTANCE_DICT_ATTRIBUTE_NAME:
+            should_suppress_check = True
+            continue
+        read_names.add(each_node.attr)
+    return read_names, should_suppress_check
 
 
 def _exported_names(tree: ast.Module) -> set[str]:
@@ -173,10 +185,11 @@ def check_dead_dataclass_fields(
     A field is dead when its dataclass is instantiated somewhere in the file
     (so the class is live), the field name never appears as an attribute read
     or a literal ``getattr``/``attrgetter`` access anywhere in the file, and the
-    file contains no non-literal dynamic access or reflective whole-instance
-    consumer (``asdict``, ``astuple``, ``vars``) that could read it indirectly.
-    Whole-file analysis runs against ``full_file_content`` when supplied so an
-    Edit fragment is judged against the reconstructed post-edit file.
+    file contains no non-literal dynamic access, reflective whole-instance
+    consumer (``asdict``, ``astuple``, ``replace``, ``vars``), or ``__dict__``
+    read that could read it indirectly. Whole-file analysis runs against
+    ``full_file_content`` when supplied so an Edit fragment is judged against the
+    reconstructed post-edit file.
 
     Args:
         content: The new content under validation (Edit fragment or whole file).
@@ -197,10 +210,11 @@ def check_dead_dataclass_fields(
         tree = ast.parse(effective_content)
     except SyntaxError:
         return []
-    dynamic_literal_names, should_suppress_check = _dynamic_access_names(tree)
-    if should_suppress_check:
+    dynamic_literal_names, dynamic_access_suppresses_check = _dynamic_access_names(tree)
+    attribute_read_names, instance_dict_suppresses_check = _attribute_read_names(tree)
+    if dynamic_access_suppresses_check or instance_dict_suppresses_check:
         return []
-    read_names = _attribute_read_names(tree) | dynamic_literal_names | _exported_names(tree)
+    read_names = attribute_read_names | dynamic_literal_names | _exported_names(tree)
     constructed_class_names = _constructed_class_names(tree)
     issues: list[str] = []
     for each_node in ast.walk(tree):

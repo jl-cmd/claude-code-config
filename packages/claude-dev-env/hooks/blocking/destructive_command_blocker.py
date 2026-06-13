@@ -19,6 +19,7 @@ from hooks_constants.convergence_branch_constants import (  # noqa: E402
     CONVERGENCE_FORCE_PUSH_DETECTION_PATTERN,
 )
 from hooks_constants.destructive_command_segment_constants import (  # noqa: E402
+    ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS,
     ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
     ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS,
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
@@ -370,6 +371,51 @@ def _leading_command_token(all_command_tokens: list[str]) -> str | None:
     return None
 
 
+def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] | None:
+    """Return the tokens after a leading command-launcher wrapper, or None when absent.
+
+    A pure launcher wrapper (``timeout``, ``nohup``, ``nice``, ``ionice``,
+    ``stdbuf``, ``time``, ``setsid``, ``chrt``, ``taskset``) forwards a trailing
+    command line to another program without itself executing a quoted string. To
+    find that real program, the launcher token and its own option tokens are
+    dropped: leading ``VAR=value`` assignments are skipped, the launcher token is
+    consumed, then every following dash-prefixed flag and the single numeric
+    positional value some launchers take (a ``timeout`` duration, a ``chrt``
+    priority) are consumed until the first token that names a program. Returns the
+    program token and the tokens that follow it, or None when the leading program is
+    not a launcher wrapper.
+
+    Args:
+        all_command_tokens: Tokens of one shell segment.
+
+    Returns:
+        The tokens beginning at the wrapped program, or None when no launcher leads.
+    """
+    leading_assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+    first_program_index = next(
+        (
+            index
+            for index, token in enumerate(all_command_tokens)
+            if not leading_assignment_pattern.match(token)
+        ),
+        None,
+    )
+    if first_program_index is None:
+        return None
+    leading_command_basename = Path(all_command_tokens[first_program_index]).name.lower()
+    if leading_command_basename not in ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS:
+        return None
+    for each_index in range(first_program_index + 1, len(all_command_tokens)):
+        each_token = all_command_tokens[each_index]
+        if each_token.startswith("-"):
+            continue
+        each_basename = Path(each_token).name.lower()
+        if each_basename.isdigit():
+            continue
+        return all_command_tokens[each_index:]
+    return []
+
+
 def _command_executes_a_string_argument(all_command_tokens: list[str]) -> bool:
     """Return True when the command's leading program runs a string argument as code.
 
@@ -381,6 +427,16 @@ def _command_executes_a_string_argument(all_command_tokens: list[str]) -> bool:
     ``ruby``, ``node`` and the rest of ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS) run
     a string only with a ``-c`` or ``-e`` flag, so those qualify only when such a
     flag is present.
+
+    A pure command-launcher wrapper (``timeout``, ``nohup``, ``nice`` and the rest
+    of ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS) does not run a quoted string itself but
+    forwards argv to a following program, so a ``timeout`` in front of
+    ``bash -c 'rm -rf /etc'`` runs ``rm`` through the wrapped ``bash``. The wrapper
+    and its own flags are stripped and the wrapped program is re-evaluated,
+    recursively through stacked wrappers, so a launcher in front of an interpreter is
+    caught while a launcher in front of a plain program (a ``timeout`` in front of
+    ``rm -rf /tmp/scratch``) still reports False and reaches the legitimate-mention
+    path.
 
     Args:
         all_command_tokens: Tokens produced by shlex tokenization.
@@ -394,6 +450,11 @@ def _command_executes_a_string_argument(all_command_tokens: list[str]) -> bool:
     leading_command_basename = Path(leading_command_token).name.lower()
     if leading_command_basename in ALL_INTERPRETER_AND_WRAPPER_COMMANDS:
         return True
+    if leading_command_basename in ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS:
+        wrapped_program_tokens = _strip_leading_launcher_wrapper(all_command_tokens)
+        if not wrapped_program_tokens:
+            return False
+        return _command_executes_a_string_argument(wrapped_program_tokens)
     if leading_command_basename not in ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS:
         return False
     if leading_command_basename == "ssh":
@@ -409,10 +470,11 @@ def _explode_glued_shell_control_operators(all_command_tokens: list[str]) -> lis
     shlex keeps a control operator joined to an adjacent program when no whitespace
     separates them, so ``true; eval 'x'`` tokenizes to ``['true;', 'eval', 'x']``
     with the ``;`` hidden inside ``true;``. This re-splits each token on the
-    unquoted control operators ``&&`` / ``||`` / ``;`` / ``|`` / ``&`` so the
-    operator becomes its own token and segment boundaries are visible. shlex has
-    already removed quoting, so any operator character still present in a token came
-    from unquoted shell source and is a real boundary.
+    unquoted control operators ``&&`` / ``||`` / ``;`` / ``|`` / ``&`` and on the
+    POSIX command terminators newline and carriage return, so the operator becomes
+    its own token and segment boundaries are visible. shlex has already removed
+    quoting, so any operator character still present in a token came from unquoted
+    shell source and is a real boundary.
 
     Args:
         all_command_tokens: Tokens produced by shlex tokenization.
@@ -420,7 +482,7 @@ def _explode_glued_shell_control_operators(all_command_tokens: list[str]) -> lis
     Returns:
         Tokens with glued control operators separated into standalone tokens.
     """
-    control_operator_split_pattern = re.compile(r"(&&|\|\||;|\||&)")
+    control_operator_split_pattern = re.compile(r"(&&|\|\||;|\||&|\n|\r)")
     all_exploded_tokens: list[str] = []
     for each_token in all_command_tokens:
         for each_fragment in control_operator_split_pattern.split(each_token):
@@ -470,11 +532,15 @@ def command_has_no_real_rm_invocation(command: str) -> bool:
     unbalanced quotes; or when any shell segment's leading program executes a quoted
     string argument as code (``bash -c 'rm -rf /etc'``, ``eval 'rm -rf /etc'``,
     ``ssh host 'rm -rf /etc'``, ``awk 'BEGIN{system("rm -rf /etc")}'``,
-    ``echo hi && bash -c 'rm -rf /etc'``), where the destructive ``rm`` rides inside
-    an executed string rather than a passive mention. The per-segment check means a
-    benign leader on the whole command does not mask an interpreter in a later
-    segment. ``/bin/rm``, ``sudo rm`` and ``\\rm`` each tokenize to a token whose
-    basename is ``rm`` and are correctly reported as real.
+    ``echo hi && bash -c 'rm -rf /etc'``, ``timeout bash -c 'rm -rf /etc'``), where
+    the destructive ``rm`` rides inside an executed string rather than a passive
+    mention. The command is split on the POSIX newline and carriage-return command
+    terminators before tokenizing, because shlex treats those as whitespace and would
+    otherwise merge a later-line interpreter (``echo safe`` newline
+    ``bash -c 'rm -rf /etc'``) into the benign leading segment. The per-segment check
+    means a benign leader on a line does not mask an interpreter later on that line.
+    ``/bin/rm``, ``sudo rm`` and ``\\rm`` each tokenize to a token whose basename is
+    ``rm`` and are correctly reported as real.
 
     Args:
         command: The raw Bash command string from the tool input.
@@ -484,15 +550,17 @@ def command_has_no_real_rm_invocation(command: str) -> bool:
     """
     if _command_contains_shell_expansion(command):
         return False
-    try:
-        all_command_tokens = _split_command_preserving_windows_backslashes(command)
-    except ValueError:
-        return False
-    if _any_shell_segment_executes_a_string_argument(all_command_tokens):
-        return False
-    for each_token in all_command_tokens:
-        if Path(each_token).name == "rm":
+    all_physical_command_lines = re.split(r"[\n\r]+", command)
+    for each_command_line in all_physical_command_lines:
+        try:
+            all_command_tokens = _split_command_preserving_windows_backslashes(each_command_line)
+        except ValueError:
             return False
+        if _any_shell_segment_executes_a_string_argument(all_command_tokens):
+            return False
+        for each_token in all_command_tokens:
+            if Path(each_token).name == "rm":
+                return False
     return True
 
 
@@ -592,8 +660,10 @@ def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
     such as ``rm -rf /tmp/pr136 /tmp/difftest && echo 'cleaned'``. Splits the
     command into shell segments and requires all of: at least one segment runs
     ``rm``; every ``rm`` segment targets only absolute ephemeral paths; no segment's
-    leading command is a shell interpreter, ``eval``, ``exec``, ``source`` or a
-    privilege or argument wrapper (``sudo``, ``su``, ``env``, ``xargs``); no segment
+    leading program executes a quoted string argument as code — a shell interpreter,
+    ``eval``, ``exec``, ``source``, a privilege or argument wrapper
+    (``sudo``, ``su``, ``env``, ``xargs``), or a command-launcher wrapper that
+    forwards argv to such a program (``timeout bash -c '...'``); no segment
     matches a destructive pattern that is not rm-family (force push, git clean,
     git reset --hard, mkfs, dd, DROP/TRUNCATE, signing bypass); and the command
     contains no shell expansion.
@@ -622,7 +692,7 @@ def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
     for each_segment in _split_tokens_into_shell_segments(all_command_tokens):
         if not each_segment:
             continue
-        if Path(each_segment[0]).name.lower() in ALL_INTERPRETER_AND_WRAPPER_COMMANDS:
+        if _command_executes_a_string_argument(each_segment):
             return False
         each_rm_token_index = next(
             (

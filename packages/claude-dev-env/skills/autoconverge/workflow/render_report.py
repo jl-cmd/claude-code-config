@@ -33,8 +33,6 @@ from autoconverge_report_constants.render_report_constants import (
     SEVERITY_MINOR_BUCKET,
     STRUCTURED_OUTPUT_TOOL_NAME,
     TEST_DEFINITION_PATTERN,
-    TEST_FILE_DIFF_PATTERN,
-    TEST_FILE_NEW_MARKER,
     TEST_PATH_GLOB,
     THEME_FALLBACK,
     THEME_PATH_SEGMENT_COUNT,
@@ -198,16 +196,8 @@ def _count_tests_added(base_sha: str, new_sha: str, repo_path: Path) -> int:
 
     diff_text = completed.stdout
     test_def_pattern = re.compile(TEST_DEFINITION_PATTERN, re.MULTILINE)
-    new_file_pattern = re.compile(TEST_FILE_DIFF_PATTERN, re.MULTILINE)
 
-    definition_count = len(test_def_pattern.findall(diff_text))
-    new_file_count = sum(
-        1
-        for each_match in new_file_pattern.finditer(diff_text)
-        if TEST_FILE_NEW_MARKER
-        in diff_text[max(0, each_match.start() - 100) : each_match.start()]
-    )
-    return definition_count + new_file_count
+    return len(test_def_pattern.findall(diff_text))
 
 
 def _build_dedup_key(file_path: str, line: int, title: str) -> tuple[str, int, str]:

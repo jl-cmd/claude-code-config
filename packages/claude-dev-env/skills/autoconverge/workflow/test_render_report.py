@@ -160,6 +160,74 @@ def test_html_contains_no_hedging_words(tmp_path: Path) -> None:
         )
 
 
+def _init_git_repo(repo_path: Path) -> None:
+    """Initialize a git repo with a committed baseline so diffs resolve."""
+    subprocess.run(
+        ["git", "-C", str(repo_path), "init"], capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.email", "test@example.com"],
+        capture_output=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "config", "user.name", "Test"],
+        capture_output=True,
+        check=True,
+    )
+    (repo_path / "README.md").write_text("baseline\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(repo_path), "add", "."], capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "commit", "-m", "baseline"],
+        capture_output=True,
+        check=True,
+    )
+
+
+def _resolve_head(repo_path: Path) -> str:
+    """Return the current HEAD sha of the repo."""
+    completed = subprocess.run(
+        ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return completed.stdout.strip()
+
+
+def test_count_tests_added_does_not_double_count_new_file(tmp_path: Path) -> None:
+    """Should count a new test file with two test functions as exactly two."""
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    _init_git_repo(repo_path)
+    base_sha = _resolve_head(repo_path)
+
+    new_test_file = repo_path / "test_feature.py"
+    new_test_file.write_text(
+        "def test_one() -> None:\n"
+        "    assert True\n"
+        "\n"
+        "def test_two() -> None:\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "add", "."], capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "commit", "-m", "add tests"],
+        capture_output=True,
+        check=True,
+    )
+    new_sha = _resolve_head(repo_path)
+
+    test_count = render_report._count_tests_added(base_sha, new_sha, repo_path)
+
+    assert test_count == 2, f"Expected 2 added test definitions, got {test_count}"
+
+
 def test_robustness_with_missing_transcripts(tmp_path: Path) -> None:
     """Should succeed even when agent transcript files are absent or contain non-tool lines."""
     out_path = tmp_path / "report-robust.html"

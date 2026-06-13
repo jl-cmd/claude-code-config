@@ -115,6 +115,17 @@ def main() -> None:
     suffix = Path(file_path).suffix.lower()
 
     if suffix in PYTHON_EXTENSIONS:
+        for each_fix_command in [
+            ["ruff", "check", "--fix", file_path],
+            [sys.executable, "-m", "ruff", "check", "--fix", file_path],
+        ]:
+            try:
+                subprocess.run(each_fix_command, capture_output=True, text=True, timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+                break
+            except FileNotFoundError:
+                continue
+            except subprocess.TimeoutExpired:
+                break
         for each_formatter_command in [
             ["ruff", "format", file_path],
             [sys.executable, "-m", "ruff", "format", file_path],

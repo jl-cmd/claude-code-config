@@ -1,0 +1,99 @@
+"""Tests for the auto_formatter hook.
+
+Exercises the real hook against real ruff inside a real git repository. A
+brand-new (untracked) Python file carrying an unused import is fixed in
+place, while the same file arriving through the Edit tool is left untouched
+so the fix stays scoped to newly created files.
+
+The sandbox is rooted under the user's home directory via ``tempfile.mkdtemp``
+rather than the OS temp directory, matching the sibling workflow-hook tests.
+"""
+
+import functools
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Generator
+
+import pytest
+
+HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "auto_formatter.py")
+UNUSED_IMPORT_SOURCE = "import os\n\n\nVALUE = 1\n"
+HOOK_RUN_TIMEOUT_SECONDS = 60
+
+
+def _strip_read_only_and_retry(removal_function, target_path, *_exc_info):
+    try:
+        os.chmod(target_path, stat.S_IWRITE)
+        removal_function(target_path)
+    except OSError:
+        pass
+
+
+def _force_rmtree(target_path: str) -> None:
+    handler_kw = (
+        {"onexc": _strip_read_only_and_retry}
+        if sys.version_info >= (3, 12)
+        else {"onerror": _strip_read_only_and_retry}
+    )
+    try:
+        shutil.rmtree(target_path, **handler_kw)
+    except OSError:
+        pass
+
+
+@functools.lru_cache(maxsize=1)
+def _get_sandbox_parent_directory() -> str:
+    return tempfile.mkdtemp(prefix="pytest_auto_formatter_", dir=str(Path.home()))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_sandbox_parent_directory() -> Generator[None, None, None]:
+    yield
+    if _get_sandbox_parent_directory.cache_info().currsize:
+        _force_rmtree(_get_sandbox_parent_directory())
+        _get_sandbox_parent_directory.cache_clear()
+
+
+@pytest.fixture
+def git_repository() -> Generator[Path, None, None]:
+    repository_path = Path(tempfile.mkdtemp(dir=_get_sandbox_parent_directory()))
+    subprocess.run(["git", "init"], cwd=repository_path, capture_output=True, check=True)
+    yield repository_path
+    _force_rmtree(str(repository_path))
+
+
+def _run_hook(tool_name: str, file_path: Path) -> None:
+    hook_input = json.dumps({"tool_name": tool_name, "tool_input": {"file_path": str(file_path)}})
+    subprocess.run(
+        [sys.executable, HOOK_SCRIPT_PATH],
+        input=hook_input,
+        capture_output=True,
+        text=True,
+        timeout=HOOK_RUN_TIMEOUT_SECONDS,
+    )
+
+
+class TestRuffFixOnNewFiles:
+    def should_remove_unused_import_from_new_untracked_python_file(
+        self, git_repository: Path
+    ) -> None:
+        new_file = git_repository / "brand_new.py"
+        new_file.write_text(UNUSED_IMPORT_SOURCE, encoding="utf-8")
+
+        _run_hook("Write", new_file)
+
+        assert "import os" not in new_file.read_text(encoding="utf-8")
+
+    def should_leave_file_arriving_through_edit_untouched(self, git_repository: Path) -> None:
+        edited_file = git_repository / "edited.py"
+        edited_file.write_text(UNUSED_IMPORT_SOURCE, encoding="utf-8")
+
+        _run_hook("Edit", edited_file)
+
+        assert "import os" in edited_file.read_text(encoding="utf-8")

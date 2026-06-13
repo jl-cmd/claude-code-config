@@ -22,9 +22,11 @@ from hooks_constants.destructive_command_segment_constants import (  # noqa: E40
     ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS,
     ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS,
     ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
+    ALL_LAUNCHER_OPTIONS_TAKING_SEPARATE_VALUE,
     ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS,
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
     ALL_STRING_ARGUMENT_EXECUTION_FLAGS,
+    ALL_SUBSHELL_GROUPING_CHARACTERS,
     LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN,
 )
 
@@ -381,14 +383,18 @@ def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] 
     command line to another program without itself executing a quoted string. To
     find that real program, the launcher token and its own option tokens are
     dropped: leading ``VAR=value`` assignments are skipped, the launcher token is
-    consumed, then every following dash-prefixed flag and every positional value
+    consumed, then option tokens are consumed until the first token that names a
+    program. A launcher option that takes a SEPARATE argument value
+    (``timeout -s SIGNAL`` / ``--signal SIGNAL``, ``timeout -k DURATION`` /
+    ``--kill-after DURATION``, ``nice -n PRIORITY``) consumes both the flag and the
+    following value token, so a signal name such as ``KILL`` is never mistaken for
+    the wrapped program. Every other dash-prefixed flag and every positional value
     token a launcher takes (a ``timeout`` duration, a ``chrt`` priority, a
-    ``taskset`` CPU mask or CPU range) is consumed until the first token that names
-    a program. A positional value is recognized by shape — decimal, hexadecimal
-    mask, duration with unit suffix, or CPU range/list — so a non-decimal mask or a
-    duration suffix no longer masks the wrapped program. Returns the program token
-    and the tokens that follow it, or None when the leading program is not a
-    launcher wrapper.
+    ``taskset`` CPU mask or CPU range) is consumed as well. A positional value is
+    recognized by shape — decimal, hexadecimal mask, duration with unit suffix, or
+    CPU range/list — so a non-decimal mask or a duration suffix no longer masks the
+    wrapped program. Returns the program token and the tokens that follow it, or
+    None when the leading program is not a launcher wrapper.
 
     Args:
         all_command_tokens: Tokens of one shell segment.
@@ -411,12 +417,24 @@ def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] 
     leading_command_basename = Path(all_command_tokens[first_program_index]).name.lower()
     if leading_command_basename not in ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS:
         return None
-    for each_index in range(first_program_index + 1, len(all_command_tokens)):
+    each_index = first_program_index + 1
+    skip_next_token_as_option_value = False
+    while each_index < len(all_command_tokens):
         each_token = all_command_tokens[each_index]
+        if skip_next_token_as_option_value:
+            skip_next_token_as_option_value = False
+            each_index += 1
+            continue
+        if each_token in ALL_LAUNCHER_OPTIONS_TAKING_SEPARATE_VALUE:
+            skip_next_token_as_option_value = True
+            each_index += 1
+            continue
         if each_token.startswith("-"):
+            each_index += 1
             continue
         each_basename = Path(each_token).name.lower()
         if launcher_positional_value_pattern.match(each_basename):
+            each_index += 1
             continue
         return all_command_tokens[each_index:]
     return []
@@ -497,6 +515,25 @@ def _explode_glued_shell_control_operators(all_command_tokens: list[str]) -> lis
     return all_exploded_tokens
 
 
+def _strip_leading_subshell_grouping_characters(token: str) -> str:
+    """Return a token with leading subshell-grouping characters removed.
+
+    shlex keeps a subshell ``(`` or brace-group ``{`` joined to an adjacent program
+    when no whitespace separates them, so ``(rm -rf /etc)`` tokenizes to
+    ``['(rm', '-rf', '/etc)']`` with the ``(`` hidden inside ``(rm``. Stripping the
+    leading grouping characters exposes the real program name (``rm``) so the
+    rm-detection check sees it. shlex has already removed quoting, so any grouping
+    character still present came from unquoted shell source.
+
+    Args:
+        token: One token produced by shlex tokenization.
+
+    Returns:
+        The token with leading ``(`` and ``{`` characters removed.
+    """
+    return token.lstrip(ALL_SUBSHELL_GROUPING_CHARACTERS)
+
+
 def _any_shell_segment_executes_a_string_argument(all_command_tokens: list[str]) -> bool:
     """Return True when any shell segment's leading program runs a string as code.
 
@@ -546,7 +583,11 @@ def command_has_no_real_rm_invocation(command: str) -> bool:
     ``bash -c 'rm -rf /etc'``) into the benign leading segment. The per-segment check
     means a benign leader on a line does not mask an interpreter later on that line.
     ``/bin/rm``, ``sudo rm`` and ``\\rm`` each tokenize to a token whose basename is
-    ``rm`` and are correctly reported as real.
+    ``rm`` and are correctly reported as real. Before the rm-detection scan, each
+    token is split on glued control operators and stripped of leading subshell- and
+    brace-grouping characters, so ``(rm -rf /etc)``, ``;rm -rf /etc`` and
+    ``echo|rm -rf /etc`` expose ``rm`` as a real invocation rather than a passive
+    mention.
 
     Args:
         command: The raw Bash command string from the tool input.
@@ -564,8 +605,10 @@ def command_has_no_real_rm_invocation(command: str) -> bool:
             return False
         if _any_shell_segment_executes_a_string_argument(all_command_tokens):
             return False
-        for each_token in all_command_tokens:
-            if Path(each_token).name == "rm":
+        all_operator_split_tokens = _explode_glued_shell_control_operators(all_command_tokens)
+        for each_token in all_operator_split_tokens:
+            each_program_token = _strip_leading_subshell_grouping_characters(each_token)
+            if Path(each_program_token).name == "rm":
                 return False
     return True
 

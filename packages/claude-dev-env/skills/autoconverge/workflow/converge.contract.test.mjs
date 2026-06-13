@@ -146,6 +146,31 @@ test('the FINALIZE repair branch does not re-assign head from the repair before 
   );
 });
 
+function fixBranchAfter(branchLabel) {
+  const labelIndex = convergeSource.indexOf(branchLabel);
+  assert.notEqual(labelIndex, -1, `expected the ${branchLabel} marker to exist`);
+  const applyFixesIndex = convergeSource.indexOf('await applyFixes(', labelIndex);
+  assert.notEqual(applyFixesIndex, -1, `expected an applyFixes call after ${branchLabel}`);
+  const branchEnd = convergeSource.indexOf('continue', applyFixesIndex) + 'continue'.length;
+  return convergeSource.slice(applyFixesIndex, branchEnd);
+}
+
+test('the CONVERGE fix branch does not re-assign head from the fix before re-converging', () => {
+  assert.doesNotMatch(
+    fixBranchAfter('${findings.length} finding(s) — applying fixes'),
+    /head\s*=\s*fixProgress/,
+    'the next CONVERGE pass re-resolves HEAD from GitHub, so assigning the fix SHA here is dead',
+  );
+});
+
+test('the COPILOT fix branch does not re-assign head from the fix before re-converging', () => {
+  assert.doesNotMatch(
+    fixBranchAfter('${copilotOutcome.findings.length} finding(s) — fixing and re-converging'),
+    /head\s*=\s*fixProgress/,
+    'the CONVERGE pass it transitions to re-resolves HEAD from GitHub, so assigning the fix SHA here is dead',
+  );
+});
+
 test('the CONVERGE branch re-resolves HEAD from GitHub on every entry', () => {
   const convergeBranchStart = convergeSource.indexOf("if (phase === 'CONVERGE')");
   assert.notEqual(convergeBranchStart, -1, 'expected the CONVERGE branch to exist');

@@ -10,6 +10,7 @@ rather than the OS temp directory, matching the sibling workflow-hook tests.
 """
 
 import functools
+import importlib.util
 import json
 import os
 import shutil
@@ -23,6 +24,10 @@ from typing import Generator
 import pytest
 
 HOOK_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "auto_formatter.py")
+HOOKS_JSON_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "hooks", "hooks.json"
+)
+AUTO_FORMATTER_COMMAND_FRAGMENT = "workflow/auto_formatter.py"
 UNUSED_IMPORT_SOURCE = "import os\n\n\nVALUE = 1\n"
 HOOK_RUN_TIMEOUT_SECONDS = 60
 
@@ -100,3 +105,30 @@ class TestRuffFixOnNewFiles:
 
         assert completed_hook.returncode == 0
         assert "import os" in edited_file.read_text(encoding="utf-8")
+
+
+def _load_auto_formatter_module() -> object:
+    module_spec = importlib.util.spec_from_file_location("auto_formatter", HOOK_SCRIPT_PATH)
+    assert module_spec is not None and module_spec.loader is not None
+    auto_formatter_module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(auto_formatter_module)
+    return auto_formatter_module
+
+
+def _registered_auto_formatter_timeout() -> int:
+    with open(HOOKS_JSON_PATH, encoding="utf-8") as hooks_file:
+        hooks_configuration = json.load(hooks_file)
+    for each_event in hooks_configuration["hooks"].values():
+        for each_matcher in each_event:
+            for each_hook in each_matcher["hooks"]:
+                if AUTO_FORMATTER_COMMAND_FRAGMENT in each_hook["command"]:
+                    return int(each_hook["timeout"])
+    raise AssertionError("auto_formatter hook is not registered in hooks.json")
+
+
+class TestPythonFormatTimeoutBudget:
+    def should_keep_both_sequential_python_subprocesses_under_the_harness_budget(self) -> None:
+        auto_formatter_module = _load_auto_formatter_module()
+        worst_case_total = auto_formatter_module.worst_case_python_format_seconds()
+
+        assert worst_case_total < _registered_auto_formatter_timeout()

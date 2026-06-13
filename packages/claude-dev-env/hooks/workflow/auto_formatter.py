@@ -46,7 +46,7 @@ JS_EXTENSIONS = {".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs"}
 JSON_EXTENSIONS = {".json"}
 PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HOOKS_DIR = os.path.join(PLUGIN_ROOT, "hooks") + os.sep
-PYTHON_FORMAT_TIMEOUT_SECONDS = 15
+PYTHON_FORMAT_TIMEOUT_SECONDS = 12
 JS_FORMAT_TIMEOUT_SECONDS = 30
 PRETTIER_CONFIG_NAMES = {
     ".prettierrc",
@@ -74,6 +74,12 @@ def has_prettier_config(file_path: str) -> bool:
             break
         each_ancestor = parent
     return False
+
+
+def worst_case_python_format_seconds() -> int:
+    fix_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    format_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    return fix_phase_seconds + format_phase_seconds
 
 
 def is_untracked_in_git(file_path: str) -> bool:

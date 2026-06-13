@@ -40,6 +40,12 @@ def is_untracked_in_git(file_path: str) -> bool:
 
 def run_format(file_path: str) -> None:
     subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+
+
+def main(file_path: str) -> None:
+    if is_untracked_in_git(file_path):
+        return
+    run_format(file_path)
 """
 
 _BUDGET_COUNTS_EVERY_TIMEOUT = """
@@ -63,6 +69,12 @@ def is_untracked_in_git(file_path: str) -> bool:
 
 def run_format(file_path: str) -> None:
     subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+
+
+def main(file_path: str) -> None:
+    if is_untracked_in_git(file_path):
+        return
+    run_format(file_path)
 """
 
 _NO_BUDGET_FUNCTION = """
@@ -94,6 +106,12 @@ def is_untracked_in_git(file_path: str) -> bool:
 
 def run_format(file_path: str) -> None:
     subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+
+
+def main(file_path: str) -> None:
+    if is_untracked_in_git(file_path):
+        return
+    run_format(file_path)
 """
 
 _BUDGET_COUNTS_VIA_ANNOTATED_CONSTANTS = """
@@ -117,6 +135,54 @@ def is_untracked_in_git(file_path: str) -> bool:
 
 def run_format(file_path: str) -> None:
     subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+
+
+def main(file_path: str) -> None:
+    if is_untracked_in_git(file_path):
+        return
+    run_format(file_path)
+"""
+
+_BUDGET_PLUS_UNREACHABLE_NETWORK_PROBE = """
+import subprocess
+
+PYTHON_FORMAT_TIMEOUT_SECONDS = 12
+
+
+def worst_case_format_phase_seconds() -> int:
+    fix_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    format_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    return fix_phase_seconds + format_phase_seconds
+
+
+def run_format(file_path: str) -> None:
+    subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+
+
+def unrelated_network_probe() -> int:
+    completed_probe = subprocess.run(["curl", "https://example.test"], timeout=30)
+    return completed_probe.returncode
+
+
+def main(file_path: str) -> None:
+    run_format(file_path)
+"""
+
+_INTERIOR_BUDGET_SUBSTRING_NOT_A_TOTAL = """
+import subprocess
+
+
+def audit_budget_report() -> int:
+    return run_auditor()
+
+
+def run_auditor() -> int:
+    completed_audit = subprocess.run(["auditor"], timeout=30)
+    return completed_audit.returncode
+
+
+def main() -> int:
+    return audit_budget_report()
 """
 
 
@@ -151,6 +217,14 @@ def test_flags_budget_that_omits_a_named_constant_subprocess_timeout() -> None:
 
 def test_passes_budget_that_accounts_via_annotated_module_constants() -> None:
     assert find_undercounted_budget(_BUDGET_COUNTS_VIA_ANNOTATED_CONSTANTS) is None
+
+
+def test_passes_budget_with_unreachable_unrelated_subprocess_probe() -> None:
+    assert find_undercounted_budget(_BUDGET_PLUS_UNREACHABLE_NETWORK_PROBE) is None
+
+
+def test_ignores_function_whose_name_merely_contains_the_budget_substring() -> None:
+    assert find_undercounted_budget(_INTERIOR_BUDGET_SUBSTRING_NOT_A_TOTAL) is None
 
 
 def _run_hook_on_content(content: str) -> subprocess.CompletedProcess[str]:
@@ -190,6 +264,28 @@ def test_full_hook_ignores_a_non_string_file_path() -> None:
         {
             "tool_name": "Write",
             "tool_input": {"file_path": 5, "content": _BUDGET_FLAGS_GIT_TIMEOUT_OMISSION},
+        }
+    )
+    completed_hook = subprocess.run(
+        [sys.executable, str(_HOOK_DIR / "subprocess_budget_completeness.py")],
+        input=hook_input,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert completed_hook.returncode == 0
+    assert completed_hook.stdout.strip() == ""
+
+
+def test_full_hook_exempts_test_files_from_the_budget_gate() -> None:
+    hook_input = json.dumps(
+        {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "packages/example/test_timing_module.py",
+                "content": _BUDGET_FLAGS_GIT_TIMEOUT_OMISSION,
+            },
         }
     )
     completed_hook = subprocess.run(

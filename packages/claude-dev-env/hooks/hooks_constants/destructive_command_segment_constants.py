@@ -23,3 +23,18 @@ ALL_INTERPRETER_AND_WRAPPER_COMMANDS: frozenset[str] = frozenset(
         "xargs",
     }
 )
+ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS: frozenset[str] = frozenset(
+    {
+        "ssh",
+        "python",
+        "python2",
+        "python3",
+        "perl",
+        "ruby",
+        "node",
+        "deno",
+        "bun",
+        "php",
+    }
+)
+ALL_STRING_ARGUMENT_EXECUTION_FLAGS: frozenset[str] = frozenset({"-c", "-e"})

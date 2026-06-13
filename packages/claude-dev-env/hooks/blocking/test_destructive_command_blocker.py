@@ -1109,6 +1109,26 @@ def test_quoted_mention_asks_when_real_force_push_rides_alongside_quoted_rm() ->
     )
 
 
+def test_interpreter_execution_asks_when_bash_dash_c_runs_quoted_rm() -> None:
+    _assert_hook_asks("bash -c 'rm -rf /etc'")
+
+
+def test_interpreter_execution_asks_when_sh_dash_c_runs_quoted_rm() -> None:
+    _assert_hook_asks("sh -c 'rm -rf /home/user/x'")
+
+
+def test_interpreter_execution_asks_when_eval_runs_quoted_rm() -> None:
+    _assert_hook_asks("eval 'rm -rf /etc'")
+
+
+def test_interpreter_execution_asks_when_ssh_runs_remote_quoted_rm() -> None:
+    _assert_hook_asks("ssh host 'rm -rf /etc'")
+
+
+def test_interpreter_execution_asks_when_python_dash_c_runs_quoted_rm() -> None:
+    _assert_hook_asks("""python -c "import os; os.system('rm -rf /etc')\"""")
+
+
 # --- convergence branch exemption unit tests ---
 
 import importlib.util

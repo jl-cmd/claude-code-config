@@ -85,6 +85,8 @@ ALL_GIT_CONFIG_READ_ONLY_FLAGS: frozenset[str] = frozenset(
 )
 ALL_GIT_REMOTE_READ_ONLY_VERBS: frozenset[str] = frozenset({"-v", "--verbose", "show", "get-url"})
 ALL_GH_HTTP_WRITE_METHOD_FLAGS: frozenset[str] = frozenset({"-X", "--method"})
+GH_SHORT_METHOD_FLAG_PREFIX: str = "-X"
+GH_LONG_METHOD_FLAG_EQUALS_PREFIX: str = "--method="
 ALL_GH_HTTP_WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 ALL_READ_ONLY_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
     {

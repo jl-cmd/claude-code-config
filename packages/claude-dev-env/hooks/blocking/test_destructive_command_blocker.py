@@ -1146,6 +1146,18 @@ def test_compound_rm_asks_when_gh_api_http_delete_rides_alongside_ephemeral_rm()
     _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo -X DELETE")
 
 
+def test_compound_rm_asks_when_gh_api_glued_short_delete_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo -XDELETE")
+
+
+def test_compound_rm_asks_when_gh_api_glued_short_post_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api -XPOST repos/owner/repo/issues -f title=x")
+
+
+def test_compound_rm_asks_when_gh_api_equals_long_delete_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo --method=DELETE")
+
+
 def test_compound_rm_allowed_when_git_config_lists_after_ephemeral_rm() -> None:
     _assert_hook_allows("rm -rf /tmp/reply && git config --list")
 

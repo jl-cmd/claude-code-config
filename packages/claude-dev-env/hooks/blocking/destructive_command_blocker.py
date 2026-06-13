@@ -33,6 +33,8 @@ from hooks_constants.destructive_command_segment_constants import (  # noqa: E40
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
     ALL_STRING_ARGUMENT_EXECUTION_FLAGS,
     ALL_SUBSHELL_GROUPING_CHARACTERS,
+    GH_LONG_METHOD_FLAG_EQUALS_PREFIX,
+    GH_SHORT_METHOD_FLAG_PREFIX,
     LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN,
     OUTPUT_REDIRECTION_OPERATOR_PATTERN,
 )
@@ -800,15 +802,42 @@ def _all_positional_tokens_after_leader(all_segment_tokens: list[str]) -> list[s
     ]
 
 
+def _gh_method_flag_token_names_a_write_method(method_flag_token: str) -> bool:
+    """Return True when one ``gh api`` method-flag token carries a glued write method.
+
+    ``gh`` accepts the HTTP method inline as well as in the next token: the glued short
+    form ``-XDELETE`` and the equals long form ``--method=DELETE`` both name the method
+    inside a single token. The inline value is ``token[2:]`` for the short ``-X`` form
+    and the substring after the first ``=`` for the long ``--method=`` form; when that
+    value uppercases into a write method the flag token names a write.
+
+    Args:
+        method_flag_token: One shlex token from a ``gh`` segment.
+
+    Returns:
+        True when the token glues a write method onto an ``-X``/``--method`` flag.
+    """
+    if method_flag_token.startswith(GH_SHORT_METHOD_FLAG_PREFIX):
+        inline_method = method_flag_token[len(GH_SHORT_METHOD_FLAG_PREFIX) :]
+    elif method_flag_token.startswith(GH_LONG_METHOD_FLAG_EQUALS_PREFIX):
+        inline_method = method_flag_token[len(GH_LONG_METHOD_FLAG_EQUALS_PREFIX) :]
+    else:
+        return False
+    return inline_method.upper() in ALL_GH_HTTP_WRITE_METHODS
+
+
 def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool:
     """Return True when a ``gh`` segment performs an HTTP write through ``gh api``.
 
     ``gh api`` reaches the GitHub API with whatever HTTP method an ``-X``/``--method``
     flag names. A GET is read-only, but POST, PUT, PATCH and DELETE mutate server
-    state (``gh api repos/foo -X DELETE``). The method flag is dash-prefixed and so is
-    dropped from the positional-token list the read-only check inspects, so the raw
-    segment tokens are scanned here: when a write-method flag is followed by a write
-    method, the segment is reported as a write rather than a read.
+    state. The method flag is dash-prefixed and so is dropped from the positional-token
+    list the read-only check inspects, so the raw segment tokens are scanned here. Both
+    flag spellings ``gh`` accepts are recognized: the space-separated form where the
+    flag (``-X``/``--method``) is its own token and the next token names the method
+    (``gh api repos/foo -X DELETE``), and the glued forms where the method is inside the
+    flag token (``-XDELETE``, ``--method=DELETE``). Either spelling naming POST, PUT,
+    PATCH or DELETE reports the segment as a write.
 
     Args:
         all_segment_tokens: Shlex tokens of one shell segment.
@@ -817,6 +846,8 @@ def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool
         True when the segment names an HTTP write method via ``gh api``.
     """
     for each_index, each_token in enumerate(all_segment_tokens):
+        if _gh_method_flag_token_names_a_write_method(each_token):
+            return True
         if each_token not in ALL_GH_HTTP_WRITE_METHOD_FLAGS:
             continue
         each_next_index = each_index + 1

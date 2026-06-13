@@ -60,6 +60,10 @@ DOCUMENT_RUNNING_LOW_MESSAGE = (
 USER_ADVICE_NEW_SESSION_MESSAGE = (
     "To save tokens, you could start a new session for the unrelated task."
 )
+CONTEXT_WINDOW_SUMMARIZE_MESSAGE = (
+    "The context window is getting full, so let me summarize where we are."
+)
+BENIGN_SUMMARIZE_REPORT_MESSAGE = "I should summarize the findings for the report."
 EMPTY_MESSAGE = ""
 
 
@@ -239,6 +243,23 @@ def test_document_running_low_instruction_passes_through_with_no_output():
 
 def test_user_directed_new_session_advice_passes_through_with_no_output():
     completed_process = run_hook_with_message(USER_ADVICE_NEW_SESSION_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_context_window_summarize_handoff_emits_block():
+    completed_process = run_hook_with_message(CONTEXT_WINDOW_SUMMARIZE_MESSAGE)
+
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+
+    assert parsed_response["decision"] == "block"
+    assert parsed_response["systemMessage"] == USER_FACING_CONTEXT_REASSURANCE_NOTICE
+
+
+def test_benign_summarize_report_passes_through_with_no_output():
+    completed_process = run_hook_with_message(BENIGN_SUMMARIZE_REPORT_MESSAGE)
 
     assert completed_process.returncode == 0
     assert completed_process.stdout == ""

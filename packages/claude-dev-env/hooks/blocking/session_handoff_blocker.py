@@ -63,7 +63,7 @@ def has_first_person_self_termination(text: str) -> bool:
         re.IGNORECASE,
     )
     self_termination_cue_pattern = re.compile(
-        r"\b(?:stop|summariz|wrap\s+up|wrap\s+things\s+up"
+        r"\b(?:stop|summari[sz]\w*|wrap\s+up|wrap\s+things\s+up"
         r"|hand\s+(?:off|it\s+off|this\s+off)|pause"
         r"|continue\s+(?:this|later)|pick\s+(?:this|it)\s+up"
         r"|new\s+session|fresh\s+session|separate\s+session|clean\s+session"
@@ -92,7 +92,7 @@ def has_resource_reference_with_handoff_cue(text: str) -> bool:
         re.IGNORECASE,
     )
     stop_or_handoff_cue_pattern = re.compile(
-        r"\b(?:stop|summariz|wrap\s+up|wrap\s+things\s+up|hand\s+off"
+        r"\b(?:stop|summari[sz]\w*|wrap\s+up|wrap\s+things\s+up|hand\s+off"
         r"|new\s+session|pause|continue\s+later|pick\s+this\s+up\s+later)\b",
         re.IGNORECASE,
     )

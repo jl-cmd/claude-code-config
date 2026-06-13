@@ -22,10 +22,9 @@ use the substitution convention at all:
   2. the content establishes a per-iteration loop (an "each"/"EACH"/"for i"
      style phrase, or an explicit `cand_0` enumeration);
   3. a bare `<word>_<i|j|k>` token appears as a per-iteration path segment
-     (adjacent to a path separator). A quoted structured-output key counts
-     only when its token ALSO appears as such a path segment, so a quoted key
-     whose name legitimately ends in `_i|_j|_k` (a permanent identifier never
-     written as a per-iteration path) does not fire.
+     (adjacent to a path separator). A quoted structured-output key whose name
+     ends in `_i|_j|_k` (a permanent identifier with no per-iteration path) does
+     not fire on its own; only the per-iteration path shape triggers a block.
 
 Fails OPEN (approves) on malformed input or a non-workflow path; the violation
 shape is narrow enough that a false negative is preferable to blocking
@@ -112,18 +111,8 @@ def find_bare_path_segments(content: str) -> set[str]:
     return all_path_segments
 
 
-def find_quoted_key_tokens(content: str) -> set[str]:
-    loop_letters = "ijk"
-    quoted_key_context = re.compile(
-        r"[\"']([A-Za-z][\w]*?_[" + loop_letters + r"])(?![\w>])[\"']"
-    )
-    return {each_match.group(1) for each_match in quoted_key_context.finditer(content)}
-
-
 def find_bare_index_segments(content: str) -> set[str]:
-    all_path_segments = find_bare_path_segments(content)
-    looped_quoted_keys = find_quoted_key_tokens(content) & all_path_segments
-    return all_path_segments | looped_quoted_keys
+    return find_bare_path_segments(content)
 
 
 def content_has_violation(content: str) -> bool:

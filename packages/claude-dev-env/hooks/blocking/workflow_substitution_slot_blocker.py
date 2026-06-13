@@ -21,8 +21,11 @@ use the substitution convention at all:
      (a `<...>` slot), proving the author marks per-call values that way;
   2. the content establishes a per-iteration loop (an "each"/"EACH"/"for i"
      style phrase, or an explicit `cand_0` enumeration);
-  3. a bare `<word>_<i|j|k>` token appears as a path or output-key segment
-     (adjacent to a path separator, or quoted as a structured-output key).
+  3. a bare `<word>_<i|j|k>` token appears as a per-iteration path segment
+     (adjacent to a path separator). A quoted structured-output key counts
+     only when its token ALSO appears as such a path segment, so a quoted key
+     whose name legitimately ends in `_i|_j|_k` (a permanent identifier never
+     written as a per-iteration path) does not fire.
 
 Fails OPEN (approves) on malformed input or a non-workflow path; the violation
 shape is narrow enough that a false negative is preferable to blocking
@@ -92,22 +95,35 @@ def has_iteration_loop(content: str) -> bool:
     )
 
 
-def find_bare_index_segments(content: str) -> set[str]:
+def find_bare_path_segments(content: str) -> set[str]:
     loop_letters = "ijk"
-    path_or_key_context = re.compile(
+    path_context = re.compile(
         r"(?:[\\/]\s*([A-Za-z][\w]*?_[" + loop_letters + r"])(?![\w>])"
-        r"|([A-Za-z][\w]*?_[" + loop_letters + r"])(?![\w>])\s*[\\/]"
-        r"|[\"']([A-Za-z][\w]*?_[" + loop_letters + r"])(?![\w>])[\"'])"
+        r"|([A-Za-z][\w]*?_[" + loop_letters + r"])(?![\w>])\s*[\\/])"
     )
-    all_segments: set[str] = set()
-    for each_match in path_or_key_context.finditer(content):
+    all_path_segments: set[str] = set()
+    for each_match in path_context.finditer(content):
         each_token = next(
             (each_group for each_group in each_match.groups() if each_group),
             "",
         )
         if each_token:
-            all_segments.add(each_token)
-    return all_segments
+            all_path_segments.add(each_token)
+    return all_path_segments
+
+
+def find_quoted_key_tokens(content: str) -> set[str]:
+    loop_letters = "ijk"
+    quoted_key_context = re.compile(
+        r"[\"']([A-Za-z][\w]*?_[" + loop_letters + r"])(?![\w>])[\"']"
+    )
+    return {each_match.group(1) for each_match in quoted_key_context.finditer(content)}
+
+
+def find_bare_index_segments(content: str) -> set[str]:
+    all_path_segments = find_bare_path_segments(content)
+    looped_quoted_keys = find_quoted_key_tokens(content) & all_path_segments
+    return all_path_segments | looped_quoted_keys
 
 
 def content_has_violation(content: str) -> bool:

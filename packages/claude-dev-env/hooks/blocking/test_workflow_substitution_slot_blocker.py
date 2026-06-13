@@ -51,8 +51,13 @@ def test_detects_bare_index_in_path_segment() -> None:
     ) == {"cand_i"}
 
 
-def test_detects_bare_index_in_quoted_output_key() -> None:
-    assert "cand_i" in find_bare_index_segments('{key: "cand_i", name}')
+def test_detects_quoted_key_when_token_also_appears_as_path_segment() -> None:
+    looped_path_and_key = "write ${work}\\\\cand_i\\\\plate.svg\n{key: \"cand_i\", name}"
+    assert "cand_i" in find_bare_index_segments(looped_path_and_key)
+
+
+def test_quoted_key_alone_without_path_segment_is_not_detected() -> None:
+    assert find_bare_index_segments('{key: "metric_i", name}') == set()
 
 
 def test_marked_substitution_slot_is_not_a_bare_segment() -> None:
@@ -107,6 +112,21 @@ def test_benign_prose_each_with_fixed_literal_is_not_flagged() -> None:
         "The protocol field is named 'tier_i' as a permanent identifier.\n"
     )
     assert content_has_violation(benign_template) is False
+
+
+def test_quoted_permanent_identifier_key_is_not_flagged() -> None:
+    permanent_identifier_template = (
+        'For EACH candidate, render <plate.svg>.\nReturn {key: "metric_i", value}'
+    )
+    assert content_has_violation(permanent_identifier_template) is False
+
+
+def test_quoted_key_flagged_only_when_token_also_appears_as_path_segment() -> None:
+    looping_path_and_key = (
+        "For EACH candidate, write <plate.svg> to ${work}\\\\cand_i\\\\plate.svg.\n"
+        'Return {key: "cand_i", name}\n'
+    )
+    assert content_has_violation(looping_path_and_key) is True
 
 
 def test_written_content_reads_multiedit_new_strings() -> None:

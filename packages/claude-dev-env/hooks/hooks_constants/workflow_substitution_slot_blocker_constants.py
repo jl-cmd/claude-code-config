@@ -17,6 +17,6 @@ CORRECTIVE_MESSAGE: str = (
     "this template already uses for per-call values (`<plate.svg>`, `<glow_hex>`): "
     "write `cand_<i>` instead of `cand_i`, or spell out 'replace <i> with the "
     "iteration index 0, 1, 2' in the step text.\n\n"
-    "Convention reference: theme-icon-set/SKILL.md marks every per-call "
-    "substitution slot with angle brackets."
+    "Convention: every per-call substitution slot in a .workflow.js template is "
+    "marked with angle brackets, so an agent fills in a fresh value per call."
 )

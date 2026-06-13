@@ -1,6 +1,8 @@
 """Tests for render_report.py against the real wf_881252e6-700 fixture."""
 
+import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -228,8 +230,83 @@ def test_count_tests_added_does_not_double_count_new_file(tmp_path: Path) -> Non
     assert test_count == 2, f"Expected 2 added test definitions, got {test_count}"
 
 
+def _write_structured_output_transcript(
+    transcript_path: Path, tool_input: dict[str, object]
+) -> None:
+    """Write a one-line agent transcript carrying a single StructuredOutput tool_use."""
+    line = json.dumps(
+        {
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": render_report.STRUCTURED_OUTPUT_TOOL_NAME,
+                        "input": tool_input,
+                    }
+                ]
+            }
+        }
+    )
+    transcript_path.write_text(line + "\n", encoding="utf-8")
+
+
+def test_base_sha_resets_each_round_when_prior_fix_transcript_missing(
+    tmp_path: Path,
+) -> None:
+    """Should bind each round's fix base sha to that round's own head, never a prior round's."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+
+    round_one_head = "1111111111111111111111111111111111111111"
+    round_two_head = "2222222222222222222222222222222222222222"
+
+    round_one_gate_id = "round-one-gate"
+    round_two_gate_id = "round-two-gate"
+    round_two_fix_id = "round-two-fix"
+
+    _write_structured_output_transcript(
+        agents_dir / f"agent-{round_one_gate_id}.jsonl",
+        {"sha": round_one_head, "clean": False, "findings": []},
+    )
+    _write_structured_output_transcript(
+        agents_dir / f"agent-{round_two_gate_id}.jsonl",
+        {"sha": round_two_head, "clean": False, "findings": []},
+    )
+    _write_structured_output_transcript(
+        agents_dir / f"agent-{round_two_fix_id}.jsonl",
+        {"newSha": round_two_head, "pushed": True, "resolvedWithoutCommit": False},
+    )
+
+    progress_entries: list[dict] = [
+        {"label": render_report.LABEL_RESOLVE_HEAD, "agentId": "round-one-resolve"},
+        {"label": render_report.LABEL_COPILOT_GATE, "agentId": round_one_gate_id},
+        {"label": render_report.LABEL_PREFIX_FIX + "copilot", "agentId": "missing-fix"},
+        {"label": render_report.LABEL_RESOLVE_HEAD, "agentId": "round-two-resolve"},
+        {"label": render_report.LABEL_COPILOT_GATE, "agentId": round_two_gate_id},
+        {"label": render_report.LABEL_PREFIX_FIX + "copilot", "agentId": round_two_fix_id},
+    ]
+
+    _all_findings, fix_by_round = render_report._parse_progress_entries(
+        progress_entries, agents_dir
+    )
+
+    assert fix_by_round[2].base_sha == round_two_head, (
+        "Round 2 fix recorded a stale base sha leaked from round 1; "
+        f"expected {round_two_head}, got {fix_by_round[2].base_sha}"
+    )
+
+
 def test_robustness_with_missing_transcripts(tmp_path: Path) -> None:
-    """Should succeed even when agent transcript files are absent or contain non-tool lines."""
+    """Should exit 0 and render zero finding cards when no agent transcripts exist."""
+    run_root = tmp_path / "wf_run"
+    journal_destination = run_root / "workflows" / FIXTURE_JOURNAL.name
+    journal_destination.parent.mkdir(parents=True)
+    shutil.copy(FIXTURE_JOURNAL, journal_destination)
+
+    run_id = FIXTURE_JOURNAL.stem
+    empty_agents_dir = run_root / "subagents" / "workflows" / run_id
+    empty_agents_dir.mkdir(parents=True)
+
     out_path = tmp_path / "report-robust.html"
     render_script = Path(__file__).resolve().parent / "render_report.py"
 
@@ -238,7 +315,7 @@ def test_robustness_with_missing_transcripts(tmp_path: Path) -> None:
             sys.executable,
             str(render_script),
             "--journal",
-            str(FIXTURE_JOURNAL),
+            str(journal_destination),
             "--out",
             str(out_path),
             "--pr",
@@ -261,8 +338,7 @@ def test_robustness_with_missing_transcripts(tmp_path: Path) -> None:
     html_content = out_path.read_text(encoding="utf-8")
     assert "PR #211 Convergence Insights" in html_content
 
-    minor_card_count = html_content.count('class="bug-card minor"')
-    assert minor_card_count == EXPECTED_MINOR_COUNT, (
-        f"Missing transcripts changed finding count: expected {EXPECTED_MINOR_COUNT}, "
-        f"got {minor_card_count}"
+    finding_card_count = html_content.count('class="bug-card')
+    assert finding_card_count == 0, (
+        f"Missing transcripts yielded findings: expected 0 cards, got {finding_card_count}"
     )

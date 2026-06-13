@@ -282,6 +282,7 @@ def _parse_progress_entries(
 
         if label == LABEL_RESOLVE_HEAD:
             current_round += 1
+            current_round_base_sha = ""
             continue
 
         if agent_id is None:
@@ -310,7 +311,6 @@ def _parse_progress_entries(
             fix_by_round[current_round] = _parse_fix_record(
                 agent_result, current_round, current_round_base_sha
             )
-            current_round_base_sha = ""
 
     return all_findings, fix_by_round
 

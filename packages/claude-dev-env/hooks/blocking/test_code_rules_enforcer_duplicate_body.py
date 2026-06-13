@@ -185,3 +185,85 @@ def test_should_not_flag_method_inside_class(module_dir: pathlib.Path) -> None:
     new_file = module_dir / "new.py"
     issues = check_duplicate_function_body_across_files(class_source, str(new_file))
     assert issues == [], f"Only module-scope functions are compared, not methods, got: {issues}"
+
+
+_UNRELATED_LEADING_FUNCTION = (
+    "def unrelated_helper(left: int, right: int) -> int:\n"
+    "    summed = left + right\n"
+    "    tripled = summed * 3\n"
+    "    return tripled\n"
+)
+
+
+def test_should_not_flag_when_edit_leaves_duplicate_outside_changed_lines(
+    module_dir: pathlib.Path,
+) -> None:
+    _write(module_dir, "existing.py", SHARED_HELPER_SOURCE)
+    new_file = module_dir / "new_blocker.py"
+    post_edit_content = _UNRELATED_LEADING_FUNCTION + "\n\n" + SHARED_HELPER_SOURCE
+    changed_lines_outside_duplicate = {1, 2, 3, 4}
+    issues = check_duplicate_function_body_across_files(
+        post_edit_content,
+        str(new_file),
+        all_changed_lines=changed_lines_outside_duplicate,
+    )
+    assert issues == [], (
+        "An Edit that never touches the duplicated function must not block, "
+        f"got: {issues}"
+    )
+
+
+def test_should_flag_when_edit_changed_lines_intersect_duplicate(
+    module_dir: pathlib.Path,
+) -> None:
+    _write(module_dir, "existing.py", SHARED_HELPER_SOURCE)
+    new_file = module_dir / "new_blocker.py"
+    post_edit_content = _UNRELATED_LEADING_FUNCTION + "\n\n" + SHARED_HELPER_SOURCE
+    duplicate_definition_line = post_edit_content.splitlines().index(
+        "def strip_code_and_quotes(text: str) -> str:"
+    ) + 1
+    changed_lines_inside_duplicate = {duplicate_definition_line + 1}
+    issues = check_duplicate_function_body_across_files(
+        post_edit_content,
+        str(new_file),
+        all_changed_lines=changed_lines_inside_duplicate,
+    )
+    assert any("strip_code_and_quotes" in each_issue for each_issue in issues), (
+        "An Edit whose changed lines touch the copied helper must still flag, "
+        f"got: {issues}"
+    )
+
+
+def test_should_flag_whole_file_write_when_changed_lines_is_none(
+    module_dir: pathlib.Path,
+) -> None:
+    _write(module_dir, "existing.py", SHARED_HELPER_SOURCE)
+    new_file = module_dir / "new_blocker.py"
+    issues = check_duplicate_function_body_across_files(
+        SHARED_HELPER_SOURCE,
+        str(new_file),
+        all_changed_lines=None,
+    )
+    assert any("strip_code_and_quotes" in each_issue for each_issue in issues), (
+        "A whole-file Write treats every line as in scope and must flag, "
+        f"got: {issues}"
+    )
+
+
+def test_should_return_every_violation_when_scope_deferred_to_caller(
+    module_dir: pathlib.Path,
+) -> None:
+    _write(module_dir, "existing.py", SHARED_HELPER_SOURCE)
+    new_file = module_dir / "new_blocker.py"
+    post_edit_content = _UNRELATED_LEADING_FUNCTION + "\n\n" + SHARED_HELPER_SOURCE
+    changed_lines_outside_duplicate = {1, 2, 3, 4}
+    issues = check_duplicate_function_body_across_files(
+        post_edit_content,
+        str(new_file),
+        all_changed_lines=changed_lines_outside_duplicate,
+        defer_scope_to_caller=True,
+    )
+    assert any("strip_code_and_quotes" in each_issue for each_issue in issues), (
+        "The commit/push gate scopes by added line, so the check must return "
+        f"every violation when scope is deferred, got: {issues}"
+    )

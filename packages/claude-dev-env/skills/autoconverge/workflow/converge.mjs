@@ -15,7 +15,7 @@ export const meta = {
   whenToUse: 'Launched by the /autoconverge skill after it resolves PR scope, enters a worktree, and grants project .claude permissions.',
   phases: [
     { title: 'Converge', detail: 'Bugbot + code-review + bug-audit in parallel each round; one clean-coder applies all fixes; loop until all three are clean on a stable HEAD' },
-    { title: 'Copilot gate', detail: 'Request Copilot review and poll up to three times; route findings back into Converge; pass the gate when Copilot is out of usage' },
+    { title: 'Copilot gate', detail: 'Request Copilot review and poll up to three times; route findings back into Converge; when Copilot is down or out of quota, log a notice and mark the PR ready with the gate bypassed' },
     { title: 'Finalize', detail: 'Run check_convergence.py; mark draft=false on a full pass' },
   ],
 }
@@ -62,11 +62,10 @@ const COPILOT_SCHEMA = {
   properties: {
     sha: { type: 'string' },
     clean: { type: 'boolean' },
-    down: { type: 'boolean', description: 'true when Copilot is out of usage (the requester hit their quota) so the gate is bypassed' },
+    down: { type: 'boolean', description: 'true when Copilot is down or out of quota — it posts an out-of-usage notice or never surfaces a review on HEAD after the poll cap; the gate is bypassed and the run proceeds to mark-ready' },
     findings: LENS_SCHEMA.properties.findings,
-    blocker: { type: ['string', 'null'], description: 'non-null when Copilot never surfaced a review after the poll cap' },
   },
-  required: ['sha', 'clean', 'down', 'findings', 'blocker'],
+  required: ['sha', 'clean', 'down', 'findings'],
 }
 
 const HEAD_SCHEMA = {
@@ -325,22 +324,22 @@ function classifyReadyOutcome(readyResult) {
  * Classify a Copilot gate result into the loop's next action. A dead gate agent
  * (null result) is a retry rather than an approval, mirroring the converge
  * lenses' dead-agent convention so a failed gate is never mistaken for a clean
- * Copilot review. A down result — Copilot out of usage because the requester hit
- * their quota — passes the gate so a usage outage never blocks the run, the same
- * way a down Bugbot lens is bypassed; this is checked before the blocker so a
- * usage outage is a pass, not a no-show. A non-null blocker ends the run;
- * findings route to a fix step. The gate otherwise approves only when it
- * explicitly reports clean:true with no findings — a clean:false result with
+ * Copilot review. A down result — Copilot out of quota or unreachable, so it
+ * posts an out-of-usage notice or never surfaces a review after the poll cap —
+ * routes to the 'down' kind, which logs a notice and proceeds to mark-ready with
+ * the Copilot gate bypassed, the same way a down Bugbot lens is bypassed; this is
+ * checked first so an outage proceeds rather than waiting on a review that will
+ * not arrive. Findings route to a fix step. The gate otherwise approves only when
+ * it explicitly reports clean:true with no findings — a clean:false result with
  * zero findings is an unreliable or malformed gate response and retries rather
  * than advancing to Finalize, so a PR never goes ready on a HEAD Copilot did not
  * call clean.
  * @param {object|null|undefined} copilot the Copilot gate result, or null on agent failure
- * @returns {{kind: string, blocker?: string, findings?: Array<object>}} the next action
+ * @returns {{kind: string, findings?: Array<object>}} the next action
  */
 function classifyCopilotOutcome(copilot) {
   if (copilot == null) return { kind: 'retry' }
-  if (copilot.down === true) return { kind: 'approved' }
-  if (copilot.blocker) return { kind: 'blocker', blocker: copilot.blocker }
+  if (copilot.down === true) return { kind: 'down' }
   if (copilot.findings.length > 0) return { kind: 'fix', findings: copilot.findings }
   if (copilot.clean === true) return { kind: 'approved' }
   return { kind: 'retry' }
@@ -561,24 +560,25 @@ function postCleanAudit(head) {
 
 /**
  * Copilot gate: request a Copilot review on HEAD and poll until it lands or the
- * poll cap is hit; return Copilot's findings, an out-of-usage down signal, or a
- * blocker. When Copilot is out of usage (the requester hit their quota) it posts
- * an out-of-usage notice rather than a review; the gate reports that as down so
- * the run passes the gate and moves on instead of waiting out the poll cap.
+ * poll cap is hit; return Copilot's findings or a down signal. Copilot is down
+ * when it posts an out-of-usage notice (the requester hit their quota) rather
+ * than a review, or surfaces no review at all after the poll cap; the gate
+ * reports either as down so the run logs a notice and proceeds to mark-ready with
+ * the gate bypassed rather than waiting on a review that will not arrive.
  * @param {string} head converged PR HEAD SHA
  * @returns {Promise<object>} COPILOT_SCHEMA result
  */
 function runCopilotGate(head) {
   return agent(
     `You are the Copilot gate for ${prCoordinates}, HEAD ${head}. Do not edit code, commit, or push.\n\n` +
-      `Copilot can run out of usage. When the newest Copilot review on HEAD carries an out-of-usage notice — a body stating Copilot was unable to review because the user who requested the review has reached their quota limit, or any equivalent quota / premium-request / usage-limit exhaustion message rather than an actual code review — Copilot is down for this run: return {sha:${'`'}${head}${'`'}, clean:true, down:true, findings:[], blocker:null} and stop. Do NOT re-request a review, do NOT keep polling, and do NOT treat the notice as a finding.\n\n` +
+      `Copilot can run out of usage. When the newest Copilot review on HEAD carries an out-of-usage notice — a body stating Copilot was unable to review because the user who requested the review has reached their quota limit, or any equivalent quota / premium-request / usage-limit exhaustion message rather than an actual code review — Copilot is down for this run: return {sha:${'`'}${head}${'`'}, clean:true, down:true, findings:[]} and stop. Do NOT re-request a review, do NOT keep polling, and do NOT treat the notice as a finding.\n\n` +
       `1. Read any existing Copilot review on HEAD first: python "${CONFIG.sharedScripts}/fetch_copilot_reviews.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber}. This lists every Copilot review across all commits newest-first; only count entries whose commit_id starts with ${head}. If the newest such HEAD-scoped Copilot review is the out-of-usage notice above -> return the down result and stop. A notice on any earlier commit is NOT down: ignore it and continue. With no Copilot review on HEAD, skip a duplicate request: python "${CONFIG.sharedScripts}/check_pending_reviews.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber} --user copilot. Exit 0 means a request is already pending; otherwise request one:\n` +
       `   gh api --method POST repos/${input.owner}/${input.repo}/pulls/${input.prNumber}/requested_reviewers -f 'reviewers[]=copilot-pull-request-reviewer[bot]'\n` +
       `2. Poll for Copilot's review on HEAD ${head}: up to ${CONFIG.copilotMaxPolls} attempts, 360 seconds apart (delay each attempt with "sleep 360", or the PowerShell alternative "Start-Sleep -Seconds 360"). Each attempt: python "${CONFIG.sharedScripts}/fetch_copilot_reviews.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber} for the top-level review state, plus gh api "repos/${input.owner}/${input.repo}/pulls/${input.prNumber}/comments" --paginate --slurp for inline comment ids (Copilot's login contains "copilot", case-insensitive). Only count entries whose commit_id starts with ${head}.\n` +
       `   - Out-of-usage notice on HEAD -> return the down result above (clean:true, down:true) and stop.\n` +
-      `   - Copilot review present and clean/approved on HEAD -> return {sha:${'`'}${head}${'`'}, clean:true, down:false, findings:[], blocker:null}.\n` +
-      `   - Copilot findings on HEAD -> return them (each with its inline comment id in replyToCommentId; category 'code-standard' for pure CODE_RULES/style violations with no behavioral impact, 'bug' otherwise), clean:false, down:false, blocker:null.\n` +
-      `   - No review after ${CONFIG.copilotMaxPolls} attempts -> return {sha:${'`'}${head}${'`'}, clean:false, down:false, findings:[], blocker:"Copilot did not surface a review on HEAD after ${CONFIG.copilotMaxPolls} polls"}.\n\n` +
+      `   - Copilot review present and clean/approved on HEAD -> return {sha:${'`'}${head}${'`'}, clean:true, down:false, findings:[]}.\n` +
+      `   - Copilot findings on HEAD -> return them (each with its inline comment id in replyToCommentId; category 'code-standard' for pure CODE_RULES/style violations with no behavioral impact, 'bug' otherwise), clean:false, down:false.\n` +
+      `   - No review after ${CONFIG.copilotMaxPolls} attempts -> Copilot is down for this run (unreachable, or silently out of quota with no notice): return {sha:${'`'}${head}${'`'}, clean:false, down:true, findings:[]}.\n\n` +
       `Return strictly the schema.`,
     { label: 'copilot-gate', phase: 'Copilot gate', schema: COPILOT_SCHEMA },
   )
@@ -587,13 +587,15 @@ function runCopilotGate(head) {
 /**
  * Run the authoritative convergence gate.
  * @param {boolean} bugbotDown pass --bugbot-down when Bugbot is opted out or proved unreachable this run
+ * @param {boolean} copilotDown pass --copilot-down when Copilot is down or out of quota this run
  * @returns {Promise<object>} CONVERGENCE_SCHEMA result
  */
-function checkConvergence(bugbotDown) {
+function checkConvergence(bugbotDown, copilotDown) {
   const bugbotDownFlag = bugbotDown ? ' --bugbot-down' : ''
+  const copilotDownFlag = copilotDown ? ' --copilot-down' : ''
   return agent(
     `Run the convergence gate for ${prCoordinates} and report the result. Do not edit code.\n\n` +
-      `Run: python "${CONFIG.sharedScripts}/check_convergence.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber}${bugbotDownFlag}\n\n` +
+      `Run: python "${CONFIG.sharedScripts}/check_convergence.py" --owner ${input.owner} --repo ${input.repo} --pr-number ${input.prNumber}${bugbotDownFlag}${copilotDownFlag}\n\n` +
       `Exit 0 -> every gate passed: return {pass:true, failures:[]}.\n` +
       `Exit 1 -> return {pass:false, failures:[<each printed FAIL line verbatim>]}.\n` +
       `Exit 2 -> retry once; if it still errors, return {pass:false, failures:["check_convergence gh error"]}.`,
@@ -689,6 +691,8 @@ let rounds = 0
 let iterations = 0
 let blocker = null
 let bugbotDown = input.bugbotDisabled || false
+let copilotDown = false
+let copilotNote = null
 let standardsNote = null
 
 while (iterations < CONFIG.maxIterations) {
@@ -752,9 +756,12 @@ while (iterations < CONFIG.maxIterations) {
       log('Copilot gate agent died or returned an unreliable not-clean result with no findings — re-running the gate on the same HEAD')
       continue
     }
-    if (copilotOutcome.kind === 'blocker') {
-      blocker = copilotOutcome.blocker
-      break
+    if (copilotOutcome.kind === 'down') {
+      log('Copilot gate: Copilot is down or out of quota — no review on HEAD after the poll cap. Logging a notice and proceeding to mark-ready with the Copilot gate bypassed.')
+      copilotDown = true
+      copilotNote = 'Copilot was down or out of quota — the Copilot gate was bypassed and the PR was marked ready without a Copilot review'
+      phase = 'FINALIZE'
+      continue
     }
     if (copilotOutcome.kind === 'fix') {
       if (isStandardsOnlyRound(copilotOutcome.findings)) {
@@ -777,12 +784,14 @@ while (iterations < CONFIG.maxIterations) {
       phase = 'CONVERGE'
       continue
     }
+    copilotDown = false
+    copilotNote = null
     phase = 'FINALIZE'
     continue
   }
 
   if (phase === 'FINALIZE') {
-    const convergence = await checkConvergence(bugbotDown)
+    const convergence = await checkConvergence(bugbotDown, copilotDown)
     const convergenceOutcome = classifyConvergenceOutcome(convergence)
     if (convergenceOutcome.kind === 'retry') {
       log('Convergence check agent died or returned no FAIL lines — re-running the check on the same HEAD')
@@ -792,7 +801,7 @@ while (iterations < CONFIG.maxIterations) {
       const readyResult = await markReady(head)
       const readyOutcome = classifyReadyOutcome(readyResult)
       if (readyOutcome.converged) {
-        return { converged: true, rounds, finalSha: head, blocker: null, standardsNote }
+        return { converged: true, rounds, finalSha: head, blocker: null, standardsNote, copilotNote }
       }
       blocker = readyOutcome.blocker
       break
@@ -810,4 +819,5 @@ return {
   finalSha: head,
   blocker: blocker || `iteration cap reached (${CONFIG.maxIterations})`,
   standardsNote,
+  copilotNote,
 }

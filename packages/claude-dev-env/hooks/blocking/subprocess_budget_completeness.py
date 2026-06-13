@@ -189,7 +189,7 @@ def main() -> None:
     raw_tool_input = hook_input.get("tool_input", {})
     tool_input = raw_tool_input if isinstance(raw_tool_input, dict) else {}
     file_path = tool_input.get("file_path", "")
-    if not file_path or not is_python_target(file_path):
+    if not isinstance(file_path, str) or not file_path or not is_python_target(file_path):
         sys.exit(0)
 
     content = resolved_content(tool_input)

@@ -183,3 +183,22 @@ def test_full_hook_allows_write_with_complete_budget() -> None:
     completed_hook = _run_hook_on_content(_BUDGET_COUNTS_EVERY_TIMEOUT)
     assert completed_hook.returncode == 0
     assert completed_hook.stdout.strip() == ""
+
+
+def test_full_hook_ignores_a_non_string_file_path() -> None:
+    hook_input = json.dumps(
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": 5, "content": _BUDGET_FLAGS_GIT_TIMEOUT_OMISSION},
+        }
+    )
+    completed_hook = subprocess.run(
+        [sys.executable, str(_HOOK_DIR / "subprocess_budget_completeness.py")],
+        input=hook_input,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert completed_hook.returncode == 0
+    assert completed_hook.stdout.strip() == ""

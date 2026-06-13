@@ -76,7 +76,16 @@ ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS: frozenset[str] = frozenset(
         "git",
     }
 )
-ALL_OUTPUT_REDIRECTION_OPERATORS: frozenset[str] = frozenset({">", ">>", "&>", ">|"})
+OUTPUT_REDIRECTION_OPERATOR_PATTERN: str = r"(?:\d+|&)?>>?\|?(?!&[\d-])"
+ALL_FILE_WRITING_OUTPUT_FLAGS_BY_BENIGN_PROGRAM: dict[str, frozenset[str]] = {
+    "sort": frozenset({"-o", "--output"}),
+}
+ALL_GIT_CONFIG_READ_ONLY_FLAGS: frozenset[str] = frozenset(
+    {"--get", "--get-all", "--get-regexp", "--list", "-l", "--get-urlmatch"}
+)
+ALL_GIT_REMOTE_READ_ONLY_VERBS: frozenset[str] = frozenset({"-v", "--verbose", "show", "get-url"})
+ALL_GH_HTTP_WRITE_METHOD_FLAGS: frozenset[str] = frozenset({"-X", "--method"})
+ALL_GH_HTTP_WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 ALL_READ_ONLY_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
     {
         "status",

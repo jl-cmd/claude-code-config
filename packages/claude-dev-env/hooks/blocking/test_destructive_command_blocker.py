@@ -1106,6 +1106,58 @@ def test_compound_rm_allowed_when_git_read_only_subcommand_follows_ephemeral_rm(
     _assert_hook_allows("rm -rf /tmp/reply && git status")
 
 
+def test_compound_rm_asks_when_benign_segment_glues_redirect_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo pwned>/etc/passwd")
+
+
+def test_compound_rm_asks_when_benign_segment_glues_append_redirect_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo hi>>/etc/important.conf")
+
+
+def test_compound_rm_asks_when_benign_segment_uses_fd_prefixed_redirect_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo hi 1>/etc/important.conf")
+
+
+def test_compound_rm_asks_when_benign_segment_uses_glued_combined_redirect_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo hi &>/etc/important.conf")
+
+
+def test_compound_rm_asks_when_benign_segment_glues_redirect_directly_to_program() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && cat secret>/etc/important.conf")
+
+
+def test_compound_rm_asks_when_sort_writes_output_file_to_non_ephemeral_path() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && sort -o /etc/important.conf /etc/passwd")
+
+
+def test_compound_rm_asks_when_git_config_sets_value_after_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git config --global user.name evil")
+
+
+def test_compound_rm_asks_when_git_remote_add_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git remote add evil http://e")
+
+
+def test_compound_rm_asks_when_git_remote_remove_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git remote remove origin")
+
+
+def test_compound_rm_asks_when_gh_api_http_delete_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo -X DELETE")
+
+
+def test_compound_rm_allowed_when_git_config_lists_after_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && git config --list")
+
+
+def test_compound_rm_allowed_when_git_remote_lists_after_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && git remote -v")
+
+
+def test_compound_rm_allowed_when_gh_api_get_follows_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && gh api repos/foo")
+
+
 def test_quoted_mention_allowed_when_rm_appears_inside_grep_pattern() -> None:
     _assert_hook_allows("grep 'rm -rf foo' history.jsonl | tail -5")
 

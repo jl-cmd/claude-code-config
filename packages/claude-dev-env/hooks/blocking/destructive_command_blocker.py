@@ -21,15 +21,20 @@ from hooks_constants.convergence_branch_constants import (  # noqa: E402
 from hooks_constants.destructive_command_segment_constants import (  # noqa: E402
     ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS,
     ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS,
+    ALL_FILE_WRITING_OUTPUT_FLAGS_BY_BENIGN_PROGRAM,
+    ALL_GH_HTTP_WRITE_METHOD_FLAGS,
+    ALL_GH_HTTP_WRITE_METHODS,
+    ALL_GIT_CONFIG_READ_ONLY_FLAGS,
+    ALL_GIT_REMOTE_READ_ONLY_VERBS,
     ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
     ALL_LAUNCHER_OPTIONS_TAKING_SEPARATE_VALUE,
-    ALL_OUTPUT_REDIRECTION_OPERATORS,
     ALL_READ_ONLY_SUBCOMMANDS_BY_DISPATCHING_PROGRAM,
     ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS,
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
     ALL_STRING_ARGUMENT_EXECUTION_FLAGS,
     ALL_SUBSHELL_GROUPING_CHARACTERS,
     LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN,
+    OUTPUT_REDIRECTION_OPERATOR_PATTERN,
 )
 
 CLAUDE_DIRECTORY_PATH = os.path.normpath(os.path.expanduser("~/.claude"))
@@ -739,20 +744,27 @@ def _rm_segment_targets_only_absolute_ephemeral_paths(all_rm_segment_tokens: lis
 def _segment_redirects_output_to_a_file(all_segment_tokens: list[str]) -> bool:
     """Return True when a segment writes its output to a file via shell redirection.
 
-    An output redirection (``>``, ``>>``, ``&>``, ``>|``) truncates or rewrites the
-    redirect target, so ``cat /dev/null > /etc/important.conf`` destroys the target
-    file even though ``cat`` itself is read-only. The benign-segment check declines
-    any segment whose tokens contain a redirection operator so a benign program that
-    overwrites a non-ephemeral file does not ride the ephemeral ``rm`` auto-allow.
+    An output redirection (a plain, appending, clobbering, or combined operator, with
+    or without a leading file-descriptor number) truncates or rewrites the redirect
+    target, so ``cat /dev/null > /etc/important.conf`` destroys the target file even
+    though ``cat`` itself is read-only. A file-descriptor duplication that names another
+    descriptor as its target writes no file and stays read-only. shlex keeps a
+    redirect operator glued to an adjacent program or target token when no whitespace
+    separates them (``echo pwned>/etc/passwd``, ``cat secret>/etc/x``), so each token is
+    scanned for a redirect operator anywhere within it rather than tested for exact
+    equality. The benign-segment check declines any segment carrying a redirect operator
+    so a benign program that overwrites a non-ephemeral file does not ride the ephemeral
+    ``rm`` auto-allow.
 
     Args:
         all_segment_tokens: Shlex tokens of one shell segment.
 
     Returns:
-        True when the segment contains an output-redirection operator token.
+        True when any token contains an output-redirection operator.
     """
+    output_redirection_pattern = re.compile(OUTPUT_REDIRECTION_OPERATOR_PATTERN)
     return any(
-        each_token in ALL_OUTPUT_REDIRECTION_OPERATORS for each_token in all_segment_tokens
+        output_redirection_pattern.search(each_token) for each_token in all_segment_tokens
     )
 
 
@@ -788,8 +800,71 @@ def _all_positional_tokens_after_leader(all_segment_tokens: list[str]) -> list[s
     ]
 
 
+def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool:
+    """Return True when a ``gh`` segment performs an HTTP write through ``gh api``.
+
+    ``gh api`` reaches the GitHub API with whatever HTTP method an ``-X``/``--method``
+    flag names. A GET is read-only, but POST, PUT, PATCH and DELETE mutate server
+    state (``gh api repos/foo -X DELETE``). The method flag is dash-prefixed and so is
+    dropped from the positional-token list the read-only check inspects, so the raw
+    segment tokens are scanned here: when a write-method flag is followed by a write
+    method, the segment is reported as a write rather than a read.
+
+    Args:
+        all_segment_tokens: Shlex tokens of one shell segment.
+
+    Returns:
+        True when the segment names an HTTP write method via ``gh api``.
+    """
+    for each_index, each_token in enumerate(all_segment_tokens):
+        if each_token not in ALL_GH_HTTP_WRITE_METHOD_FLAGS:
+            continue
+        each_next_index = each_index + 1
+        if each_next_index >= len(all_segment_tokens):
+            continue
+        if all_segment_tokens[each_next_index].upper() in ALL_GH_HTTP_WRITE_METHODS:
+            return True
+    return False
+
+
+def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segment_tokens: list[str]) -> bool:
+    """Return True when a ``git config`` or ``git remote`` segment mutates state.
+
+    ``config`` and ``remote`` appear in the git read-only allowlist for their query
+    modes (``git config --list``, ``git remote -v``) but each carries a write mode:
+    ``git config key value`` and ``git config --global key value`` set a value, and
+    ``git remote add|remove|rm|set-url`` change the remote table. A ``config`` segment
+    mutates unless an explicit read-only flag (``--get``/``--list`` and the rest of
+    ALL_GIT_CONFIG_READ_ONLY_FLAGS) is present; a ``remote`` segment mutates unless its
+    only positional verb after ``remote`` is a read-only one (``-v``, ``show``,
+    ``get-url``).
+
+    Args:
+        all_positional_tokens: The non-flag tokens after the leading ``git`` program.
+        all_segment_tokens: Shlex tokens of the whole ``git`` segment.
+
+    Returns:
+        True when the segment runs a mutating ``config`` or ``remote`` mode.
+    """
+    all_lowercased_positional_tokens = [each_token.lower() for each_token in all_positional_tokens]
+    if "config" in all_lowercased_positional_tokens:
+        return not any(
+            each_token in ALL_GIT_CONFIG_READ_ONLY_FLAGS for each_token in all_segment_tokens
+        )
+    if "remote" in all_lowercased_positional_tokens:
+        remote_verb_index = all_lowercased_positional_tokens.index("remote") + 1
+        all_remote_verbs = all_positional_tokens[remote_verb_index:]
+        carries_a_read_only_verb = any(
+            each_token in ALL_GIT_REMOTE_READ_ONLY_VERBS for each_token in all_segment_tokens
+        )
+        return bool(all_remote_verbs) and not carries_a_read_only_verb
+    return False
+
+
 def _subcommand_dispatching_segment_is_read_only(
-    all_read_only_subcommands: frozenset[str], all_segment_tokens: list[str]
+    leading_program_basename: str,
+    all_read_only_subcommands: frozenset[str],
+    all_segment_tokens: list[str],
 ) -> bool:
     """Return True only when a subcommand-dispatching segment runs a read-only verb.
 
@@ -797,22 +872,71 @@ def _subcommand_dispatching_segment_is_read_only(
     DESTRUCTIVE_BASH_PATTERNS table does not separately enumerate (``gh repo delete``,
     ``git checkout -- .``, ``git stash drop``, ``git branch -D``), so a chained
     destructive subcommand would otherwise ride the ephemeral ``rm`` auto-allow. The
-    check fails closed: a segment is benign only when one of its positional tokens is
-    a recognized read-only subcommand (``git status``, ``gh pr view``) and none is a
-    known mutating one; any unrecognized subcommand is treated as non-benign.
+    check fails closed: a segment is benign only when one of its positional tokens is a
+    recognized read-only subcommand (``git status``, ``gh pr view``) and the segment
+    runs no known mutating mode. ``git config`` and ``git remote`` sit in the read-only
+    allowlist for their query modes yet carry write modes (``git config --global key
+    value``, ``git remote add evil url``), and ``gh api`` performs an HTTP write when an
+    ``-X``/``--method`` flag names POST, PUT, PATCH or DELETE; each such mutating mode
+    declines the segment.
 
     Args:
-        all_read_only_subcommands: The read-only subcommand verbs for the segment's
-            dispatching program.
+        leading_program_basename: The dispatching program (``git`` or ``gh``).
+        all_read_only_subcommands: The read-only subcommand verbs for the dispatching
+            program.
         all_segment_tokens: Shlex tokens of one shell segment.
 
     Returns:
-        True when the segment's subcommand is on the read-only allowlist.
+        True when the segment's subcommand is on the read-only allowlist and the
+        segment runs no mutating mode.
     """
     all_positional_tokens = _all_positional_tokens_after_leader(all_segment_tokens)
-    return any(
+    runs_a_read_only_subcommand = any(
         each_token.lower() in all_read_only_subcommands
         for each_token in all_positional_tokens
+    )
+    if not runs_a_read_only_subcommand:
+        return False
+    if leading_program_basename == "git" and _git_segment_runs_a_mutating_mode(
+        all_positional_tokens, all_segment_tokens
+    ):
+        return False
+    if leading_program_basename == "gh" and _gh_segment_runs_an_http_write_method(
+        all_segment_tokens
+    ):
+        return False
+    return True
+
+
+def _benign_program_writes_a_file_via_output_flag(
+    leading_program_basename: str, all_segment_tokens: list[str]
+) -> bool:
+    """Return True when a benign program writes a file through its own output flag.
+
+    Some allowlisted reporting commands overwrite an arbitrary file without a shell
+    redirection: ``sort -o FILE`` truncates and rewrites ``FILE`` the same way
+    ``cat ... > FILE`` does, so ``sort -o /etc/important.conf /etc/passwd`` destroys a
+    non-ephemeral file even though ``sort`` is read-only by default. A segment whose
+    leading program is in ALL_FILE_WRITING_OUTPUT_FLAGS_BY_BENIGN_PROGRAM and carries
+    one of that program's file-writing output flags is reported as a write so it
+    declines the ephemeral ``rm`` auto-allow.
+
+    Args:
+        leading_program_basename: The segment's leading program basename, lowercased.
+        all_segment_tokens: Shlex tokens of one shell segment.
+
+    Returns:
+        True when the segment writes a file through the program's output flag.
+    """
+    all_file_writing_output_flags = ALL_FILE_WRITING_OUTPUT_FLAGS_BY_BENIGN_PROGRAM.get(
+        leading_program_basename
+    )
+    if all_file_writing_output_flags is None:
+        return False
+    return any(
+        each_token in all_file_writing_output_flags
+        or each_token.split("=", 1)[0] in all_file_writing_output_flags
+        for each_token in all_segment_tokens
     )
 
 
@@ -827,11 +951,16 @@ def _segment_leading_program_is_benign(all_segment_tokens: list[str]) -> bool:
     DESTRUCTIVE_BASH_PATTERNS table — is treated as non-benign so the chain falls
     through to the prompt rather than riding the ephemeral ``rm`` auto-allow.
 
-    Two further constraints fail the segment closed even when its leading program is
+    Three further constraints fail the segment closed even when its leading program is
     allowlisted: an output redirection (``cat /dev/null > /etc/important.conf``)
-    truncates the redirect target, and a ``git`` or ``gh`` segment must run a
-    read-only subcommand (``git status``, ``gh pr view``) rather than a destructive
-    one (``gh repo delete``, ``git checkout -- .``, ``git stash drop``).
+    truncates the redirect target; a benign program that writes a file through its own
+    output flag (``sort -o /etc/important.conf``) overwrites the named file without a
+    shell redirection; and a ``git`` or ``gh`` segment must run a read-only subcommand
+    in a read-only mode (``git status``, ``gh pr view``, ``git config --list``) rather
+    than a destructive subcommand (``gh repo delete``, ``git checkout -- .``,
+    ``git stash drop``) or a mutating mode of an otherwise-read-only subcommand
+    (``git config --global key value``, ``git remote add evil url``, ``gh api -X
+    DELETE``).
 
     Args:
         all_segment_tokens: Shlex tokens of one shell segment, possibly led by
@@ -848,12 +977,14 @@ def _segment_leading_program_is_benign(all_segment_tokens: list[str]) -> bool:
         return False
     if _segment_redirects_output_to_a_file(all_segment_tokens):
         return False
+    if _benign_program_writes_a_file_via_output_flag(leading_program_basename, all_segment_tokens):
+        return False
     all_read_only_subcommands = ALL_READ_ONLY_SUBCOMMANDS_BY_DISPATCHING_PROGRAM.get(
         leading_program_basename
     )
     if all_read_only_subcommands is not None:
         return _subcommand_dispatching_segment_is_read_only(
-            all_read_only_subcommands, all_segment_tokens
+            leading_program_basename, all_read_only_subcommands, all_segment_tokens
         )
     return True
 

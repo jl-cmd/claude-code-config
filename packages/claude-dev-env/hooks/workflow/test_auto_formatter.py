@@ -68,14 +68,15 @@ def git_repository() -> Generator[Path, None, None]:
     _force_rmtree(str(repository_path))
 
 
-def _run_hook(tool_name: str, file_path: Path) -> None:
+def _run_hook(tool_name: str, file_path: Path) -> subprocess.CompletedProcess[str]:
     hook_input = json.dumps({"tool_name": tool_name, "tool_input": {"file_path": str(file_path)}})
-    subprocess.run(
+    return subprocess.run(
         [sys.executable, HOOK_SCRIPT_PATH],
         input=hook_input,
         capture_output=True,
         text=True,
         timeout=HOOK_RUN_TIMEOUT_SECONDS,
+        check=False,
     )
 
 
@@ -86,14 +87,16 @@ class TestRuffFixOnNewFiles:
         new_file = git_repository / "brand_new.py"
         new_file.write_text(UNUSED_IMPORT_SOURCE, encoding="utf-8")
 
-        _run_hook("Write", new_file)
+        completed_hook = _run_hook("Write", new_file)
 
+        assert completed_hook.returncode == 0
         assert "import os" not in new_file.read_text(encoding="utf-8")
 
     def should_leave_file_arriving_through_edit_untouched(self, git_repository: Path) -> None:
         edited_file = git_repository / "edited.py"
         edited_file.write_text(UNUSED_IMPORT_SOURCE, encoding="utf-8")
 
-        _run_hook("Edit", edited_file)
+        completed_hook = _run_hook("Edit", edited_file)
 
+        assert completed_hook.returncode == 0
         assert "import os" in edited_file.read_text(encoding="utf-8")

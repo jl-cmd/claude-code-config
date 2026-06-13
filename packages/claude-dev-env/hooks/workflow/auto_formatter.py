@@ -120,7 +120,7 @@ def main() -> None:
             [sys.executable, "-m", "ruff", "check", "--fix", file_path],
         ]:
             try:
-                subprocess.run(each_fix_command, capture_output=True, text=True, timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+                subprocess.run(each_fix_command, capture_output=True, text=True, timeout=PYTHON_FORMAT_TIMEOUT_SECONDS, check=False)
                 break
             except FileNotFoundError:
                 continue

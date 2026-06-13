@@ -141,6 +141,7 @@ def validate_content(
     full_file_content: str | None = None,
     prior_full_file_content: str = "",
     defer_scope_to_caller: bool = False,
+    sibling_directory: Path | None = None,
 ) -> list[str]:
     """Run all applicable validators on content.
 
@@ -171,6 +172,12 @@ def validate_content(
             checks return their violations unscoped for the gate to classify.
             PreToolUse new-file or full-file writes leave this False: this
             enforcer is terminal, so it marks every violation in scope.
+        sibling_directory: The absolute directory the cross-file duplicate-body
+            check scans for sibling modules. The commit/push gate passes the
+            resolved file's parent so the on-disk sibling scan stays anchored to
+            the repository regardless of the gate process's working directory.
+            None (the PreToolUse default) derives the directory from
+            ``file_path``'s parent, which is already absolute on that path.
     """
     extension = get_file_extension(file_path)
     all_issues = []
@@ -198,6 +205,7 @@ def validate_content(
                 file_path,
                 all_changed_lines,
                 defer_scope_to_caller,
+                sibling_directory,
             )
         )
         all_issues.extend(check_type_escape_hatches(effective_content, file_path))

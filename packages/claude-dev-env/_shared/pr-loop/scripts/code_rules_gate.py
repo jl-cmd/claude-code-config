@@ -1256,6 +1256,7 @@ def _scoped_violations_for_file(
         relative_posix,
         prior_content,
         defer_scope_to_caller=True,
+        sibling_directory=resolved_path.parent,
     )
     issues.extend(check_wrapper_plumb_through(content, relative_posix))
     if not issues:

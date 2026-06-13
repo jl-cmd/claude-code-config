@@ -560,6 +560,72 @@ def test_collect_partitioned_violations_counts_unreadable_sibling_as_skip(
     assert skipped_unreadable_count == 1
 
 
+_DUPLICATE_HELPER_SOURCE = (
+    "import re\n"
+    "\n"
+    "def strip_code_and_quotes(text: str) -> str:\n"
+    '    """Strip fences, inline code, and quoted lines from text.\n'
+    "\n"
+    "    Args:\n"
+    "        text: The raw text to clean.\n"
+    "\n"
+    "    Returns:\n"
+    "        The cleaned text.\n"
+    '    """\n'
+    "    without_fences = re.sub(r'```.*?```', '', text, flags=re.DOTALL)\n"
+    "    without_inline = re.sub(r'`[^`]*`', '', without_fences)\n"
+    "    without_quotes = re.sub(r'(?m)^>.*$', '', without_inline)\n"
+    "    return without_quotes.strip()\n"
+)
+
+
+def test_run_gate_flags_copied_sibling_when_cwd_is_outside_repo_root(
+    temporary_git_repository: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The duplicate-body sibling scan must anchor to the repo, not process CWD.
+
+    The duplicate-body check reads sibling modules from disk to flag a copied
+    helper. When the gate runs with a working directory above the repository
+    root, resolving the sibling directory against the process CWD points at the
+    wrong place and the copied helper slips through. Driving the gate's per-file
+    validation from a parent directory with a nested byte-identical sibling
+    proves sibling resolution is anchored to the absolute file location rather
+    than the inherited CWD — the duplicate message must appear in the blocking
+    set.
+    """
+    package_directory = temporary_git_repository / "package"
+    package_directory.mkdir()
+    existing_file = package_directory / "existing_helper.py"
+    copied_file = package_directory / "copied_helper.py"
+    existing_file.write_text(_DUPLICATE_HELPER_SOURCE, encoding="utf-8")
+    copied_file.write_text(_DUPLICATE_HELPER_SOURCE, encoding="utf-8")
+    validate_content = gate_module.load_validate_content()
+
+    monkeypatch.chdir(temporary_git_repository.parent)
+    blocking_by_file, _advisory_by_file, _skipped = (
+        gate_module._collect_partitioned_violations(
+            validate_content,
+            [copied_file],
+            temporary_git_repository,
+            None,
+        )
+    )
+
+    all_blocking_messages = [
+        each_message
+        for each_file_messages in blocking_by_file.values()
+        for each_message in each_file_messages
+    ]
+    assert any(
+        "duplicates existing_helper.py" in each_message
+        for each_message in all_blocking_messages
+    ), (
+        "A copied sibling helper must be flagged even when the gate runs from a "
+        f"CWD above the repository root, got: {all_blocking_messages}"
+    )
+
+
 def test_run_gate_skips_non_utf8_source_without_crashing(
     temporary_git_repository: Path,
     monkeypatch: pytest.MonkeyPatch,

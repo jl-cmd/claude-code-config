@@ -167,18 +167,27 @@ def _is_comparable_sibling(sibling_path: Path, written_file_name: str) -> bool:
     return not is_test_file(sibling_path.name)
 
 
-def _sibling_signatures(file_path: str) -> dict[str, list[str]]:
+def _sibling_signatures(
+    file_path: str,
+    sibling_directory: Path | None = None,
+) -> dict[str, list[str]]:
     """Collect normalized body signatures from every comparable sibling module.
 
     Args:
         file_path: The path of the file being written.
+        sibling_directory: An absolute directory to scan for sibling modules.
+            When None, the directory is derived from ``file_path``'s parent,
+            which resolves against the process CWD for a relative ``file_path``.
+            The commit/push gate passes the resolved file's parent so sibling
+            resolution stays anchored to the repository regardless of the gate
+            process's working directory.
 
     Returns:
         A signature-to-source-names mapping, where the value lists the
         ``module.py::function`` locations carrying that body.
     """
     written_path = Path(file_path)
-    directory = written_path.parent
+    directory = written_path.parent if sibling_directory is None else sibling_directory
     source_names_by_signature: dict[str, list[str]] = {}
     try:
         all_entries = sorted(directory.iterdir())
@@ -203,6 +212,7 @@ def check_duplicate_function_body_across_files(
     file_path: str,
     all_changed_lines: set[int] | None = None,
     defer_scope_to_caller: bool = False,
+    sibling_directory: Path | None = None,
 ) -> list[str]:
     """Flag top-level functions copied byte-for-structure from a sibling module.
 
@@ -232,6 +242,12 @@ def check_duplicate_function_body_across_files(
         defer_scope_to_caller: When True, return every violation so the
             commit/push gate's ``split_violations_by_scope`` can scope by added
             line.
+        sibling_directory: An absolute directory to scan for sibling modules.
+            When None, the directory is derived from ``file_path``'s parent. The
+            PreToolUse path leaves this None because its ``file_path`` is already
+            absolute; the commit/push gate passes the resolved file's parent so
+            the sibling scan stays anchored to the repository regardless of the
+            gate process's working directory.
 
     Returns:
         Human-readable violation strings, one per duplicated function, scoped to
@@ -250,7 +266,7 @@ def check_duplicate_function_body_across_files(
     written_signature_spans = _top_level_function_signature_spans(written_tree)
     if not written_signature_spans:
         return []
-    source_names_by_signature = _sibling_signatures(file_path)
+    source_names_by_signature = _sibling_signatures(file_path, sibling_directory)
     all_violations_in_walk_order: list[tuple[range, str]] = []
     for each_name, (each_signature, each_span) in written_signature_spans.items():
         matching_locations = source_names_by_signature.get(each_signature)

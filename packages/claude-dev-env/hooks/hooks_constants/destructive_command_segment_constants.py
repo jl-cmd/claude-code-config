@@ -76,6 +76,50 @@ ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS: frozenset[str] = frozenset(
         "git",
     }
 )
+ALL_OUTPUT_REDIRECTION_OPERATORS: frozenset[str] = frozenset({">", ">>", "&>", ">|"})
+ALL_READ_ONLY_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
+    {
+        "status",
+        "log",
+        "show",
+        "diff",
+        "rev-parse",
+        "rev-list",
+        "describe",
+        "config",
+        "remote",
+        "fetch",
+        "ls-files",
+        "ls-remote",
+        "ls-tree",
+        "cat-file",
+        "blame",
+        "shortlog",
+        "name-rev",
+        "for-each-ref",
+        "symbolic-ref",
+        "merge-base",
+        "count-objects",
+        "version",
+        "help",
+    }
+)
+ALL_READ_ONLY_GH_SUBCOMMANDS: frozenset[str] = frozenset(
+    {
+        "view",
+        "list",
+        "status",
+        "checks",
+        "diff",
+        "search",
+        "browse",
+        "api",
+    }
+)
+ALL_READ_ONLY_SUBCOMMANDS_BY_DISPATCHING_PROGRAM: dict[str, frozenset[str]] = {
+    "git": ALL_READ_ONLY_GIT_SUBCOMMANDS,
+    "gh": ALL_READ_ONLY_GH_SUBCOMMANDS,
+}
 LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN: str = (
     r"^(?:0x[0-9A-Fa-f]+"
     r"|[0-9]+(?:[.,][0-9]+)?[smhd]?"

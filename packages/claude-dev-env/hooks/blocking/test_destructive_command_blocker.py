@@ -1066,6 +1066,46 @@ def test_compound_rm_asks_when_mv_moves_non_ephemeral_path() -> None:
     _assert_hook_asks("rm -rf /tmp/x && mv /home/user/important /tmp/x2")
 
 
+def test_compound_rm_asks_when_gh_repo_delete_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh repo delete jl-cmd/foo --yes")
+
+
+def test_compound_rm_asks_when_git_checkout_discards_worktree_after_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git checkout -- .")
+
+
+def test_compound_rm_asks_when_git_stash_drop_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git stash drop")
+
+
+def test_compound_rm_asks_when_git_branch_force_delete_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git branch -D main")
+
+
+def test_compound_rm_asks_when_git_clean_force_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git clean -fd")
+
+
+def test_compound_rm_asks_when_git_rm_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git rm -rf src")
+
+
+def test_compound_rm_asks_when_benign_segment_redirects_into_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && cat /dev/null > /etc/important.conf")
+
+
+def test_compound_rm_asks_when_benign_segment_appends_redirect_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo hi >> /etc/important.conf")
+
+
+def test_compound_rm_allowed_when_gh_read_only_subcommand_follows_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && gh pr view 19")
+
+
+def test_compound_rm_allowed_when_git_read_only_subcommand_follows_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && git status")
+
+
 def test_quoted_mention_allowed_when_rm_appears_inside_grep_pattern() -> None:
     _assert_hook_allows("grep 'rm -rf foo' history.jsonl | tail -5")
 
@@ -1453,3 +1493,14 @@ def test_force_push_convergence_with_no_gpg_sign_blocked() -> None:
     response = json.loads(result.stdout)
     assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
     assert "--no-gpg-sign" in response["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_force_push_convergence_allowed_when_quoted_rm_mention_precedes_push() -> None:
+    _assert_hook_allows('echo "rm -rf foo" && git push --force origin claude/fix-123')
+
+
+def test_force_push_main_asks_when_quoted_rm_mention_precedes_push() -> None:
+    _assert_hook_asks(
+        'echo "rm -rf foo" && git push --force origin main',
+        expected_reason_fragment="git push --force",
+    )

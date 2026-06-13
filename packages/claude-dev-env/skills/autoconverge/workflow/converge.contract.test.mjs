@@ -134,7 +134,9 @@ function finalizeRepairBranch() {
   assert.notEqual(repairCallIndex, -1, 'expected the FINALIZE repair call to exist');
   const transitionIndex = convergeSource.indexOf("phase = 'CONVERGE'", repairCallIndex);
   assert.notEqual(transitionIndex, -1, 'expected a CONVERGE transition after the repair call');
-  const branchEnd = convergeSource.indexOf('continue', transitionIndex) + 'continue'.length;
+  const continueIndex = convergeSource.indexOf('continue', transitionIndex);
+  assert.notEqual(continueIndex, -1, 'expected a continue statement to close the FINALIZE repair branch');
+  const branchEnd = continueIndex + 'continue'.length;
   return convergeSource.slice(repairCallIndex, branchEnd);
 }
 
@@ -151,7 +153,9 @@ function fixBranchAfter(branchLabel) {
   assert.notEqual(labelIndex, -1, `expected the ${branchLabel} marker to exist`);
   const applyFixesIndex = convergeSource.indexOf('await applyFixes(', labelIndex);
   assert.notEqual(applyFixesIndex, -1, `expected an applyFixes call after ${branchLabel}`);
-  const branchEnd = convergeSource.indexOf('continue', applyFixesIndex) + 'continue'.length;
+  const continueIndex = convergeSource.indexOf('continue', applyFixesIndex);
+  assert.notEqual(continueIndex, -1, `expected a continue statement to close the ${branchLabel} branch`);
+  const branchEnd = continueIndex + 'continue'.length;
   return convergeSource.slice(applyFixesIndex, branchEnd);
 }
 

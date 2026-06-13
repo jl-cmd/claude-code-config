@@ -76,7 +76,15 @@ def has_prettier_config(file_path: str) -> bool:
     return False
 
 
-def worst_case_python_format_seconds() -> int:
+def budgeted_python_format_seconds() -> int:
+    """Return the wall-clock budget for the two-subprocess happy path.
+
+    The Python branch breaks out of each loop the moment a command runs, so
+    the common case spends one fix subprocess plus one format subprocess. This
+    is a budget for that assumed path, not a guaranteed upper bound: when a
+    command is missing or times out the loops fall through to the next entry,
+    so a degraded run can spend more than this budget.
+    """
     fix_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
     format_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
     return fix_phase_seconds + format_phase_seconds

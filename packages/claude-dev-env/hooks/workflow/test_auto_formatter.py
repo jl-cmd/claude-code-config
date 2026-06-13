@@ -129,6 +129,6 @@ def _registered_auto_formatter_timeout() -> int:
 class TestPythonFormatTimeoutBudget:
     def should_keep_both_sequential_python_subprocesses_under_the_harness_budget(self) -> None:
         auto_formatter_module = _load_auto_formatter_module()
-        worst_case_total = auto_formatter_module.worst_case_python_format_seconds()
+        budgeted_total = auto_formatter_module.budgeted_python_format_seconds()
 
-        assert worst_case_total < _registered_auto_formatter_timeout()
+        assert budgeted_total < _registered_auto_formatter_timeout()

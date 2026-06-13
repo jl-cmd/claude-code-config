@@ -20,7 +20,9 @@ from hooks_constants.convergence_branch_constants import (  # noqa: E402
 )
 from hooks_constants.destructive_command_segment_constants import (  # noqa: E402
     ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
+    ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS,
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
+    ALL_STRING_ARGUMENT_EXECUTION_FLAGS,
 )
 
 CLAUDE_DIRECTORY_PATH = os.path.normpath(os.path.expanduser("~/.claude"))
@@ -346,6 +348,61 @@ def _split_tokens_into_shell_segments(all_command_tokens: list[str]) -> list[lis
     return all_segments
 
 
+def _leading_command_token(all_command_tokens: list[str]) -> str | None:
+    """Return the program token that leads the command, skipping VAR=value prefixes.
+
+    A shell command may begin with one or more ``NAME=value`` environment
+    assignments (``FOO=bar rm -rf x``); the first token that is not such an
+    assignment is the program the shell executes. Returns None when every token is
+    an assignment or the list is empty.
+
+    Args:
+        all_command_tokens: Tokens produced by shlex tokenization.
+
+    Returns:
+        The leading program token, or None when there is no program token.
+    """
+    leading_assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+    for each_token in all_command_tokens:
+        if leading_assignment_pattern.match(each_token):
+            continue
+        return each_token
+    return None
+
+
+def _command_executes_a_string_argument(all_command_tokens: list[str]) -> bool:
+    """Return True when the command's leading program runs a string argument as code.
+
+    Shell interpreters and wrappers (``bash``, ``sh``, ``eval``, ``sudo``,
+    ``xargs`` and the rest of ALL_INTERPRETER_AND_WRAPPER_COMMANDS) and remote
+    runners such as ``ssh`` execute a following quoted token as a command line, so
+    ``bash -c 'rm -rf /etc'`` and ``ssh host 'rm -rf /etc'`` run ``rm`` even though
+    no token's basename is ``rm``. Language interpreters (``python``, ``perl``,
+    ``ruby``, ``node`` and the rest of ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS) run
+    a string only with a ``-c`` or ``-e`` flag, so those qualify only when such a
+    flag is present.
+
+    Args:
+        all_command_tokens: Tokens produced by shlex tokenization.
+
+    Returns:
+        True when the leading program executes a quoted string argument as code.
+    """
+    leading_command_token = _leading_command_token(all_command_tokens)
+    if leading_command_token is None:
+        return False
+    leading_command_basename = Path(leading_command_token).name.lower()
+    if leading_command_basename in ALL_INTERPRETER_AND_WRAPPER_COMMANDS:
+        return True
+    if leading_command_basename not in ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS:
+        return False
+    if leading_command_basename == "ssh":
+        return True
+    return any(
+        each_token in ALL_STRING_ARGUMENT_EXECUTION_FLAGS for each_token in all_command_tokens
+    )
+
+
 def command_has_no_real_rm_invocation(command: str) -> bool:
     """Return True when no shell token in the command actually invokes ``rm``.
 
@@ -358,9 +415,13 @@ def command_has_no_real_rm_invocation(command: str) -> bool:
 
     Fails closed (returns False, meaning "treat as a real invocation, keep
     prompting") when the command contains shell expansion (``$`` or backtick),
-    where a token such as ``$RM`` could expand to ``rm``, or when tokenization
-    fails on unbalanced quotes. ``/bin/rm``, ``sudo rm`` and ``\\rm`` each tokenize
-    to a token whose basename is ``rm`` and are correctly reported as real.
+    where a token such as ``$RM`` could expand to ``rm``; when tokenization fails on
+    unbalanced quotes; or when the leading program executes a quoted string argument
+    as code (``bash -c 'rm -rf /etc'``, ``eval 'rm -rf /etc'``,
+    ``ssh host 'rm -rf /etc'``, ``python -c "...os.system('rm -rf /etc')..."``),
+    where the destructive ``rm`` rides inside the executed string rather than a
+    passive mention. ``/bin/rm``, ``sudo rm`` and ``\\rm`` each tokenize to a token
+    whose basename is ``rm`` and are correctly reported as real.
 
     Args:
         command: The raw Bash command string from the tool input.
@@ -373,6 +434,8 @@ def command_has_no_real_rm_invocation(command: str) -> bool:
     try:
         all_command_tokens = _split_command_preserving_windows_backslashes(command)
     except ValueError:
+        return False
+    if _command_executes_a_string_argument(all_command_tokens):
         return False
     for each_token in all_command_tokens:
         if Path(each_token).name == "rm":

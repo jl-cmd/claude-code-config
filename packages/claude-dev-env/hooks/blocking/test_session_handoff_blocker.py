@@ -64,6 +64,12 @@ CONTEXT_WINDOW_SUMMARIZE_MESSAGE = (
     "The context window is getting full, so let me summarize where we are."
 )
 BENIGN_SUMMARIZE_REPORT_MESSAGE = "I should summarize the findings for the report."
+BENIGN_STOP_PLUS_UNRELATED_RUNNING_LOW_MESSAGE = (
+    "Let me pause the animation timer. The job fails when it is running low on tokens."
+)
+BENIGN_STOP_PLUS_USER_DIRECTED_NEW_SESSION_MESSAGE = (
+    "Let me stop the timer. The user can continue this in a fresh session."
+)
 EMPTY_MESSAGE = ""
 
 
@@ -260,6 +266,24 @@ def test_context_window_summarize_handoff_emits_block():
 
 def test_benign_summarize_report_passes_through_with_no_output():
     completed_process = run_hook_with_message(BENIGN_SUMMARIZE_REPORT_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_benign_stop_with_unrelated_running_low_sentence_passes_through_with_no_output():
+    completed_process = run_hook_with_message(
+        BENIGN_STOP_PLUS_UNRELATED_RUNNING_LOW_MESSAGE
+    )
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_benign_stop_with_user_directed_new_session_sentence_passes_through_with_no_output():
+    completed_process = run_hook_with_message(
+        BENIGN_STOP_PLUS_USER_DIRECTED_NEW_SESSION_MESSAGE
+    )
 
     assert completed_process.returncode == 0
     assert completed_process.stdout == ""

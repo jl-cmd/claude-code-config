@@ -19,6 +19,9 @@ if _hooks_dir not in sys.path:
     sys.path.insert(0, _hooks_dir)
 
 from hooks_constants.messages import USER_FACING_CONTEXT_REASSURANCE_NOTICE  # noqa: E402
+from hooks_constants.session_handoff_blocker_constants import (  # noqa: E402
+    FIRST_PERSON_SUBJECT_PATTERN,
+)
 
 
 def strip_code_and_quotes(text: str) -> str:
@@ -56,12 +59,6 @@ def has_first_person_self_termination(text: str) -> bool:
     Args:
         text: The prose to scan sentence by sentence.
     """
-    first_person_subject_pattern = re.compile(
-        r"\b(?:i['’]?m|i['’]?ll|i\s+will|i\s+am|i\s+need\s+to|i\s+should"
-        r"|i\s+recommend|i\s+suggest|let\s+me|let['’]?s"
-        r"|we\s+(?:should|can|could)|we['’]?ll|we\s+are|we\s+will)\b",
-        re.IGNORECASE,
-    )
     self_termination_cue_pattern = re.compile(
         r"\b(?:stop|summari[sz]\w*|wrap\s+up|wrap\s+things\s+up"
         r"|hand\s+(?:off|it\s+off|this\s+off)|pause"
@@ -72,7 +69,7 @@ def has_first_person_self_termination(text: str) -> bool:
         re.IGNORECASE,
     )
     for each_sentence in split_into_sentences(text):
-        if first_person_subject_pattern.search(
+        if FIRST_PERSON_SUBJECT_PATTERN.search(
             each_sentence
         ) and self_termination_cue_pattern.search(each_sentence):
             return True
@@ -104,11 +101,11 @@ def has_resource_reference_with_handoff_cue(text: str) -> bool:
     return False
 
 
-def find_session_handoff_proposal(text: str) -> bool:
-    """Return whether the message proposes stopping on account of context or tokens.
+def has_first_person_direct_handoff(text: str) -> bool:
+    """Return whether any sentence binds a first-person subject to a direct-handoff cue.
 
     Args:
-        text: The raw assistant message to evaluate.
+        text: The prose to scan sentence by sentence.
     """
     new_session_proposal_pattern = re.compile(
         r"\b(?:wrap\s+up|wrap\s+things\s+up|hand\s+off|hand\s+this\s+off"
@@ -126,15 +123,30 @@ def find_session_handoff_proposal(text: str) -> bool:
         new_session_proposal_pattern,
         running_low_pattern,
     ]
+    for each_sentence in split_into_sentences(text):
+        if not FIRST_PERSON_SUBJECT_PATTERN.search(each_sentence):
+            continue
+        if any(
+            each_pattern.search(each_sentence)
+            for each_pattern in all_direct_handoff_patterns
+        ):
+            return True
+    return False
 
+
+def find_session_handoff_proposal(text: str) -> bool:
+    """Return whether the message proposes stopping on account of context or tokens.
+
+    Args:
+        text: The raw assistant message to evaluate.
+    """
     prose_text = strip_code_and_quotes(text)
 
     if not has_first_person_self_termination(prose_text):
         return False
 
-    for each_pattern in all_direct_handoff_patterns:
-        if each_pattern.search(prose_text):
-            return True
+    if has_first_person_direct_handoff(prose_text):
+        return True
 
     return has_resource_reference_with_handoff_cue(prose_text)
 

@@ -57,7 +57,9 @@ def has_resource_reference_with_handoff_cue(text: str) -> bool:
         text: The prose to scan sentence by sentence.
     """
     resource_reference_pattern = re.compile(
-        r"\b(?:context|token)\s+(?:budget|window|limit|count|usage)\b",
+        r"\b(?:context|token)\s+(?:budget|window|limit|count|usage)\b"
+        r"|\b(?:low|short)\s+on\s+(?:context|tokens)\b"
+        r"|\bto\s+(?:save|conserve|preserve|free\s+up)\s+(?:context|tokens)\b",
         re.IGNORECASE,
     )
     stop_or_handoff_cue_pattern = re.compile(
@@ -91,19 +93,9 @@ def find_session_handoff_proposal(text: str) -> bool:
         r"\brunning\s+(?:low|out)\s+(?:on|of)\s+(?:context|tokens)\b",
         re.IGNORECASE,
     )
-    low_on_resource_pattern = re.compile(
-        r"\b(?:low|short)\s+on\s+(?:context|tokens)\b",
-        re.IGNORECASE,
-    )
-    conserve_resource_pattern = re.compile(
-        r"\bto\s+(?:save|conserve|preserve|free\s+up)\s+(?:context|tokens)\b",
-        re.IGNORECASE,
-    )
     all_direct_handoff_patterns = [
         new_session_proposal_pattern,
         running_low_pattern,
-        low_on_resource_pattern,
-        conserve_resource_pattern,
     ]
 
     prose_text = strip_code_and_quotes(text)

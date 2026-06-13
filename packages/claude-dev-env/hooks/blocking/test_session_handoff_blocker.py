@@ -38,6 +38,13 @@ DATABASE_SESSION_MESSAGE = "Open a new database session before running the query
 HANDOFF_NEW_SESSION_MESSAGE = (
     "Let's wrap up and continue this in a fresh session to pick this up later."
 )
+LOW_ON_CONTEXT_WITHOUT_CUE_MESSAGE = (
+    "I am low on context for this edge case in the parser."
+)
+SAVE_TOKENS_REPORT_MESSAGE = "To save tokens, I inlined the constant."
+LOW_ON_CONTEXT_WITH_HANDOFF_CUE_MESSAGE = (
+    "I'm low on context, so let me wrap up and hand off."
+)
 EMPTY_MESSAGE = ""
 
 
@@ -155,6 +162,30 @@ def test_database_session_passes_through_with_no_output():
 
 def test_new_session_with_handoff_framing_emits_block():
     completed_process = run_hook_with_message(HANDOFF_NEW_SESSION_MESSAGE)
+
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+
+    assert parsed_response["decision"] == "block"
+    assert parsed_response["systemMessage"] == USER_FACING_CONTEXT_REASSURANCE_NOTICE
+
+
+def test_low_on_context_without_handoff_cue_passes_through_with_no_output():
+    completed_process = run_hook_with_message(LOW_ON_CONTEXT_WITHOUT_CUE_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_save_tokens_work_report_passes_through_with_no_output():
+    completed_process = run_hook_with_message(SAVE_TOKENS_REPORT_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_low_on_context_with_handoff_cue_emits_block():
+    completed_process = run_hook_with_message(LOW_ON_CONTEXT_WITH_HANDOFF_CUE_MESSAGE)
 
     assert completed_process.returncode == 0
     parsed_response = json.loads(completed_process.stdout)

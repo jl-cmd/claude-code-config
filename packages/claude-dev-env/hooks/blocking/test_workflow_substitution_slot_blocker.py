@@ -89,8 +89,24 @@ def test_each_inside_an_ordinary_word_is_not_a_loop() -> None:
         assert has_iteration_loop(each_word + " the end") is False
 
 
+def test_standalone_lowercase_each_in_prose_is_not_a_loop() -> None:
+    assert has_iteration_loop("use each color once") is False
+
+
 def test_standalone_each_keyword_is_a_loop() -> None:
     assert has_iteration_loop("For EACH candidate i") is True
+
+
+def test_lowercase_for_each_phrase_is_still_a_loop() -> None:
+    assert has_iteration_loop("for each candidate") is True
+
+
+def test_benign_prose_each_with_fixed_literal_is_not_flagged() -> None:
+    benign_template = (
+        "Render each layer to <layer.svg>.\n"
+        "The protocol field is named 'tier_i' as a permanent identifier.\n"
+    )
+    assert content_has_violation(benign_template) is False
 
 
 def test_written_content_reads_multiedit_new_strings() -> None:

@@ -82,11 +82,14 @@ def uses_angle_slot_convention(content: str) -> bool:
 
 def has_iteration_loop(content: str) -> bool:
     loop_phrase_pattern = re.compile(
-        r"\b(?:for\s+each|each\s+candidate|for\s+[ijk]\b|candidate\s+[ijk]\b)|\bEACH\b"
-        r"|\bcand_0\b",
+        r"\b(?:for\s+each|each\s+candidate|for\s+[ijk]\b|candidate\s+[ijk]\b|cand_0)\b",
         re.IGNORECASE,
     )
-    return bool(loop_phrase_pattern.search(content))
+    uppercase_each_keyword_pattern = re.compile(r"\bEACH\b")
+    return bool(
+        loop_phrase_pattern.search(content)
+        or uppercase_each_keyword_pattern.search(content)
+    )
 
 
 def find_bare_index_segments(content: str) -> set[str]:

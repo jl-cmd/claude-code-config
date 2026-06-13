@@ -267,3 +267,56 @@ def test_should_not_flag_double_star_arg_fixture_name() -> None:
     )
 
 
+def test_should_not_flag_positional_only_fixture_name() -> None:
+    source = "def test_board(tmp_path, /):\n    pass\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A positional-only param cannot receive a keyword-injected fixture, got: {issues}"
+    )
+
+
+def test_should_flag_keyword_only_fixture_name() -> None:
+    source = "def test_board(*, tmp_path):\n    pass\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert any(
+        "tmp_path" in each_issue and "Path" in each_issue for each_issue in issues
+    ), f"A keyword-only fixture is still an injection site, got: {issues}"
+
+
+def test_should_not_flag_defaulted_fixture_name() -> None:
+    source = "def test_board(tmp_path=None):\n    pass\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A defaulted param is not fixture-injected and must not be flagged, got: {issues}"
+    )
+
+
+def test_should_not_flag_defaulted_keyword_only_fixture_name() -> None:
+    source = "def test_board(*, tmp_path=None):\n    pass\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A defaulted keyword-only param is not fixture-injected, got: {issues}"
+    )
+
+
+def test_should_flag_undefaulted_fixture_before_defaulted_one() -> None:
+    source = "def test_board(tmp_path, capsys=None):\n    pass\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert any(
+        "tmp_path" in each_issue and "Path" in each_issue for each_issue in issues
+    ), f"An undefaulted leading fixture stays an injection site, got: {issues}"
+    assert not any("capsys" in each_issue for each_issue in issues), (
+        f"The trailing defaulted param must not be flagged, got: {issues}"
+    )
+
+

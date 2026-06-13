@@ -120,25 +120,40 @@ def _collect_fixture_injection_arguments(
 ) -> list[ast.arg]:
     """Return only the named parameters pytest fills by fixture injection.
 
-    Pytest injects fixtures by matching individual named parameters, so a
-    ``*args`` star-argument or ``**kwargs`` double-star-argument never names a
-    fixture even when it shares a builtin fixture's name. Only positional-only,
-    positional-or-keyword, and keyword-only parameters are injection slots, so
-    this collector omits ``args.vararg`` and ``args.kwarg``.
+    Pytest passes fixtures by keyword (``testfunction(**testargs)``), so a
+    parameter can receive a fixture only when both conditions hold: it is
+    reachable by keyword, and pytest is responsible for supplying its value.
+    Positional-only parameters are NOT injection slots — a keyword-passed
+    fixture can never bind to one, and ``def test_x(tmp_path, /)`` raises a
+    missing-argument ``TypeError`` under pytest. A ``*args`` star-argument or
+    ``**kwargs`` double-star-argument never names a single fixture either.
+    A parameter carrying a default is NOT injected — pytest leaves its default
+    in place rather than supplying the fixture. So this collector keeps only the
+    positional-or-keyword and keyword-only parameters that have no default, and
+    omits ``args.posonlyargs``, ``args.vararg``, and ``args.kwarg``.
 
     Args:
         function_node: The function definition AST node to inspect.
 
     Returns:
-        The positional-only, positional-or-keyword, and keyword-only argument
-        nodes, in declaration order.
+        The undefaulted positional-or-keyword and keyword-only argument nodes,
+        in declaration order.
     """
     arguments = function_node.args
-    all_injection_arguments: list[ast.arg] = []
-    all_injection_arguments.extend(arguments.posonlyargs)
-    all_injection_arguments.extend(arguments.args)
-    all_injection_arguments.extend(arguments.kwonlyargs)
-    return all_injection_arguments
+    defaulted_positional_count = len(arguments.defaults)
+    undefaulted_positional_arguments = (
+        arguments.args[:-defaulted_positional_count]
+        if defaulted_positional_count
+        else arguments.args
+    )
+    undefaulted_keyword_only_arguments = [
+        each_keyword_argument
+        for each_keyword_argument, each_default in zip(
+            arguments.kwonlyargs, arguments.kw_defaults
+        )
+        if each_default is None
+    ]
+    return [*undefaulted_positional_arguments, *undefaulted_keyword_only_arguments]
 
 
 def _collect_target_names(target: ast.expr) -> list[ast.Name]:

@@ -151,10 +151,13 @@ def check_known_pytest_fixture_annotations(content: str, file_path: str) -> list
     A known fixture parameter is flagged both when it carries no annotation and
     when its annotation source differs from the fixture's single documented
     type, so ``tmp_path: str`` is flagged exactly like ``tmp_path``. Only the
-    named injection slots pytest actually fills — positional-only,
-    positional-or-keyword, and keyword-only parameters — are inspected; a
-    ``*args`` or ``**kwargs`` parameter that happens to share a fixture name is
-    never a fixture injection and is skipped.
+    named injection slots pytest actually fills — undefaulted
+    positional-or-keyword and keyword-only parameters — are inspected. A
+    positional-only parameter is skipped because pytest passes fixtures by
+    keyword and can never bind one positionally; a defaulted parameter is
+    skipped because pytest leaves its default in place rather than injecting a
+    fixture; and a ``*args`` or ``**kwargs`` parameter that happens to share a
+    fixture name is never a fixture injection.
 
     Args:
         content: The Python source to analyze.

@@ -28,8 +28,8 @@ BAR_COLOR_ROUND = "#2563eb"
 BAR_COLOR_TESTS = "#10b981"
 BAR_COLOR_THEME = "#8b5cf6"
 
-TEST_DEFINITION_PATTERN = r"^\+\s*(async\s+)?def\s+test"
-TEST_PATH_GLOB = "*test*.py"
+TEST_DEFINITION_PATTERN = r"^\+\s*(async\s+)?def\s+(test|should)"
+TEST_PATH_GLOBS = ("*test*.py", "**/*test*.py")
 
 BAR_FILL_MAX_PERCENT = 100
 

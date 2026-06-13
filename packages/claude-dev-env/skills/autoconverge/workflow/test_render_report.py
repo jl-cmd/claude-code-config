@@ -230,6 +230,146 @@ def test_count_tests_added_does_not_double_count_new_file(tmp_path: Path) -> Non
     assert test_count == 2, f"Expected 2 added test definitions, got {test_count}"
 
 
+def test_count_tests_added_counts_nested_test_directory(tmp_path: Path) -> None:
+    """Should count test functions added under a nested src/<pkg>/tests/ layout."""
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    _init_git_repo(repo_path)
+    base_sha = _resolve_head(repo_path)
+
+    nested_test_file = repo_path / "src" / "exports" / "tests" / "test_feature.py"
+    nested_test_file.parent.mkdir(parents=True)
+    nested_test_file.write_text(
+        "def test_one() -> None:\n"
+        "    assert True\n"
+        "\n"
+        "def test_two() -> None:\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "add", "."], capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "commit", "-m", "add nested tests"],
+        capture_output=True,
+        check=True,
+    )
+    new_sha = _resolve_head(repo_path)
+
+    test_count = render_report._count_tests_added(base_sha, new_sha, repo_path)
+
+    assert test_count == 2, (
+        f"Expected 2 added test definitions in nested dir, got {test_count}"
+    )
+
+
+def test_count_tests_added_counts_should_functions(tmp_path: Path) -> None:
+    """Should count pytest should_* functions, not only def test functions."""
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    _init_git_repo(repo_path)
+    base_sha = _resolve_head(repo_path)
+
+    new_test_file = repo_path / "test_behavior.py"
+    new_test_file.write_text(
+        "def should_validate_order() -> None:\n"
+        "    assert True\n"
+        "\n"
+        "def test_explicit() -> None:\n"
+        "    assert True\n",
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "add", "."], capture_output=True, check=True
+    )
+    subprocess.run(
+        ["git", "-C", str(repo_path), "commit", "-m", "add should and test"],
+        capture_output=True,
+        check=True,
+    )
+    new_sha = _resolve_head(repo_path)
+
+    test_count = render_report._count_tests_added(base_sha, new_sha, repo_path)
+
+    assert test_count == 2, (
+        f"Expected 2 added definitions (should_ + test), got {test_count}"
+    )
+
+
+def test_extract_structured_output_returns_last_tool_input(tmp_path: Path) -> None:
+    """Should return the input of the last StructuredOutput tool_use in the transcript."""
+    transcript_path = tmp_path / "agent-stream.jsonl"
+    earlier_line = json.dumps(
+        {
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": render_report.STRUCTURED_OUTPUT_TOOL_NAME,
+                        "input": {"newSha": "aaaa1111", "pushed": False},
+                    }
+                ]
+            }
+        }
+    )
+    later_line = json.dumps(
+        {
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": render_report.STRUCTURED_OUTPUT_TOOL_NAME,
+                        "input": {"newSha": "bbbb2222", "pushed": True},
+                    }
+                ]
+            }
+        }
+    )
+    transcript_path.write_text(earlier_line + "\n" + later_line + "\n", encoding="utf-8")
+
+    extracted = render_report._extract_structured_output(transcript_path)
+
+    assert extracted == {"newSha": "bbbb2222", "pushed": True}
+
+
+def test_extract_structured_output_returns_none_on_missing_file(tmp_path: Path) -> None:
+    """Should return None when the transcript file does not exist."""
+    missing_path = tmp_path / "does-not-exist.jsonl"
+
+    extracted = render_report._extract_structured_output(missing_path)
+
+    assert extracted is None
+
+
+def test_render_fix_block_falls_back_when_sha_empty() -> None:
+    """Should not claim a commit when the fix record has an empty new sha."""
+    finding = render_report.RawFinding(
+        file="src/exports/writer.py",
+        line=10,
+        severity="P2",
+        title="example finding",
+        detail="example detail",
+        round_number=2,
+        sha="abc",
+    )
+    fix_by_round = {
+        2: render_report.FixRecord(
+            new_sha="",
+            pushed=False,
+            resolved_without_commit=False,
+            round_number=2,
+            base_sha="base",
+        )
+    }
+
+    fix_html = render_report._render_fix_block(finding, fix_by_round)
+
+    assert "<code></code>" not in fix_html
+    assert "fix commit" not in fix_html
+    assert "resolved during convergence" in fix_html
+
+
 def _write_structured_output_transcript(
     transcript_path: Path, tool_input: dict[str, object]
 ) -> None:

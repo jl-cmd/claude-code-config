@@ -33,7 +33,7 @@ from autoconverge_report_constants.render_report_constants import (
     SEVERITY_MINOR_BUCKET,
     STRUCTURED_OUTPUT_TOOL_NAME,
     TEST_DEFINITION_PATTERN,
-    TEST_PATH_GLOB,
+    TEST_PATH_GLOBS,
     THEME_FALLBACK,
     THEME_PATH_SEGMENT_COUNT,
 )
@@ -121,32 +121,50 @@ def _extract_structured_output(transcript_path: Path) -> dict | None:
     """
     last_input: dict | None = None
     try:
-        lines = transcript_path.read_text(encoding="utf-8").splitlines()
+        with transcript_path.open(encoding="utf-8") as transcript_file:
+            for each_line in transcript_file:
+                last_input = _last_structured_input_in_line(each_line, last_input)
     except OSError:
         return None
 
-    for each_line in lines:
-        try:
-            parsed = json.loads(each_line)
-        except (ValueError, json.JSONDecodeError):
-            continue
-
-        message = parsed.get("message") if isinstance(parsed, dict) else None
-        content_list = message.get("content") if isinstance(message, dict) else None
-        if not isinstance(content_list, list):
-            continue
-
-        for each_block in content_list:
-            if not isinstance(each_block, dict):
-                continue
-            if (
-                each_block.get("type") == "tool_use"
-                and each_block.get("name") == STRUCTURED_OUTPUT_TOOL_NAME
-                and isinstance(each_block.get("input"), dict)
-            ):
-                last_input = each_block["input"]
-
     return last_input
+
+
+def _last_structured_input_in_line(
+    transcript_line: str, prior_input: dict | None
+) -> dict | None:
+    """Return the StructuredOutput input on a transcript line, else the prior input.
+
+    Args:
+        transcript_line: One raw JSON line from an agent transcript.
+        prior_input: The last StructuredOutput input seen before this line.
+
+    Returns:
+        The input dict of the last StructuredOutput tool_use on this line, or
+        prior_input when the line carries none.
+    """
+    try:
+        parsed = json.loads(transcript_line)
+    except (ValueError, json.JSONDecodeError):
+        return prior_input
+
+    message = parsed.get("message") if isinstance(parsed, dict) else None
+    content_list = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content_list, list):
+        return prior_input
+
+    latest_input = prior_input
+    for each_block in content_list:
+        if not isinstance(each_block, dict):
+            continue
+        if (
+            each_block.get("type") == "tool_use"
+            and each_block.get("name") == STRUCTURED_OUTPUT_TOOL_NAME
+            and isinstance(each_block.get("input"), dict)
+        ):
+            latest_input = each_block["input"]
+
+    return latest_input
 
 
 def _derive_theme(file_path: str) -> str:
@@ -176,17 +194,18 @@ def _count_tests_added(base_sha: str, new_sha: str, repo_path: Path) -> int:
     Returns:
         Number of newly added test-function definitions; 0 on any git error.
     """
+    diff_command = [
+        "git",
+        "-C",
+        str(repo_path),
+        "diff",
+        f"{base_sha}..{new_sha}",
+        "--",
+        *TEST_PATH_GLOBS,
+    ]
     try:
         completed = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repo_path),
-                "diff",
-                f"{base_sha}..{new_sha}",
-                "--",
-                TEST_PATH_GLOB,
-            ],
+            diff_command,
             capture_output=True,
             text=True,
             check=True,
@@ -554,6 +573,9 @@ def _render_fix_block(finding: RawFinding, fix_by_round: dict[int, FixRecord]) -
             f'<div class="bug-fix"><b>Fix:</b> already resolved at HEAD in round {round_number}; '
             f"threads closed.</div>"
         )
+
+    if not fix_record.new_sha:
+        return '<div class="bug-fix"><b>Fix:</b> resolved during convergence.</div>'
 
     new_sha_short = fix_record.new_sha[:8]
     return (

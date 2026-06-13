@@ -18,6 +18,10 @@ from hooks_constants.convergence_branch_constants import (  # noqa: E402
     CONVERGENCE_BRANCH_SUFFIX_PATTERN,
     CONVERGENCE_FORCE_PUSH_DETECTION_PATTERN,
 )
+from hooks_constants.destructive_command_segment_constants import (  # noqa: E402
+    ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
+    ALL_SHELL_CONTROL_OPERATOR_TOKENS,
+)
 
 CLAUDE_DIRECTORY_PATH = os.path.normpath(os.path.expanduser("~/.claude"))
 GH_REDIRECT_ACTIVE_ENV_VAR = "CLAUDE_GH_REDIRECT_ACTIVE"
@@ -277,6 +281,249 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
         if not directory_is_ephemeral(each_resolved_path):
             return False
     return True
+
+
+def _destructive_match_is_rm_family(matched_description: str) -> bool:
+    """Return True when the matched destructive pattern is one of the rm-family deletes.
+
+    The rm-family descriptions all begin with the same prefix; the compound
+    ephemeral auto-allow and the quoted-mention guard act only on these, never on
+    git, database, or device patterns.
+
+    Args:
+        matched_description: A description from DESTRUCTIVE_BASH_PATTERNS.
+
+    Returns:
+        True when the description names an rm deletion.
+    """
+    rm_family_description_prefix = "rm "
+    return matched_description.startswith(rm_family_description_prefix)
+
+
+def _command_contains_shell_expansion(command: str) -> bool:
+    """Return True when the command contains shell parameter or command expansion.
+
+    Any ``$`` (variable reference or ``$(...)`` command substitution) or backtick
+    subshell means a token could expand at runtime to ``rm`` or to an arbitrary
+    destructive command that the hook cannot resolve statically. The quoted-mention
+    guard and the compound ephemeral auto-allow both fail closed on this so they
+    never grant on a command whose effective program list is unknown until the
+    shell runs.
+
+    Args:
+        command: The raw Bash command string from the tool input.
+
+    Returns:
+        True when the command contains a ``$`` or backtick expansion character.
+    """
+    return "$" in command or "`" in command
+
+
+def _split_tokens_into_shell_segments(all_command_tokens: list[str]) -> list[list[str]]:
+    """Split a shlex token list into simple-command segments on control operators.
+
+    Segments are delimited by ``&&``, ``||``, ``;``, ``|`` and ``&`` tokens, so
+    each returned segment is one simple command. Operators that are not whitespace
+    separated stay inside one shlex token and therefore inside one segment; that
+    segment fails the absolute-ephemeral target check and the command falls through
+    to the prompt.
+
+    Args:
+        all_command_tokens: Tokens produced by shlex tokenization.
+
+    Returns:
+        A list of segments, each a list of tokens with operators removed.
+    """
+    all_segments: list[list[str]] = []
+    current_segment: list[str] = []
+    for each_token in all_command_tokens:
+        if each_token in ALL_SHELL_CONTROL_OPERATOR_TOKENS:
+            all_segments.append(current_segment)
+            current_segment = []
+            continue
+        current_segment.append(each_token)
+    all_segments.append(current_segment)
+    return all_segments
+
+
+def command_has_no_real_rm_invocation(command: str) -> bool:
+    """Return True when no shell token in the command actually invokes ``rm``.
+
+    Distinguishes a destructive-pattern match that lands inside a quoted string
+    argument (``grep 'rm -rf foo' log``, ``echo "rm -rf x"``,
+    ``git commit -m "rm -rf cleanup"``) from a command that runs ``rm``. A quoted
+    mention tokenizes to a single token whose path basename is not ``rm``, so it is
+    reported as having no real invocation and the spurious ``rm`` prompt is
+    suppressed.
+
+    Fails closed (returns False, meaning "treat as a real invocation, keep
+    prompting") when the command contains shell expansion (``$`` or backtick),
+    where a token such as ``$RM`` could expand to ``rm``, or when tokenization
+    fails on unbalanced quotes. ``/bin/rm``, ``sudo rm`` and ``\\rm`` each tokenize
+    to a token whose basename is ``rm`` and are correctly reported as real.
+
+    Args:
+        command: The raw Bash command string from the tool input.
+
+    Returns:
+        True when the command contains no real ``rm`` invocation.
+    """
+    if _command_contains_shell_expansion(command):
+        return False
+    try:
+        all_command_tokens = _split_command_preserving_windows_backslashes(command)
+    except ValueError:
+        return False
+    for each_token in all_command_tokens:
+        if Path(each_token).name == "rm":
+            return False
+    return True
+
+
+def _find_non_rm_destructive_pattern(command: str) -> str | None:
+    """Return the first non-rm-family destructive pattern description, or None.
+
+    Applied after the quoted-mention guard finds a matched rm-family pattern to be
+    a false positive: the command is rescanned for any other destructive pattern
+    (force push, git clean, mkfs, dd, DROP/TRUNCATE, signing bypass) so a real
+    non-rm hazard riding alongside the quoted mention
+    (``grep 'rm -rf' f && git push --force origin main``) still prompts.
+
+    Args:
+        command: The raw Bash command string from the tool input.
+
+    Returns:
+        The description of the first matching non-rm-family pattern, or None.
+    """
+    for each_pattern_regex, each_pattern_description in DESTRUCTIVE_BASH_PATTERNS:
+        if _destructive_match_is_rm_family(each_pattern_description):
+            continue
+        if each_pattern_regex.search(command):
+            return each_pattern_description
+    return None
+
+
+def _command_contains_non_rm_family_destructive_pattern(command: str) -> bool:
+    """Return True when any destructive pattern in the command is not rm-family.
+
+    The compound ephemeral auto-allow grants only when every destructive pattern
+    present is an rm deletion. A git reset --hard, force push, git clean, mkfs, dd,
+    or DROP/TRUNCATE riding inside the chain is not bounded by the ephemeral rm
+    targets, so its presence declines the whole auto-allow.
+
+    Args:
+        command: The raw Bash command string from the tool input.
+
+    Returns:
+        True when at least one matching destructive pattern is not rm-family.
+    """
+    for each_pattern_regex, each_pattern_description in DESTRUCTIVE_BASH_PATTERNS:
+        if each_pattern_regex.search(command) and not _destructive_match_is_rm_family(
+            each_pattern_description
+        ):
+            return True
+    return False
+
+
+def _rm_segment_targets_only_absolute_ephemeral_paths(all_rm_segment_tokens: list[str]) -> bool:
+    """Return True when an ``rm`` segment's every target is an absolute ephemeral path.
+
+    ``all_rm_segment_tokens`` is one shell segment beginning at its ``rm`` command
+    token. Rejects the segment (returns False) when an unsafe flag precedes ``--``,
+    when there are no targets, when a target is relative (the compound auto-allow
+    refuses to resolve relative targets without a trusted working directory), when
+    a target basename is a glob wildcard, when a target is a bare ephemeral root or
+    a bare worktrees container, or when a target is not inside an ephemeral
+    directory.
+
+    Args:
+        all_rm_segment_tokens: Shlex tokens of a single ``rm`` segment, the first
+            token being the ``rm`` command.
+
+    Returns:
+        True when every target is an absolute ephemeral path safe to auto-allow.
+    """
+    tokens_after_rm = all_rm_segment_tokens[1:]
+    if _rm_flags_before_double_dash_are_unsafe(tokens_after_rm):
+        return False
+    all_target_tokens = _collect_rm_target_tokens(tokens_after_rm)
+    if not all_target_tokens:
+        return False
+    for each_target_token in all_target_tokens:
+        each_expanded_target = os.path.expanduser(each_target_token)
+        each_is_absolute = (
+            os.path.isabs(each_expanded_target)
+            or each_expanded_target.replace("\\", "/").startswith("/")
+        )
+        if not each_is_absolute:
+            return False
+        each_resolved_target = os.path.normpath(each_expanded_target)
+        if _path_basename_is_shell_glob_wildcard(each_resolved_target):
+            return False
+        if _path_is_bare_ephemeral_root(each_resolved_target):
+            return False
+        if _path_is_bare_named_worktrees_container(each_resolved_target):
+            return False
+        if not directory_is_ephemeral(each_resolved_target):
+            return False
+    return True
+
+
+def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
+    """Return True when a compound command's every ``rm`` segment is safe to auto-allow.
+
+    Handles destructive cleanup chains that declare no ephemeral working directory,
+    such as ``rm -rf /tmp/pr136 /tmp/difftest && echo 'cleaned'``. Splits the
+    command into shell segments and requires all of: at least one segment runs
+    ``rm``; every ``rm`` segment targets only absolute ephemeral paths; no segment's
+    leading command is a shell interpreter, ``eval``, ``exec``, ``source`` or a
+    privilege or argument wrapper (``sudo``, ``su``, ``env``, ``xargs``); no segment
+    matches a destructive pattern that is not rm-family (force push, git clean,
+    git reset --hard, mkfs, dd, DROP/TRUNCATE, signing bypass); and the command
+    contains no shell expansion.
+
+    Fails closed (returns False) on shell expansion (``$`` or backtick), on a
+    tokenization error, and whenever any ``rm`` segment fails the absolute-ephemeral
+    target check, so the compound auto-allow grants only on chains it can fully
+    bound.
+
+    Args:
+        command: The raw Bash command string from the tool input.
+
+    Returns:
+        True when every ``rm`` segment targets only absolute ephemeral paths and no
+        other hazard is present.
+    """
+    if _command_contains_shell_expansion(command):
+        return False
+    if _command_contains_non_rm_family_destructive_pattern(command):
+        return False
+    try:
+        all_command_tokens = _split_command_preserving_windows_backslashes(command)
+    except ValueError:
+        return False
+    has_seen_rm_segment = False
+    for each_segment in _split_tokens_into_shell_segments(all_command_tokens):
+        if not each_segment:
+            continue
+        if Path(each_segment[0]).name.lower() in ALL_INTERPRETER_AND_WRAPPER_COMMANDS:
+            return False
+        each_rm_token_index = next(
+            (
+                index
+                for index, token in enumerate(each_segment)
+                if Path(token).name == "rm"
+            ),
+            None,
+        )
+        if each_rm_token_index is None:
+            continue
+        has_seen_rm_segment = True
+        if not _rm_segment_targets_only_absolute_ephemeral_paths(
+            each_segment[each_rm_token_index:]
+        ):
+            return False
+    return has_seen_rm_segment
 
 
 def targets_only_claude_directory(command: str) -> bool:
@@ -564,6 +811,13 @@ def main() -> None:
 
     matched_description = find_destructive_pattern(command)
 
+    if (
+        matched_description is not None
+        and _destructive_match_is_rm_family(matched_description)
+        and command_has_no_real_rm_invocation(command)
+    ):
+        matched_description = _find_non_rm_destructive_pattern(command)
+
     if matched_description is not None and targets_only_claude_directory(command):
         sys.exit(0)
 
@@ -577,6 +831,13 @@ def main() -> None:
         sys.exit(0)
 
     if matched_description is not None and _ephemeral_recursive_rm_auto_allow_granted(command, matched_description):
+        sys.exit(0)
+
+    if (
+        matched_description is not None
+        and _destructive_match_is_rm_family(matched_description)
+        and rm_compound_targets_only_absolute_ephemeral_paths(command)
+    ):
         sys.exit(0)
 
     if matched_description is not None and "git reset --hard" in matched_description:

@@ -1269,6 +1269,46 @@ def test_brace_group_newline_interpreter_asks_when_bash_dash_c_runs_quoted_rm() 
     _assert_hook_asks("{ echo hi\nbash -c 'rm -rf /etc'; }")
 
 
+def test_launcher_execution_asks_when_timeout_separate_signal_value_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("timeout -s KILL 5 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_timeout_separate_sigkill_signal_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("timeout -s SIGKILL 5 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_timeout_long_signal_value_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("timeout --signal KILL 5 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_timeout_kill_after_value_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("timeout -k 1 5 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_timeout_separate_signal_wraps_bash_after_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && timeout -s KILL 5 bash -c 'rm -rf /etc'")
+
+
+def test_subshell_grouped_rm_asks_when_parenthesis_glued_to_rm() -> None:
+    _assert_hook_asks("(rm -rf /etc)")
+
+
+def test_brace_grouped_rm_asks_when_brace_glued_to_rm() -> None:
+    _assert_hook_asks("{ rm -rf /etc; }")
+
+
+def test_glued_semicolon_rm_asks_when_semicolon_prefixes_rm() -> None:
+    _assert_hook_asks(";rm -rf /etc")
+
+
+def test_glued_pipe_rm_asks_when_pipe_joins_echo_to_rm() -> None:
+    _assert_hook_asks("echo|rm -rf /etc")
+
+
+def test_subshell_grouped_rm_asks_when_benign_command_precedes_grouped_rm() -> None:
+    _assert_hook_asks("echo hi; (rm -rf /etc)")
+
+
 # --- convergence branch exemption unit tests ---
 
 import importlib.util

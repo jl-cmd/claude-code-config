@@ -81,3 +81,13 @@ LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN: str = (
     r"|[0-9]+(?:[.,][0-9]+)?[smhd]?"
     r"|[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*)$"
 )
+ALL_LAUNCHER_OPTIONS_TAKING_SEPARATE_VALUE: frozenset[str] = frozenset(
+    {
+        "-s",
+        "--signal",
+        "-k",
+        "--kill-after",
+        "-n",
+    }
+)
+ALL_SUBSHELL_GROUPING_CHARACTERS: str = "({"

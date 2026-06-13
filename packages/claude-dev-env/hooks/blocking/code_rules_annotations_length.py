@@ -86,6 +86,54 @@ def _is_pytest_fixture_injection_site(
     return False
 
 
+def _normalize_fixture_annotation_text(annotation_text: str) -> str:
+    """Strip forward-reference string quoting from an unparsed annotation.
+
+    ``ast.unparse`` renders a forward-reference annotation such as
+    ``tmp_path: "Path"`` as the quoted literal ``'Path'``. Removing the
+    surrounding quotes recovers the bare type name so the quoted spelling
+    compares equal to its unquoted form.
+
+    Args:
+        annotation_text: The annotation as rendered by ``ast.unparse``.
+
+    Returns:
+        The annotation text with any single surrounding quote pair removed.
+    """
+    if len(annotation_text) >= 2 and annotation_text[0] in {'"', "'"}:
+        if annotation_text[-1] == annotation_text[0]:
+            return annotation_text[1:-1]
+    return annotation_text
+
+
+def _fixture_annotation_matches_expected(
+    actual_annotation: str, expected_annotation: str
+) -> bool:
+    """Return True when an annotation matches its fixture's documented type.
+
+    The match accepts every equally-correct spelling of the documented type:
+    the exact text, a forward-reference string form, and either the bare
+    attribute tail or the fully-qualified dotted form. Both ``tmp_path: Path``
+    and ``tmp_path: pathlib.Path`` satisfy an expected ``Path``, and both
+    ``monkeypatch: pytest.MonkeyPatch`` and ``monkeypatch: MonkeyPatch``
+    satisfy an expected ``pytest.MonkeyPatch``.
+
+    Args:
+        actual_annotation: The annotation as rendered by ``ast.unparse``.
+        expected_annotation: The fixture's single documented type spelling.
+
+    Returns:
+        True when the actual annotation is an accepted spelling of the
+        expected type; False otherwise.
+    """
+    normalized_actual = _normalize_fixture_annotation_text(actual_annotation)
+    if normalized_actual == expected_annotation:
+        return True
+    return normalized_actual.rsplit(".", 1)[-1] == expected_annotation.rsplit(
+        ".", 1
+    )[-1]
+
+
 def check_known_pytest_fixture_annotations(content: str, file_path: str) -> list[str]:
     """Flag well-known pytest fixture parameters lacking their type annotation.
 
@@ -142,7 +190,9 @@ def check_known_pytest_fixture_annotations(content: str, file_path: str) -> list
                 if each_arg.annotation is not None
                 else None
             )
-            if actual_annotation == expected_annotation:
+            if actual_annotation is not None and _fixture_annotation_matches_expected(
+                actual_annotation, expected_annotation
+            ):
                 continue
             issues.append(
                 f"Line {each_arg.lineno}: parameter {each_arg.arg!r} on "

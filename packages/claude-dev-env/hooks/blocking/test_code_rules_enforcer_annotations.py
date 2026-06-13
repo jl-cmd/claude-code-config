@@ -209,6 +209,44 @@ def test_should_not_flag_correctly_annotated_qualified_fixture() -> None:
     )
 
 
+def test_should_not_flag_dotted_pathlib_path_fixture_annotation() -> None:
+    source = (
+        "import pathlib\n"
+        "def test_board(tmp_path: pathlib.Path) -> None:\n"
+        "    assert tmp_path.exists()\n"
+    )
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"tmp_path: pathlib.Path is an equally-correct spelling, got: {issues}"
+    )
+
+
+def test_should_not_flag_bare_tail_of_qualified_fixture_annotation() -> None:
+    source = (
+        "from pytest import MonkeyPatch\n"
+        "def test_env(monkeypatch: MonkeyPatch) -> None:\n"
+        "    monkeypatch.setenv('A', 'B')\n"
+    )
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"monkeypatch: MonkeyPatch matches the qualified expected tail, got: {issues}"
+    )
+
+
+def test_should_not_flag_forward_reference_fixture_annotation() -> None:
+    source = 'def test_board(tmp_path: "Path") -> None:\n    assert tmp_path\n'
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f'A forward-ref "Path" annotation must not be flagged, got: {issues}'
+    )
+
+
 def test_should_not_flag_star_arg_fixture_name() -> None:
     source = "def test_board(*tmp_path):\n    assert tmp_path\n"
     issues = code_rules_enforcer.check_known_pytest_fixture_annotations(

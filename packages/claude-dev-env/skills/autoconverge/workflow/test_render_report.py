@@ -348,6 +348,7 @@ def test_render_fix_block_falls_back_when_sha_empty() -> None:
         file="src/exports/writer.py",
         line=10,
         severity="P2",
+        category=render_report.FINDING_CATEGORY_DEFAULT,
         title="example finding",
         detail="example detail",
         round_number=2,
@@ -363,7 +364,7 @@ def test_render_fix_block_falls_back_when_sha_empty() -> None:
         )
     }
 
-    fix_html = render_report._render_fix_block(finding, fix_by_round)
+    fix_html = render_report._render_fix_block(finding, fix_by_round, set())
 
     assert "<code></code>" not in fix_html
     assert "fix commit" not in fix_html
@@ -426,14 +427,182 @@ def test_base_sha_resets_each_round_when_prior_fix_transcript_missing(
         {"label": render_report.LABEL_PREFIX_FIX + "copilot", "agentId": round_two_fix_id},
     ]
 
-    _all_findings, fix_by_round = render_report._parse_progress_entries(
-        progress_entries, agents_dir
+    _all_findings, fix_by_round, _deferred_rounds = (
+        render_report._parse_progress_entries(progress_entries, agents_dir)
     )
 
     assert fix_by_round[2].base_sha == round_two_head, (
         "Round 2 fix recorded a stale base sha leaked from round 1; "
         f"expected {round_two_head}, got {fix_by_round[2].base_sha}"
     )
+
+
+def test_repair_convergence_step_counts_as_a_fix_commit(tmp_path: Path) -> None:
+    """Should treat a repair-convergence step that pushed as a fix-bearing commit."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+
+    round_head = "1111111111111111111111111111111111111111"
+    repaired_head = "2222222222222222222222222222222222222222"
+
+    gate_id = "round-one-gate"
+    repair_id = "round-one-repair"
+
+    _write_structured_output_transcript(
+        agents_dir / f"agent-{gate_id}.jsonl",
+        {"sha": round_head, "clean": True, "findings": []},
+    )
+    _write_structured_output_transcript(
+        agents_dir / f"agent-{repair_id}.jsonl",
+        {"newSha": repaired_head, "pushed": True, "resolvedWithoutCommit": False},
+    )
+
+    progress_entries: list[dict] = [
+        {"label": render_report.LABEL_RESOLVE_HEAD, "agentId": "round-one-resolve"},
+        {"label": render_report.LABEL_COPILOT_GATE, "agentId": gate_id},
+        {"label": render_report.LABEL_REPAIR_CONVERGENCE, "agentId": repair_id},
+    ]
+
+    _all_findings, fix_by_round, _deferred_rounds = (
+        render_report._parse_progress_entries(progress_entries, agents_dir)
+    )
+
+    assert 1 in fix_by_round, "repair-convergence step was dropped from fix_by_round"
+    assert fix_by_round[1].pushed is True
+    assert fix_by_round[1].new_sha == repaired_head
+    assert fix_by_round[1].base_sha == round_head, (
+        "repair-convergence fix should record the round's reviewed head as its base"
+    )
+
+
+def test_standards_followup_round_marks_findings_deferred(tmp_path: Path) -> None:
+    """Should flag a round with a standards-followup step as deferred, with no fix record."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+
+    round_head = "1111111111111111111111111111111111111111"
+    lens_id = "round-one-lens"
+    followup_id = "round-one-followup"
+
+    _write_structured_output_transcript(
+        agents_dir / f"agent-{lens_id}.jsonl",
+        {
+            "sha": round_head,
+            "clean": False,
+            "findings": [
+                {
+                    "file": "src/exports/writer.py",
+                    "line": 12,
+                    "severity": "P2",
+                    "category": render_report.FINDING_CATEGORY_CODE_STANDARD,
+                    "title": "Banned identifier 'result'",
+                    "detail": "Rename to a domain noun.",
+                }
+            ],
+        },
+    )
+    _write_structured_output_transcript(
+        agents_dir / f"agent-{followup_id}.jsonl",
+        {"newSha": round_head, "pushed": False, "resolvedWithoutCommit": False},
+    )
+
+    progress_entries: list[dict] = [
+        {"label": render_report.LABEL_RESOLVE_HEAD, "agentId": "round-one-resolve"},
+        {"label": render_report.LABEL_PREFIX_LENS + "code-review", "agentId": lens_id},
+        {
+            "label": render_report.LABEL_PREFIX_STANDARDS_FOLLOWUP + "converge-round",
+            "agentId": followup_id,
+        },
+    ]
+
+    all_findings, fix_by_round, deferred_rounds = (
+        render_report._parse_progress_entries(progress_entries, agents_dir)
+    )
+
+    assert 1 in deferred_rounds, "round with standards-followup step was not marked deferred"
+    assert 1 not in fix_by_round, "deferred round must carry no fix record"
+    assert len(all_findings) == 1
+    assert all_findings[0].category == render_report.FINDING_CATEGORY_CODE_STANDARD
+
+
+def test_render_fix_block_labels_deferred_finding_not_fixed() -> None:
+    """Should render a deferred-round finding as deferred to a follow-up issue, not fixed."""
+    finding = render_report.RawFinding(
+        file="src/exports/writer.py",
+        line=12,
+        severity="P2",
+        category=render_report.FINDING_CATEGORY_CODE_STANDARD,
+        title="Banned identifier 'result'",
+        detail="Rename to a domain noun.",
+        round_number=1,
+        sha="abc",
+    )
+
+    fix_html = render_report._render_fix_block(finding, {}, {1})
+
+    assert "follow-up issue" in fix_html
+    assert "resolved during convergence" not in fix_html
+    assert "fix commit" not in fix_html
+
+
+def test_render_bug_card_deferred_shows_deferred_badge() -> None:
+    """Should stamp a deferred finding's card with a Deferred badge, never Fixed."""
+    finding = render_report.RawFinding(
+        file="src/exports/writer.py",
+        line=12,
+        severity="P2",
+        category=render_report.FINDING_CATEGORY_CODE_STANDARD,
+        title="Banned identifier 'result'",
+        detail="Rename to a domain noun.",
+        round_number=1,
+        sha="abc",
+    )
+
+    card_html = render_report._render_bug_card(1, finding, {}, {1}, "minor")
+
+    assert "Deferred" in card_html
+    assert ">Fixed<" not in card_html
+
+
+def test_at_a_glance_resolution_reflects_deferred_findings(tmp_path: Path) -> None:
+    """Should not claim every finding was fixed when a round was deferred."""
+    deferred_finding = render_report.RawFinding(
+        file="src/exports/writer.py",
+        line=12,
+        severity="P2",
+        category=render_report.FINDING_CATEGORY_CODE_STANDARD,
+        title="Banned identifier 'result'",
+        detail="Rename to a domain noun.",
+        round_number=1,
+        sha="abc",
+    )
+    run_data = render_report.RunData(
+        generated_date="2026-06-13",
+        total_finding_count=1,
+        critical_finding_count=0,
+        minor_finding_count=1,
+        fix_commit_count=0,
+        tests_added_by_round={},
+        finding_count_by_round={1: 1},
+        finding_count_by_theme={"src/exports": 1},
+        all_critical_findings=[],
+        all_minor_findings=[deferred_finding],
+        fix_by_round={},
+        deferred_rounds={1},
+    )
+    pr_metadata = render_report.PrMetadata(
+        owner="example-owner",
+        repo="example-repo",
+        number=211,
+        url="https://github.com/example-owner/example-repo/pull/211",
+        final_sha="7c2f420c4d5b7c83aa47f93d99a0f1420e3373c4",
+        round_count=1,
+    )
+
+    html_content = render_report.render_report_html(run_data, pr_metadata, "2026-06-13")
+
+    assert "every finding was fixed" not in html_content
+    assert "deferred to a follow-up issue" in html_content
 
 
 def test_robustness_with_missing_transcripts(tmp_path: Path) -> None:

@@ -17,20 +17,26 @@ from autoconverge_report_constants.render_report_constants import (
     BAR_COLOR_TESTS,
     BAR_COLOR_THEME,
     BAR_FILL_MAX_PERCENT,
+    FINDING_CATEGORY_CODE_STANDARD,
+    FINDING_CATEGORY_DEFAULT,
     GITHUB_PR_URL_TEMPLATE,
     HTML_DOCTYPE,
     HTML_HEAD_TEMPLATE,
     HTML_STYLE_BLOCK,
+    JOURNAL_DATE_PREFIX_LENGTH,
     JOURNAL_SIBLING_SUBAGENTS,
     JOURNAL_SIBLING_WORKFLOWS,
     LABEL_COPILOT_GATE,
     LABEL_PREFIX_FIX,
     LABEL_PREFIX_LENS,
+    LABEL_PREFIX_STANDARDS_FOLLOWUP,
+    LABEL_REPAIR_CONVERGENCE,
     LABEL_RESOLVE_HEAD,
     SEVERITY_BADGE_CLASS_BY_LEVEL,
     SEVERITY_CRITICAL_BUCKET,
     SEVERITY_CRITICAL_LEVELS,
     SEVERITY_MINOR_BUCKET,
+    SHORT_SHA_LENGTH,
     STRUCTURED_OUTPUT_TOOL_NAME,
     TEST_DEFINITION_PATTERN,
     TEST_PATH_GLOBS,
@@ -46,6 +52,7 @@ class RawFinding:
     file: str
     line: int
     severity: str
+    category: str
     title: str
     detail: str
     round_number: int
@@ -90,6 +97,7 @@ class RunData:
     all_critical_findings: list[RawFinding]
     all_minor_findings: list[RawFinding]
     fix_by_round: dict[int, FixRecord]
+    deferred_rounds: set[int]
 
 
 def _resolve_agents_dir(journal_path: Path) -> Path:
@@ -248,6 +256,7 @@ def _parse_finding_from_dict(raw: dict, round_number: int, sha: str) -> RawFindi
         file=raw.get("file", ""),
         line=raw.get("line", 0),
         severity=raw.get("severity", "P2"),
+        category=raw.get("category", FINDING_CATEGORY_DEFAULT),
         title=raw.get("title", ""),
         detail=raw.get("detail", ""),
         round_number=round_number,
@@ -280,18 +289,21 @@ def _parse_fix_record(
 def _parse_progress_entries(
     progress_entries: list[dict],
     agents_dir: Path,
-) -> tuple[list[RawFinding], dict[int, FixRecord]]:
-    """Walk workflowProgress in order and collect findings and fix results by round.
+) -> tuple[list[RawFinding], dict[int, FixRecord], set[int]]:
+    """Walk workflowProgress in order and collect findings, fixes, and deferrals by round.
 
     Args:
         progress_entries: The workflowProgress list from the journal.
         agents_dir: Directory containing per-agent .jsonl transcript files.
 
     Returns:
-        A tuple of (all_raw_findings, fix_by_round).
+        A tuple of (all_raw_findings, fix_by_round, deferred_rounds). A round lands
+        in deferred_rounds when it surfaced only code-standard findings that were
+        deferred to a follow-up issue rather than fixed on this branch.
     """
     all_findings: list[RawFinding] = []
     fix_by_round: dict[int, FixRecord] = {}
+    deferred_rounds: set[int] = set()
     current_round = 0
     current_round_base_sha = ""
 
@@ -304,6 +316,10 @@ def _parse_progress_entries(
             current_round_base_sha = ""
             continue
 
+        if label.startswith(LABEL_PREFIX_STANDARDS_FOLLOWUP):
+            deferred_rounds.add(current_round)
+            continue
+
         if agent_id is None:
             continue
 
@@ -314,7 +330,9 @@ def _parse_progress_entries(
 
         is_lens = label.startswith(LABEL_PREFIX_LENS)
         is_copilot = label == LABEL_COPILOT_GATE
-        is_fix = label.startswith(LABEL_PREFIX_FIX)
+        is_fix = (
+            label.startswith(LABEL_PREFIX_FIX) or label == LABEL_REPAIR_CONVERGENCE
+        )
 
         if is_lens or is_copilot:
             sha = agent_result.get("sha", "")
@@ -331,7 +349,7 @@ def _parse_progress_entries(
                 agent_result, current_round, current_round_base_sha
             )
 
-    return all_findings, fix_by_round
+    return all_findings, fix_by_round, deferred_rounds
 
 
 def _dedup_findings(all_findings: list[RawFinding]) -> list[RawFinding]:
@@ -367,12 +385,13 @@ def load_run_data(journal_path: Path, repo_path: Path) -> RunData:
     """
     journal = json.loads(journal_path.read_text(encoding="utf-8"))
     timestamp: str = journal.get("timestamp", "")
-    generated_date = timestamp[:10] if len(timestamp) >= 10 else ""
+    has_date_prefix = len(timestamp) >= JOURNAL_DATE_PREFIX_LENGTH
+    generated_date = timestamp[:JOURNAL_DATE_PREFIX_LENGTH] if has_date_prefix else ""
 
     progress_entries: list[dict] = journal.get("workflowProgress", [])
     agents_dir = _resolve_agents_dir(journal_path)
 
-    all_raw_findings, fix_by_round = _parse_progress_entries(
+    all_raw_findings, fix_by_round, deferred_rounds = _parse_progress_entries(
         progress_entries, agents_dir
     )
     distinct_findings = _dedup_findings(all_raw_findings)
@@ -422,6 +441,7 @@ def load_run_data(journal_path: Path, repo_path: Path) -> RunData:
         all_critical_findings=all_critical_findings,
         all_minor_findings=all_minor_findings,
         fix_by_round=fix_by_round,
+        deferred_rounds=deferred_rounds,
     )
 
 
@@ -500,13 +520,19 @@ def _render_round_findings_chart(
     Returns:
         An HTML .chart-card string.
     """
-    all_counts = [finding_count_by_round.get(r, 0) for r in range(1, round_count + 1)]
+    all_counts = [
+        finding_count_by_round.get(each_round_number, 0)
+        for each_round_number in range(1, round_count + 1)
+    ]
     max_count = max(all_counts + [1])
     rows = "".join(
         _render_bar_row(
-            f"Round {r}", finding_count_by_round.get(r, 0), max_count, BAR_COLOR_ROUND
+            f"Round {each_round_number}",
+            finding_count_by_round.get(each_round_number, 0),
+            max_count,
+            BAR_COLOR_ROUND,
         )
-        for r in range(1, round_count + 1)
+        for each_round_number in range(1, round_count + 1)
     )
     return _render_chart_card("Findings by round", rows)
 
@@ -521,13 +547,19 @@ def _render_tests_chart(round_count: int, tests_added_by_round: dict[int, int]) 
     Returns:
         An HTML .chart-card string.
     """
-    all_counts = [tests_added_by_round.get(r, 0) for r in range(1, round_count + 1)]
+    all_counts = [
+        tests_added_by_round.get(each_round_number, 0)
+        for each_round_number in range(1, round_count + 1)
+    ]
     max_count = max(all_counts + [1])
     rows = "".join(
         _render_bar_row(
-            f"Round {r}", tests_added_by_round.get(r, 0), max_count, BAR_COLOR_TESTS
+            f"Round {each_round_number}",
+            tests_added_by_round.get(each_round_number, 0),
+            max_count,
+            BAR_COLOR_TESTS,
         )
-        for r in range(1, round_count + 1)
+        for each_round_number in range(1, round_count + 1)
     )
     return _render_chart_card("Tests added per round", rows)
 
@@ -552,17 +584,30 @@ def _render_theme_chart(finding_count_by_theme: dict[str, int]) -> str:
     return _render_chart_card("Findings by theme", rows)
 
 
-def _render_fix_block(finding: RawFinding, fix_by_round: dict[int, FixRecord]) -> str:
-    """Return the green fix resolution sub-block for a finding card.
+def _render_fix_block(
+    finding: RawFinding,
+    fix_by_round: dict[int, FixRecord],
+    deferred_rounds: set[int],
+) -> str:
+    """Return the resolution sub-block for a finding card.
 
     Args:
         finding: The raw finding being described.
         fix_by_round: Mapping of round number to fix record.
+        deferred_rounds: Round numbers whose findings were deferred to a follow-up
+            issue rather than fixed on this branch.
 
     Returns:
-        An HTML .bug-fix string describing how the finding was resolved.
+        An HTML .bug-fix string describing how the finding was resolved or deferred.
     """
     round_number = finding.round_number
+
+    if round_number in deferred_rounds:
+        return (
+            f'<div class="bug-fix"><b>Resolution:</b> code-standard finding deferred '
+            f"to a follow-up issue from round {round_number}; not fixed on this branch.</div>"
+        )
+
     fix_record = fix_by_round.get(round_number)
 
     if fix_record is None:
@@ -577,7 +622,7 @@ def _render_fix_block(finding: RawFinding, fix_by_round: dict[int, FixRecord]) -
     if not fix_record.new_sha:
         return '<div class="bug-fix"><b>Fix:</b> resolved during convergence.</div>'
 
-    new_sha_short = fix_record.new_sha[:8]
+    new_sha_short = fix_record.new_sha[:SHORT_SHA_LENGTH]
     return (
         f'<div class="bug-fix"><b>Fix:</b> resolved in the round {round_number} fix commit '
         f"<code>{html.escape(new_sha_short)}</code>.</div>"
@@ -588,6 +633,7 @@ def _render_bug_card(
     index: int,
     finding: RawFinding,
     fix_by_round: dict[int, FixRecord],
+    deferred_rounds: set[int],
     card_class: str,
 ) -> str:
     """Return an HTML .bug-card element for one finding.
@@ -596,6 +642,7 @@ def _render_bug_card(
         index: 1-based display index for the card.
         finding: The raw finding to render.
         fix_by_round: Mapping of round number to fix record for the fix sub-block.
+        deferred_rounds: Round numbers whose findings were deferred to a follow-up issue.
         card_class: Either 'crit' or 'minor'.
 
     Returns:
@@ -608,8 +655,14 @@ def _render_bug_card(
     escaped_file = html.escape(finding.file)
     line_number = finding.line
     round_number = finding.round_number
+    is_deferred = round_number in deferred_rounds
+    status_badge = (
+        '<span class="badge b-deferred">Deferred</span>'
+        if is_deferred
+        else '<span class="badge b-fixed">Fixed</span>'
+    )
 
-    fix_block = _render_fix_block(finding, fix_by_round)
+    fix_block = _render_fix_block(finding, fix_by_round, deferred_rounds)
 
     return (
         f'<div class="bug-card {card_class}">'
@@ -618,7 +671,7 @@ def _render_bug_card(
         f'<span class="bug-title">{escaped_title}</span>'
         f'<div class="badges">'
         f'<span class="badge {badge_class}">{html.escape(severity)}</span>'
-        f'<span class="badge b-fixed">Fixed</span>'
+        f"{status_badge}"
         f"</div>"
         f"</div>"
         f'<div class="bug-impact">{escaped_detail}</div>'
@@ -650,6 +703,7 @@ def _render_stat(label: str, stat_value: int) -> str:
 def _render_finding_cards(
     findings: list[RawFinding],
     fix_by_round: dict[int, FixRecord],
+    deferred_rounds: set[int],
     card_class: str,
 ) -> str:
     """Return an HTML .bugs container with one .bug-card per finding.
@@ -657,6 +711,7 @@ def _render_finding_cards(
     Args:
         findings: The list of raw findings to render.
         fix_by_round: Mapping of round number to fix record.
+        deferred_rounds: Round numbers whose findings were deferred to a follow-up issue.
         card_class: Either 'crit' or 'minor'.
 
     Returns:
@@ -665,7 +720,9 @@ def _render_finding_cards(
     if not findings:
         return ""
     cards = "".join(
-        _render_bug_card(each_index + 1, each_finding, fix_by_round, card_class)
+        _render_bug_card(
+            each_index + 1, each_finding, fix_by_round, deferred_rounds, card_class
+        )
         for each_index, each_finding in enumerate(findings)
     )
     return f'<div class="bugs">{cards}</div>'
@@ -687,7 +744,7 @@ def render_report_html(
     pr_number = pr_metadata.number
     owner = html.escape(pr_metadata.owner)
     repo = html.escape(pr_metadata.repo)
-    final_sha_short = pr_metadata.final_sha[:8]
+    final_sha_short = pr_metadata.final_sha[:SHORT_SHA_LENGTH]
     round_count = pr_metadata.round_count
 
     total_findings = run_data.total_finding_count
@@ -695,6 +752,12 @@ def render_report_html(
     minor_count = run_data.minor_finding_count
     fix_commit_count = run_data.fix_commit_count
     tests_added_total = sum(run_data.tests_added_by_round.values())
+    deferred_rounds = run_data.deferred_rounds
+    deferred_finding_count = sum(
+        1
+        for each_finding in run_data.all_critical_findings + run_data.all_minor_findings
+        if each_finding.round_number in deferred_rounds
+    )
 
     head_html = HTML_HEAD_TEMPLATE.format(
         pr_number=pr_number,
@@ -711,9 +774,21 @@ def render_report_html(
         f"{round_count} rounds and surfaced {total_findings} distinct findings — "
         f"{critical_count} critical, {minor_count} minor.</div>"
     )
+    fixed_finding_count = total_findings - deferred_finding_count
+    if deferred_finding_count > 0:
+        resolution_sentence = (
+            f"{fixed_finding_count} findings were fixed and {deferred_finding_count} "
+            f"code-standard findings were deferred to a follow-up issue "
+            f"before the PR was marked ready; {fix_commit_count} fix commits landed."
+        )
+    else:
+        resolution_sentence = (
+            f"every finding was fixed before the PR was marked ready; "
+            f"{fix_commit_count} fix commits landed."
+        )
     glance_resolution = (
-        f'<div class="glance-section"><strong>Resolution:</strong> every finding was fixed '
-        f"before the PR was marked ready; {fix_commit_count} fix commits landed.</div>"
+        f'<div class="glance-section"><strong>Resolution:</strong> '
+        f"{resolution_sentence}</div>"
     )
     glance_status = (
         f'<div class="glance-section"><strong>Status:</strong> the run converged on commit '
@@ -762,20 +837,24 @@ def render_report_html(
     )
 
     critical_cards = _render_finding_cards(
-        run_data.all_critical_findings, run_data.fix_by_round, "crit"
+        run_data.all_critical_findings,
+        run_data.fix_by_round,
+        deferred_rounds,
+        "crit",
     )
-    critical_intro = '<p class="section-intro">P0 and P1 findings caught and fixed during the run.</p>'
+    critical_intro = '<p class="section-intro">P0 and P1 findings caught during the run.</p>'
     critical_section = f'<h2 id="critical">Critical findings</h2>' + (
         f"{critical_intro}{critical_cards}"
         if run_data.all_critical_findings
         else '<p class="section-intro">No critical findings.</p>'
     )
 
-    minor_intro = (
-        '<p class="section-intro">P2 findings caught and fixed during the run.</p>'
-    )
+    minor_intro = '<p class="section-intro">P2 findings caught during the run.</p>'
     minor_cards = _render_finding_cards(
-        run_data.all_minor_findings, run_data.fix_by_round, "minor"
+        run_data.all_minor_findings,
+        run_data.fix_by_round,
+        deferred_rounds,
+        "minor",
     )
     minor_section = f'<h2 id="minor">Minor findings</h2>{minor_intro}{minor_cards}'
 

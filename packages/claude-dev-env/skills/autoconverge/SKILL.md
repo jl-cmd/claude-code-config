@@ -121,9 +121,10 @@ round records nothing resumable and replays dirty.
       the htmlpreview link, headline counts (findings by severity, rounds, tests
       added), and the full finding list as `file:line — P# — title` grouped by
       severity. Honor the gh-body-file rule: write a BOM-free temp file and pass
-      `--body-file` to `gh issue comment`/`gh issue comment edit`, or use the
-      GitHub MCP `add_issue_comment` tool (body as a structured parameter, no
-      `--body` flag).
+      `--body-file` to `gh issue comment <pr> --edit-last --create-if-none`
+      (one idempotent call that edits the marker comment when present and creates
+      it otherwise), or use the GitHub MCP `add_issue_comment` tool (body as a
+      structured parameter, no `--body` flag).
 
    e. **Open the report in Chrome.**
       ```

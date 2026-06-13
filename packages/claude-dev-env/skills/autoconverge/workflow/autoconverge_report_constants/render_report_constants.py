@@ -5,7 +5,15 @@ STRUCTURED_OUTPUT_TOOL_NAME = "StructuredOutput"
 LABEL_RESOLVE_HEAD = "resolve-head"
 LABEL_PREFIX_LENS = "lens:"
 LABEL_PREFIX_FIX = "fix:"
+LABEL_REPAIR_CONVERGENCE = "repair-convergence"
+LABEL_PREFIX_STANDARDS_FOLLOWUP = "standards-followup:"
 LABEL_COPILOT_GATE = "copilot-gate"
+
+FINDING_CATEGORY_CODE_STANDARD = "code-standard"
+FINDING_CATEGORY_DEFAULT = "bug"
+
+SHORT_SHA_LENGTH = 8
+JOURNAL_DATE_PREFIX_LENGTH = 10
 
 JOURNAL_SIBLING_SUBAGENTS = "subagents"
 JOURNAL_SIBLING_WORKFLOWS = "workflows"
@@ -89,6 +97,7 @@ HTML_STYLE_BLOCK = """\
     .b-p1 { background: #fee2e2; color: #991b1b; }
     .b-p2 { background: #fef3c7; color: #92400e; }
     .b-fixed { background: #dcfce7; color: #166534; }
+    .b-deferred { background: #fef9c3; color: #854d0e; }
     .bug-impact { font-size: 13px; color: #7f1d1d; margin-top: 10px; line-height: 1.55; }
     .bug-card.minor .bug-impact { color: #78350f; }
     .bug-fix { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 10px 12px; margin-top: 10px; font-size: 13px; color: #166534; line-height: 1.5; }

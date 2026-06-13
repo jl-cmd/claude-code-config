@@ -1046,6 +1046,26 @@ def test_compound_rm_allowed_when_followed_by_gh_command() -> None:
     _assert_hook_allows("rm -rf /tmp/reply && gh pr checks 19")
 
 
+def test_compound_rm_asks_when_shred_targets_non_ephemeral_path() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && shred -u /etc/passwd")
+
+
+def test_compound_rm_asks_when_truncate_targets_non_ephemeral_path() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && truncate -s0 /etc/passwd")
+
+
+def test_compound_rm_asks_when_find_delete_walks_root() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && find / -name secret -delete")
+
+
+def test_compound_rm_asks_when_chmod_recursive_targets_non_ephemeral_path() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && chmod -R 000 /etc")
+
+
+def test_compound_rm_asks_when_mv_moves_non_ephemeral_path() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && mv /home/user/important /tmp/x2")
+
+
 def test_quoted_mention_allowed_when_rm_appears_inside_grep_pattern() -> None:
     _assert_hook_allows("grep 'rm -rf foo' history.jsonl | tail -5")
 
@@ -1215,6 +1235,26 @@ def test_launcher_execution_asks_when_timeout_wraps_bash_after_ephemeral_rm() ->
 
 def test_launcher_execution_allows_when_timeout_wraps_ephemeral_rm() -> None:
     _assert_hook_allows("timeout 5 rm -rf /tmp/scratch")
+
+
+def test_launcher_execution_asks_when_taskset_hex_mask_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("taskset 0x1 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_taskset_hex_mask_absolute_path_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("/usr/bin/taskset 0xff bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_taskset_cpu_range_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("taskset -c 0-3 bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_timeout_duration_suffix_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("timeout 5s bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_taskset_hex_mask_wraps_bash_after_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && timeout 5s bash -c 'rm -rf /etc'")
 
 
 def test_newline_separated_interpreter_asks_when_bash_dash_c_runs_quoted_rm() -> None:

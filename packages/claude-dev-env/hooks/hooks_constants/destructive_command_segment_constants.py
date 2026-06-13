@@ -59,3 +59,25 @@ ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS: frozenset[str] = frozenset(
     }
 )
 ALL_STRING_ARGUMENT_EXECUTION_FLAGS: frozenset[str] = frozenset({"-c", "-e"})
+ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS: frozenset[str] = frozenset(
+    {
+        "echo",
+        "printf",
+        "gh",
+        "head",
+        "tail",
+        "cat",
+        "ls",
+        "grep",
+        "wc",
+        "sort",
+        "uniq",
+        "true",
+        "git",
+    }
+)
+LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN: str = (
+    r"^(?:0x[0-9A-Fa-f]+"
+    r"|[0-9]+(?:[.,][0-9]+)?[smhd]?"
+    r"|[0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*)$"
+)

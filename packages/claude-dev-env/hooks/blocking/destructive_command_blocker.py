@@ -19,11 +19,13 @@ from hooks_constants.convergence_branch_constants import (  # noqa: E402
     CONVERGENCE_FORCE_PUSH_DETECTION_PATTERN,
 )
 from hooks_constants.destructive_command_segment_constants import (  # noqa: E402
+    ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS,
     ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS,
     ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
     ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS,
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
     ALL_STRING_ARGUMENT_EXECUTION_FLAGS,
+    LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN,
 )
 
 CLAUDE_DIRECTORY_PATH = os.path.normpath(os.path.expanduser("~/.claude"))
@@ -379,11 +381,14 @@ def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] 
     command line to another program without itself executing a quoted string. To
     find that real program, the launcher token and its own option tokens are
     dropped: leading ``VAR=value`` assignments are skipped, the launcher token is
-    consumed, then every following dash-prefixed flag and the single numeric
-    positional value some launchers take (a ``timeout`` duration, a ``chrt``
-    priority) are consumed until the first token that names a program. Returns the
-    program token and the tokens that follow it, or None when the leading program is
-    not a launcher wrapper.
+    consumed, then every following dash-prefixed flag and every positional value
+    token a launcher takes (a ``timeout`` duration, a ``chrt`` priority, a
+    ``taskset`` CPU mask or CPU range) is consumed until the first token that names
+    a program. A positional value is recognized by shape — decimal, hexadecimal
+    mask, duration with unit suffix, or CPU range/list — so a non-decimal mask or a
+    duration suffix no longer masks the wrapped program. Returns the program token
+    and the tokens that follow it, or None when the leading program is not a
+    launcher wrapper.
 
     Args:
         all_command_tokens: Tokens of one shell segment.
@@ -392,6 +397,7 @@ def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] 
         The tokens beginning at the wrapped program, or None when no launcher leads.
     """
     leading_assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+    launcher_positional_value_pattern = re.compile(LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN)
     first_program_index = next(
         (
             index
@@ -410,7 +416,7 @@ def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] 
         if each_token.startswith("-"):
             continue
         each_basename = Path(each_token).name.lower()
-        if each_basename.isdigit():
+        if launcher_positional_value_pattern.match(each_basename):
             continue
         return all_command_tokens[each_index:]
     return []
@@ -653,20 +659,47 @@ def _rm_segment_targets_only_absolute_ephemeral_paths(all_rm_segment_tokens: lis
     return True
 
 
+def _segment_leading_program_is_benign(all_segment_tokens: list[str]) -> bool:
+    """Return True when a non-rm segment's leading program is a benign reporting command.
+
+    A compound chain auto-allow requires every segment that is not an ``rm`` deletion
+    to be a recognized read-only or reporting command (``echo``, ``gh``, ``head``,
+    ``cat``, ``grep`` and the rest of ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS). A segment
+    leading with any other program — ``shred``, ``truncate``, ``find ... -delete``,
+    ``chmod -R``, ``mv`` and every other destructive command absent from the
+    DESTRUCTIVE_BASH_PATTERNS table — is treated as non-benign so the chain falls
+    through to the prompt rather than riding the ephemeral ``rm`` auto-allow.
+
+    Args:
+        all_segment_tokens: Shlex tokens of one shell segment, possibly led by
+            ``VAR=value`` assignments before the program token.
+
+    Returns:
+        True when the segment's leading program is in the benign allowlist.
+    """
+    leading_command_token = _leading_command_token(all_segment_tokens)
+    if leading_command_token is None:
+        return False
+    return Path(leading_command_token).name.lower() in ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS
+
+
 def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
     """Return True when a compound command's every ``rm`` segment is safe to auto-allow.
 
     Handles destructive cleanup chains that declare no ephemeral working directory,
     such as ``rm -rf /tmp/pr136 /tmp/difftest && echo 'cleaned'``. Splits the
     command into shell segments and requires all of: at least one segment runs
-    ``rm``; every ``rm`` segment targets only absolute ephemeral paths; no segment's
-    leading program executes a quoted string argument as code — a shell interpreter,
-    ``eval``, ``exec``, ``source``, a privilege or argument wrapper
-    (``sudo``, ``su``, ``env``, ``xargs``), or a command-launcher wrapper that
-    forwards argv to such a program (``timeout bash -c '...'``); no segment
-    matches a destructive pattern that is not rm-family (force push, git clean,
-    git reset --hard, mkfs, dd, DROP/TRUNCATE, signing bypass); and the command
-    contains no shell expansion.
+    ``rm``; every ``rm`` segment targets only absolute ephemeral paths; every
+    non-``rm`` segment leads with a benign reporting command from
+    ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS, so a ``shred``, ``truncate``,
+    ``find ... -delete``, ``chmod -R`` or ``mv`` segment that destroys
+    non-ephemeral data declines the auto-allow; no segment's leading program
+    executes a quoted string argument as code — a shell interpreter, ``eval``,
+    ``exec``, ``source``, a privilege or argument wrapper (``sudo``, ``su``,
+    ``env``, ``xargs``), or a command-launcher wrapper that forwards argv to such a
+    program (``timeout bash -c '...'``); no segment matches a destructive pattern
+    that is not rm-family (force push, git clean, git reset --hard, mkfs, dd,
+    DROP/TRUNCATE, signing bypass); and the command contains no shell expansion.
 
     Fails closed (returns False) on shell expansion (``$`` or backtick), on a
     tokenization error, and whenever any ``rm`` segment fails the absolute-ephemeral
@@ -703,6 +736,8 @@ def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
             None,
         )
         if each_rm_token_index is None:
+            if not _segment_leading_program_is_benign(each_segment):
+                return False
             continue
         has_seen_rm_segment = True
         if not _rm_segment_targets_only_absolute_ephemeral_paths(

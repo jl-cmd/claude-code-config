@@ -115,6 +115,32 @@ def _collect_annotated_arguments(function_node: ast.FunctionDef | ast.AsyncFunct
     return all_annotated_arguments
 
 
+def _collect_fixture_injection_arguments(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[ast.arg]:
+    """Return only the named parameters pytest fills by fixture injection.
+
+    Pytest injects fixtures by matching individual named parameters, so a
+    ``*args`` star-argument or ``**kwargs`` double-star-argument never names a
+    fixture even when it shares a builtin fixture's name. Only positional-only,
+    positional-or-keyword, and keyword-only parameters are injection slots, so
+    this collector omits ``args.vararg`` and ``args.kwarg``.
+
+    Args:
+        function_node: The function definition AST node to inspect.
+
+    Returns:
+        The positional-only, positional-or-keyword, and keyword-only argument
+        nodes, in declaration order.
+    """
+    arguments = function_node.args
+    all_injection_arguments: list[ast.arg] = []
+    all_injection_arguments.extend(arguments.posonlyargs)
+    all_injection_arguments.extend(arguments.args)
+    all_injection_arguments.extend(arguments.kwonlyargs)
+    return all_injection_arguments
+
+
 def _collect_target_names(target: ast.expr) -> list[ast.Name]:
     """Return every ast.Name reachable through tuple/list/starred unpacking targets."""
     if isinstance(target, ast.Name):

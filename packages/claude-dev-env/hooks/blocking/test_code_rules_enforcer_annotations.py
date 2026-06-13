@@ -175,3 +175,57 @@ def test_should_flag_unannotated_fixture_in_decorated_fixture() -> None:
     ), f"Expected unannotated tmp_path in @pytest.fixture-decorated function flagged, got: {issues}"
 
 
+def test_should_flag_known_fixture_with_wrong_annotation() -> None:
+    source = "def test_board(tmp_path: str):\n    assert tmp_path\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert any(
+        "tmp_path" in each_issue and "Path" in each_issue for each_issue in issues
+    ), f"Expected wrongly annotated tmp_path: str flagged, got: {issues}"
+
+
+def test_should_flag_known_fixture_with_unrelated_annotation() -> None:
+    source = "def test_board(tmp_path: int):\n    assert tmp_path\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert any(
+        "tmp_path" in each_issue and "Path" in each_issue for each_issue in issues
+    ), f"Expected wrongly annotated tmp_path: int flagged, got: {issues}"
+
+
+def test_should_not_flag_correctly_annotated_qualified_fixture() -> None:
+    source = (
+        "import pytest\n"
+        "def test_env(monkeypatch: pytest.MonkeyPatch) -> None:\n"
+        "    monkeypatch.setenv('A', 'B')\n"
+    )
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"Correctly annotated monkeypatch must not be flagged, got: {issues}"
+    )
+
+
+def test_should_not_flag_star_arg_fixture_name() -> None:
+    source = "def test_board(*tmp_path):\n    assert tmp_path\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A *vararg sharing a fixture name is not an injection site, got: {issues}"
+    )
+
+
+def test_should_not_flag_double_star_arg_fixture_name() -> None:
+    source = "def test_env(**monkeypatch):\n    assert monkeypatch\n"
+    issues = code_rules_enforcer.check_known_pytest_fixture_annotations(
+        source, TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A **kwarg sharing a fixture name is not an injection site, got: {issues}"
+    )
+
+

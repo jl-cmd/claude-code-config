@@ -13,6 +13,7 @@ if _hooks_directory not in sys.path:
 
 from code_rules_shared import (  # noqa: E402
     _collect_annotated_arguments,
+    _collect_fixture_injection_arguments,
     _definition_docstring_line_span,
     _function_definition_line_span,
     _scope_violations_to_changed_lines,
@@ -99,13 +100,22 @@ def check_known_pytest_fixture_annotations(content: str, file_path: str) -> list
     A non-test file produces no findings here: the broad check already covers
     every parameter outside test files.
 
+    A known fixture parameter is flagged both when it carries no annotation and
+    when its annotation source differs from the fixture's single documented
+    type, so ``tmp_path: str`` is flagged exactly like ``tmp_path``. Only the
+    named injection slots pytest actually fills — positional-only,
+    positional-or-keyword, and keyword-only parameters — are inspected; a
+    ``*args`` or ``**kwargs`` parameter that happens to share a fixture name is
+    never a fixture injection and is skipped.
+
     Args:
         content: The Python source to analyze.
         file_path: The path of the file being checked.
 
     Returns:
-        One blocking issue per known fixture parameter that carries no
-        annotation, naming the parameter and its expected type.
+        One blocking issue per known fixture injection parameter whose
+        annotation is missing or differs from its single documented type,
+        naming the parameter and its expected type.
     """
     if not is_test_file(file_path):
         return []
@@ -121,13 +131,18 @@ def check_known_pytest_fixture_annotations(content: str, file_path: str) -> list
             continue
         if not _is_pytest_fixture_injection_site(each_node):
             continue
-        for each_arg in _collect_annotated_arguments(each_node):
+        for each_arg in _collect_fixture_injection_arguments(each_node):
             expected_annotation = ANNOTATION_BY_PYTEST_FIXTURE.get(
                 each_arg.arg
             )
             if expected_annotation is None:
                 continue
-            if each_arg.annotation is not None:
+            actual_annotation = (
+                ast.unparse(each_arg.annotation)
+                if each_arg.annotation is not None
+                else None
+            )
+            if actual_annotation == expected_annotation:
                 continue
             issues.append(
                 f"Line {each_arg.lineno}: parameter {each_arg.arg!r} on "

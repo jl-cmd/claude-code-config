@@ -118,9 +118,9 @@ ANNOTATION_BY_PYTEST_FIXTURE: dict[str, str] = {
     "request": "pytest.FixtureRequest",
 }
 KNOWN_PYTEST_FIXTURE_ANNOTATION_MESSAGE_SUFFIX: str = (
-    "known pytest fixture parameter missing its type annotation - annotate it "
-    "as the fixture's single documented type (CODE_RULES §6; pytest builtin "
-    "fixture reference https://docs.pytest.org/en/stable/reference/fixtures.html)"
+    "known pytest fixture parameter must carry its single documented type "
+    "(CODE_RULES §6; pytest builtin fixture reference "
+    "https://docs.pytest.org/en/stable/reference/fixtures.html)"
 )
 ALL_LOOP_INDEX_LETTER_EXEMPTIONS: frozenset[str] = frozenset({"i", "j", "k", "_"})
 EACH_PREFIX = "each_"

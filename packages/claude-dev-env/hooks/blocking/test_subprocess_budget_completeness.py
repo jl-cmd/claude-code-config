@@ -5,6 +5,10 @@ import json
 import pathlib
 import subprocess
 import sys
+import tempfile
+from collections.abc import Iterator
+
+import pytest
 
 _HOOK_DIR = pathlib.Path(__file__).parent
 if str(_HOOK_DIR) not in sys.path:
@@ -21,6 +25,13 @@ hook_spec.loader.exec_module(hook_module)
 
 find_undercounted_budget = hook_module.find_undercounted_budget
 format_block_message = hook_module.format_block_message
+resolved_content = hook_module.resolved_content
+
+
+@pytest.fixture
+def production_module_path() -> Iterator[pathlib.Path]:
+    with tempfile.TemporaryDirectory(prefix="budget_completeness_") as production_dir:
+        yield pathlib.Path(production_dir) / "timing_module.py"
 
 _BUDGET_FLAGS_GIT_TIMEOUT_OMISSION = """
 import subprocess
@@ -323,6 +334,151 @@ def test_ignores_function_whose_name_merely_contains_the_budget_substring() -> N
     assert find_undercounted_budget(_INTERIOR_BUDGET_SUBSTRING_NOT_A_TOTAL) is None
 
 
+_STRAY_LITERAL_EQUAL_TO_OMITTED_TIMEOUT = """
+import subprocess
+
+
+def worst_case_seconds() -> int:
+    retry_attempts = 5
+    fix_phase_seconds = 12
+    format_phase_seconds = 12
+    if retry_attempts < 0:
+        return 0
+    return fix_phase_seconds + format_phase_seconds
+
+
+def is_untracked_in_git(file_path: str) -> bool:
+    git_check = subprocess.run(["git", "ls-files", file_path], timeout=5)
+    return git_check.returncode != 0
+
+
+def main(file_path: str) -> bool:
+    return is_untracked_in_git(file_path)
+"""
+
+
+def test_flags_when_a_stray_literal_equals_the_omitted_subprocess_timeout() -> None:
+    undercounted_budget = find_undercounted_budget(_STRAY_LITERAL_EQUAL_TO_OMITTED_TIMEOUT)
+    assert undercounted_budget is not None
+    function_name, omitted_values = undercounted_budget
+    assert function_name == "worst_case_seconds"
+    assert omitted_values == {5}
+
+
+_BARE_RUN_IMPORT_OMITS_A_REACHABLE_TIMEOUT = """
+from subprocess import run
+
+PYTHON_FORMAT_TIMEOUT_SECONDS = 12
+
+
+def worst_case_seconds() -> int:
+    return PYTHON_FORMAT_TIMEOUT_SECONDS
+
+
+def run_format(file_path: str) -> None:
+    run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+
+
+def probe() -> int:
+    completed_probe = run(["curl", "https://example.test"], timeout=99)
+    return completed_probe.returncode
+
+
+def main(file_path: str) -> int:
+    run_format(file_path)
+    return probe()
+"""
+
+
+def test_flags_bare_run_call_from_subprocess_import_run() -> None:
+    undercounted_budget = find_undercounted_budget(_BARE_RUN_IMPORT_OMITS_A_REACHABLE_TIMEOUT)
+    assert undercounted_budget is not None
+    function_name, omitted_values = undercounted_budget
+    assert function_name == "worst_case_seconds"
+    assert omitted_values == {99}
+
+
+def test_resolved_content_reconstructs_the_full_file_for_an_edit(
+    tmp_path: pathlib.Path,
+) -> None:
+    edited_module_path = tmp_path / "timing_module.py"
+    old_helper_body = '    git_check = subprocess.run(["git", "ls-files", file_path])\n'
+    new_helper_body = '    git_check = subprocess.run(["git", "ls-files", file_path], timeout=45)\n'
+    edited_module_path.write_text(
+        _BUDGET_COUNTS_EVERY_TIMEOUT.replace(
+            '    git_check = subprocess.run(["git", "ls-files", file_path],'
+            " timeout=GIT_CHECK_TIMEOUT_SECONDS)\n",
+            old_helper_body,
+        ),
+        encoding="utf-8",
+    )
+    reconstructed_content = resolved_content(
+        {
+            "file_path": str(edited_module_path),
+            "old_string": old_helper_body,
+            "new_string": new_helper_body,
+        }
+    )
+    assert "timeout=45" in reconstructed_content
+    assert "def worst_case_python_format_seconds" in reconstructed_content
+
+
+def test_edit_flags_new_timeout_added_to_a_non_budget_helper(tmp_path: pathlib.Path) -> None:
+    edited_module_path = tmp_path / "timing_module.py"
+    edited_module_path.write_text(_BUDGET_COUNTS_EVERY_TIMEOUT, encoding="utf-8")
+    old_helper_line = (
+        '    git_check = subprocess.run(["git", "ls-files", file_path],'
+        " timeout=GIT_CHECK_TIMEOUT_SECONDS)\n"
+    )
+    new_helper_line = (
+        '    git_check = subprocess.run(["git", "ls-files", file_path], timeout=45)\n'
+    )
+    reconstructed_content = resolved_content(
+        {
+            "file_path": str(edited_module_path),
+            "old_string": old_helper_line,
+            "new_string": new_helper_line,
+        }
+    )
+    undercounted_budget = find_undercounted_budget(reconstructed_content)
+    assert undercounted_budget is not None
+    function_name, omitted_values = undercounted_budget
+    assert function_name == "worst_case_python_format_seconds"
+    assert omitted_values == {45}
+
+
+def test_edit_passes_single_helper_when_full_file_budget_is_complete(
+    tmp_path: pathlib.Path,
+) -> None:
+    edited_module_path = tmp_path / "timing_module.py"
+    edited_module_path.write_text(_BUDGET_COUNTS_EVERY_TIMEOUT, encoding="utf-8")
+    old_helper_line = '    return git_check.returncode != 0\n'
+    new_helper_line = '    return git_check.returncode != 0  # checked\n'
+    reconstructed_content = resolved_content(
+        {
+            "file_path": str(edited_module_path),
+            "old_string": old_helper_line,
+            "new_string": new_helper_line,
+        }
+    )
+    assert find_undercounted_budget(reconstructed_content) is None
+
+
+def test_resolved_content_returns_empty_when_edit_old_string_is_absent(
+    tmp_path: pathlib.Path,
+) -> None:
+    edited_module_path = tmp_path / "timing_module.py"
+    edited_module_path.write_text(_BUDGET_COUNTS_EVERY_TIMEOUT, encoding="utf-8")
+    reconstructed_content = resolved_content(
+        {
+            "file_path": str(edited_module_path),
+            "old_string": "no such line in the file\n",
+            "new_string": "replacement\n",
+        }
+    )
+    assert reconstructed_content == ""
+
+
 def _run_hook_on_content(content: str) -> subprocess.CompletedProcess[str]:
     hook_input = json.dumps(
         {
@@ -394,3 +550,39 @@ def test_full_hook_exempts_test_files_from_the_budget_gate() -> None:
     )
     assert completed_hook.returncode == 0
     assert completed_hook.stdout.strip() == ""
+
+
+def test_full_hook_denies_edit_that_adds_a_timeout_to_a_non_budget_helper(
+    production_module_path: pathlib.Path,
+) -> None:
+    edited_module_path = production_module_path
+    edited_module_path.write_text(_BUDGET_COUNTS_EVERY_TIMEOUT, encoding="utf-8")
+    old_helper_line = (
+        '    git_check = subprocess.run(["git", "ls-files", file_path],'
+        " timeout=GIT_CHECK_TIMEOUT_SECONDS)\n"
+    )
+    new_helper_line = (
+        '    git_check = subprocess.run(["git", "ls-files", file_path], timeout=45)\n'
+    )
+    hook_input = json.dumps(
+        {
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(edited_module_path),
+                "old_string": old_helper_line,
+                "new_string": new_helper_line,
+            },
+        }
+    )
+    completed_hook = subprocess.run(
+        [sys.executable, str(_HOOK_DIR / "subprocess_budget_completeness.py")],
+        input=hook_input,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert completed_hook.returncode == 0
+    hook_output = json.loads(completed_hook.stdout)
+    assert hook_output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "45s" in hook_output["hookSpecificOutput"]["permissionDecisionReason"]

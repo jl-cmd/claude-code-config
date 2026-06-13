@@ -9,14 +9,20 @@ Fires when a Write/Edit produces a Python module that both:
     interior ``budget`` segment such as ``audit_budget_report`` does not qualify),
     and
   * passes ``timeout=`` (an integer literal or a module-level integer
-    constant) to one or more ``subprocess.run`` calls,
+    constant) to one or more subprocess ``run`` calls, recognized in both the
+    ``subprocess.run(...)`` attribute form and the bare ``run(...)`` form bound
+    by ``from subprocess import run`` (including an aliased import),
 
 but the budget total omits a distinct subprocess timeout value reachable in one
 invocation. The reachable set is the subprocess timeouts in functions the module
 ``main`` entry point transitively calls; a module with no ``main`` treats every
-function as reachable. A budget helper that undercounts a reachable subprocess
-timeout reports a wall-clock margin wider than the real one, so a later change
-can silently cross the harness timeout while the named guard still reads green.
+function as reachable. The budget total counts only the integer values that flow
+into the helper's ``return`` expression — its returned literals, the module
+constants it references there, and the local names bound to integers it returns
+— so a stray literal elsewhere in the helper body never masks an omitted timeout.
+A budget helper that undercounts a reachable subprocess timeout reports a
+wall-clock margin wider than the real one, so a later change can silently cross
+the harness timeout while the named guard still reads green.
 
 Test files are exempt: the gate skips paths matching the project's test-path
 patterns so a test module can stage undercounting fixtures freely.
@@ -59,10 +65,29 @@ def resolved_content(all_tool_input_fields: dict[str, object]) -> str:
     written_content = all_tool_input_fields.get("content")
     if isinstance(written_content, str):
         return written_content
-    replacement_content = all_tool_input_fields.get("new_string")
-    if isinstance(replacement_content, str):
-        return replacement_content
-    return ""
+    return reconstructed_edit_content(all_tool_input_fields)
+
+
+def reconstructed_edit_content(all_tool_input_fields: dict[str, object]) -> str:
+    file_path = all_tool_input_fields.get("file_path")
+    old_string = all_tool_input_fields.get("old_string")
+    new_string = all_tool_input_fields.get("new_string")
+    if not isinstance(file_path, str) or not isinstance(old_string, str):
+        return ""
+    if not isinstance(new_string, str) or not old_string:
+        return ""
+    existing_content = existing_file_content(file_path)
+    if existing_content is None or old_string not in existing_content:
+        return ""
+    return existing_content.replace(old_string, new_string, 1)
+
+
+def existing_file_content(file_path: str) -> str | None:
+    try:
+        with open(file_path, "r", encoding="utf-8") as existing_file:
+            return existing_file.read()
+    except (FileNotFoundError, OSError, UnicodeDecodeError):
+        return None
 
 
 def integer_literal_value(node: ast.expr) -> int | None:
@@ -88,6 +113,7 @@ def collect_reachable_subprocess_timeout_values(
     tree: ast.Module,
     value_by_constant_name: dict[str, int],
     all_reachable_function_names: set[str] | None,
+    all_bare_run_aliases: set[str],
 ) -> set[int]:
     all_timeout_values: set[int] = set()
     for each_function in iter_function_definitions(tree):
@@ -97,19 +123,21 @@ def collect_reachable_subprocess_timeout_values(
         ):
             continue
         all_timeout_values |= subprocess_timeout_values_in_function(
-            each_function, value_by_constant_name
+            each_function, value_by_constant_name, all_bare_run_aliases
         )
     return all_timeout_values
 
 
 def subprocess_timeout_values_in_function(
-    function_node: FunctionDefinition, value_by_constant_name: dict[str, int]
+    function_node: FunctionDefinition,
+    value_by_constant_name: dict[str, int],
+    all_bare_run_aliases: set[str],
 ) -> set[int]:
     all_timeout_values: set[int] = set()
     for each_node in ast.walk(function_node):
         if not isinstance(each_node, ast.Call):
             continue
-        if not is_subprocess_run_call(each_node):
+        if not is_subprocess_run_call(each_node, all_bare_run_aliases):
             continue
         for each_keyword in each_node.keywords:
             if each_keyword.arg != SUBPROCESS_TIMEOUT_KEYWORD:
@@ -158,10 +186,12 @@ def reachable_function_names_from_entry_points(tree: ast.Module) -> set[str] | N
     return reachable_names
 
 
-def is_subprocess_run_call(call_node: ast.Call) -> bool:
+def is_subprocess_run_call(call_node: ast.Call, all_bare_run_aliases: set[str]) -> bool:
     function_node = call_node.func
     if isinstance(function_node, ast.Attribute):
         return function_node.attr == "run" and _attribute_root_name(function_node) == "subprocess"
+    if isinstance(function_node, ast.Name):
+        return function_node.id in all_bare_run_aliases
     return False
 
 
@@ -172,15 +202,62 @@ def _attribute_root_name(attribute_node: ast.Attribute) -> str | None:
     return None
 
 
-def summed_integer_literals(function_node: FunctionDefinition) -> set[int]:
-    all_summed_literals: set[int] = set()
+def bare_run_aliases(tree: ast.Module) -> set[str]:
+    all_aliases: set[str] = set()
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, ast.ImportFrom) or each_node.module != "subprocess":
+            continue
+        for each_name in each_node.names:
+            if each_name.name == "run":
+                all_aliases.add(each_name.asname or each_name.name)
+    return all_aliases
+
+
+def values_flowing_into_returned_total(
+    function_node: FunctionDefinition, value_by_constant_name: dict[str, int]
+) -> set[int]:
+    value_by_local_name = local_integer_bindings(function_node, value_by_constant_name)
+    all_accounted_values: set[int] = set()
     for each_node in ast.walk(function_node):
-        literal_value = (
-            integer_literal_value(each_node) if isinstance(each_node, ast.expr) else None
+        if not isinstance(each_node, ast.Return) or each_node.value is None:
+            continue
+        all_accounted_values |= integer_values_in_expression(
+            each_node.value, value_by_local_name, value_by_constant_name
         )
+    return all_accounted_values
+
+
+def local_integer_bindings(
+    function_node: FunctionDefinition, value_by_constant_name: dict[str, int]
+) -> dict[str, int]:
+    value_by_local_name: dict[str, int] = {}
+    for each_node in ast.walk(function_node):
+        if not isinstance(each_node, ast.Assign):
+            continue
+        bound_value = resolved_integer_value(each_node.value, value_by_constant_name)
+        if bound_value is None:
+            continue
+        for each_target in each_node.targets:
+            if isinstance(each_target, ast.Name):
+                value_by_local_name[each_target.id] = bound_value
+    return value_by_local_name
+
+
+def integer_values_in_expression(
+    expression_node: ast.expr,
+    value_by_local_name: dict[str, int],
+    value_by_constant_name: dict[str, int],
+) -> set[int]:
+    all_values: set[int] = set()
+    for each_node in ast.walk(expression_node):
+        literal_value = integer_literal_value(each_node) if isinstance(each_node, ast.expr) else None
         if literal_value is not None:
-            all_summed_literals.add(literal_value)
-    return all_summed_literals
+            all_values.add(literal_value)
+        elif isinstance(each_node, ast.Name):
+            named_value = value_by_local_name.get(each_node.id, value_by_constant_name.get(each_node.id))
+            if named_value is not None:
+                all_values.add(named_value)
+    return all_values
 
 
 def is_budget_function(function_node: FunctionDefinition) -> bool:
@@ -213,8 +290,9 @@ def find_undercounted_budget(content: str) -> tuple[str, set[int]] | None:
 
     referenced_constants = collect_module_constant_values(tree)
     all_reachable_function_names = reachable_function_names_from_entry_points(tree)
+    all_bare_run_aliases = bare_run_aliases(tree)
     subprocess_timeout_values = collect_reachable_subprocess_timeout_values(
-        tree, referenced_constants, all_reachable_function_names
+        tree, referenced_constants, all_reachable_function_names, all_bare_run_aliases
     )
     if not subprocess_timeout_values:
         return None
@@ -224,9 +302,7 @@ def find_undercounted_budget(content: str) -> tuple[str, set[int]] | None:
             continue
         if not is_budget_function(each_node):
             continue
-        accounted_values = summed_integer_literals(each_node) | budget_named_constant_values(
-            each_node, referenced_constants
-        )
+        accounted_values = values_flowing_into_returned_total(each_node, referenced_constants)
         omitted_values = subprocess_timeout_values - accounted_values
         if omitted_values:
             return each_node.name, omitted_values
@@ -248,16 +324,6 @@ def collect_module_constant_values(tree: ast.Module) -> dict[str, int]:
             if annotated_value is not None and isinstance(each_node.target, ast.Name):
                 value_by_constant_name[each_node.target.id] = annotated_value
     return value_by_constant_name
-
-
-def budget_named_constant_values(
-    function_node: FunctionDefinition, value_by_constant_name: dict[str, int]
-) -> set[int]:
-    all_referenced_values: set[int] = set()
-    for each_node in ast.walk(function_node):
-        if isinstance(each_node, ast.Name) and each_node.id in value_by_constant_name:
-            all_referenced_values.add(value_by_constant_name[each_node.id])
-    return all_referenced_values
 
 
 def format_block_message(file_path: str, function_name: str, all_omitted_values: set[int]) -> str:

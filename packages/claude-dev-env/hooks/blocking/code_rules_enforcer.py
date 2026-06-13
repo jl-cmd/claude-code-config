@@ -54,6 +54,9 @@ from code_rules_docstrings import (  # noqa: E402
     check_docstring_args_match_signature,
     check_docstring_format,
 )
+from code_rules_duplicate_body import (  # noqa: E402
+    check_duplicate_function_body_across_files,
+)
 from code_rules_imports_logging import (  # noqa: E402
     advise_file_line_count,
     check_e2e_test_naming,
@@ -188,6 +191,9 @@ def validate_content(
         all_issues.extend(check_constants_outside_config(content, file_path))
         all_issues.extend(check_constants_outside_config_advisory(content, file_path))
         all_issues.extend(check_file_global_constants_use_count(content, file_path))
+        all_issues.extend(
+            check_duplicate_function_body_across_files(effective_content, file_path)
+        )
         all_issues.extend(check_type_escape_hatches(effective_content, file_path))
         all_issues.extend(check_banned_identifiers(content, file_path))
         all_issues.extend(

@@ -23,6 +23,8 @@ from hooks_constants.destructive_command_segment_constants import (  # noqa: E40
     ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS,
     ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
     ALL_LAUNCHER_OPTIONS_TAKING_SEPARATE_VALUE,
+    ALL_OUTPUT_REDIRECTION_OPERATORS,
+    ALL_READ_ONLY_SUBCOMMANDS_BY_DISPATCHING_PROGRAM,
     ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS,
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
     ALL_STRING_ARGUMENT_EXECUTION_FLAGS,
@@ -636,6 +638,38 @@ def _find_non_rm_destructive_pattern(command: str) -> str | None:
     return None
 
 
+def _find_non_force_push_destructive_hazard(command: str) -> str | None:
+    """Return a destructive hazard riding alongside a convergence force-push, or None.
+
+    Applied when a force-push to a convergence branch is being auto-allowed: the
+    command is rescanned for any destructive pattern other than the force-push itself
+    so a real co-resident hazard (``git push --force origin claude/x && git reset
+    --hard``) still prompts. The force-push patterns are skipped because they are the
+    very thing the convergence exemption grants. An rm-family pattern is skipped when
+    it is only a quoted mention (``echo "rm -rf foo" && git push --force origin
+    claude/x``), so a passive ``rm`` string does not re-block a legitimate push.
+
+    Args:
+        command: The raw Bash command string from the tool input.
+
+    Returns:
+        The description of the first co-resident destructive hazard, or None.
+    """
+    for each_pattern_regex, each_pattern_description in DESTRUCTIVE_BASH_PATTERNS:
+        if "git push" in each_pattern_description and (
+            "force" in each_pattern_description or "-f" in each_pattern_description
+        ):
+            continue
+        if not each_pattern_regex.search(command):
+            continue
+        if _destructive_match_is_rm_family(
+            each_pattern_description
+        ) and command_has_no_real_rm_invocation(command):
+            continue
+        return each_pattern_description
+    return None
+
+
 def _command_contains_non_rm_family_destructive_pattern(command: str) -> bool:
     """Return True when any destructive pattern in the command is not rm-family.
 
@@ -702,6 +736,86 @@ def _rm_segment_targets_only_absolute_ephemeral_paths(all_rm_segment_tokens: lis
     return True
 
 
+def _segment_redirects_output_to_a_file(all_segment_tokens: list[str]) -> bool:
+    """Return True when a segment writes its output to a file via shell redirection.
+
+    An output redirection (``>``, ``>>``, ``&>``, ``>|``) truncates or rewrites the
+    redirect target, so ``cat /dev/null > /etc/important.conf`` destroys the target
+    file even though ``cat`` itself is read-only. The benign-segment check declines
+    any segment whose tokens contain a redirection operator so a benign program that
+    overwrites a non-ephemeral file does not ride the ephemeral ``rm`` auto-allow.
+
+    Args:
+        all_segment_tokens: Shlex tokens of one shell segment.
+
+    Returns:
+        True when the segment contains an output-redirection operator token.
+    """
+    return any(
+        each_token in ALL_OUTPUT_REDIRECTION_OPERATORS for each_token in all_segment_tokens
+    )
+
+
+def _all_positional_tokens_after_leader(all_segment_tokens: list[str]) -> list[str]:
+    """Return the non-flag tokens that follow a segment's leading program.
+
+    Skips leading ``VAR=value`` assignments, the program token itself, every
+    dash-prefixed flag, and any ``key=value`` flag value, leaving the positional
+    words that name a subcommand chain (``repo``, ``delete`` in ``gh repo delete``;
+    ``stash``, ``drop`` in ``git stash drop``).
+
+    Args:
+        all_segment_tokens: Shlex tokens of one shell segment.
+
+    Returns:
+        The positional tokens after the leading program, in order.
+    """
+    leading_assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+    first_program_index = next(
+        (
+            index
+            for index, token in enumerate(all_segment_tokens)
+            if not leading_assignment_pattern.match(token)
+        ),
+        None,
+    )
+    if first_program_index is None:
+        return []
+    return [
+        each_token
+        for each_token in all_segment_tokens[first_program_index + 1:]
+        if not each_token.startswith("-") and "=" not in each_token
+    ]
+
+
+def _subcommand_dispatching_segment_is_read_only(
+    all_read_only_subcommands: frozenset[str], all_segment_tokens: list[str]
+) -> bool:
+    """Return True only when a subcommand-dispatching segment runs a read-only verb.
+
+    ``git`` and ``gh`` dispatch destructive operations through subcommands the
+    DESTRUCTIVE_BASH_PATTERNS table does not separately enumerate (``gh repo delete``,
+    ``git checkout -- .``, ``git stash drop``, ``git branch -D``), so a chained
+    destructive subcommand would otherwise ride the ephemeral ``rm`` auto-allow. The
+    check fails closed: a segment is benign only when one of its positional tokens is
+    a recognized read-only subcommand (``git status``, ``gh pr view``) and none is a
+    known mutating one; any unrecognized subcommand is treated as non-benign.
+
+    Args:
+        all_read_only_subcommands: The read-only subcommand verbs for the segment's
+            dispatching program.
+        all_segment_tokens: Shlex tokens of one shell segment.
+
+    Returns:
+        True when the segment's subcommand is on the read-only allowlist.
+    """
+    all_positional_tokens = _all_positional_tokens_after_leader(all_segment_tokens)
+    return any(
+        each_token.lower() in all_read_only_subcommands
+        for each_token in all_positional_tokens
+    )
+
+
 def _segment_leading_program_is_benign(all_segment_tokens: list[str]) -> bool:
     """Return True when a non-rm segment's leading program is a benign reporting command.
 
@@ -713,6 +827,12 @@ def _segment_leading_program_is_benign(all_segment_tokens: list[str]) -> bool:
     DESTRUCTIVE_BASH_PATTERNS table — is treated as non-benign so the chain falls
     through to the prompt rather than riding the ephemeral ``rm`` auto-allow.
 
+    Two further constraints fail the segment closed even when its leading program is
+    allowlisted: an output redirection (``cat /dev/null > /etc/important.conf``)
+    truncates the redirect target, and a ``git`` or ``gh`` segment must run a
+    read-only subcommand (``git status``, ``gh pr view``) rather than a destructive
+    one (``gh repo delete``, ``git checkout -- .``, ``git stash drop``).
+
     Args:
         all_segment_tokens: Shlex tokens of one shell segment, possibly led by
             ``VAR=value`` assignments before the program token.
@@ -723,7 +843,19 @@ def _segment_leading_program_is_benign(all_segment_tokens: list[str]) -> bool:
     leading_command_token = _leading_command_token(all_segment_tokens)
     if leading_command_token is None:
         return False
-    return Path(leading_command_token).name.lower() in ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS
+    leading_program_basename = Path(leading_command_token).name.lower()
+    if leading_program_basename not in ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS:
+        return False
+    if _segment_redirects_output_to_a_file(all_segment_tokens):
+        return False
+    all_read_only_subcommands = ALL_READ_ONLY_SUBCOMMANDS_BY_DISPATCHING_PROGRAM.get(
+        leading_program_basename
+    )
+    if all_read_only_subcommands is not None:
+        return _subcommand_dispatching_segment_is_read_only(
+            all_read_only_subcommands, all_segment_tokens
+        )
+    return True
 
 
 def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
@@ -1114,14 +1246,10 @@ def main() -> None:
         and ("force" in matched_description or "-f" in matched_description)
         and _force_push_targets_convergence_branch(command)
     ):
-        for each_pattern, each_description in DESTRUCTIVE_BASH_PATTERNS:
-            if "git push" in each_description and ("force" in each_description or "-f" in each_description):
-                continue
-            if each_pattern.search(command):
-                matched_description = each_description
-                break
-        else:
+        co_resident_hazard_description = _find_non_force_push_destructive_hazard(command)
+        if co_resident_hazard_description is None:
             sys.exit(0)
+        matched_description = co_resident_hazard_description
 
     if matched_description is not None:
         ask_response = {

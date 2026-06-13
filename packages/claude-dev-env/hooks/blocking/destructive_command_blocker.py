@@ -38,6 +38,7 @@ from hooks_constants.destructive_command_segment_constants import (  # noqa: E40
     GH_HTTP_READ_ONLY_METHOD,
     GH_LONG_METHOD_FLAG_EQUALS_PREFIX,
     GH_SHORT_METHOD_FLAG_PREFIX,
+    ALL_READ_ONLY_SUBCOMMAND_POSITION_DEPTHS_BY_DISPATCHING_PROGRAM,
     LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN,
     OUTPUT_REDIRECTION_OPERATOR_PATTERN,
 )
@@ -869,10 +870,13 @@ def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool
 
     ``gh api`` reaches the GitHub API with whatever HTTP method an ``-X``/``--method``
     flag names. A GET is read-only, but POST, PUT, PATCH and DELETE mutate server
-    state (``gh api repos/foo -X DELETE``). The method flag is dash-prefixed and so is
-    dropped from the positional-token list the read-only check inspects, so the raw
-    segment tokens are scanned here: when a write-method flag is followed by a write
-    method, the segment is reported as a write rather than a read.
+    state (``gh api repos/foo -X DELETE``). Both flag spellings are recognized: the
+    space-separated form where the method is its own token (``-X DELETE``) and the
+    glued forms where the method is inside the flag token (``-XDELETE``,
+    ``--method=DELETE``). The method flag is dash-prefixed and so is dropped from the
+    positional-token list the read-only check inspects, so the raw segment tokens are
+    scanned here: when a write-method flag names a write method, the segment is
+    reported as a write rather than a read.
 
     ``gh api`` also defaults the method to POST when any request-body field flag
     (``-f``/``--raw-field``, ``-F``/``--field``, ``--input``) is present and no explicit
@@ -886,14 +890,11 @@ def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool
     Returns:
         True when the segment names an HTTP write method via ``gh api``.
     """
-    for each_index, each_token in enumerate(all_segment_tokens):
-        if each_token not in ALL_GH_HTTP_WRITE_METHOD_FLAGS:
-            continue
-        each_next_index = each_index + 1
-        if each_next_index >= len(all_segment_tokens):
-            continue
-        if all_segment_tokens[each_next_index].upper() in ALL_GH_HTTP_WRITE_METHODS:
-            return True
+    if any(
+        _gh_segment_names_an_explicit_method(all_segment_tokens, each_write_method)
+        for each_write_method in ALL_GH_HTTP_WRITE_METHODS
+    ):
+        return True
     if _gh_segment_carries_a_request_body_field(all_segment_tokens):
         return not _gh_segment_names_an_explicit_method(
             all_segment_tokens, GH_HTTP_READ_ONLY_METHOD
@@ -948,13 +949,17 @@ def _subcommand_dispatching_segment_is_read_only(
     DESTRUCTIVE_BASH_PATTERNS table does not separately enumerate (``gh repo delete``,
     ``git checkout -- .``, ``git stash drop``, ``git branch -D``), so a chained
     destructive subcommand would otherwise ride the ephemeral ``rm`` auto-allow. The
-    check fails closed: a segment is benign only when one of its positional tokens is a
-    recognized read-only subcommand (``git status``, ``gh pr view``) and the segment
-    runs no known mutating mode. ``git config`` and ``git remote`` sit in the read-only
-    allowlist for their query modes yet carry write modes (``git config --global key
-    value``, ``git remote add evil url``), and ``gh api`` performs an HTTP write when an
-    ``-X``/``--method`` flag names POST, PUT, PATCH or DELETE; each such mutating mode
-    declines the segment.
+    check fails closed: a segment is benign only when a read-only subcommand verb sits
+    in the program's leading subcommand window and the segment runs no known mutating
+    mode. The window spans the first positional for ``git`` (``git status``) and the
+    first two positionals for ``gh`` (``gh api``, ``gh pr view``), matching how each
+    program names its subcommand. Bounding the search to that window keeps a read-only
+    verb used as a deeper argument to a destructive subcommand (``gh repo delete
+    status``, ``git push origin log``, ``git branch -D log``) from satisfying the check.
+    ``git config`` and ``git remote`` sit in the read-only allowlist for their query
+    modes yet carry write modes (``git config --global key value``, ``git remote add
+    evil url``), and ``gh api`` performs an HTTP write when an ``-X``/``--method`` flag
+    names POST, PUT, PATCH or DELETE; each such mutating mode declines the segment.
 
     Args:
         leading_program_basename: The dispatching program (``git`` or ``gh``).
@@ -967,9 +972,15 @@ def _subcommand_dispatching_segment_is_read_only(
         segment runs no mutating mode.
     """
     all_positional_tokens = _all_positional_tokens_after_leader(all_segment_tokens)
+    subcommand_window_depth = (
+        ALL_READ_ONLY_SUBCOMMAND_POSITION_DEPTHS_BY_DISPATCHING_PROGRAM[
+            leading_program_basename
+        ]
+    )
+    all_leading_subcommand_tokens = all_positional_tokens[:subcommand_window_depth]
     runs_a_read_only_subcommand = any(
         each_token.lower() in all_read_only_subcommands
-        for each_token in all_positional_tokens
+        for each_token in all_leading_subcommand_tokens
     )
     if not runs_a_read_only_subcommand:
         return False

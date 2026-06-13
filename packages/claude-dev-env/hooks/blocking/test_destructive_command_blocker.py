@@ -1162,6 +1162,54 @@ def test_compound_rm_allowed_when_gh_api_field_with_explicit_get_follows_ephemer
     _assert_hook_allows("rm -rf /tmp/reply && gh api repos/foo -X GET -f a=b")
 
 
+def test_compound_rm_asks_when_gh_api_glued_short_delete_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo -XDELETE")
+
+
+def test_compound_rm_asks_when_gh_api_glued_long_delete_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo --method=DELETE")
+
+
+def test_compound_rm_asks_when_gh_api_glued_short_put_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo -XPUT")
+
+
+def test_compound_rm_asks_when_gh_api_glued_long_patch_lowercase_rides_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo --method=patch")
+
+
+def test_compound_rm_allowed_when_gh_api_glued_short_get_follows_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && gh api repos/foo -XGET")
+
+
+def test_compound_rm_allowed_when_gh_api_glued_long_get_follows_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && gh api repos/foo --method=GET")
+
+
+def test_compound_rm_asks_when_gh_repo_delete_targets_read_only_verb_named_repo() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh repo delete status --yes")
+
+
+def test_compound_rm_asks_when_git_stash_drop_targets_read_only_verb_named_ref() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git stash drop status")
+
+
+def test_compound_rm_asks_when_git_branch_force_delete_targets_read_only_verb_named_branch() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git branch -D log")
+
+
+def test_compound_rm_asks_when_git_checkout_discards_read_only_verb_named_path() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git checkout -- log")
+
+
+def test_compound_rm_asks_when_git_push_targets_read_only_verb_named_ref() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git push origin log")
+
+
+def test_compound_rm_allowed_when_gh_pr_view_takes_read_only_verb_named_argument() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && gh pr view status")
+
+
 def test_compound_rm_asks_when_git_remote_add_after_verbose_flag_rides_ephemeral_rm() -> None:
     _assert_hook_asks("rm -rf /tmp/x && git remote -v add evil http://attacker")
 

@@ -142,6 +142,10 @@ ALL_READ_ONLY_SUBCOMMANDS_BY_DISPATCHING_PROGRAM: dict[str, frozenset[str]] = {
     "git": ALL_READ_ONLY_GIT_SUBCOMMANDS,
     "gh": ALL_READ_ONLY_GH_SUBCOMMANDS,
 }
+ALL_READ_ONLY_SUBCOMMAND_POSITION_DEPTHS_BY_DISPATCHING_PROGRAM: dict[str, int] = {
+    "git": 1,
+    "gh": 2,
+}
 LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN: str = (
     r"^(?:0x[0-9A-Fa-f]+"
     r"|[0-9]+(?:[.,][0-9]+)?[smhd]?"

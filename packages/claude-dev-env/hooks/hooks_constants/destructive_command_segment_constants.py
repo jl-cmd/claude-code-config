@@ -83,9 +83,22 @@ ALL_FILE_WRITING_OUTPUT_FLAGS_BY_BENIGN_PROGRAM: dict[str, frozenset[str]] = {
 ALL_GIT_CONFIG_READ_ONLY_FLAGS: frozenset[str] = frozenset(
     {"--get", "--get-all", "--get-regexp", "--list", "-l", "--get-urlmatch"}
 )
-ALL_GIT_REMOTE_READ_ONLY_VERBS: frozenset[str] = frozenset({"-v", "--verbose", "show", "get-url"})
+ALL_GIT_REMOTE_READ_ONLY_VERBS: frozenset[str] = frozenset({"show", "get-url"})
 ALL_GH_HTTP_WRITE_METHOD_FLAGS: frozenset[str] = frozenset({"-X", "--method"})
 ALL_GH_HTTP_WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+GH_HTTP_READ_ONLY_METHOD: str = "GET"
+GH_SHORT_METHOD_FLAG_PREFIX: str = "-X"
+GH_LONG_METHOD_FLAG_EQUALS_PREFIX: str = "--method="
+ALL_GH_API_REQUEST_BODY_FIELD_FLAGS: frozenset[str] = frozenset(
+    {"-f", "--raw-field", "-F", "--field", "--input"}
+)
+ALL_GH_API_GLUED_REQUEST_BODY_FIELD_FLAG_PREFIXES: tuple[str, ...] = (
+    "-f",
+    "-F",
+    "--raw-field=",
+    "--field=",
+    "--input=",
+)
 ALL_READ_ONLY_GIT_SUBCOMMANDS: frozenset[str] = frozenset(
     {
         "status",
@@ -141,6 +154,13 @@ ALL_LAUNCHER_OPTIONS_TAKING_SEPARATE_VALUE: frozenset[str] = frozenset(
         "-k",
         "--kill-after",
         "-n",
+        "-o",
+        "--output",
+        "-e",
+        "--error",
+        "-i",
+        "--input",
+        "--classdata",
     }
 )
 ALL_SUBSHELL_GROUPING_CHARACTERS: str = "({"

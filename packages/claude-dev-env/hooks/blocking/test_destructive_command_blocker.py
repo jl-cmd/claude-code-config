@@ -1146,6 +1146,46 @@ def test_compound_rm_asks_when_gh_api_http_delete_rides_alongside_ephemeral_rm()
     _assert_hook_asks("rm -rf /tmp/x && gh api repos/foo -X DELETE")
 
 
+def test_compound_rm_asks_when_gh_api_raw_field_implicit_post_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/o/r/issues -f title=x")
+
+
+def test_compound_rm_asks_when_gh_api_field_file_implicit_post_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api -F a=@b repos/o/r/comments")
+
+
+def test_compound_rm_asks_when_gh_api_input_implicit_post_rides_alongside_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && gh api repos/o/r/x --input body.json")
+
+
+def test_compound_rm_allowed_when_gh_api_field_with_explicit_get_follows_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && gh api repos/foo -X GET -f a=b")
+
+
+def test_compound_rm_asks_when_git_remote_add_after_verbose_flag_rides_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git remote -v add evil http://attacker")
+
+
+def test_compound_rm_asks_when_git_remote_set_url_after_verbose_flag_rides_ephemeral_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git remote -v set-url origin http://evil")
+
+
+def test_compound_rm_asks_when_stdbuf_separate_output_value_wraps_bash_dash_c() -> None:
+    _assert_hook_asks('stdbuf -o L bash -c "rm -rf /etc"')
+
+
+def test_compound_rm_asks_when_stdbuf_long_output_value_wraps_bash_dash_c() -> None:
+    _assert_hook_asks('stdbuf --output L bash -c "rm -rf /etc"')
+
+
+def test_compound_rm_asks_when_stdbuf_separate_error_value_wraps_bash_dash_c() -> None:
+    _assert_hook_asks('stdbuf -e 0 bash -c "rm -rf /etc"')
+
+
+def test_compound_rm_asks_when_ionice_classdata_name_wraps_bash_dash_c() -> None:
+    _assert_hook_asks('ionice --classdata foo bash -c "rm -rf /etc"')
+
+
 def test_compound_rm_allowed_when_git_config_lists_after_ephemeral_rm() -> None:
     _assert_hook_allows("rm -rf /tmp/reply && git config --list")
 

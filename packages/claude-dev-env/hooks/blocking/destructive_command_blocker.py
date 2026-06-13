@@ -22,6 +22,8 @@ from hooks_constants.destructive_command_segment_constants import (  # noqa: E40
     ALL_BENIGN_COMPOUND_SEGMENT_COMMANDS,
     ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS,
     ALL_FILE_WRITING_OUTPUT_FLAGS_BY_BENIGN_PROGRAM,
+    ALL_GH_API_GLUED_REQUEST_BODY_FIELD_FLAG_PREFIXES,
+    ALL_GH_API_REQUEST_BODY_FIELD_FLAGS,
     ALL_GH_HTTP_WRITE_METHOD_FLAGS,
     ALL_GH_HTTP_WRITE_METHODS,
     ALL_GIT_CONFIG_READ_ONLY_FLAGS,
@@ -33,6 +35,9 @@ from hooks_constants.destructive_command_segment_constants import (  # noqa: E40
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
     ALL_STRING_ARGUMENT_EXECUTION_FLAGS,
     ALL_SUBSHELL_GROUPING_CHARACTERS,
+    GH_HTTP_READ_ONLY_METHOD,
+    GH_LONG_METHOD_FLAG_EQUALS_PREFIX,
+    GH_SHORT_METHOD_FLAG_PREFIX,
     LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN,
     OUTPUT_REDIRECTION_OPERATOR_PATTERN,
 )
@@ -800,6 +805,65 @@ def _all_positional_tokens_after_leader(all_segment_tokens: list[str]) -> list[s
     ]
 
 
+def _gh_segment_names_an_explicit_method(
+    all_segment_tokens: list[str], target_method: str
+) -> bool:
+    """Return True when a ``gh`` segment explicitly names ``target_method``.
+
+    Recognizes both ``gh`` flag spellings: the space-separated form where the flag
+    (``-X``/``--method``) is its own token and the next token names the method
+    (``-X GET``), and the glued forms where the method is inside the flag token
+    (``-XGET``, ``--method=GET``). The match is case-insensitive against the
+    already-uppercased ``target_method``.
+
+    Args:
+        all_segment_tokens: Shlex tokens of one shell segment.
+        target_method: The HTTP method name to match, uppercased.
+
+    Returns:
+        True when an ``-X``/``--method`` flag names ``target_method``.
+    """
+    for each_index, each_token in enumerate(all_segment_tokens):
+        if each_token.startswith(GH_SHORT_METHOD_FLAG_PREFIX):
+            inline_method = each_token[len(GH_SHORT_METHOD_FLAG_PREFIX) :]
+        elif each_token.startswith(GH_LONG_METHOD_FLAG_EQUALS_PREFIX):
+            inline_method = each_token[len(GH_LONG_METHOD_FLAG_EQUALS_PREFIX) :]
+        else:
+            inline_method = ""
+        if inline_method.upper() == target_method:
+            return True
+        if each_token not in ALL_GH_HTTP_WRITE_METHOD_FLAGS:
+            continue
+        each_next_index = each_index + 1
+        if each_next_index < len(all_segment_tokens) and (
+            all_segment_tokens[each_next_index].upper() == target_method
+        ):
+            return True
+    return False
+
+
+def _gh_segment_carries_a_request_body_field(all_segment_tokens: list[str]) -> bool:
+    """Return True when a ``gh api`` segment adds a request-body field.
+
+    ``gh api`` adds a parameter to the request body through ``-f``/``--raw-field``,
+    ``-F``/``--field``, or ``--input``, each accepted as its own token (``-f title=x``,
+    ``--field a=b``) or glued to its value (``-ftitle=x``, ``--field=a=b``,
+    ``--input=body.json``).
+
+    Args:
+        all_segment_tokens: Shlex tokens of one shell segment.
+
+    Returns:
+        True when any token is a request-body field flag.
+    """
+    for each_token in all_segment_tokens:
+        if each_token in ALL_GH_API_REQUEST_BODY_FIELD_FLAGS:
+            return True
+        if each_token.startswith(ALL_GH_API_GLUED_REQUEST_BODY_FIELD_FLAG_PREFIXES):
+            return True
+    return False
+
+
 def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool:
     """Return True when a ``gh`` segment performs an HTTP write through ``gh api``.
 
@@ -809,6 +873,12 @@ def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool
     dropped from the positional-token list the read-only check inspects, so the raw
     segment tokens are scanned here: when a write-method flag is followed by a write
     method, the segment is reported as a write rather than a read.
+
+    ``gh api`` also defaults the method to POST when any request-body field flag
+    (``-f``/``--raw-field``, ``-F``/``--field``, ``--input``) is present and no explicit
+    method is given, so a field-carrying segment that does not explicitly name GET
+    (``gh api repos/foo -f title=x``) is an implicit-POST write. An explicit ``-X
+    GET``/``--method GET`` keeps such a segment read-only.
 
     Args:
         all_segment_tokens: Shlex tokens of one shell segment.
@@ -824,6 +894,10 @@ def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool
             continue
         if all_segment_tokens[each_next_index].upper() in ALL_GH_HTTP_WRITE_METHODS:
             return True
+    if _gh_segment_carries_a_request_body_field(all_segment_tokens):
+        return not _gh_segment_names_an_explicit_method(
+            all_segment_tokens, GH_HTTP_READ_ONLY_METHOD
+        )
     return False
 
 
@@ -835,9 +909,12 @@ def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segm
     ``git config key value`` and ``git config --global key value`` set a value, and
     ``git remote add|remove|rm|set-url`` change the remote table. A ``config`` segment
     mutates unless an explicit read-only flag (``--get``/``--list`` and the rest of
-    ALL_GIT_CONFIG_READ_ONLY_FLAGS) is present; a ``remote`` segment mutates unless its
-    only positional verb after ``remote`` is a read-only one (``-v``, ``show``,
-    ``get-url``).
+    ALL_GIT_CONFIG_READ_ONLY_FLAGS) is present; a ``remote`` segment mutates unless the
+    first positional verb after ``remote`` is a read-only one (``show``, ``get-url``).
+    The verb is read positionally rather than by scanning the whole segment for any
+    read-only token, because ``git`` accepts the global ``-v``/``--verbose`` flag before
+    a write verb (``git remote -v add evil url``), so the presence of a read-only flag
+    anywhere does not make the segment read-only.
 
     Args:
         all_positional_tokens: The non-flag tokens after the leading ``git`` program.
@@ -853,11 +930,10 @@ def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segm
         )
     if "remote" in all_lowercased_positional_tokens:
         remote_verb_index = all_lowercased_positional_tokens.index("remote") + 1
-        all_remote_verbs = all_positional_tokens[remote_verb_index:]
-        carries_a_read_only_verb = any(
-            each_token in ALL_GIT_REMOTE_READ_ONLY_VERBS for each_token in all_segment_tokens
-        )
-        return bool(all_remote_verbs) and not carries_a_read_only_verb
+        all_remote_verbs = all_lowercased_positional_tokens[remote_verb_index:]
+        if not all_remote_verbs:
+            return False
+        return all_remote_verbs[0] not in ALL_GIT_REMOTE_READ_ONLY_VERBS
     return False
 
 

@@ -80,10 +80,9 @@ def find_session_handoff_proposal(text: str) -> bool:
         text: The raw assistant message to evaluate.
     """
     new_session_proposal_pattern = re.compile(
-        r"\b(?:suggest|recommend|consider|should|could|let['’]s|propose"
-        r"|might\s+want|i['’]d\s+suggest|i\s+recommend|start|begin|spin\s+up"
-        r"|open|continue|pick\s+this\s+up|pick\s+it\s+up|resume|hand\s+off"
-        r"|hand\s+this\s+off)\b"
+        r"\b(?:wrap\s+up|wrap\s+things\s+up|hand\s+off|hand\s+this\s+off"
+        r"|hand\s+it\s+off|continue\s+this|continue\s+later|pick\s+this\s+up"
+        r"|pick\s+it\s+up|pause|resume)\b"
         r"[^.!?]*"
         r"\b(?:a\s+|the\s+)?(?:new|fresh|separate|clean)\s+session\b",
         re.IGNORECASE,

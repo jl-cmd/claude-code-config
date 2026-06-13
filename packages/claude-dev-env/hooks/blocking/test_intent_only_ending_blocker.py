@@ -22,6 +22,9 @@ NEXT_STEPS_MESSAGE = "Next steps:"
 COMPLETED_WORK_MESSAGE = "Done - all tests pass. The fix is in place."
 BENIGN_PAST_TENSE_MESSAGE = "I implemented the parser and verified it against the fixtures."
 CLEAN_MESSAGE = "The function returns the parsed payload to its caller."
+COMMITMENT_PHRASING_MESSAGE = "I'll commit to keeping the API stable across the next release."
+NAMING_COMMITMENT_MESSAGE = "Let me commit to a clear naming convention for these helpers."
+GIT_COMMIT_INTENT_MESSAGE = "I'll commit the changes once the tests pass."
 EMPTY_MESSAGE = ""
 
 
@@ -93,6 +96,30 @@ def test_past_tense_summary_passes_through_with_no_output():
 
     assert completed_process.returncode == 0
     assert completed_process.stdout == ""
+
+
+def test_commitment_phrasing_passes_through_with_no_output():
+    completed_process = run_hook_with_message(COMMITMENT_PHRASING_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_naming_commitment_passes_through_with_no_output():
+    completed_process = run_hook_with_message(NAMING_COMMITMENT_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_git_commit_intent_emits_block():
+    completed_process = run_hook_with_message(GIT_COMMIT_INTENT_MESSAGE)
+
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+
+    assert parsed_response["decision"] == "block"
+    assert parsed_response["systemMessage"] == USER_FACING_INTENT_ENDING_NOTICE
 
 
 def test_clean_message_passes_through_with_no_output():

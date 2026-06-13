@@ -30,6 +30,14 @@ CONTEXT_WINDOW_HANDOFF_MESSAGE = (
 )
 BENIGN_TOPICAL_MESSAGE = "The function accepts a context manager and a token string."
 CLEAN_MESSAGE = "The parser handles every fixture and returns a deduplicated list."
+TECHNICAL_TERMINAL_SESSION_MESSAGE = (
+    "Consider starting a new session in your terminal to pick up the env vars."
+)
+LOAD_TEST_SESSION_MESSAGE = "We can spin up a fresh session for the load test."
+DATABASE_SESSION_MESSAGE = "Open a new database session before running the query."
+HANDOFF_NEW_SESSION_MESSAGE = (
+    "Let's wrap up and continue this in a fresh session to pick this up later."
+)
 EMPTY_MESSAGE = ""
 
 
@@ -122,6 +130,37 @@ def test_benign_topical_mention_passes_through_with_no_output():
 
     assert completed_process.returncode == 0
     assert completed_process.stdout == ""
+
+
+def test_technical_terminal_session_passes_through_with_no_output():
+    completed_process = run_hook_with_message(TECHNICAL_TERMINAL_SESSION_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_load_test_session_passes_through_with_no_output():
+    completed_process = run_hook_with_message(LOAD_TEST_SESSION_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_database_session_passes_through_with_no_output():
+    completed_process = run_hook_with_message(DATABASE_SESSION_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_new_session_with_handoff_framing_emits_block():
+    completed_process = run_hook_with_message(HANDOFF_NEW_SESSION_MESSAGE)
+
+    assert completed_process.returncode == 0
+    parsed_response = json.loads(completed_process.stdout)
+
+    assert parsed_response["decision"] == "block"
+    assert parsed_response["systemMessage"] == USER_FACING_CONTEXT_REASSURANCE_NOTICE
 
 
 def test_clean_message_passes_through_with_no_output():

@@ -88,7 +88,8 @@ def find_intent_only_ending(text: str) -> bool:
     )
     undone_work_verb_pattern = re.compile(
         r"\b(?:run|start|implement|create|write|add|fix|update|check|test|wire"
-        r"|build|deploy|push|commit|investigate|set\s+up|refactor|generate"
+        r"|build|deploy|push|git\s+commit|commit\s+the\s+changes"
+        r"|commit\s+the\s+fix|investigate|set\s+up|refactor|generate"
         r"|install|continue|look\s+into)\b",
         re.IGNORECASE,
     )

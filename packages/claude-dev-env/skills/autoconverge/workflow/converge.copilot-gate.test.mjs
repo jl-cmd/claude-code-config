@@ -94,3 +94,17 @@ test('the Copilot gate prompt detects an out-of-usage notice and returns a down 
     'expected the gate to return down:true on an out-of-usage notice',
   );
 });
+
+test('the step-1 out-of-usage down-detection requires the notice commit_id to start with HEAD', () => {
+  const copilotPrompt = functionBody('runCopilotGate');
+  const stepOneStart = copilotPrompt.indexOf('`1.');
+  assert.notEqual(stepOneStart, -1, 'expected a step-1 instruction in the gate prompt');
+  const stepTwoStart = copilotPrompt.indexOf('`2.', stepOneStart);
+  assert.notEqual(stepTwoStart, -1, 'expected a step-2 instruction in the gate prompt');
+  const stepOneText = copilotPrompt.slice(stepOneStart, stepTwoStart);
+  assert.match(
+    stepOneText,
+    /commit_id starts with \$\{head\}/,
+    'expected step 1 to scope the out-of-usage notice to reviews whose commit_id starts with HEAD, matching step 2 and the convergence gate',
+  );
+});

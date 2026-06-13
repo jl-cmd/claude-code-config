@@ -165,12 +165,31 @@ const INSTALL_GROUPS = {
     ...discoverDependencyGroups(),
 };
 
-function detectPython() {
-    const candidates = [
+/**
+ * Returns the ordered python interpreter candidates to probe for the given
+ * platform. On win32 the `py -3` launcher is probed first because it resolves
+ * through the Windows registry and is immune to the Microsoft Store
+ * `python.exe` App Execution Alias that otherwise gets baked into settings.json.
+ *
+ * @param {string} platform A value from `process.platform` (e.g. 'win32', 'linux').
+ * @returns {{command: string, versionFlag: string}[]} Candidates in probe order.
+ */
+export function pythonCandidatesForPlatform(platform) {
+    const windowsOrder = [
+        { command: 'py -3', versionFlag: '--version' },
+        { command: 'python3', versionFlag: '--version' },
+        { command: 'python', versionFlag: '--version' },
+    ];
+    const defaultOrder = [
         { command: 'python3', versionFlag: '--version' },
         { command: 'python', versionFlag: '--version' },
         { command: 'py -3', versionFlag: '--version' },
     ];
+    return platform === 'win32' ? windowsOrder : defaultOrder;
+}
+
+function detectPython() {
+    const candidates = pythonCandidatesForPlatform(process.platform);
     for (const { command, versionFlag } of candidates) {
         try {
             const version = execSync(`${command} ${versionFlag}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
@@ -235,10 +254,58 @@ function backupClaudeHubBeforeOverwrite(destPath, incomingPath) {
     return backupPath;
 }
 
+/**
+ * Builds the set of hook script paths this installer manages, each relative to
+ * the hooks directory (e.g. 'blocking/code_rules_enforcer.py'), parsed from the
+ * `${CLAUDE_PLUGIN_ROOT}/hooks/<path>` references in hooks.json. Inline
+ * `python3 -c` commands reference the hooks directory without a script tail and
+ * contribute nothing.
+ *
+ * @param {{hooks: object}} hooksConfig Parsed hooks.json.
+ * @returns {Set<string>} Forward-slash relative script paths under hooks/.
+ */
+export function managedHookScriptRelativePaths(hooksConfig) {
+    const relativePaths = new Set();
+    const scriptReferencePattern = /\$\{CLAUDE_PLUGIN_ROOT\}\/hooks\/(\S+?\.py)/g;
+    for (const matcherGroups of Object.values(hooksConfig.hooks)) {
+        for (const sourceGroup of matcherGroups) {
+            for (const hook of sourceGroup.hooks) {
+                for (const scriptMatch of hook.command.matchAll(scriptReferencePattern)) {
+                    relativePaths.add(scriptMatch[1]);
+                }
+            }
+        }
+    }
+    return relativePaths;
+}
+
+/**
+ * Reports whether a settings.json hook command points at one of this installer's
+ * managed scripts, no matter how the home directory was written ($HOME, ~,
+ * ${HOME}, or an absolute path) or which path separator was used. Matching on
+ * the `/.claude/hooks/<relative>` tail lets a reinstall prune stale entries from
+ * earlier installs that used a different interpreter prefix, while leaving
+ * user-authored hooks outside the managed set untouched.
+ *
+ * @param {string} commandString The hook command from settings.json.
+ * @param {Set<string>} managedHookRelativePaths Managed script paths under hooks/.
+ * @returns {boolean} True when the command references a managed script.
+ */
+export function commandReferencesManagedHook(commandString, managedHookRelativePaths) {
+    const normalizedCommand = commandString.replace(/\\/g, '/');
+    for (const relativePath of managedHookRelativePaths) {
+        if (normalizedCommand.includes(`/.claude/hooks/${relativePath}`)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function mergeHooks(hooksSourceRoot, pythonCommand) {
     const hooksJsonPath = join(hooksSourceRoot, 'hooks', 'hooks.json');
     if (!existsSync(hooksJsonPath)) return 0;
     const hooksConfig = JSON.parse(readFileSync(hooksJsonPath, 'utf8'));
+    const managedHookRelativePaths = managedHookScriptRelativePaths(hooksConfig);
     const settingsPath = join(CLAUDE_HOME, 'settings.json');
     let settings = {};
     if (existsSync(settingsPath)) {
@@ -249,7 +316,6 @@ function mergeHooks(hooksSourceRoot, pythonCommand) {
         }
     }
     if (!settings.hooks) settings.hooks = {};
-    const installedHooksDir = join(CLAUDE_HOME, 'hooks');
     const pluginRootDir = CLAUDE_HOME;
     let groupCount = 0;
     for (const [eventType, matcherGroups] of Object.entries(hooksConfig.hooks)) {
@@ -267,7 +333,7 @@ function mergeHooks(hooksSourceRoot, pythonCommand) {
             if (existingIndex >= 0) {
                 const existing = settings.hooks[eventType][existingIndex];
                 const userHooks = existing.hooks.filter(
-                    hook => !hook.command.includes(installedHooksDir.replace(/\\/g, '/'))
+                    hook => !commandReferencesManagedHook(hook.command, managedHookRelativePaths)
                 );
                 settings.hooks[eventType][existingIndex] = {
                     ...existing,

@@ -5,7 +5,13 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { collectPackageSourceConflicts, CONTENT_DIRECTORIES } from './install.mjs';
+import {
+    collectPackageSourceConflicts,
+    CONTENT_DIRECTORIES,
+    pythonCandidatesForPlatform,
+    managedHookScriptRelativePaths,
+    commandReferencesManagedHook,
+} from './install.mjs';
 
 
 function createTemporaryGitRepository() {
@@ -171,4 +177,77 @@ test('collectPackageSourceConflicts surfaces both-added and deleted-by-them entr
     } finally {
         rmSync(repositoryRoot, { recursive: true, force: true });
     }
+});
+
+
+test('pythonCandidatesForPlatform prefers py -3 ahead of python on win32 so the Microsoft Store stub is never probed first', () => {
+    const commands = pythonCandidatesForPlatform('win32').map(candidate => candidate.command);
+    assert.equal(commands[0], 'py -3');
+    assert.ok(commands.indexOf('py -3') < commands.indexOf('python'));
+});
+
+
+test('pythonCandidatesForPlatform keeps python3 first on non-Windows platforms', () => {
+    const commands = pythonCandidatesForPlatform('linux').map(candidate => candidate.command);
+    assert.equal(commands[0], 'python3');
+});
+
+
+test('pythonCandidatesForPlatform still offers python as a win32 fallback when py -3 and python3 are absent', () => {
+    const commands = pythonCandidatesForPlatform('win32').map(candidate => candidate.command);
+    assert.ok(commands.includes('python'));
+});
+
+
+const SAMPLE_HOOKS_CONFIG = {
+    hooks: {
+        Stop: [
+            {
+                matcher: '',
+                hooks: [
+                    { command: 'python3 ${CLAUDE_PLUGIN_ROOT}/hooks/notification/attention_needed_notify.py', timeout: 15 },
+                    { command: 'python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/hedging_language_blocker.py', timeout: 10 },
+                ],
+            },
+        ],
+        PreToolUse: [
+            {
+                matcher: 'Write',
+                hooks: [
+                    { command: 'python3 -c "import sys; sys.path.insert(0, r\'${CLAUDE_PLUGIN_ROOT}/hooks\'); print(1)"', timeout: 5 },
+                ],
+            },
+        ],
+    },
+};
+
+
+test('managedHookScriptRelativePaths collects every installed hook script path and ignores inline -c commands', () => {
+    const relativePaths = managedHookScriptRelativePaths(SAMPLE_HOOKS_CONFIG);
+    assert.ok(relativePaths.has('notification/attention_needed_notify.py'));
+    assert.ok(relativePaths.has('blocking/hedging_language_blocker.py'));
+    assert.equal([...relativePaths].length, 2);
+});
+
+
+test('commandReferencesManagedHook matches managed scripts written with $HOME, ~, ${HOME}, and absolute path styles', () => {
+    const managedPaths = new Set(['notification/attention_needed_notify.py']);
+    assert.ok(commandReferencesManagedHook('python $HOME/.claude/hooks/notification/attention_needed_notify.py', managedPaths));
+    assert.ok(commandReferencesManagedHook('python ~/.claude/hooks/notification/attention_needed_notify.py', managedPaths));
+    assert.ok(commandReferencesManagedHook('python ${HOME}/.claude/hooks/notification/attention_needed_notify.py', managedPaths));
+    assert.ok(commandReferencesManagedHook('py -3 C:/Users/jonlo/.claude/hooks/notification/attention_needed_notify.py', managedPaths));
+    assert.ok(commandReferencesManagedHook('python /Users/jon/.claude/hooks/notification/attention_needed_notify.py', managedPaths));
+});
+
+
+test('commandReferencesManagedHook matches Windows backslash paths', () => {
+    const managedPaths = new Set(['blocking/hedging_language_blocker.py']);
+    assert.ok(commandReferencesManagedHook('py -3 C:\\Users\\jonlo\\.claude\\hooks\\blocking\\hedging_language_blocker.py', managedPaths));
+});
+
+
+test('commandReferencesManagedHook leaves user hooks outside the managed set untouched', () => {
+    const managedPaths = new Set(['notification/attention_needed_notify.py']);
+    assert.equal(commandReferencesManagedHook('python /home/me/custom-tools/my_own_hook.py', managedPaths), false);
+    assert.equal(commandReferencesManagedHook('py -3 ~/.claude/hooks/blocking/some_unmanaged_user_hook.py', managedPaths), false);
 });

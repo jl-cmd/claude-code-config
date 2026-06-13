@@ -302,3 +302,29 @@ def test_should_return_every_violation_when_scope_deferred_to_caller(
         "The commit/push gate scopes by added line, so the check must return "
         f"every violation when scope is deferred, got: {issues}"
     )
+
+
+def test_should_carry_a_parseable_span_for_the_commit_gate_scoper(
+    module_dir: pathlib.Path,
+) -> None:
+    _write(module_dir, "existing.py", SHARED_HELPER_SOURCE)
+    new_file = module_dir / "new_blocker.py"
+    post_edit_content = _UNRELATED_LEADING_FUNCTION + "\n\n" + SHARED_HELPER_SOURCE
+    duplicate_definition_line = post_edit_content.splitlines().index(
+        "def strip_code_and_quotes(text: str) -> str:"
+    ) + 1
+    issues = check_duplicate_function_body_across_files(
+        post_edit_content,
+        str(new_file),
+        all_changed_lines=None,
+        defer_scope_to_caller=True,
+    )
+    matching_issues = [
+        each_issue for each_issue in issues if "strip_code_and_quotes" in each_issue
+    ]
+    assert matching_issues, f"expected a duplicate-body issue, got: {issues}"
+    expected_fragment = f"(duplicate body span at line {duplicate_definition_line}, spanning 5 lines)"
+    assert expected_fragment in matching_issues[0], (
+        "The commit gate's scope splitter parses the copied function's span from "
+        f"the message, so the message must carry it, got: {matching_issues[0]}"
+    )

@@ -274,7 +274,8 @@ def check_duplicate_function_body_across_files(
             continue
         first_location = matching_locations[0]
         message = (
-            f"Function {each_name!r} duplicates {first_location} — {DUPLICATE_BODY_GUIDANCE}"
+            f"Function {each_name!r} duplicates {first_location} — {DUPLICATE_BODY_GUIDANCE} "
+            f"(duplicate body span at line {each_span.start}, spanning {len(each_span)} lines)"
         )
         all_violations_in_walk_order.append((each_span, message))
         if len(all_violations_in_walk_order) >= MAX_DUPLICATE_BODY_ISSUES:

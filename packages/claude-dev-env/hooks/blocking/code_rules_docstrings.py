@@ -21,10 +21,13 @@ from code_rules_shared import (  # noqa: E402
 
 from hooks_constants.blocking_check_limits import (  # noqa: E402
     ALL_DOCSTRING_EXEMPT_DECORATOR_NAMES,
+    ALL_DOCSTRING_FALL_THROUGH_CLAIM_PHRASES,
     ALL_DOCSTRING_IMPLICIT_INSTANCE_PARAMETER_NAMES,
+    ALL_DOCSTRING_UNCONDITIONAL_BREAK_CLAIM_PHRASES,
     DOCSTRING_TRIVIAL_FUNCTION_BODY_LINE_LIMIT,
     MAX_DOCSTRING_ARGS_SIGNATURE_ISSUES,
     MAX_DOCSTRING_FORMAT_ISSUES,
+    MAX_DOCSTRING_LOOP_CONTROL_FLOW_ISSUES,
 )
 from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_DOCSTRING_ARGS_SECTION_HEADERS,
@@ -132,6 +135,138 @@ def _function_body_contains_yield(
         isinstance(each_descendant, (ast.Yield, ast.YieldFrom))
         for each_descendant in _walk_skipping_nested_functions(function_node)
     )
+
+
+def _loop_bodies(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[list[ast.stmt]]:
+    loop_bodies: list[list[ast.stmt]] = []
+    for each_descendant in _walk_skipping_nested_functions(function_node):
+        if isinstance(each_descendant, (ast.For, ast.AsyncFor, ast.While)):
+            loop_bodies.append(list(each_descendant.body))
+    return loop_bodies
+
+
+def _statement_list_has_unconditional_break(all_statements: list[ast.stmt]) -> bool:
+    for each_statement in all_statements:
+        if isinstance(each_statement, ast.Break):
+            return True
+        if isinstance(each_statement, (ast.For, ast.AsyncFor, ast.While)):
+            continue
+        if _statement_subtree_has_unconditional_break(each_statement):
+            return True
+    return False
+
+
+def _statement_subtree_has_unconditional_break(statement: ast.stmt) -> bool:
+    if isinstance(statement, ast.If):
+        return False
+    if isinstance(statement, ast.Try):
+        return _statement_list_has_unconditional_break(statement.body)
+    if isinstance(statement, ast.With):
+        return _statement_list_has_unconditional_break(statement.body)
+    return False
+
+
+def _any_loop_has_unconditional_break(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    return any(
+        _statement_list_has_unconditional_break(each_body)
+        for each_body in _loop_bodies(function_node)
+    )
+
+
+def _function_loops_contain_continue(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    return any(
+        isinstance(each_descendant, ast.Continue)
+        for each_descendant in _walk_skipping_nested_functions(function_node)
+    )
+
+
+def _docstring_asserts_unconditional_break(docstring_text: str) -> bool:
+    lowered_text = docstring_text.lower()
+    return any(
+        each_phrase in lowered_text
+        for each_phrase in ALL_DOCSTRING_UNCONDITIONAL_BREAK_CLAIM_PHRASES
+    )
+
+
+def _docstring_asserts_fall_through(docstring_text: str) -> bool:
+    lowered_text = docstring_text.lower()
+    return any(
+        each_phrase in lowered_text
+        for each_phrase in ALL_DOCSTRING_FALL_THROUGH_CLAIM_PHRASES
+    )
+
+
+def _loop_control_flow_claim_issues(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> list[str]:
+    docstring_text = _function_docstring_text(function_node)
+    if not _loop_bodies(function_node):
+        return []
+    contradictions: list[str] = []
+    if _docstring_asserts_unconditional_break(docstring_text) and not (
+        _any_loop_has_unconditional_break(function_node)
+    ):
+        contradictions.append(
+            f"Line {function_node.lineno}: {function_node.name}() docstring claims it "
+            "'breaks out of each loop' the moment a step runs, but every loop break is "
+            "conditional — describe the actual condition that ends the loop"
+        )
+    if _docstring_asserts_fall_through(docstring_text) and not (
+        _function_loops_contain_continue(function_node)
+    ):
+        contradictions.append(
+            f"Line {function_node.lineno}: {function_node.name}() docstring claims a loop "
+            "will 'fall through' to the next entry, but no loop uses continue — describe "
+            "the actual control flow"
+        )
+    return contradictions
+
+
+def check_docstring_loop_control_flow_claims(content: str, file_path: str) -> list[str]:
+    """Flag docstrings whose loop control-flow claims contradict the code.
+
+    A docstring that asserts a function "breaks out of each loop the moment" a
+    step runs, or that on a failure the loop "falls through to the next entry",
+    is making a checkable claim. When every loop break is conditional (guarded
+    by an ``if`` test or living in an ``except`` handler) the unconditional-break
+    claim is false; when no loop uses ``continue`` the fall-through claim is
+    false. Both phrasings drift out of sync with the body after a refactor and
+    mislead the next reader, so each contradiction is reported.
+
+    Args:
+        content: The source text to inspect.
+        file_path: The path the source will be written to, used for exemptions.
+
+    Returns:
+        One issue per contradicted loop control-flow claim, capped at the
+        module limit.
+    """
+    if is_test_file(file_path) or is_hook_infrastructure(file_path):
+        return []
+    try:
+        parsed_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    issues: list[str] = []
+    for each_node in _walk_skipping_type_checking_blocks(parsed_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if _function_is_private_or_dunder(each_node.name):
+            continue
+        if _function_has_exempt_decorator(each_node):
+            continue
+        if _function_body_line_count(each_node) <= DOCSTRING_TRIVIAL_FUNCTION_BODY_LINE_LIMIT:
+            continue
+        issues.extend(_loop_control_flow_claim_issues(each_node))
+        if len(issues) >= MAX_DOCSTRING_LOOP_CONTROL_FLOW_ISSUES:
+            return issues[:MAX_DOCSTRING_LOOP_CONTROL_FLOW_ISSUES]
+    return issues[:MAX_DOCSTRING_LOOP_CONTROL_FLOW_ISSUES]
 
 
 def _function_docstring_text(

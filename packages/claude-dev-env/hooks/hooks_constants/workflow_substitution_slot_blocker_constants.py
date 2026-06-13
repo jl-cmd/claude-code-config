@@ -2,6 +2,7 @@
 
 WRITE_TOOL_NAME: str = "Write"
 EDIT_TOOL_NAME: str = "Edit"
+MULTI_EDIT_TOOL_NAME: str = "MultiEdit"
 
 WORKFLOW_FILE_SUFFIX: str = ".workflow.js"
 

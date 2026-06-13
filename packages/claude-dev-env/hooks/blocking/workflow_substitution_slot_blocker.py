@@ -41,9 +41,22 @@ if _hooks_dir not in sys.path:
 from hooks_constants.workflow_substitution_slot_blocker_constants import (  # noqa: E402
     CORRECTIVE_MESSAGE,
     EDIT_TOOL_NAME,
+    MULTI_EDIT_TOOL_NAME,
     WORKFLOW_FILE_SUFFIX,
     WRITE_TOOL_NAME,
 )
+
+def multi_edit_new_strings(all_tool_input: dict[str, object]) -> str:
+    all_edits = all_tool_input.get("edits", [])
+    if not isinstance(all_edits, list):
+        return ""
+    all_new_strings = [
+        each_edit["new_string"]
+        for each_edit in all_edits
+        if isinstance(each_edit, dict) and isinstance(each_edit.get("new_string"), str)
+    ]
+    return "\n".join(all_new_strings)
+
 
 def written_content(tool_name: str, all_tool_input: dict[str, object]) -> str:
     if tool_name == WRITE_TOOL_NAME:
@@ -52,6 +65,8 @@ def written_content(tool_name: str, all_tool_input: dict[str, object]) -> str:
     if tool_name == EDIT_TOOL_NAME:
         new_string = all_tool_input.get("new_string", "")
         return new_string if isinstance(new_string, str) else ""
+    if tool_name == MULTI_EDIT_TOOL_NAME:
+        return multi_edit_new_strings(all_tool_input)
     return ""
 
 
@@ -67,7 +82,7 @@ def uses_angle_slot_convention(content: str) -> bool:
 
 def has_iteration_loop(content: str) -> bool:
     loop_phrase_pattern = re.compile(
-        r"\b(?:for\s+each|each\s+candidate|for\s+[ijk]\b|candidate\s+[ijk]\b)|EACH\b"
+        r"\b(?:for\s+each|each\s+candidate|for\s+[ijk]\b|candidate\s+[ijk]\b)|\bEACH\b"
         r"|\bcand_0\b",
         re.IGNORECASE,
     )
@@ -107,7 +122,7 @@ def main() -> None:
         sys.exit(0)
 
     tool_name = hook_input.get("tool_name", "")
-    if tool_name not in (WRITE_TOOL_NAME, EDIT_TOOL_NAME):
+    if tool_name not in (WRITE_TOOL_NAME, EDIT_TOOL_NAME, MULTI_EDIT_TOOL_NAME):
         sys.exit(0)
 
     all_tool_input = hook_input.get("tool_input", {})

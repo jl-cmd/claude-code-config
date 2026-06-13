@@ -24,6 +24,8 @@ hook_spec.loader.exec_module(hook_module)
 
 content_has_violation = hook_module.content_has_violation
 find_bare_index_segments = hook_module.find_bare_index_segments
+has_iteration_loop = hook_module.has_iteration_loop
+written_content = hook_module.written_content
 
 
 _VIOLATING_TEMPLATE = (
@@ -82,6 +84,27 @@ def test_template_without_loop_is_not_flagged() -> None:
     assert content_has_violation(no_loop) is False
 
 
+def test_each_inside_an_ordinary_word_is_not_a_loop() -> None:
+    for each_word in ("reach", "teach", "breach", "bleach", "preach", "impeach"):
+        assert has_iteration_loop(each_word + " the end") is False
+
+
+def test_standalone_each_keyword_is_a_loop() -> None:
+    assert has_iteration_loop("For EACH candidate i") is True
+
+
+def test_written_content_reads_multiedit_new_strings() -> None:
+    multi_edit_input = {
+        "edits": [
+            {"old_string": "x", "new_string": "first ${work}\\\\cand_i\\\\plate.svg"},
+            {"old_string": "y", "new_string": "second <glow_hex>"},
+        ]
+    }
+    combined = written_content("MultiEdit", multi_edit_input)
+    assert "cand_i" in combined
+    assert "<glow_hex>" in combined
+
+
 def _run_main_with_io(input_text: str) -> str:
     with mock.patch("sys.stdin", io.StringIO(input_text)):
         with mock.patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
@@ -111,6 +134,19 @@ def test_main_blocks_violating_workflow_edit() -> None:
         "tool_input": {
             "file_path": "/repo/scripts/shared_palette_gate.workflow.js",
             "new_string": _VIOLATING_TEMPLATE,
+        },
+    }
+    output_text = _run_main_with_io(json.dumps(hook_input))
+    payload = json.loads(output_text)
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_main_blocks_violating_workflow_multiedit() -> None:
+    hook_input = {
+        "tool_name": "MultiEdit",
+        "tool_input": {
+            "file_path": "/repo/scripts/shared_palette_gate.workflow.js",
+            "edits": [{"old_string": "placeholder", "new_string": _VIOLATING_TEMPLATE}],
         },
     }
     output_text = _run_main_with_io(json.dumps(hook_input))

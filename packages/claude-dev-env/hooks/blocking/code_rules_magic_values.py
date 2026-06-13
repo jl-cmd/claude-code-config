@@ -54,6 +54,47 @@ def _mask_string_literals_preserving_length(source_line: str) -> str:
     return string_literal_pattern.sub(_replace_string_literal, source_line)
 
 
+def _bracket_segments_containing_number(masked_line: str, number_text: str) -> list[str]:
+    """Return the contents of every ``[...]`` pair that holds ``number_text``.
+
+    Brackets nest, so the scan tracks depth and records the inner text of
+    each top-level bracket pair. The returned segments let the caller tell a
+    slice (a pair whose body contains a colon, e.g. ``[:8]``) apart from a
+    plain subscript index (e.g. ``[2]``).
+    """
+    segments: list[str] = []
+    depth = 0
+    segment_start = -1
+    for each_position, each_character in enumerate(masked_line):
+        if each_character == "[":
+            if depth == 0:
+                segment_start = each_position + 1
+            depth += 1
+            continue
+        if each_character == "]" and depth > 0:
+            depth -= 1
+            if depth == 0 and segment_start != -1:
+                segment_body = masked_line[segment_start:each_position]
+                if number_text in segment_body:
+                    segments.append(segment_body)
+                segment_start = -1
+    return segments
+
+
+def _is_magic_number_inside_slice_bound(masked_line: str, number_text: str) -> bool:
+    """Return True when ``number_text`` appears as a slice bound on the line.
+
+    A slice carries a colon between its brackets (``sha[:8]``, ``ts[1:10]``);
+    a plain subscript index (``items[2]``) does not. A magic number used as a
+    slice bound is still a magic value and must not ride on the subscript
+    exemption.
+    """
+    for each_segment in _bracket_segments_containing_number(masked_line, number_text):
+        if ":" in each_segment:
+            return True
+    return False
+
+
 def check_magic_values(content: str, file_path: str) -> list[str]:
     """Check for magic values in function bodies."""
     if is_config_file(file_path) or is_test_file(file_path):
@@ -93,6 +134,9 @@ def check_magic_values(content: str, file_path: str) -> list[str]:
                 if each_number not in allowed_numbers:
                     if "range(" in stripped_without_string_literals or "enumerate(" in stripped_without_string_literals:
                         continue
+                    if _is_magic_number_inside_slice_bound(stripped_without_string_literals, each_number):
+                        issues.append(f"Line {each_line_number}: Magic value {each_number} - extract to named constant")
+                        break
                     if "[" in stripped_without_string_literals and "]" in stripped_without_string_literals:
                         continue
                     issues.append(f"Line {each_line_number}: Magic value {each_number} - extract to named constant")

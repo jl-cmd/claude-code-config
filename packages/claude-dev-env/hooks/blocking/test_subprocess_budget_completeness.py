@@ -74,6 +74,51 @@ def is_untracked_in_git(file_path: str) -> bool:
     return git_check.returncode != 0
 """
 
+_BUDGET_OMITS_A_NAMED_CONSTANT_TIMEOUT = """
+import subprocess
+
+PYTHON_FORMAT_TIMEOUT_SECONDS = 12
+GIT_CHECK_TIMEOUT_SECONDS = 5
+
+
+def worst_case_python_format_seconds() -> int:
+    fix_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    format_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    return fix_phase_seconds + format_phase_seconds
+
+
+def is_untracked_in_git(file_path: str) -> bool:
+    git_check = subprocess.run(["git", "ls-files", file_path], timeout=GIT_CHECK_TIMEOUT_SECONDS)
+    return git_check.returncode != 0
+
+
+def run_format(file_path: str) -> None:
+    subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+"""
+
+_BUDGET_COUNTS_VIA_ANNOTATED_CONSTANTS = """
+import subprocess
+
+PYTHON_FORMAT_TIMEOUT_SECONDS: int = 12
+GIT_CHECK_TIMEOUT_SECONDS: int = 5
+
+
+def worst_case_python_format_seconds() -> int:
+    git_check_seconds = GIT_CHECK_TIMEOUT_SECONDS
+    fix_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    format_phase_seconds = PYTHON_FORMAT_TIMEOUT_SECONDS
+    return git_check_seconds + fix_phase_seconds + format_phase_seconds
+
+
+def is_untracked_in_git(file_path: str) -> bool:
+    git_check = subprocess.run(["git", "ls-files", file_path], timeout=5)
+    return git_check.returncode != 0
+
+
+def run_format(file_path: str) -> None:
+    subprocess.run(["ruff", "format", file_path], timeout=PYTHON_FORMAT_TIMEOUT_SECONDS)
+"""
+
 
 def test_flags_budget_helper_that_omits_a_reachable_subprocess_timeout() -> None:
     undercounted_budget = find_undercounted_budget(_BUDGET_FLAGS_GIT_TIMEOUT_OMISSION)
@@ -94,6 +139,18 @@ def test_passes_module_without_a_budget_function() -> None:
 def test_passes_module_with_no_subprocess_calls() -> None:
     only_a_budget_function = "def worst_case_seconds() -> int:\n    return 5 + 12\n"
     assert find_undercounted_budget(only_a_budget_function) is None
+
+
+def test_flags_budget_that_omits_a_named_constant_subprocess_timeout() -> None:
+    undercounted_budget = find_undercounted_budget(_BUDGET_OMITS_A_NAMED_CONSTANT_TIMEOUT)
+    assert undercounted_budget is not None
+    function_name, omitted_values = undercounted_budget
+    assert function_name == "worst_case_python_format_seconds"
+    assert omitted_values == {5}
+
+
+def test_passes_budget_that_accounts_via_annotated_module_constants() -> None:
+    assert find_undercounted_budget(_BUDGET_COUNTS_VIA_ANNOTATED_CONSTANTS) is None
 
 
 def _run_hook_on_content(content: str) -> subprocess.CompletedProcess[str]:

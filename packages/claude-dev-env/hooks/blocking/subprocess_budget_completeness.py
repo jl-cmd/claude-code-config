@@ -5,13 +5,14 @@ Fires when a Write/Edit produces a Python module that both:
 
   * defines a function whose name names a worst-case or budget total
     (contains ``worst_case``, ``_budget``, or ``budget_seconds``), and
-  * passes ``timeout=<int>`` to one or more ``subprocess.run`` calls,
+  * passes ``timeout=`` (an integer literal or a module-level integer
+    constant) to one or more ``subprocess.run`` calls,
 
-but the budget function's summed integer literals omit a distinct subprocess
-timeout literal the module can reach in one invocation. A budget helper that
-undercounts a reachable subprocess timeout reports a wall-clock margin wider
-than the real one, so a later change can silently cross the harness timeout
-while the named guard still reads green.
+but the budget total omits a distinct subprocess timeout value the module can
+reach in one invocation. A budget helper that undercounts a reachable
+subprocess timeout reports a wall-clock margin wider than the real one, so a
+later change can silently cross the harness timeout while the named guard still
+reads green.
 """
 
 import ast
@@ -23,6 +24,9 @@ _hooks_dir = str(Path(__file__).resolve().parent.parent)
 if _hooks_dir not in sys.path:
     sys.path.insert(0, _hooks_dir)
 
+from hooks_constants.pre_tool_use_stdin import (  # noqa: E402
+    read_hook_input_dictionary_from_stdin,
+)
 from hooks_constants.subprocess_budget_completeness_constants import (  # noqa: E402
     ALL_BUDGET_NAME_MARKERS,
     SUBPROCESS_TIMEOUT_KEYWORD,
@@ -56,8 +60,19 @@ def integer_literal_value(node: ast.expr) -> int | None:
     return None
 
 
-def collect_subprocess_timeout_literals(tree: ast.Module) -> set[int]:
-    all_timeout_literals: set[int] = set()
+def resolved_integer_value(node: ast.expr, value_by_constant_name: dict[str, int]) -> int | None:
+    literal_value = integer_literal_value(node)
+    if literal_value is not None:
+        return literal_value
+    if isinstance(node, ast.Name):
+        return value_by_constant_name.get(node.id)
+    return None
+
+
+def collect_subprocess_timeout_values(
+    tree: ast.Module, value_by_constant_name: dict[str, int]
+) -> set[int]:
+    all_timeout_values: set[int] = set()
     for each_node in ast.walk(tree):
         if not isinstance(each_node, ast.Call):
             continue
@@ -66,10 +81,10 @@ def collect_subprocess_timeout_literals(tree: ast.Module) -> set[int]:
         for each_keyword in each_node.keywords:
             if each_keyword.arg != SUBPROCESS_TIMEOUT_KEYWORD:
                 continue
-            timeout_value = integer_literal_value(each_keyword.value)
+            timeout_value = resolved_integer_value(each_keyword.value, value_by_constant_name)
             if timeout_value is not None:
-                all_timeout_literals.add(timeout_value)
-    return all_timeout_literals
+                all_timeout_values.add(timeout_value)
+    return all_timeout_values
 
 
 def is_subprocess_run_call(call_node: ast.Call) -> bool:
@@ -108,11 +123,10 @@ def find_undercounted_budget(content: str) -> tuple[str, set[int]] | None:
     except SyntaxError:
         return None
 
-    subprocess_timeout_literals = collect_subprocess_timeout_literals(tree)
-    if not subprocess_timeout_literals:
-        return None
-
     referenced_constants = collect_module_constant_values(tree)
+    subprocess_timeout_values = collect_subprocess_timeout_values(tree, referenced_constants)
+    if not subprocess_timeout_values:
+        return None
 
     for each_node in ast.walk(tree):
         if not isinstance(each_node, ast.FunctionDef):
@@ -122,23 +136,26 @@ def find_undercounted_budget(content: str) -> tuple[str, set[int]] | None:
         accounted_values = summed_integer_literals(each_node) | budget_named_constant_values(
             each_node, referenced_constants
         )
-        omitted_literals = subprocess_timeout_literals - accounted_values
-        if omitted_literals:
-            return each_node.name, omitted_literals
+        omitted_values = subprocess_timeout_values - accounted_values
+        if omitted_values:
+            return each_node.name, omitted_values
     return None
 
 
 def collect_module_constant_values(tree: ast.Module) -> dict[str, int]:
     value_by_constant_name: dict[str, int] = {}
     for each_node in tree.body:
-        if not isinstance(each_node, ast.Assign):
-            continue
-        assigned_value = integer_literal_value(each_node.value)
-        if assigned_value is None:
-            continue
-        for each_target in each_node.targets:
-            if isinstance(each_target, ast.Name):
-                value_by_constant_name[each_target.id] = assigned_value
+        if isinstance(each_node, ast.Assign):
+            assigned_value = integer_literal_value(each_node.value)
+            if assigned_value is None:
+                continue
+            for each_target in each_node.targets:
+                if isinstance(each_target, ast.Name):
+                    value_by_constant_name[each_target.id] = assigned_value
+        elif isinstance(each_node, ast.AnnAssign) and each_node.value is not None:
+            annotated_value = integer_literal_value(each_node.value)
+            if annotated_value is not None and isinstance(each_node.target, ast.Name):
+                value_by_constant_name[each_node.target.id] = annotated_value
     return value_by_constant_name
 
 
@@ -152,13 +169,11 @@ def budget_named_constant_values(
     return all_referenced_values
 
 
-def format_block_message(
-    file_path: str, function_name: str, all_omitted_literals: set[int]
-) -> str:
-    omitted_text = ", ".join(str(each_value) for each_value in sorted(all_omitted_literals))
+def format_block_message(file_path: str, function_name: str, all_omitted_values: set[int]) -> str:
+    omitted_text = ", ".join(str(each_value) for each_value in sorted(all_omitted_values))
     return (
         f"SUBPROCESS BUDGET INCOMPLETE: {function_name}() in {file_path} sums a subset of the "
-        f"module's subprocess timeouts and omits timeout literal(s) {omitted_text}s that one invocation "
+        f"module's subprocess timeouts and omits timeout value(s) {omitted_text}s that one invocation "
         "can reach. A named worst-case/budget helper must account for every subprocess timeout reachable "
         "in a single invocation, so its reported margin against the harness timeout is real. Either add the "
         f"omitted timeout(s) to the modeled total, or rename the helper to name the phases it actually covers "
@@ -167,12 +182,12 @@ def format_block_message(
 
 
 def main() -> None:
-    try:
-        hook_input = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+    hook_input = read_hook_input_dictionary_from_stdin()
+    if hook_input is None:
         sys.exit(0)
 
-    tool_input = hook_input.get("tool_input", {})
+    raw_tool_input = hook_input.get("tool_input", {})
+    tool_input = raw_tool_input if isinstance(raw_tool_input, dict) else {}
     file_path = tool_input.get("file_path", "")
     if not file_path or not is_python_target(file_path):
         sys.exit(0)
@@ -185,7 +200,7 @@ def main() -> None:
     if undercounted_budget is None:
         sys.exit(0)
 
-    function_name, omitted_literals = undercounted_budget
+    function_name, omitted_values = undercounted_budget
     print(
         json.dumps(
             {
@@ -193,7 +208,7 @@ def main() -> None:
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": format_block_message(
-                        file_path, function_name, omitted_literals
+                        file_path, function_name, omitted_values
                     ),
                 }
             }

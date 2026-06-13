@@ -10,6 +10,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import render_report
+from autoconverge_report_constants.render_report_constants import (
+    FINDING_CATEGORY_CODE_STANDARD,
+)
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "wf_run"
 FIXTURE_JOURNAL = FIXTURE_DIR / "workflows" / "wf_881252e6-700.json"
@@ -160,6 +163,37 @@ def test_html_contains_no_hedging_words(tmp_path: Path) -> None:
         assert not pattern.search(html_content), (
             f"Hedging word {each_word!r} found in rendered HTML"
         )
+
+
+def test_html_links_back_to_the_pr() -> None:
+    """Should render the PR URL as a link in the report header."""
+    pr_url = "https://github.com/example-owner/example-repo/pull/211"
+    run_data = render_report.RunData(
+        generated_date="2026-06-13",
+        total_finding_count=0,
+        critical_finding_count=0,
+        minor_finding_count=0,
+        fix_commit_count=0,
+        tests_added_by_round={},
+        finding_count_by_round={},
+        finding_count_by_theme={},
+        all_critical_findings=[],
+        all_minor_findings=[],
+        fix_by_round={},
+        deferred_rounds=set(),
+    )
+    pr_metadata = render_report.PrMetadata(
+        owner="example-owner",
+        repo="example-repo",
+        number=211,
+        url=pr_url,
+        final_sha="7c2f420c4d5b7c83aa47f93d99a0f1420e3373c4",
+        round_count=4,
+    )
+
+    html_content = render_report.render_report_html(run_data, pr_metadata, "2026-06-13")
+
+    assert f'href="{pr_url}"' in html_content
 
 
 def _init_git_repo(repo_path: Path) -> None:
@@ -494,7 +528,7 @@ def test_standards_followup_round_marks_findings_deferred(tmp_path: Path) -> Non
                     "file": "src/exports/writer.py",
                     "line": 12,
                     "severity": "P2",
-                    "category": render_report.FINDING_CATEGORY_CODE_STANDARD,
+                    "category": FINDING_CATEGORY_CODE_STANDARD,
                     "title": "Banned identifier 'result'",
                     "detail": "Rename to a domain noun.",
                 }
@@ -522,7 +556,7 @@ def test_standards_followup_round_marks_findings_deferred(tmp_path: Path) -> Non
     assert 1 in deferred_rounds, "round with standards-followup step was not marked deferred"
     assert 1 not in fix_by_round, "deferred round must carry no fix record"
     assert len(all_findings) == 1
-    assert all_findings[0].category == render_report.FINDING_CATEGORY_CODE_STANDARD
+    assert all_findings[0].category == FINDING_CATEGORY_CODE_STANDARD
 
 
 def test_render_fix_block_labels_deferred_finding_not_fixed() -> None:
@@ -531,7 +565,7 @@ def test_render_fix_block_labels_deferred_finding_not_fixed() -> None:
         file="src/exports/writer.py",
         line=12,
         severity="P2",
-        category=render_report.FINDING_CATEGORY_CODE_STANDARD,
+        category=FINDING_CATEGORY_CODE_STANDARD,
         title="Banned identifier 'result'",
         detail="Rename to a domain noun.",
         round_number=1,
@@ -551,7 +585,7 @@ def test_render_bug_card_deferred_shows_deferred_badge() -> None:
         file="src/exports/writer.py",
         line=12,
         severity="P2",
-        category=render_report.FINDING_CATEGORY_CODE_STANDARD,
+        category=FINDING_CATEGORY_CODE_STANDARD,
         title="Banned identifier 'result'",
         detail="Rename to a domain noun.",
         round_number=1,
@@ -570,7 +604,7 @@ def test_at_a_glance_resolution_reflects_deferred_findings(tmp_path: Path) -> No
         file="src/exports/writer.py",
         line=12,
         severity="P2",
-        category=render_report.FINDING_CATEGORY_CODE_STANDARD,
+        category=FINDING_CATEGORY_CODE_STANDARD,
         title="Banned identifier 'result'",
         detail="Rename to a domain noun.",
         round_number=1,

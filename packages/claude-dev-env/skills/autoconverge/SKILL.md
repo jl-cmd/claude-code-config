@@ -115,16 +115,22 @@ round records nothing resumable and replays dirty.
       Capture the htmlpreview URL from stdout. The gist is secret by default; pass
       no public flag.
 
-   d. **Post one idempotent PR comment.** List the PR's issue comments; if one
-      carries the marker `<!-- autoconverge-report -->`, edit it in place, otherwise
-      create a new one. The body begins with `<!-- autoconverge-report -->`, then
-      the htmlpreview link, headline counts (findings by severity, rounds, tests
-      added), and the full finding list as `file:line — P# — title` grouped by
-      severity. Honor the gh-body-file rule: write a BOM-free temp file and pass
-      `--body-file` to `gh issue comment <pr> --edit-last --create-if-none`
-      (one idempotent call that edits the marker comment when present and creates
-      it otherwise), or use the GitHub MCP `add_issue_comment` tool (body as a
-      structured parameter, no `--body` flag).
+   d. **Post one idempotent PR comment.** List the PR's issue comments and find the
+      one whose body carries the marker `<!-- autoconverge-report -->`. If it
+      exists, edit that comment by its id; otherwise create a new one. The body
+      begins with `<!-- autoconverge-report -->`, then the htmlpreview link,
+      headline counts (findings by severity, rounds, tests added), and the full
+      finding list as `file:line — P# — title` grouped by severity. Honor the
+      gh-body-file rule: write a BOM-free temp file and pass it as the body. To
+      edit the matched marker comment, PATCH it by id:
+      `gh api --method PATCH /repos/<owner>/<repo>/issues/comments/<comment-id> -F body=@<temp-file>`.
+      To create the first one, `gh issue comment <pr> --body-file <temp-file>`.
+      Never use `--edit-last`: it targets the authenticated user's most-recent
+      comment regardless of marker, so a later same-user comment (an inline review
+      reply or the post-clean-audit artifact) would be overwritten. The GitHub MCP
+      `add_issue_comment` and `update_issue_comment` tools (body as a structured
+      parameter, no `--body` flag) cover the create and edit-by-id paths; pair them
+      with the same marker lookup to stay idempotent.
 
    e. **Open the report in Chrome.**
       ```

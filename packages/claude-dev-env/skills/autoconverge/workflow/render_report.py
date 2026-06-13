@@ -17,7 +17,6 @@ from autoconverge_report_constants.render_report_constants import (
     BAR_COLOR_TESTS,
     BAR_COLOR_THEME,
     BAR_FILL_MAX_PERCENT,
-    FINDING_CATEGORY_CODE_STANDARD,
     FINDING_CATEGORY_DEFAULT,
     GITHUB_PR_URL_TEMPLATE,
     HTML_DOCTYPE,
@@ -744,6 +743,7 @@ def render_report_html(
     pr_number = pr_metadata.number
     owner = html.escape(pr_metadata.owner)
     repo = html.escape(pr_metadata.repo)
+    pr_link = html.escape(pr_metadata.url, quote=True)
     final_sha_short = pr_metadata.final_sha[:SHORT_SHA_LENGTH]
     round_count = pr_metadata.round_count
 
@@ -765,8 +765,9 @@ def render_report_html(
     )
 
     subtitle = (
-        f'<p class="subtitle">{owner}/{repo} · {total_findings} findings '
-        f"across {round_count} rounds · {html.escape(generated_date)}</p>"
+        f'<p class="subtitle"><a href="{pr_link}">{owner}/{repo}</a> · '
+        f"{total_findings} findings across {round_count} rounds · "
+        f"{html.escape(generated_date)}</p>"
     )
 
     glance_caught = (
@@ -843,7 +844,7 @@ def render_report_html(
         "crit",
     )
     critical_intro = '<p class="section-intro">P0 and P1 findings caught during the run.</p>'
-    critical_section = f'<h2 id="critical">Critical findings</h2>' + (
+    critical_section = '<h2 id="critical">Critical findings</h2>' + (
         f"{critical_intro}{critical_cards}"
         if run_data.all_critical_findings
         else '<p class="section-intro">No critical findings.</p>'

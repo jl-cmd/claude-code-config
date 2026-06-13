@@ -24,8 +24,10 @@ from code_rules_shared import (  # noqa: E402
 
 from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_SELF_AND_CLS_PARAMETER_NAMES,
+    ANNOTATION_BY_PYTEST_FIXTURE,
     FUNCTION_LENGTH_BLOCKING_MESSAGE_SUFFIX,
     FUNCTION_LENGTH_BLOCKING_THRESHOLD,
+    KNOWN_PYTEST_FIXTURE_ANNOTATION_MESSAGE_SUFFIX,
 )
 
 
@@ -49,6 +51,56 @@ def check_parameter_annotations(content: str, file_path: str) -> list[str]:
                 issues.append(
                     f"Line {each_arg.lineno}: parameter {each_arg.arg!r} on {each_node.name!r} missing type annotation (CODE_RULES §6)"
                 )
+    return issues
+
+
+def check_known_pytest_fixture_annotations(content: str, file_path: str) -> list[str]:
+    """Flag well-known pytest fixture parameters lacking their type annotation.
+
+    The broad parameter-annotation rule exempts test files, so an ordinary
+    test parameter never needs a type hint. This narrower check restores
+    enforcement for exactly the pytest builtin fixtures whose injected type is
+    fixed and documented — ``tmp_path: Path``, ``monkeypatch:
+    pytest.MonkeyPatch``, and the rest of
+    ``ANNOTATION_BY_PYTEST_FIXTURE``. For these names the
+    correct annotation is unambiguous, so requiring it costs the author one
+    token and removes a recurring class of reviewer noise on test fixtures.
+    A non-test file produces no findings here: the broad check already covers
+    every parameter outside test files.
+
+    Args:
+        content: The Python source to analyze.
+        file_path: The path of the file being checked.
+
+    Returns:
+        One blocking issue per known fixture parameter that carries no
+        annotation, naming the parameter and its expected type.
+    """
+    if not is_test_file(file_path):
+        return []
+    if is_workflow_registry_file(file_path) or is_migration_file(file_path):
+        return []
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    issues: list[str] = []
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for each_arg in _collect_annotated_arguments(each_node):
+            expected_annotation = ANNOTATION_BY_PYTEST_FIXTURE.get(
+                each_arg.arg
+            )
+            if expected_annotation is None:
+                continue
+            if each_arg.annotation is not None:
+                continue
+            issues.append(
+                f"Line {each_arg.lineno}: parameter {each_arg.arg!r} on "
+                f"{each_node.name!r} - {KNOWN_PYTEST_FIXTURE_ANNOTATION_MESSAGE_SUFFIX} "
+                f"(annotate as {expected_annotation!r})"
+            )
     return issues
 
 

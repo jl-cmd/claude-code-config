@@ -94,19 +94,23 @@ def find_intent_only_ending(text: str) -> bool:
         re.IGNORECASE,
     )
     next_steps_lead_in_pattern = re.compile(r"^next\s+steps?:", re.IGNORECASE)
+    second_person_subject_pattern = re.compile(
+        r"\b(?:you|your|you['’]?re|user['’]?s?)\b",
+        re.IGNORECASE,
+    )
 
     final_paragraph = extract_final_paragraph(text)
     if not final_paragraph:
         return False
 
     if next_steps_lead_in_pattern.match(final_paragraph):
-        return True
+        return not second_person_subject_pattern.search(final_paragraph)
 
     first_sentence = extract_first_sentence(final_paragraph)
     if not future_intent_opener_pattern.match(first_sentence):
         return False
 
-    return bool(undone_work_verb_pattern.search(final_paragraph))
+    return bool(undone_work_verb_pattern.search(first_sentence))
 
 
 def main() -> None:

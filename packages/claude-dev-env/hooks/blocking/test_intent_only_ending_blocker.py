@@ -25,6 +25,15 @@ CLEAN_MESSAGE = "The function returns the parsed payload to its caller."
 COMMITMENT_PHRASING_MESSAGE = "I'll commit to keeping the API stable across the next release."
 NAMING_COMMITMENT_MESSAGE = "Let me commit to a clear naming convention for these helpers."
 GIT_COMMIT_INTENT_MESSAGE = "I'll commit the changes once the tests pass."
+DEFERRED_TO_USER_CI_RUNS_MESSAGE = (
+    "Let me know if this looks right. The CI will run automatically on push."
+)
+DEFERRED_TO_USER_EITHER_WAY_MESSAGE = (
+    "Let me know which option you want. I can check either way."
+)
+USER_DIRECTED_NEXT_STEPS_MESSAGE = (
+    "All done. The PR is merged.\n\nNext steps: you should deploy when ready."
+)
 EMPTY_MESSAGE = ""
 
 
@@ -120,6 +129,27 @@ def test_git_commit_intent_emits_block():
 
     assert parsed_response["decision"] == "block"
     assert parsed_response["systemMessage"] == USER_FACING_INTENT_ENDING_NOTICE
+
+
+def test_benign_opener_with_unrelated_work_verb_passes_through_with_no_output():
+    completed_process = run_hook_with_message(DEFERRED_TO_USER_CI_RUNS_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_deferral_to_user_with_later_verb_passes_through_with_no_output():
+    completed_process = run_hook_with_message(DEFERRED_TO_USER_EITHER_WAY_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
+
+
+def test_user_directed_next_steps_passes_through_with_no_output():
+    completed_process = run_hook_with_message(USER_DIRECTED_NEXT_STEPS_MESSAGE)
+
+    assert completed_process.returncode == 0
+    assert completed_process.stdout == ""
 
 
 def test_clean_message_passes_through_with_no_output():

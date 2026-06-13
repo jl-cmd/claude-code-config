@@ -50,6 +50,35 @@ def split_into_sentences(text: str) -> list[str]:
     ]
 
 
+def has_first_person_self_termination(text: str) -> bool:
+    """Return whether any sentence binds a first-person subject to a stop or handoff cue.
+
+    Args:
+        text: The prose to scan sentence by sentence.
+    """
+    first_person_subject_pattern = re.compile(
+        r"\b(?:i['’]?m|i['’]?ll|i\s+will|i\s+am|i\s+need\s+to|i\s+should"
+        r"|i\s+recommend|i\s+suggest|let\s+me|let['’]?s"
+        r"|we\s+(?:should|can|could)|we['’]?ll|we\s+are|we\s+will)\b",
+        re.IGNORECASE,
+    )
+    self_termination_cue_pattern = re.compile(
+        r"\b(?:stop|summariz|wrap\s+up|wrap\s+things\s+up"
+        r"|hand\s+(?:off|it\s+off|this\s+off)|pause"
+        r"|continue\s+(?:this|later)|pick\s+(?:this|it)\s+up"
+        r"|new\s+session|fresh\s+session|separate\s+session|clean\s+session"
+        r"|running\s+(?:low|out)\s+(?:on|of)\s+(?:context|tokens)"
+        r"|(?:low|short)\s+on\s+(?:context|tokens))\b",
+        re.IGNORECASE,
+    )
+    for each_sentence in split_into_sentences(text):
+        if first_person_subject_pattern.search(
+            each_sentence
+        ) and self_termination_cue_pattern.search(each_sentence):
+            return True
+    return False
+
+
 def has_resource_reference_with_handoff_cue(text: str) -> bool:
     """Return whether any sentence pairs a context/token reference with a stop cue.
 
@@ -99,6 +128,9 @@ def find_session_handoff_proposal(text: str) -> bool:
     ]
 
     prose_text = strip_code_and_quotes(text)
+
+    if not has_first_person_self_termination(prose_text):
+        return False
 
     for each_pattern in all_direct_handoff_patterns:
         if each_pattern.search(prose_text):

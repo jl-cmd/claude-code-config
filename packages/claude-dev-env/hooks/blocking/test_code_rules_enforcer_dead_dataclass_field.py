@@ -228,3 +228,88 @@ def test_validate_content_runs_dead_field_check() -> None:
     assert any("'url'" in each_issue for each_issue in issues), (
         f"Expected the enforcer dispatch to surface the dead field, got: {issues}"
     )
+
+
+def test_should_suppress_check_when_asdict_consumes_instance() -> None:
+    source = (
+        "from dataclasses import dataclass, asdict\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def build() -> dict:\n"
+        "    return asdict(Row(url='x'))\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_suppress_check_when_astuple_consumes_instance() -> None:
+    source = (
+        "from dataclasses import dataclass, astuple\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def build() -> tuple:\n"
+        "    return astuple(Row(url='x'))\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_suppress_check_when_vars_consumes_instance() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def build() -> dict:\n"
+        "    return vars(Row(url='x'))\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_not_flag_field_read_via_multi_argument_attrgetter() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "from operator import attrgetter\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    first: int\n"
+        "    second: int\n"
+        "\n"
+        "def build() -> tuple:\n"
+        "    return attrgetter('first', 'second')(Row(first=1, second=2))\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_evaluate_full_file_content_when_supplied() -> None:
+    fragment = "    return metadata.number\n"
+    full_file = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass\n"
+        "class PrMetadata:\n"
+        "    number: int\n"
+        "    url: str\n"
+        "\n"
+        "def build() -> PrMetadata:\n"
+        "    return PrMetadata(number=1, url='x')\n"
+        "\n"
+        "def render(metadata: PrMetadata) -> int:\n"
+        "    return metadata.number\n"
+    )
+    issues = code_rules_enforcer.check_dead_dataclass_fields(
+        fragment, PRODUCTION_FILE_PATH, full_file
+    )
+    assert any("'url'" in each_issue for each_issue in issues), (
+        f"Expected the reconstructed whole-file content to govern, got: {issues}"
+    )
+    assert not any("'number'" in each_issue for each_issue in issues), (
+        f"Read field 'number' must not be flagged, got: {issues}"
+    )

@@ -24,6 +24,7 @@ from hooks_constants.dead_dataclass_field_constants import (  # noqa: E402
     GETATTR_FUNCTION_NAME,
     GETATTR_NAME_ARGUMENT_MINIMUM,
     MAX_DEAD_DATACLASS_FIELD_ISSUES,
+    ALL_REFLECTIVE_FIELD_CONSUMER_NAMES,
 )
 
 
@@ -76,15 +77,19 @@ def _string_constant_literal(node: ast.expr) -> str | None:
 
 
 def _dynamic_access_names(tree: ast.Module) -> tuple[set[str], bool]:
-    """Return literal dynamic-access field names and whether non-literal access exists.
+    """Return literal attribute-name reads and whether the check must be suppressed.
 
-    Walks every ``getattr(obj, "name")`` and ``operator.attrgetter("name")`` call.
-    A literal string argument contributes its value as a read field name; a
-    non-literal argument means a field name cannot be proven unread, so the
-    boolean signals the caller to suppress the check for the whole file.
+    Walks every ``getattr(obj, "name")`` and ``operator.attrgetter("a", "b")``
+    call, contributing each literal string name as a read attribute name —
+    ``getattr`` names its attribute in the second positional argument while
+    ``attrgetter`` names one attribute per positional argument. A non-literal
+    name argument, or any reflective whole-instance consumer (``asdict``,
+    ``astuple``, ``vars``) that reads every field at once, means a field cannot
+    be proven unread, so the boolean signals the caller to suppress the check
+    for the whole file.
     """
     literal_names: set[str] = set()
-    has_non_literal_access = False
+    should_suppress_check = False
     for each_node in ast.walk(tree):
         if not isinstance(each_node, ast.Call):
             continue
@@ -94,28 +99,32 @@ def _dynamic_access_names(tree: ast.Module) -> tuple[set[str], bool]:
             function_name = function_node.id
         elif isinstance(function_node, ast.Attribute):
             function_name = function_node.attr
+        if function_name in ALL_REFLECTIVE_FIELD_CONSUMER_NAMES:
+            should_suppress_check = True
+            continue
         if function_name not in {GETATTR_FUNCTION_NAME, ATTRGETTER_FUNCTION_NAME}:
             continue
         string_arguments = [
             argument for argument in each_node.args if not isinstance(argument, ast.Starred)
         ]
-        name_argument = (
-            string_arguments[1]
-            if function_name == GETATTR_FUNCTION_NAME
-            and len(string_arguments) >= GETATTR_NAME_ARGUMENT_MINIMUM
-            else string_arguments[0]
-            if function_name == ATTRGETTER_FUNCTION_NAME and string_arguments
-            else None
-        )
-        if name_argument is None:
-            has_non_literal_access = True
+        if function_name == GETATTR_FUNCTION_NAME:
+            name_arguments = (
+                [string_arguments[1]]
+                if len(string_arguments) >= GETATTR_NAME_ARGUMENT_MINIMUM
+                else []
+            )
+        else:
+            name_arguments = string_arguments
+        if not name_arguments:
+            should_suppress_check = True
             continue
-        literal_name = _string_constant_literal(name_argument)
-        if literal_name is None:
-            has_non_literal_access = True
-            continue
-        literal_names.add(literal_name)
-    return literal_names, has_non_literal_access
+        for each_name_argument in name_arguments:
+            literal_name = _string_constant_literal(each_name_argument)
+            if literal_name is None:
+                should_suppress_check = True
+            else:
+                literal_names.add(literal_name)
+    return literal_names, should_suppress_check
 
 
 def _attribute_read_names(tree: ast.Module) -> set[str]:
@@ -164,7 +173,8 @@ def check_dead_dataclass_fields(
     A field is dead when its dataclass is instantiated somewhere in the file
     (so the class is live), the field name never appears as an attribute read
     or a literal ``getattr``/``attrgetter`` access anywhere in the file, and the
-    file contains no non-literal dynamic access that could read it indirectly.
+    file contains no non-literal dynamic access or reflective whole-instance
+    consumer (``asdict``, ``astuple``, ``vars``) that could read it indirectly.
     Whole-file analysis runs against ``full_file_content`` when supplied so an
     Edit fragment is judged against the reconstructed post-edit file.
 
@@ -187,8 +197,8 @@ def check_dead_dataclass_fields(
         tree = ast.parse(effective_content)
     except SyntaxError:
         return []
-    dynamic_literal_names, has_non_literal_access = _dynamic_access_names(tree)
-    if has_non_literal_access:
+    dynamic_literal_names, should_suppress_check = _dynamic_access_names(tree)
+    if should_suppress_check:
         return []
     read_names = _attribute_read_names(tree) | dynamic_literal_names | _exported_names(tree)
     constructed_class_names = _constructed_class_names(tree)

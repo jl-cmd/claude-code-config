@@ -62,6 +62,7 @@ def _bracket_segments_containing_number(masked_line: str, number_text: str) -> l
     slice (a pair whose body contains a colon, e.g. ``[:8]``) apart from a
     plain subscript index (e.g. ``[2]``).
     """
+    token_boundary_pattern = r"(?<![.\w])" + re.escape(number_text) + r"(?![.\w])"
     segments: list[str] = []
     depth = 0
     segment_start = -1
@@ -75,7 +76,7 @@ def _bracket_segments_containing_number(masked_line: str, number_text: str) -> l
             depth -= 1
             if depth == 0 and segment_start != -1:
                 segment_body = masked_line[segment_start:each_position]
-                if number_text in segment_body:
+                if re.search(token_boundary_pattern, segment_body):
                     segments.append(segment_body)
                 segment_start = -1
     return segments

@@ -78,3 +78,18 @@ def test_check_magic_values_should_allow_slice_bound_of_one() -> None:
     source = "def first_character(text):\n    head = text[:1]\n    label = head\n"
     issues = code_rules_enforcer.check_magic_values(source, PRODUCTION_FILE_PATH)
     assert issues == [], f"Expected no issues for an allowed slice bound 1, got: {issues}"
+
+
+def test_check_magic_values_should_flag_slice_bound_not_substring_subscript_on_same_line() -> None:
+    source = (
+        "def join_pair(key, value):\n"
+        "    pair = key[2] + value[:20]\n"
+        "    label = pair\n"
+    )
+    issues = code_rules_enforcer.check_magic_values(source, PRODUCTION_FILE_PATH)
+    assert any(issue.endswith("Magic value 20 - extract to named constant") for issue in issues), (
+        f"Expected the slice bound 20 to be flagged, got: {issues}"
+    )
+    assert not any(issue.endswith("Magic value 2 - extract to named constant") for issue in issues), (
+        f"Expected the subscript index 2 to stay exempt, got: {issues}"
+    )

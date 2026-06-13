@@ -280,6 +280,45 @@ export function managedHookScriptRelativePaths(hooksConfig) {
 }
 
 /**
+ * Builds the union of managed hook script paths across the given package source
+ * roots by parsing each root's hooks/hooks.json. The installer copies hook
+ * scripts into ~/.claude/hooks/ but never copies hooks.json itself, so the
+ * uninstall and update-refresh purge must read the managed-hook set from the
+ * package source the same way the merge does, never from ~/.claude/hooks/.
+ * Roots without a hooks.json contribute nothing.
+ *
+ * @param {string[]} sourceRoots Package roots that hold a hooks/hooks.json.
+ * @returns {Set<string>} Forward-slash relative script paths under hooks/.
+ */
+export function managedHookScriptRelativePathsFromSourceRoots(sourceRoots) {
+    const relativePaths = new Set();
+    for (const sourceRoot of sourceRoots) {
+        const hooksJsonPath = join(sourceRoot, 'hooks', 'hooks.json');
+        if (!existsSync(hooksJsonPath)) continue;
+        const hooksConfig = JSON.parse(readFileSync(hooksJsonPath, 'utf8'));
+        for (const relativePath of managedHookScriptRelativePaths(hooksConfig)) {
+            relativePaths.add(relativePath);
+        }
+    }
+    return relativePaths;
+}
+
+/**
+ * Resolves every package source root the installer can copy hooks from: this
+ * package plus each resolvable dependency package that ships hooks. The purge
+ * reads hooks.json from these roots so it prunes managed entries no matter which
+ * package contributed them.
+ *
+ * @returns {string[]} Distinct package roots, this package first.
+ */
+function managedPackageSourceRoots() {
+    const dependencyRoots = Object.values(INSTALL_GROUPS)
+        .filter(group => group.packageRoot)
+        .map(group => group.packageRoot);
+    return [...new Set([PACKAGE_ROOT, ...dependencyRoots])];
+}
+
+/**
  * Reports whether a settings.json hook command points at one of this installer's
  * managed scripts, no matter how the home directory was written ($HOME, ~,
  * ${HOME}, or an absolute path) or which path separator was used. Matching on
@@ -697,10 +736,9 @@ function purgeManagedInstallation({ requireManifest }) {
     if (existsSync(settingsPath)) {
         const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
         if (settings.hooks) {
-            const hooksJsonPath = join(CLAUDE_HOME, 'hooks', 'hooks.json');
-            const managedHookRelativePaths = existsSync(hooksJsonPath)
-                ? managedHookScriptRelativePaths(JSON.parse(readFileSync(hooksJsonPath, 'utf8')))
-                : new Set();
+            const managedHookRelativePaths = managedHookScriptRelativePathsFromSourceRoots(
+                managedPackageSourceRoots()
+            );
             pruneManagedHooksFromSettings(settings, managedHookRelativePaths);
             writeFileSync(settingsPath, JSON.stringify(settings, null, 4) + '\n');
             console.log('  Hook entries removed from settings.json');

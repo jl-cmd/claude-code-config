@@ -10,6 +10,7 @@ import {
     CONTENT_DIRECTORIES,
     pythonCandidatesForPlatform,
     managedHookScriptRelativePaths,
+    managedHookScriptRelativePathsFromSourceRoots,
     commandReferencesManagedHook,
     mergeHooksIntoSettings,
     pruneManagedHooksFromSettings,
@@ -399,3 +400,99 @@ test('pruneManagedHooksFromSettings removes managed hooks in every home-path and
     assert.equal(stopGroup.hooks[0].command, userHookCommand);
 });
 
+function writeHooksJsonAtRoot(sourceRoot, hooksConfig) {
+    mkdirSync(join(sourceRoot, 'hooks'), { recursive: true });
+    writeFileSync(join(sourceRoot, 'hooks', 'hooks.json'), JSON.stringify(hooksConfig));
+}
+
+
+test('managedHookScriptRelativePathsFromSourceRoots reads each root hooks.json so purge matches every installed script', () => {
+    const sourceRoot = mkdtempSync(join(tmpdir(), 'cdev-purge-set-'));
+    try {
+        writeHooksJsonAtRoot(sourceRoot, SAMPLE_HOOKS_CONFIG);
+
+        const relativePaths = managedHookScriptRelativePathsFromSourceRoots([sourceRoot]);
+
+        assert.ok(relativePaths.has('notification/attention_needed_notify.py'));
+        assert.ok(relativePaths.has('blocking/hedging_language_blocker.py'));
+        assert.equal([...relativePaths].length, 2);
+    } finally {
+        rmSync(sourceRoot, { recursive: true, force: true });
+    }
+});
+
+
+test('managedHookScriptRelativePathsFromSourceRoots unions managed scripts across multiple package roots', () => {
+    const builtinRoot = mkdtempSync(join(tmpdir(), 'cdev-purge-builtin-'));
+    const dependencyRoot = mkdtempSync(join(tmpdir(), 'cdev-purge-dependency-'));
+    try {
+        writeHooksJsonAtRoot(builtinRoot, {
+            hooks: { Stop: [{ matcher: '', hooks: [{ command: 'python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/code_rules_enforcer.py' }] }] },
+        });
+        writeHooksJsonAtRoot(dependencyRoot, {
+            hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ command: 'python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/pwsh_enforcer.py' }] }] },
+        });
+
+        const relativePaths = managedHookScriptRelativePathsFromSourceRoots([builtinRoot, dependencyRoot]);
+
+        assert.ok(relativePaths.has('blocking/code_rules_enforcer.py'));
+        assert.ok(relativePaths.has('blocking/pwsh_enforcer.py'));
+        assert.equal([...relativePaths].length, 2);
+    } finally {
+        rmSync(builtinRoot, { recursive: true, force: true });
+        rmSync(dependencyRoot, { recursive: true, force: true });
+    }
+});
+
+
+test('managedHookScriptRelativePathsFromSourceRoots skips roots whose hooks.json is absent', () => {
+    const rootWithoutHooks = mkdtempSync(join(tmpdir(), 'cdev-purge-empty-'));
+    try {
+        const relativePaths = managedHookScriptRelativePathsFromSourceRoots([rootWithoutHooks]);
+        assert.equal([...relativePaths].length, 0);
+    } finally {
+        rmSync(rootWithoutHooks, { recursive: true, force: true });
+    }
+});
+
+
+test('purge set sourced from package hooks.json prunes standalone managed script hooks and keeps user hooks', () => {
+    const sourceRoot = mkdtempSync(join(tmpdir(), 'cdev-purge-prune-'));
+    try {
+        writeHooksJsonAtRoot(sourceRoot, {
+            hooks: {
+                PreToolUse: [
+                    {
+                        matcher: 'Write|Edit',
+                        hooks: [
+                            { command: 'python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/code_rules_enforcer.py', timeout: 30 },
+                        ],
+                    },
+                ],
+            },
+        });
+        const userHookCommand = 'python /home/me/custom-tools/my_own_hook.py';
+        const settings = {
+            hooks: {
+                PreToolUse: [
+                    {
+                        matcher: 'Write|Edit',
+                        hooks: [
+                            { command: 'py -3 C:\\Users\\jonlo\\.claude\\hooks\\blocking\\code_rules_enforcer.py', timeout: 30 },
+                            { command: userHookCommand, timeout: 5 },
+                        ],
+                    },
+                ],
+            },
+        };
+
+        const managedHookRelativePaths = managedHookScriptRelativePathsFromSourceRoots([sourceRoot]);
+        pruneManagedHooksFromSettings(settings, managedHookRelativePaths);
+
+        const writeEditGroup = settings.hooks.PreToolUse.find(group => group.matcher === 'Write|Edit');
+        assert.equal(writeEditGroup.hooks.length, 1);
+        assert.equal(writeEditGroup.hooks[0].command, userHookCommand);
+    } finally {
+        rmSync(sourceRoot, { recursive: true, force: true });
+    }
+});

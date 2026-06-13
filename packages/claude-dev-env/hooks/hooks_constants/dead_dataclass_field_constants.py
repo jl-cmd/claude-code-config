@@ -11,9 +11,12 @@ CLASSVAR_ANNOTATION_NAME: str = "ClassVar"
 GETATTR_FUNCTION_NAME: str = "getattr"
 GETATTR_NAME_ARGUMENT_MINIMUM: int = 2
 ALL_REFLECTIVE_FIELD_CONSUMER_NAMES: frozenset[str] = frozenset(
-    {"asdict", "astuple", "replace", "vars"}
+    {"asdict", "astuple", "fields", "replace", "vars"}
 )
 WHOLE_INSTANCE_DICT_ATTRIBUTE_NAME: str = "__dict__"
+ALL_WHOLE_INSTANCE_STRINGIFY_NAMES: frozenset[str] = frozenset(
+    {"str", "repr", "format"}
+)
 MAX_DEAD_DATACLASS_FIELD_ISSUES: int = 25
 DEAD_DATACLASS_FIELD_GUIDANCE: str = (
     "field is assigned but never read in this file - remove the field and the code"

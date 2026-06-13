@@ -18,6 +18,7 @@ from code_rules_shared import (  # noqa: E402
 
 from hooks_constants.dead_dataclass_field_constants import (  # noqa: E402
     ALL_DATACLASS_DECORATOR_NAMES,
+    ALL_WHOLE_INSTANCE_STRINGIFY_NAMES,
     ATTRGETTER_FUNCTION_NAME,
     CLASSVAR_ANNOTATION_NAME,
     DEAD_DATACLASS_FIELD_GUIDANCE,
@@ -31,7 +32,9 @@ from hooks_constants.dead_dataclass_field_constants import (  # noqa: E402
 
 def _decorator_calls_dataclass(decorator_node: ast.expr) -> bool:
     """Return whether a decorator expression applies @dataclass (bare or called)."""
-    target_node = decorator_node.func if isinstance(decorator_node, ast.Call) else decorator_node
+    target_node = (
+        decorator_node.func if isinstance(decorator_node, ast.Call) else decorator_node
+    )
     if isinstance(target_node, ast.Name):
         return target_node.id in ALL_DATACLASS_DECORATOR_NAMES
     if isinstance(target_node, ast.Attribute):
@@ -41,7 +44,8 @@ def _decorator_calls_dataclass(decorator_node: ast.expr) -> bool:
 
 def _is_dataclass(class_node: ast.ClassDef) -> bool:
     return any(
-        _decorator_calls_dataclass(each_decorator) for each_decorator in class_node.decorator_list
+        _decorator_calls_dataclass(each_decorator)
+        for each_decorator in class_node.decorator_list
     )
 
 
@@ -85,9 +89,9 @@ def _dynamic_access_names(tree: ast.Module) -> tuple[set[str], bool]:
     ``getattr`` names its attribute in the second positional argument while
     ``attrgetter`` names one attribute per positional argument. A non-literal
     name argument, or any reflective whole-instance consumer (``asdict``,
-    ``astuple``, ``vars``) that reads every field at once, means a field cannot
-    be proven unread, so the boolean signals the caller to suppress the check
-    for the whole file.
+    ``astuple``, ``fields``, ``replace``, ``vars``) that reads every field at
+    once, means a field cannot be proven unread, so the boolean signals the
+    caller to suppress the check for the whole file.
     """
     literal_names: set[str] = set()
     should_suppress_check = False
@@ -106,7 +110,9 @@ def _dynamic_access_names(tree: ast.Module) -> tuple[set[str], bool]:
         if function_name not in {GETATTR_FUNCTION_NAME, ATTRGETTER_FUNCTION_NAME}:
             continue
         string_arguments = [
-            argument for argument in each_node.args if not isinstance(argument, ast.Starred)
+            argument
+            for argument in each_node.args
+            if not isinstance(argument, ast.Starred)
         ]
         if function_name == GETATTR_FUNCTION_NAME:
             name_arguments = (
@@ -128,24 +134,58 @@ def _dynamic_access_names(tree: ast.Module) -> tuple[set[str], bool]:
     return literal_names, should_suppress_check
 
 
+def _augmented_assignment_attribute_names(tree: ast.Module) -> set[str]:
+    """Return attribute names that an augmented assignment reads before writing.
+
+    ``obj.field += value`` parses to an ``ast.Attribute`` target in Store
+    context, yet ``+=`` reads the current attribute value before storing the
+    result, so the target attribute counts as a read.
+    """
+    augmented_read_names: set[str] = set()
+    for each_node in ast.walk(tree):
+        if not isinstance(each_node, ast.AugAssign):
+            continue
+        if isinstance(each_node.target, ast.Attribute):
+            augmented_read_names.add(each_node.target.attr)
+    return augmented_read_names
+
+
 def _attribute_read_names(tree: ast.Module) -> tuple[set[str], bool]:
     """Return literal attribute-name reads and whether the check must be suppressed.
 
-    Walks every attribute read (Load context) in the module, contributing each
-    attribute name as a read name. A read of ``__dict__`` consumes every field
-    of an instance at once, so it cannot prove any single field unread and the
-    boolean signals the caller to suppress the check for the whole file.
+    Walks every attribute read (Load context) and every augmented-assignment
+    target in the module, contributing each attribute name as a read name —
+    ``obj.field += value`` reads ``field`` before writing it. A read of
+    ``__dict__`` consumes every field of an instance at once, so it cannot prove
+    any single field unread and the boolean signals the caller to suppress the
+    check for the whole file.
     """
-    read_names: set[str] = set()
+    read_names: set[str] = _augmented_assignment_attribute_names(tree)
     should_suppress_check = False
     for each_node in ast.walk(tree):
-        if not isinstance(each_node, ast.Attribute) or not isinstance(each_node.ctx, ast.Load):
+        if not isinstance(each_node, ast.Attribute) or not isinstance(
+            each_node.ctx, ast.Load
+        ):
             continue
         if each_node.attr == WHOLE_INSTANCE_DICT_ATTRIBUTE_NAME:
             should_suppress_check = True
             continue
         read_names.add(each_node.attr)
     return read_names, should_suppress_check
+
+
+def _match_pattern_attribute_names(tree: ast.Module) -> set[str]:
+    """Return field names that a class pattern reads in a ``match`` statement.
+
+    A class pattern ``case Row(url=found):`` reads the ``url`` field through
+    ``ast.MatchClass.kwd_attrs``, so each keyword-pattern attribute name counts
+    as a read name even though it never appears as an attribute access.
+    """
+    matched_names: set[str] = set()
+    for each_node in ast.walk(tree):
+        if isinstance(each_node, ast.MatchClass):
+            matched_names.update(each_node.kwd_attrs)
+    return matched_names
 
 
 def _exported_names(tree: ast.Module) -> set[str]:
@@ -177,19 +217,56 @@ def _constructed_class_names(tree: ast.Module) -> set[str]:
     return constructed
 
 
+def _is_whole_instance_stringify_call(node: ast.AST) -> bool:
+    """Return whether a call stringifies a whole instance via ``str``/``repr``/``format``."""
+    if not isinstance(node, ast.Call):
+        return False
+    function_node = node.func
+    if isinstance(function_node, ast.Name):
+        return function_node.id in ALL_WHOLE_INSTANCE_STRINGIFY_NAMES
+    if isinstance(function_node, ast.Attribute):
+        return function_node.attr in ALL_WHOLE_INSTANCE_STRINGIFY_NAMES
+    return False
+
+
+def _uses_dataclass_dunder_field_reads(tree: ast.Module) -> bool:
+    """Return whether the file relies on auto-generated dataclass dunders to read fields.
+
+    ``@dataclass`` synthesizes ``__eq__`` (and ``__lt__``/``__hash__`` under
+    ``order``/``frozen``) plus the always-present ``__repr__``, each of which
+    reads every field without naming it as an attribute access. Comparing two
+    instances, placing instances in a set or dict, formatted-string conversion,
+    or stringifying a whole instance therefore reads fields the static scan
+    cannot otherwise observe, so the check is suppressed for the whole file.
+    """
+    for each_node in ast.walk(tree):
+        if isinstance(each_node, ast.Compare):
+            return True
+        if isinstance(each_node, (ast.Set, ast.SetComp, ast.Dict, ast.DictComp)):
+            return True
+        if isinstance(each_node, ast.FormattedValue):
+            return True
+        if _is_whole_instance_stringify_call(each_node):
+            return True
+    return False
+
+
 def check_dead_dataclass_fields(
     content: str, file_path: str, full_file_content: str | None = None
 ) -> list[str]:
     """Flag a @dataclass field that the same file constructs but never reads.
 
     A field is dead when its dataclass is instantiated somewhere in the file
-    (so the class is live), the field name never appears as an attribute read
-    or a literal ``getattr``/``attrgetter`` access anywhere in the file, and the
-    file contains no non-literal dynamic access, reflective whole-instance
-    consumer (``asdict``, ``astuple``, ``replace``, ``vars``), or ``__dict__``
-    read that could read it indirectly. Whole-file analysis runs against
-    ``full_file_content`` when supplied so an Edit fragment is judged against the
-    reconstructed post-edit file.
+    (so the class is live), the field name never appears as an attribute read,
+    an augmented-assignment target, a class-pattern keyword, or a literal
+    ``getattr``/``attrgetter`` access anywhere in the file, and the file contains
+    no non-literal dynamic access, reflective whole-instance consumer
+    (``asdict``, ``astuple``, ``fields``, ``replace``, ``vars``), ``__dict__``
+    read, or auto-generated dataclass dunder field read (comparison, set/dict
+    membership, or whole-instance stringification) that could read it
+    indirectly. Whole-file analysis runs against ``full_file_content`` when
+    supplied so an Edit fragment is judged against the reconstructed post-edit
+    file.
 
     Args:
         content: The new content under validation (Edit fragment or whole file).
@@ -210,11 +287,18 @@ def check_dead_dataclass_fields(
         tree = ast.parse(effective_content)
     except SyntaxError:
         return []
+    if _uses_dataclass_dunder_field_reads(tree):
+        return []
     dynamic_literal_names, dynamic_access_suppresses_check = _dynamic_access_names(tree)
     attribute_read_names, instance_dict_suppresses_check = _attribute_read_names(tree)
     if dynamic_access_suppresses_check or instance_dict_suppresses_check:
         return []
-    read_names = attribute_read_names | dynamic_literal_names | _exported_names(tree)
+    read_names = (
+        attribute_read_names
+        | dynamic_literal_names
+        | _match_pattern_attribute_names(tree)
+        | _exported_names(tree)
+    )
     constructed_class_names = _constructed_class_names(tree)
     issues: list[str] = []
     for each_node in ast.walk(tree):

@@ -4,7 +4,9 @@ import importlib.util
 from pathlib import Path
 
 ENFORCER_PATH = Path(__file__).resolve().parent / "code_rules_enforcer.py"
-specification = importlib.util.spec_from_file_location("code_rules_enforcer", ENFORCER_PATH)
+specification = importlib.util.spec_from_file_location(
+    "code_rules_enforcer", ENFORCER_PATH
+)
 assert specification is not None and specification.loader is not None
 code_rules_enforcer = importlib.util.module_from_spec(specification)
 specification.loader.exec_module(code_rules_enforcer)
@@ -35,12 +37,12 @@ def test_should_flag_dataclass_field_assigned_but_never_read() -> None:
         "    return metadata.number\n"
     )
     issues = _check(source, PRODUCTION_FILE_PATH)
-    assert any("'url'" in each_issue and "PrMetadata" in each_issue for each_issue in issues), (
-        f"Expected dead 'url' field flagged, got: {issues}"
-    )
-    assert not any("'number'" in each_issue for each_issue in issues), (
-        f"Read field 'number' must not be flagged, got: {issues}"
-    )
+    assert any(
+        "'url'" in each_issue and "PrMetadata" in each_issue for each_issue in issues
+    ), f"Expected dead 'url' field flagged, got: {issues}"
+    assert not any(
+        "'number'" in each_issue for each_issue in issues
+    ), f"Read field 'number' must not be flagged, got: {issues}"
 
 
 def test_should_not_flag_field_read_via_attribute_access() -> None:
@@ -142,9 +144,9 @@ def test_should_handle_called_dataclass_decorator() -> None:
         "    return PrMetadata(url='x')\n"
     )
     issues = _check(source, PRODUCTION_FILE_PATH)
-    assert any("'url'" in each_issue for each_issue in issues), (
-        f"Expected dead field flagged on called-decorator dataclass, got: {issues}"
-    )
+    assert any(
+        "'url'" in each_issue for each_issue in issues
+    ), f"Expected dead field flagged on called-decorator dataclass, got: {issues}"
 
 
 def test_should_handle_dotted_dataclasses_decorator() -> None:
@@ -159,9 +161,9 @@ def test_should_handle_dotted_dataclasses_decorator() -> None:
         "    return PrMetadata(url='x')\n"
     )
     issues = _check(source, PRODUCTION_FILE_PATH)
-    assert any("'url'" in each_issue for each_issue in issues), (
-        f"Expected dead field flagged on dotted-decorator dataclass, got: {issues}"
-    )
+    assert any(
+        "'url'" in each_issue for each_issue in issues
+    ), f"Expected dead field flagged on dotted-decorator dataclass, got: {issues}"
 
 
 def test_should_be_silent_for_test_files() -> None:
@@ -204,9 +206,9 @@ def test_should_flag_dead_field_in_workflow_path() -> None:
         "    return PrMetadata(url='x')\n"
     )
     issues = _check(source, WORKFLOW_FILE_PATH)
-    assert any("'url'" in each_issue for each_issue in issues), (
-        f"Workflow-path files are subject to dead-code detection, got: {issues}"
-    )
+    assert any(
+        "'url'" in each_issue for each_issue in issues
+    ), f"Workflow-path files are subject to dead-code detection, got: {issues}"
 
 
 def test_should_tolerate_syntax_error() -> None:
@@ -225,9 +227,9 @@ def test_validate_content_runs_dead_field_check() -> None:
         "    return PrMetadata(url='x')\n"
     )
     issues = code_rules_enforcer.validate_content(source, PRODUCTION_FILE_PATH)
-    assert any("'url'" in each_issue for each_issue in issues), (
-        f"Expected the enforcer dispatch to surface the dead field, got: {issues}"
-    )
+    assert any(
+        "'url'" in each_issue for each_issue in issues
+    ), f"Expected the enforcer dispatch to surface the dead field, got: {issues}"
 
 
 def test_should_suppress_check_when_asdict_consumes_instance() -> None:
@@ -330,6 +332,114 @@ def test_should_not_flag_field_read_via_multi_argument_attrgetter() -> None:
     assert _check(source, PRODUCTION_FILE_PATH) == []
 
 
+def test_should_suppress_check_when_two_instances_compared_for_equality() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def are_same(left: Row, right: Row) -> bool:\n"
+        "    return Row(url='a') == Row(url='b')\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_suppress_check_when_ordered_instances_compared() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass(order=True)\n"
+        "class Row:\n"
+        "    priority: int\n"
+        "\n"
+        "def is_earlier() -> bool:\n"
+        "    return Row(priority=1) < Row(priority=2)\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_suppress_check_when_instances_placed_in_set() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass(frozen=True)\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def unique_rows() -> set:\n"
+        "    return {Row(url='a'), Row(url='b')}\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_suppress_check_when_whole_instance_stringified() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def describe() -> str:\n"
+        "    return str(Row(url='x'))\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_not_flag_field_read_via_match_class_pattern() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def read(row: Row) -> str:\n"
+        "    match row:\n"
+        "        case Row(url=found):\n"
+        "            return found\n"
+        "    return ''\n"
+        "\n"
+        "def build() -> Row:\n"
+        "    return Row(url='x')\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_suppress_check_when_fields_reflection_consumes_instance() -> None:
+    source = (
+        "import dataclasses\n"
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    url: str\n"
+        "\n"
+        "def field_names() -> list:\n"
+        "    return [each_field.name for each_field in dataclasses.fields(Row(url='x'))]\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
+def test_should_not_flag_field_read_via_augmented_assignment() -> None:
+    source = (
+        "from dataclasses import dataclass\n"
+        "\n"
+        "@dataclass\n"
+        "class Row:\n"
+        "    counter: int\n"
+        "\n"
+        "def bump(row: Row) -> None:\n"
+        "    row.counter += 1\n"
+        "\n"
+        "def build() -> Row:\n"
+        "    return Row(counter=0)\n"
+    )
+    assert _check(source, PRODUCTION_FILE_PATH) == []
+
+
 def test_should_evaluate_full_file_content_when_supplied() -> None:
     fragment = "    return metadata.number\n"
     full_file = (
@@ -349,9 +459,9 @@ def test_should_evaluate_full_file_content_when_supplied() -> None:
     issues = code_rules_enforcer.check_dead_dataclass_fields(
         fragment, PRODUCTION_FILE_PATH, full_file
     )
-    assert any("'url'" in each_issue for each_issue in issues), (
-        f"Expected the reconstructed whole-file content to govern, got: {issues}"
-    )
-    assert not any("'number'" in each_issue for each_issue in issues), (
-        f"Read field 'number' must not be flagged, got: {issues}"
-    )
+    assert any(
+        "'url'" in each_issue for each_issue in issues
+    ), f"Expected the reconstructed whole-file content to govern, got: {issues}"
+    assert not any(
+        "'number'" in each_issue for each_issue in issues
+    ), f"Read field 'number' must not be flagged, got: {issues}"

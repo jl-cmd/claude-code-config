@@ -403,6 +403,57 @@ def _command_executes_a_string_argument(all_command_tokens: list[str]) -> bool:
     )
 
 
+def _explode_glued_shell_control_operators(all_command_tokens: list[str]) -> list[str]:
+    """Split control operators off shlex tokens that glue them to a program name.
+
+    shlex keeps a control operator joined to an adjacent program when no whitespace
+    separates them, so ``true; eval 'x'`` tokenizes to ``['true;', 'eval', 'x']``
+    with the ``;`` hidden inside ``true;``. This re-splits each token on the
+    unquoted control operators ``&&`` / ``||`` / ``;`` / ``|`` / ``&`` so the
+    operator becomes its own token and segment boundaries are visible. shlex has
+    already removed quoting, so any operator character still present in a token came
+    from unquoted shell source and is a real boundary.
+
+    Args:
+        all_command_tokens: Tokens produced by shlex tokenization.
+
+    Returns:
+        Tokens with glued control operators separated into standalone tokens.
+    """
+    control_operator_split_pattern = re.compile(r"(&&|\|\||;|\||&)")
+    all_exploded_tokens: list[str] = []
+    for each_token in all_command_tokens:
+        for each_fragment in control_operator_split_pattern.split(each_token):
+            if each_fragment:
+                all_exploded_tokens.append(each_fragment)
+    return all_exploded_tokens
+
+
+def _any_shell_segment_executes_a_string_argument(all_command_tokens: list[str]) -> bool:
+    """Return True when any shell segment's leading program runs a string as code.
+
+    Splits the command into simple-command segments on ``&&`` / ``||`` / ``;`` /
+    ``|`` / ``&`` and applies the leading-program string-execution check to each.
+    A benign program leading the whole command (``echo hi && bash -c 'rm -rf /etc'``,
+    ``true; eval 'rm -rf /etc'``) must not mask an interpreter that runs the
+    destructive ``rm`` inside a later segment, so every segment is inspected rather
+    than only the command's first program. Control operators glued to a program by
+    missing whitespace are separated first so those segment boundaries are seen.
+
+    Args:
+        all_command_tokens: Tokens produced by shlex tokenization.
+
+    Returns:
+        True when at least one segment's leading program executes a quoted string
+        argument as code.
+    """
+    all_exploded_tokens = _explode_glued_shell_control_operators(all_command_tokens)
+    for each_segment in _split_tokens_into_shell_segments(all_exploded_tokens):
+        if each_segment and _command_executes_a_string_argument(each_segment):
+            return True
+    return False
+
+
 def command_has_no_real_rm_invocation(command: str) -> bool:
     """Return True when no shell token in the command actually invokes ``rm``.
 
@@ -416,12 +467,14 @@ def command_has_no_real_rm_invocation(command: str) -> bool:
     Fails closed (returns False, meaning "treat as a real invocation, keep
     prompting") when the command contains shell expansion (``$`` or backtick),
     where a token such as ``$RM`` could expand to ``rm``; when tokenization fails on
-    unbalanced quotes; or when the leading program executes a quoted string argument
-    as code (``bash -c 'rm -rf /etc'``, ``eval 'rm -rf /etc'``,
-    ``ssh host 'rm -rf /etc'``, ``python -c "...os.system('rm -rf /etc')..."``),
-    where the destructive ``rm`` rides inside the executed string rather than a
-    passive mention. ``/bin/rm``, ``sudo rm`` and ``\\rm`` each tokenize to a token
-    whose basename is ``rm`` and are correctly reported as real.
+    unbalanced quotes; or when any shell segment's leading program executes a quoted
+    string argument as code (``bash -c 'rm -rf /etc'``, ``eval 'rm -rf /etc'``,
+    ``ssh host 'rm -rf /etc'``, ``awk 'BEGIN{system("rm -rf /etc")}'``,
+    ``echo hi && bash -c 'rm -rf /etc'``), where the destructive ``rm`` rides inside
+    an executed string rather than a passive mention. The per-segment check means a
+    benign leader on the whole command does not mask an interpreter in a later
+    segment. ``/bin/rm``, ``sudo rm`` and ``\\rm`` each tokenize to a token whose
+    basename is ``rm`` and are correctly reported as real.
 
     Args:
         command: The raw Bash command string from the tool input.
@@ -435,7 +488,7 @@ def command_has_no_real_rm_invocation(command: str) -> bool:
         all_command_tokens = _split_command_preserving_windows_backslashes(command)
     except ValueError:
         return False
-    if _command_executes_a_string_argument(all_command_tokens):
+    if _any_shell_segment_executes_a_string_argument(all_command_tokens):
         return False
     for each_token in all_command_tokens:
         if Path(each_token).name == "rm":

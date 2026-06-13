@@ -49,6 +49,11 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/subprocess_budget_completeness.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/workflow_substitution_slot_blocker.py",
+            "timeout": 10
           }
         ]
       },

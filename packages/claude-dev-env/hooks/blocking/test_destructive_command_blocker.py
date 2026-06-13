@@ -1129,6 +1129,40 @@ def test_interpreter_execution_asks_when_python_dash_c_runs_quoted_rm() -> None:
     _assert_hook_asks("""python -c "import os; os.system('rm -rf /etc')\"""")
 
 
+def test_interpreter_execution_asks_when_awk_system_runs_quoted_rm() -> None:
+    _assert_hook_asks("""awk 'BEGIN{system("rm -rf /etc")}'""")
+
+
+def test_interpreter_execution_asks_when_gawk_system_runs_quoted_rm() -> None:
+    _assert_hook_asks("""gawk 'BEGIN{system("rm -rf /etc")}'""")
+
+
+def test_interpreter_execution_asks_when_make_runs_quoted_rm() -> None:
+    _assert_hook_asks("""make -f - 'rm -rf /etc'""")
+
+
+def test_compound_rm_asks_when_awk_segment_runs_quoted_rm_after_ephemeral_rm() -> None:
+    _assert_hook_asks("""rm -rf /tmp/x && awk 'BEGIN{system("rm -rf /etc")}'""")
+
+
+def test_interpreter_execution_asks_when_benign_command_precedes_bash_dash_c() -> None:
+    _assert_hook_asks("echo hi && bash -c 'rm -rf /etc'")
+
+
+def test_interpreter_execution_asks_when_benign_command_precedes_ssh() -> None:
+    _assert_hook_asks("ls && ssh host 'rm -rf /etc'")
+
+
+def test_interpreter_execution_asks_when_benign_command_precedes_eval() -> None:
+    _assert_hook_asks("true; eval 'rm -rf /etc'")
+
+
+def test_interpreter_execution_asks_when_benign_command_precedes_python_dash_c() -> None:
+    _assert_hook_asks(
+        """echo start && python -c "import os; os.system('rm -rf /etc')\""""
+    )
+
+
 # --- convergence branch exemption unit tests ---
 
 import importlib.util

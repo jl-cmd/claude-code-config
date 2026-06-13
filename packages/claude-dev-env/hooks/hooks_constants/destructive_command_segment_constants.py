@@ -21,6 +21,14 @@ ALL_INTERPRETER_AND_WRAPPER_COMMANDS: frozenset[str] = frozenset(
         "su",
         "env",
         "xargs",
+        "awk",
+        "gawk",
+        "mawk",
+        "nawk",
+        "make",
+        "tclsh",
+        "expect",
+        "lua",
     }
 )
 ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS: frozenset[str] = frozenset(

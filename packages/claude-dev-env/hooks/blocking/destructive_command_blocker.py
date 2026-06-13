@@ -952,6 +952,11 @@ def _benign_program_writes_a_file_via_output_flag(
     one of that program's file-writing output flags is reported as a write so it
     declines the ephemeral ``rm`` auto-allow.
 
+    Three token shapes carry the output flag: the flag as its own token (``-o FILE``),
+    the long flag joined to its value through an equals sign (``--output=FILE``), and a
+    single-dash short flag with its value attached (``-o/etc/important.conf``). All
+    three are matched.
+
     Args:
         leading_program_basename: The segment's leading program basename, lowercased.
         all_segment_tokens: Shlex tokens of one shell segment.
@@ -965,9 +970,37 @@ def _benign_program_writes_a_file_via_output_flag(
     if all_file_writing_output_flags is None:
         return False
     return any(
-        each_token in all_file_writing_output_flags
-        or each_token.split("=", 1)[0] in all_file_writing_output_flags
+        _token_carries_an_output_flag(each_token, all_file_writing_output_flags)
         for each_token in all_segment_tokens
+    )
+
+
+def _token_carries_an_output_flag(token: str, all_output_flags: frozenset[str]) -> bool:
+    """Return True when a token names an output flag in any accepted spelling.
+
+    Matches the flag as its own token (``-o``), the long flag joined to its value
+    through an equals sign (``--output=FILE`` splits to ``--output``), and a single-dash
+    short flag with its value attached (``-o/etc/x`` starts with ``-o`` and carries
+    more). A long ``--`` flag is excluded from the attached-value branch because its
+    value attaches through ``=`` rather than directly.
+
+    Args:
+        token: One shell token.
+        all_output_flags: The program's file-writing output flags.
+
+    Returns:
+        True when the token names one of the output flags.
+    """
+    if token in all_output_flags:
+        return True
+    if token.split("=", 1)[0] in all_output_flags:
+        return True
+    return any(
+        each_flag.startswith("-")
+        and not each_flag.startswith("--")
+        and token.startswith(each_flag)
+        and len(token) > len(each_flag)
+        for each_flag in all_output_flags
     )
 
 

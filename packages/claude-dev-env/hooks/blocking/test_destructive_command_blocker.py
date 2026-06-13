@@ -1130,6 +1130,10 @@ def test_compound_rm_asks_when_sort_writes_output_file_to_non_ephemeral_path() -
     _assert_hook_asks("rm -rf /tmp/x && sort -o /etc/important.conf /etc/passwd")
 
 
+def test_compound_rm_asks_when_sort_glues_output_value_to_short_flag() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && sort -o/etc/important.conf /etc/passwd")
+
+
 def test_compound_rm_asks_when_git_config_sets_value_after_ephemeral_rm() -> None:
     _assert_hook_asks("rm -rf /tmp/x && git config --global user.name evil")
 

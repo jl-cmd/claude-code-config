@@ -91,6 +91,7 @@ ALL_GIT_CONFIG_READ_ONLY_FLAGS: frozenset[str] = frozenset(
     {"--get", "--get-all", "--get-regexp", "--list", "-l", "--get-urlmatch"}
 )
 ALL_GIT_REMOTE_READ_ONLY_VERBS: frozenset[str] = frozenset({"show", "get-url"})
+ALL_GIT_FETCH_FORCE_FLAGS: frozenset[str] = frozenset({"-f", "--force"})
 ALL_GH_HTTP_WRITE_METHOD_FLAGS: frozenset[str] = frozenset({"-X", "--method"})
 ALL_GH_HTTP_WRITE_METHODS: frozenset[str] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 GH_HTTP_READ_ONLY_METHOD: str = "GET"

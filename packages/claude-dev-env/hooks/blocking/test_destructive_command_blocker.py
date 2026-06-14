@@ -1735,8 +1735,24 @@ def test_compound_rm_asks_when_git_fetch_force_refspec_rewrites_local_branch() -
     )
 
 
+def test_compound_rm_asks_when_git_fetch_long_force_flag_rewrites_local_branch() -> None:
+    _assert_hook_asks(
+        "rm -rf /tmp/x && git fetch --force origin refs/heads/main:refs/heads/main"
+    )
+
+
+def test_compound_rm_asks_when_git_fetch_short_force_flag_rewrites_local_branch() -> None:
+    _assert_hook_asks(
+        "rm -rf /tmp/x && git fetch -f origin refs/heads/main:refs/heads/main"
+    )
+
+
 def test_compound_rm_allowed_when_plain_git_fetch_follows_ephemeral_rm() -> None:
     _assert_hook_allows("rm -rf /tmp/reply && git fetch")
+
+
+def test_compound_rm_allowed_when_git_fetch_origin_branch_follows_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && git fetch origin main")
 
 
 def test_launcher_execution_asks_when_timeout_infinity_wraps_bash_dash_c() -> None:

@@ -28,6 +28,7 @@ from hooks_constants.destructive_command_segment_constants import (  # noqa: E40
     ALL_GH_HTTP_WRITE_METHOD_FLAGS,
     ALL_GH_HTTP_WRITE_METHODS,
     ALL_GIT_CONFIG_READ_ONLY_FLAGS,
+    ALL_GIT_FETCH_FORCE_FLAGS,
     ALL_GIT_REMOTE_READ_ONLY_VERBS,
     ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
     ALL_LAUNCHER_OPTIONS_TAKING_SEPARATE_VALUE,
@@ -936,21 +937,31 @@ def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool
     return False
 
 
-def _git_fetch_segment_carries_a_force_refspec(all_positional_tokens: list[str]) -> bool:
-    """Return True when a ``git fetch`` segment carries a ref-rewriting force refspec.
+def _git_fetch_segment_forces_a_local_ref_update(
+    all_positional_tokens: list[str], all_segment_tokens: list[str]
+) -> bool:
+    """Return True when a ``git fetch`` segment force-updates a local ref.
 
-    ``git fetch`` is read-only in normal use, but a ``+``-prefixed refspec
-    force-updates the local destination ref even when it is not a fast-forward:
-    ``git fetch origin +refs/heads/main:refs/heads/main`` overwrites the local
-    ``main`` branch and discards local commits. A positional refspec that begins with
-    ``+``, or that names a ``+refs/`` source anywhere within it, is a force refspec.
+    ``git fetch`` is read-only in normal use, but two spellings force-update the local
+    destination ref even when the update is not a fast-forward, overwriting a local
+    branch and discarding local commits. A ``+``-prefixed refspec forces only the refs
+    it names: ``git fetch origin +refs/heads/main:refs/heads/main`` is detected from a
+    positional refspec that begins with ``+`` or names a ``+refs/`` source. The ``-f``/
+    ``--force`` flag forces every named refspec at once: ``git fetch --force origin
+    refs/heads/main:refs/heads/main`` discards local ``main`` commits with no ``+`` in
+    sight. The force flag is dash-prefixed and so is dropped from the positional-token
+    list, so the raw segment tokens are scanned for it, mirroring how the ``gh api``
+    write-method check scans raw tokens for ``-X``.
 
     Args:
         all_positional_tokens: The non-flag tokens after the leading ``git`` program.
+        all_segment_tokens: Shlex tokens of the whole ``git`` segment.
 
     Returns:
-        True when any positional refspec force-updates a local ref.
+        True when any positional refspec or a force flag force-updates a local ref.
     """
+    if any(each_token in ALL_GIT_FETCH_FORCE_FLAGS for each_token in all_segment_tokens):
+        return True
     return any(
         each_token.startswith("+") or "+refs/" in each_token
         for each_token in all_positional_tokens
@@ -1005,7 +1016,8 @@ def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segm
     of ALL_GIT_CONFIG_READ_ONLY_FLAGS) precedes the first positional key; a ``remote``
     segment mutates unless the first positional verb after ``remote`` is a read-only one
     (``show``, ``get-url``); a ``fetch`` segment mutates when it carries a ``+``-prefixed
-    force refspec. Both the config mode and the remote verb are read positionally rather
+    force refspec or a ``-f``/``--force`` flag. Both the config mode and the remote verb
+    are read positionally rather
     than by scanning the whole segment for any read-only token, because a value that
     follows the key positional (``git config core.editor --get`` stores ``--get``) and a
     global ``-v``/``--verbose`` before a write verb (``git remote -v add evil url``) would
@@ -1028,7 +1040,9 @@ def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segm
             return False
         return all_remote_verbs[0] not in ALL_GIT_REMOTE_READ_ONLY_VERBS
     if "fetch" in all_lowercased_positional_tokens:
-        return _git_fetch_segment_carries_a_force_refspec(all_positional_tokens)
+        return _git_fetch_segment_forces_a_local_ref_update(
+            all_positional_tokens, all_segment_tokens
+        )
     return False
 
 

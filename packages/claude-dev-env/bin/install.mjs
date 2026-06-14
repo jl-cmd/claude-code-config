@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, copyFileSync, unlinkSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, copyFileSync, unlinkSync, rmSync, realpathSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync, execFileSync } from 'node:child_process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { installAllGitHooks } from './git_hooks_installer.mjs';
 import { installMypyIniForClaudeHooks } from './install_mypy_ini.mjs';
@@ -856,9 +856,17 @@ writes the previous contents to ~/.claude/backups/CLAUDE.md.<timestamp>.bak firs
 
 /**
  * Reports whether this module is the process entry point (run as
- * `node install.mjs`) rather than imported by another module such as the test
- * suite. The install/uninstall dispatch runs only when true, so importing the
- * module carries no side effects.
+ * `node install.mjs`, or through a bin symlink such as the npm-installed
+ * `claude-dev-env` launcher) rather than imported by another module such as the
+ * test suite. The install/uninstall dispatch runs only when true, so importing
+ * the module carries no side effects.
+ *
+ * Both sides resolve to their real on-disk paths before comparison, so a
+ * symlinked launcher whose target is this module still counts as the entry
+ * point even though `process.argv[1]` keeps the symlink path while
+ * `import.meta.url` reports the resolved target. When either path cannot be
+ * resolved on disk (for example a synthetic path in a unit test), the raw
+ * paths are compared instead.
  *
  * @param {string} moduleUrl The module's import.meta.url.
  * @param {string|undefined} entryScriptPath The invoked script path (process.argv[1]).
@@ -866,7 +874,16 @@ writes the previous contents to ~/.claude/backups/CLAUDE.md.<timestamp>.bak firs
  */
 export function invokedAsEntryPoint(moduleUrl, entryScriptPath) {
     if (!entryScriptPath) return false;
-    return moduleUrl === pathToFileURL(entryScriptPath).href;
+    const modulePath = fileURLToPath(moduleUrl);
+    return realPathOrSelf(modulePath) === realPathOrSelf(entryScriptPath);
+}
+
+function realPathOrSelf(filesystemPath) {
+    try {
+        return realpathSync(filesystemPath);
+    } catch {
+        return filesystemPath;
+    }
 }
 
 if (invokedAsEntryPoint(import.meta.url, process.argv[1])) {

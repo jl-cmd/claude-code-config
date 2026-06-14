@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -301,6 +301,36 @@ test('invokedAsEntryPoint is false when the module is imported by another script
 
 test('invokedAsEntryPoint is false when there is no invoked script path', () => {
     assert.equal(invokedAsEntryPoint('file:///pkg/bin/install.mjs', undefined), false);
+});
+
+
+test('invokedAsEntryPoint is true when the module is reached through a bin symlink', () => {
+    const linkRoot = mkdtempSync(join(tmpdir(), 'cdev-bin-symlink-'));
+    try {
+        const realModulePath = join(linkRoot, 'install.mjs');
+        const symlinkLauncherPath = join(linkRoot, 'claude-dev-env');
+        writeFileSync(realModulePath, 'export const sentinel = true;\n');
+        symlinkSync(realModulePath, symlinkLauncherPath);
+        const realModuleUrl = pathToFileURL(realModulePath).href;
+        assert.equal(invokedAsEntryPoint(realModuleUrl, symlinkLauncherPath), true);
+    } finally {
+        rmSync(linkRoot, { recursive: true, force: true });
+    }
+});
+
+
+test('invokedAsEntryPoint is false when a sibling script imports the real module', () => {
+    const importerRoot = mkdtempSync(join(tmpdir(), 'cdev-bin-importer-'));
+    try {
+        const realModulePath = join(importerRoot, 'install.mjs');
+        const importerScriptPath = join(importerRoot, 'install.test.mjs');
+        writeFileSync(realModulePath, 'export const sentinel = true;\n');
+        writeFileSync(importerScriptPath, 'import "./install.mjs";\n');
+        const realModuleUrl = pathToFileURL(realModulePath).href;
+        assert.equal(invokedAsEntryPoint(realModuleUrl, importerScriptPath), false);
+    } finally {
+        rmSync(importerRoot, { recursive: true, force: true });
+    }
 });
 
 

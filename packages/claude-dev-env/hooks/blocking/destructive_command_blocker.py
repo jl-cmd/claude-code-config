@@ -969,6 +969,42 @@ def _git_fetch_segment_carries_a_force_refspec(all_positional_tokens: list[str])
     )
 
 
+def _git_config_segment_runs_a_read_only_mode(all_segment_tokens: list[str]) -> bool:
+    """Return True only when a ``git config`` segment carries a read-only mode flag.
+
+    ``git config`` parses a read-only mode flag (``--get``/``--list``/``-l`` and the
+    rest of ALL_GIT_CONFIG_READ_ONLY_FLAGS) only while it sits before the first
+    positional key. Once a key positional appears (``git config core.editor ...``),
+    every following dash-prefixed token is the value being set, so ``git config
+    core.editor --get`` stores the literal string ``--get`` rather than querying.
+    Reading the mode from the flags that precede the first key positional, rather
+    than scanning the whole segment, keeps a value that happens to equal a read-only
+    flag string from masking the write.
+
+    Args:
+        all_segment_tokens: Shlex tokens of the whole ``git config`` segment.
+
+    Returns:
+        True when a read-only flag precedes the first ``config`` key positional.
+    """
+    config_token_index = next(
+        (
+            each_index
+            for each_index, each_token in enumerate(all_segment_tokens)
+            if each_token.lower() == "config"
+        ),
+        None,
+    )
+    if config_token_index is None:
+        return False
+    for each_token in all_segment_tokens[config_token_index + 1:]:
+        if not each_token.startswith("-"):
+            return False
+        if each_token in ALL_GIT_CONFIG_READ_ONLY_FLAGS:
+            return True
+    return False
+
+
 def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segment_tokens: list[str]) -> bool:
     """Return True when a ``git config``, ``git remote`` or ``git fetch`` segment mutates state.
 
@@ -977,14 +1013,15 @@ def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segm
     carries a write mode: ``git config key value`` and ``git config --global key value``
     set a value, ``git remote add|remove|rm|set-url`` change the remote table, and
     ``git fetch origin +refs/heads/main:refs/heads/main`` force-updates a local ref. A
-    ``config`` segment mutates unless an explicit read-only flag (``--get``/``--list``
-    and the rest of ALL_GIT_CONFIG_READ_ONLY_FLAGS) is present; a ``remote`` segment
-    mutates unless the first positional verb after ``remote`` is a read-only one
+    ``config`` segment mutates unless a read-only flag (``--get``/``--list`` and the rest
+    of ALL_GIT_CONFIG_READ_ONLY_FLAGS) precedes the first positional key; a ``remote``
+    segment mutates unless the first positional verb after ``remote`` is a read-only one
     (``show``, ``get-url``); a ``fetch`` segment mutates when it carries a ``+``-prefixed
-    force refspec. The remote verb is read positionally rather than by scanning the whole
-    segment for any read-only token, because ``git`` accepts the global ``-v``/``--verbose``
-    flag before a write verb (``git remote -v add evil url``), so the presence of a
-    read-only flag anywhere does not make the segment read-only.
+    force refspec. Both the config mode and the remote verb are read positionally rather
+    than by scanning the whole segment for any read-only token, because a value that
+    follows the key positional (``git config core.editor --get`` stores ``--get``) and a
+    global ``-v``/``--verbose`` before a write verb (``git remote -v add evil url``) would
+    otherwise let a read-only token anywhere mask the write.
 
     Args:
         all_positional_tokens: The non-flag tokens after the leading ``git`` program.
@@ -995,9 +1032,7 @@ def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segm
     """
     all_lowercased_positional_tokens = [each_token.lower() for each_token in all_positional_tokens]
     if "config" in all_lowercased_positional_tokens:
-        return not any(
-            each_token in ALL_GIT_CONFIG_READ_ONLY_FLAGS for each_token in all_segment_tokens
-        )
+        return not _git_config_segment_runs_a_read_only_mode(all_segment_tokens)
     if "remote" in all_lowercased_positional_tokens:
         remote_verb_index = all_lowercased_positional_tokens.index("remote") + 1
         all_remote_verbs = all_lowercased_positional_tokens[remote_verb_index:]

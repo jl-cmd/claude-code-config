@@ -1134,6 +1134,22 @@ def test_compound_rm_asks_when_git_config_sets_value_after_ephemeral_rm() -> Non
     _assert_hook_asks("rm -rf /tmp/x && git config --global user.name evil")
 
 
+def test_compound_rm_asks_when_git_config_sets_value_equal_to_long_read_only_flag() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git config core.editor --get")
+
+
+def test_compound_rm_asks_when_git_config_sets_value_equal_to_list_read_only_flag() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git config alias.x --list")
+
+
+def test_compound_rm_asks_when_git_config_sets_value_equal_to_short_read_only_flag() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && git config core.pager -l")
+
+
+def test_compound_rm_allowed_when_git_config_get_urlmatch_reads_after_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && git config --get-urlmatch a b")
+
+
 def test_compound_rm_asks_when_git_remote_add_rides_alongside_ephemeral_rm() -> None:
     _assert_hook_asks("rm -rf /tmp/x && git remote add evil http://e")
 

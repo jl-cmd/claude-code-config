@@ -5,13 +5,18 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
+
+import pytest
 
 
 SCRIPT_PATH = Path(__file__).parent / "destructive_command_blocker.py"
 GH_GATE_USER_FACING_PREFIX = "[gh-gate]"
 GH_REDIRECT_ACTIVE_ENV_VAR = "CLAUDE_GH_REDIRECT_ACTIVE"
 GH_REDIRECT_ACTIVE_VALUE = "1"
+AUTOCONVERGE_BYPASS_MARKER_NAME = ".autoconverge-destructive-bypass"
+STALE_MARKER_AGE_SECONDS = 10800
 
 
 def _run_hook(
@@ -146,6 +151,57 @@ def test_gh_pr_review_is_allowed_when_redirect_env_var_is_unset() -> None:
 
     assert result.stdout.strip() == ""
     assert result.returncode == 0
+
+
+def _make_isolated_claude_home(
+    monkeypatch: pytest.MonkeyPatch, home_root: Path
+) -> Path:
+    claude_directory = home_root / ".claude"
+    claude_directory.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    return claude_directory / AUTOCONVERGE_BYPASS_MARKER_NAME
+
+
+def test_fresh_autoconverge_marker_allows_destructive_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker_path = _make_isolated_claude_home(monkeypatch, tmp_path)
+    marker_path.touch()
+
+    result = _run_hook(_make_bash_payload("mkfs /dev/sda"), gh_redirect_active=False)
+
+    assert result.stdout.strip() == ""
+    assert result.returncode == 0
+    assert marker_path.exists()
+
+
+def test_missing_autoconverge_marker_asks_for_destructive_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker_path = _make_isolated_claude_home(monkeypatch, tmp_path)
+
+    result = _run_hook(_make_bash_payload("mkfs /dev/sda"), gh_redirect_active=False)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert "mkfs" in response["hookSpecificOutput"]["permissionDecisionReason"]
+    assert not marker_path.exists()
+
+
+def test_stale_autoconverge_marker_asks_and_is_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker_path = _make_isolated_claude_home(monkeypatch, tmp_path)
+    marker_path.touch()
+    stale_modified_time = time.time() - STALE_MARKER_AGE_SECONDS
+    os.utime(marker_path, (stale_modified_time, stale_modified_time))
+
+    result = _run_hook(_make_bash_payload("mkfs /dev/sda"), gh_redirect_active=False)
+
+    response = json.loads(result.stdout)
+    assert response["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert not marker_path.exists()
 
 
 def test_gh_api_post_comment_is_allowed_when_redirect_env_var_is_unset() -> None:

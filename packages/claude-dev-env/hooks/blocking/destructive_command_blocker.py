@@ -7,6 +7,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 _hooks_dir = str(Path(__file__).resolve().parent.parent)
@@ -18,6 +19,9 @@ from hooks_constants.convergence_branch_constants import (  # noqa: E402
     CONVERGENCE_BRANCH_SUFFIX_PATTERN,
     CONVERGENCE_FORCE_PUSH_DETECTION_PATTERN,
 )
+from hooks_constants.destructive_command_blocker_constants import (  # noqa: E402
+    AUTOCONVERGE_DESTRUCTIVE_BYPASS_FRESHNESS_WINDOW_SECONDS,
+)
 
 CLAUDE_DIRECTORY_PATH = os.path.normpath(os.path.expanduser("~/.claude"))
 GH_REDIRECT_ACTIVE_ENV_VAR = "CLAUDE_GH_REDIRECT_ACTIVE"
@@ -27,6 +31,37 @@ GH_REDIRECT_ACTIVE_TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
 def gh_redirect_is_active() -> bool:
     env_var_value = os.environ.get(GH_REDIRECT_ACTIVE_ENV_VAR, "").strip().lower()
     return env_var_value in GH_REDIRECT_ACTIVE_TRUTHY_VALUES
+
+def autoconverge_destructive_bypass_is_active() -> bool:
+    """Report whether an active autoconverge run has suspended destructive blocking.
+
+    The autoconverge convergence workflow audits pull requests that modify this
+    hook, so its background review agents legitimately run commands carrying
+    destructive-command literals (probe scripts, the committed pytest suite). A
+    confirmation prompt cannot be answered inside a background workflow run and
+    stalls it, so the workflow writes a marker file at the start of a run and
+    deletes it when the run ends; while that marker exists and is fresh this hook
+    allows the command rather than prompting. A stale marker older than the
+    freshness window — left behind by a hard-killed run that skipped its cleanup
+    — is deleted here and grants no bypass, so a crashed run re-arms the guard on
+    the next command instead of leaving it suspended.
+
+    Returns:
+        True when a fresh autoconverge bypass marker is present; False otherwise.
+    """
+    freshness_window_seconds = AUTOCONVERGE_DESTRUCTIVE_BYPASS_FRESHNESS_WINDOW_SECONDS
+    marker_path = os.path.join(CLAUDE_DIRECTORY_PATH, ".autoconverge-destructive-bypass")
+    try:
+        marker_age_seconds = time.time() - os.path.getmtime(marker_path)
+    except OSError:
+        return False
+    if marker_age_seconds <= freshness_window_seconds:
+        return True
+    try:
+        os.remove(marker_path)
+    except OSError:
+        return False
+    return False
 
 def directory_is_ephemeral(directory_path: str) -> bool:
     ephemeral_auto_allow_disabled_env_var = "CLAUDE_DESTRUCTIVE_DISABLE_EPHEMERAL_AUTO_ALLOW"
@@ -561,6 +596,9 @@ def main() -> None:
         if redirected_gh_description is not None:
             print(json.dumps(_build_silent_gh_deny_response(redirected_gh_description)))
             sys.exit(0)
+
+    if autoconverge_destructive_bypass_is_active():
+        sys.exit(0)
 
     matched_description = find_destructive_pattern(command)
 

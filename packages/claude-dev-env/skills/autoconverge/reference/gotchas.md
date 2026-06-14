@@ -45,3 +45,17 @@ fails in a new way.
 - **`gh` token drift across accounts.** When a run touches more than one GitHub
   account, pin the token with `--user <login>`; `gh auth token` alone can return
   another account's token after a switch.
+
+- **A resumed or background session can be rooted in the wrong repo.** When the
+  launching session is continued in the background or resumed, its working
+  directory can land outside the PR worktree — under a path with no `.git` of its
+  own, so git walks up to the home directory, which is itself a git repository.
+  Spawned agents inherit that cwd, so every lens runs `git diff origin/main...HEAD`
+  against the wrong repository, and `EnterWorktree` into the worktree is rejected
+  ("not a linked worktree of <home>"). Before the `Workflow` call, point the
+  session at the PR worktree with a standalone Bash `cd "$HOME/.claude/worktrees/<worktree-name>"`
+  — a lone `cd` persists for the session and spawned agents inherit it, while a
+  compound `cd … && …` can trip a permission prompt. Confirm the move with a
+  throwaway agent that reports `pwd` and `git rev-parse --show-toplevel` before
+  launching. Alternatively, start `/autoconverge` from a session already rooted in
+  the target repo.

@@ -9,8 +9,10 @@ passed OR the ``CLAUDE_REVIEWS_DISABLED`` environment variable lists the
 ``bugbot`` token, so a Bugbot opt-out closes the gate without the flag.
 
 The Copilot review gate and the pending-requested-reviews gate are bypassed
-when ``--copilot-down`` is passed, so a Copilot outage or quota exhaustion
-closes the broader convergence gate on the remaining signals.
+when either ``--copilot-down`` is passed OR the ``CLAUDE_REVIEWS_DISABLED``
+environment variable lists the ``copilot`` token, so a Copilot outage or
+quota exhaustion closes the broader convergence gate on the remaining
+signals without the flag.
 
 Exit codes:
   0 — all pre-conditions met
@@ -62,7 +64,10 @@ _shared_pr_loop_scripts_dir = (
 if str(_shared_pr_loop_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_shared_pr_loop_scripts_dir))
 
-from reviews_disabled import is_bugbot_disabled_via_env
+from reviews_disabled import (
+    is_bugbot_disabled_via_env,
+    is_copilot_disabled_via_env,
+)
 
 
 def _is_bugteam_review(review_body: str) -> bool:
@@ -755,6 +760,23 @@ def _resolve_bugbot_down(bugbot_down_flag: bool) -> bool:
     return bugbot_down_flag or is_bugbot_disabled_via_env()
 
 
+def _resolve_copilot_down(is_copilot_down_flag: bool) -> bool:
+    """Combine the explicit flag with the CLAUDE_REVIEWS_DISABLED env opt-out.
+
+    Args:
+        is_copilot_down_flag: Value of the ``--copilot-down`` CLI flag.
+
+    Returns:
+        True when the flag is set OR ``CLAUDE_REVIEWS_DISABLED`` lists the
+        ``copilot`` token, so a Copilot outage signalled through the env var
+        bypasses the Copilot gates even when the caller omits the flag. The
+        mark-ready blocker hook re-runs this script without the flag, so the
+        env token is the only channel a genuine Copilot outage has to pass
+        that independent gate.
+    """
+    return is_copilot_down_flag or is_copilot_disabled_via_env()
+
+
 def main(all_arguments: list[str]) -> int:
     """Run the script end-to-end against parsed CLI arguments.
 
@@ -770,7 +792,7 @@ def main(all_arguments: list[str]) -> int:
         repo=arguments.repo,
         number=getattr(arguments, "pr_number"),
         is_bugbot_down=_resolve_bugbot_down(arguments.bugbot_down),
-        is_copilot_down=arguments.copilot_down,
+        is_copilot_down=_resolve_copilot_down(arguments.copilot_down),
     )
 
 

@@ -245,6 +245,34 @@ def should_resolve_bugbot_down_false_when_env_disables_only_bugteam(
     assert check_convergence._resolve_bugbot_down(False) is False
 
 
+def should_resolve_copilot_down_true_when_flag_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CLAUDE_REVIEWS_DISABLED", raising=False)
+    assert check_convergence._resolve_copilot_down(True) is True
+
+
+def should_resolve_copilot_down_true_when_env_disables_copilot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_REVIEWS_DISABLED", "copilot")
+    assert check_convergence._resolve_copilot_down(False) is True
+
+
+def should_resolve_copilot_down_false_when_flag_unset_and_env_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CLAUDE_REVIEWS_DISABLED", raising=False)
+    assert check_convergence._resolve_copilot_down(False) is False
+
+
+def should_resolve_copilot_down_false_when_env_disables_only_bugbot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_REVIEWS_DISABLED", "bugbot")
+    assert check_convergence._resolve_copilot_down(False) is False
+
+
 def should_bypass_bugbot_gates_when_bugbot_down_is_true(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -468,3 +496,28 @@ def should_propagate_systemexit_from_get_pr_head_sha(
         )
 
     assert exc_info.value.code == check_convergence.EXIT_CODE_GH_ERROR
+
+
+def should_derive_copilot_down_from_env_when_main_omits_the_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CLAUDE_REVIEWS_DISABLED", "copilot")
+    captured_copilot_down: list[bool] = []
+
+    def stub_check_all(
+        *,
+        owner: str,
+        repo: str,
+        number: int,
+        is_bugbot_down: bool,
+        is_copilot_down: bool,
+    ) -> int:
+        captured_copilot_down.append(is_copilot_down)
+        return 0
+
+    monkeypatch.setattr(check_convergence, "check_all", stub_check_all)
+    exit_code = check_convergence.main(
+        ["--owner", "o", "--repo", "r", "--pr-number", "1"]
+    )
+    assert exit_code == 0
+    assert captured_copilot_down == [True]

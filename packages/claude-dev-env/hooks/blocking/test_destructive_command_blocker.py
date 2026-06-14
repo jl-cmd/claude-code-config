@@ -1505,6 +1505,7 @@ _hook_spec.loader.exec_module(_hook_module)
 _force_push_targets_convergence_branch = _hook_module._force_push_targets_convergence_branch
 _is_convergence_branch = _hook_module._is_convergence_branch
 _all_refspecs_are_convergence_branches = _hook_module._all_refspecs_are_convergence_branches
+_find_non_force_push_destructive_hazard = _hook_module._find_non_force_push_destructive_hazard
 
 
 def test_convergence_branch_claude_prefix_allowed() -> None:
@@ -1644,3 +1645,55 @@ def test_force_push_main_asks_when_quoted_rm_mention_precedes_push() -> None:
         'echo "rm -rf foo" && git push --force origin main',
         expected_reason_fragment="git push --force",
     )
+
+
+def test_compound_rm_asks_when_pipe_both_joins_tee_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && cat foo |& tee /etc/passwd")
+
+
+def test_compound_rm_asks_when_glued_pipe_both_joins_tee_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && cat foo|&tee /etc/passwd")
+
+
+def test_compound_rm_asks_when_pipe_both_joins_tee_append_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && cat foo |& tee -a /etc/passwd")
+
+
+def test_find_non_force_push_hazard_detects_tee_after_pipe_both_operator() -> None:
+    hazard_description = _find_non_force_push_destructive_hazard(
+        "git push --force origin claude/x && cat foo |& tee /etc/passwd"
+    )
+    assert hazard_description is None or "rm" not in hazard_description
+    assert not _hook_module.rm_compound_targets_only_absolute_ephemeral_paths(
+        "rm -rf /tmp/x && cat foo |& tee /etc/passwd"
+    )
+
+
+def test_compound_rm_asks_when_git_fetch_force_refspec_rewrites_local_branch() -> None:
+    _assert_hook_asks(
+        "rm -rf /tmp/x && git fetch origin +refs/heads/main:refs/heads/main"
+    )
+
+
+def test_compound_rm_allowed_when_plain_git_fetch_follows_ephemeral_rm() -> None:
+    _assert_hook_allows("rm -rf /tmp/reply && git fetch")
+
+
+def test_launcher_execution_asks_when_timeout_infinity_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("timeout inf bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_timeout_millisecond_duration_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("timeout 100ms bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_asks_when_nice_then_timeout_infinity_wraps_bash_dash_c() -> None:
+    _assert_hook_asks("nice -n 5 timeout inf bash -c 'rm -rf /etc'")
+
+
+def test_launcher_execution_allows_when_timeout_infinity_wraps_ephemeral_rm() -> None:
+    _assert_hook_allows("timeout inf rm -rf /tmp/scratch")
+
+
+def test_launcher_execution_allows_when_timeout_seconds_wraps_ephemeral_rm() -> None:
+    _assert_hook_allows("timeout 5 rm -rf /tmp/scratch")

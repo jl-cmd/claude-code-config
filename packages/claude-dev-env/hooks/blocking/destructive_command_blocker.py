@@ -30,6 +30,7 @@ from hooks_constants.destructive_command_segment_constants import (  # noqa: E40
     ALL_GIT_REMOTE_READ_ONLY_VERBS,
     ALL_INTERPRETER_AND_WRAPPER_COMMANDS,
     ALL_LAUNCHER_OPTIONS_TAKING_SEPARATE_VALUE,
+    ALL_LAUNCHERS_REQUIRING_A_POSITIONAL_VALUE,
     ALL_READ_ONLY_SUBCOMMANDS_BY_DISPATCHING_PROGRAM,
     ALL_REMOTE_AND_PROGRAM_STRING_EXECUTORS,
     ALL_SHELL_CONTROL_OPERATOR_TOKENS,
@@ -342,8 +343,8 @@ def _command_contains_shell_expansion(command: str) -> bool:
 def _split_tokens_into_shell_segments(all_command_tokens: list[str]) -> list[list[str]]:
     """Split a shlex token list into simple-command segments on control operators.
 
-    Segments are delimited by ``&&``, ``||``, ``;``, ``|`` and ``&`` tokens, so
-    each returned segment is one simple command. Operators that are not whitespace
+    Segments are delimited by ``&&``, ``||``, ``;``, ``|&``, ``|`` and ``&`` tokens,
+    so each returned segment is one simple command. Operators that are not whitespace
     separated stay inside one shlex token and therefore inside one segment; that
     segment fails the absolute-ephemeral target check and the command falls through
     to the prompt.
@@ -401,19 +402,26 @@ def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] 
     (``timeout -s SIGNAL`` / ``--signal SIGNAL``, ``timeout -k DURATION`` /
     ``--kill-after DURATION``, ``nice -n PRIORITY``) consumes both the flag and the
     following value token, so a signal name such as ``KILL`` is never mistaken for
-    the wrapped program. Every other dash-prefixed flag and every positional value
-    token a launcher takes (a ``timeout`` duration, a ``chrt`` priority, a
-    ``taskset`` CPU mask or CPU range) is consumed as well. A positional value is
-    recognized by shape — decimal, hexadecimal mask, duration with unit suffix, or
-    CPU range/list — so a non-decimal mask or a duration suffix no longer masks the
-    wrapped program. Returns the program token and the tokens that follow it, or
-    None when the leading program is not a launcher wrapper.
+    the wrapped program. Every dash-prefixed flag is consumed as well.
+
+    The first positional token after the launcher and its flags is its required
+    value for the launchers that take one (``timeout`` duration, ``chrt`` priority,
+    ``taskset`` CPU mask or CPU range) and is consumed before the wrapped program. A
+    value matching the known shapes (decimal with optional unit suffix, hexadecimal
+    mask, CPU range/list) is consumed for any launcher. A launcher in
+    ALL_LAUNCHERS_REQUIRING_A_POSITIONAL_VALUE consumes its first positional even when
+    that value's shape is unrecognized (``timeout inf``, ``timeout 100ms``), so an
+    unrecognized duration never masks the wrapped program by being returned as the
+    program itself. A launcher that takes no positional value (``nohup``, ``time``,
+    ``setsid``, ``ionice``, ``nice``, ``stdbuf``) returns its first positional as the
+    wrapped program. Returns None when the leading program is not a launcher wrapper.
 
     Args:
         all_command_tokens: Tokens of one shell segment.
 
     Returns:
-        The tokens beginning at the wrapped program, or None when no launcher leads.
+        The tokens beginning at the wrapped program, an empty list when no program
+        follows the launcher value, or None when no launcher leads.
     """
     leading_assignment_pattern = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
     launcher_positional_value_pattern = re.compile(LAUNCHER_POSITIONAL_VALUE_SHAPE_PATTERN)
@@ -430,7 +438,11 @@ def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] 
     leading_command_basename = Path(all_command_tokens[first_program_index]).name.lower()
     if leading_command_basename not in ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS:
         return None
+    launcher_requires_a_positional_value = (
+        leading_command_basename in ALL_LAUNCHERS_REQUIRING_A_POSITIONAL_VALUE
+    )
     each_index = first_program_index + 1
+    has_consumed_required_positional_value = False
     skip_next_token_as_option_value = False
     while each_index < len(all_command_tokens):
         each_token = all_command_tokens[each_index]
@@ -447,6 +459,11 @@ def _strip_leading_launcher_wrapper(all_command_tokens: list[str]) -> list[str] 
             continue
         each_basename = Path(each_token).name.lower()
         if launcher_positional_value_pattern.match(each_basename):
+            has_consumed_required_positional_value = True
+            each_index += 1
+            continue
+        if launcher_requires_a_positional_value and not has_consumed_required_positional_value:
+            has_consumed_required_positional_value = True
             each_index += 1
             continue
         return all_command_tokens[each_index:]
@@ -507,11 +524,13 @@ def _explode_glued_shell_control_operators(all_command_tokens: list[str]) -> lis
     shlex keeps a control operator joined to an adjacent program when no whitespace
     separates them, so ``true; eval 'x'`` tokenizes to ``['true;', 'eval', 'x']``
     with the ``;`` hidden inside ``true;``. This re-splits each token on the
-    unquoted control operators ``&&`` / ``||`` / ``;`` / ``|`` / ``&`` and on the
-    POSIX command terminators newline and carriage return, so the operator becomes
-    its own token and segment boundaries are visible. shlex has already removed
-    quoting, so any operator character still present in a token came from unquoted
-    shell source and is a real boundary.
+    unquoted control operators ``&&`` / ``||`` / ``;`` / ``|&`` / ``|`` / ``&`` and
+    on the POSIX command terminators newline and carriage return, so the operator
+    becomes its own token and segment boundaries are visible. The ``|&`` pipe (stdout
+    and stderr both into the next command) is matched before the single ``|`` so a
+    glued ``cat foo|&tee x`` splits on ``|&`` rather than leaving ``&tee`` joined.
+    shlex has already removed quoting, so any operator character still present in a
+    token came from unquoted shell source and is a real boundary.
 
     Args:
         all_command_tokens: Tokens produced by shlex tokenization.
@@ -519,10 +538,37 @@ def _explode_glued_shell_control_operators(all_command_tokens: list[str]) -> lis
     Returns:
         Tokens with glued control operators separated into standalone tokens.
     """
-    control_operator_split_pattern = re.compile(r"(&&|\|\||;|\||&|\n|\r)")
+    control_operator_split_pattern = re.compile(r"(&&|\|\||;|\|&|\||&|\n|\r)")
     all_exploded_tokens: list[str] = []
     for each_token in all_command_tokens:
         for each_fragment in control_operator_split_pattern.split(each_token):
+            if each_fragment:
+                all_exploded_tokens.append(each_fragment)
+    return all_exploded_tokens
+
+
+def _explode_glued_pipe_both_operator(all_command_tokens: list[str]) -> list[str]:
+    """Split the ``|&`` pipe-both operator off shlex tokens that glue it to a program.
+
+    shlex keeps a ``|&`` operator joined to an adjacent program when no whitespace
+    separates them, so ``cat foo|&tee x`` tokenizes to ``['cat', 'foo|&tee', 'x']``
+    with the ``|&`` hidden inside ``foo|&tee``. This re-splits each token on ``|&``
+    so the operator becomes its own token and the program after it (``tee``) leads its
+    own segment. Only ``|&`` is split here, never a lone ``&`` or ``|``, so a
+    file-descriptor duplication such as the ``&`` inside a stderr-to-stdout redirect
+    stays intact. shlex has already removed quoting, so a ``|&`` still present in a
+    token came from unquoted shell source and is a real boundary.
+
+    Args:
+        all_command_tokens: Tokens produced by shlex tokenization.
+
+    Returns:
+        Tokens with glued ``|&`` operators separated into standalone tokens.
+    """
+    pipe_both_split_pattern = re.compile(r"(\|&)")
+    all_exploded_tokens: list[str] = []
+    for each_token in all_command_tokens:
+        for each_fragment in pipe_both_split_pattern.split(each_token):
             if each_fragment:
                 all_exploded_tokens.append(each_fragment)
     return all_exploded_tokens
@@ -902,27 +948,50 @@ def _gh_segment_runs_an_http_write_method(all_segment_tokens: list[str]) -> bool
     return False
 
 
-def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segment_tokens: list[str]) -> bool:
-    """Return True when a ``git config`` or ``git remote`` segment mutates state.
+def _git_fetch_segment_carries_a_force_refspec(all_positional_tokens: list[str]) -> bool:
+    """Return True when a ``git fetch`` segment carries a ref-rewriting force refspec.
 
-    ``config`` and ``remote`` appear in the git read-only allowlist for their query
-    modes (``git config --list``, ``git remote -v``) but each carries a write mode:
-    ``git config key value`` and ``git config --global key value`` set a value, and
-    ``git remote add|remove|rm|set-url`` change the remote table. A ``config`` segment
-    mutates unless an explicit read-only flag (``--get``/``--list`` and the rest of
-    ALL_GIT_CONFIG_READ_ONLY_FLAGS) is present; a ``remote`` segment mutates unless the
-    first positional verb after ``remote`` is a read-only one (``show``, ``get-url``).
-    The verb is read positionally rather than by scanning the whole segment for any
-    read-only token, because ``git`` accepts the global ``-v``/``--verbose`` flag before
-    a write verb (``git remote -v add evil url``), so the presence of a read-only flag
-    anywhere does not make the segment read-only.
+    ``git fetch`` is read-only in normal use, but a ``+``-prefixed refspec
+    force-updates the local destination ref even when it is not a fast-forward:
+    ``git fetch origin +refs/heads/main:refs/heads/main`` overwrites the local
+    ``main`` branch and discards local commits. A positional refspec that begins with
+    ``+``, or that names a ``+refs/`` source anywhere within it, is a force refspec.
+
+    Args:
+        all_positional_tokens: The non-flag tokens after the leading ``git`` program.
+
+    Returns:
+        True when any positional refspec force-updates a local ref.
+    """
+    return any(
+        each_token.startswith("+") or "+refs/" in each_token
+        for each_token in all_positional_tokens
+    )
+
+
+def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segment_tokens: list[str]) -> bool:
+    """Return True when a ``git config``, ``git remote`` or ``git fetch`` segment mutates state.
+
+    ``config``, ``remote`` and ``fetch`` appear in the git read-only allowlist for their
+    query modes (``git config --list``, ``git remote -v``, plain ``git fetch``) but each
+    carries a write mode: ``git config key value`` and ``git config --global key value``
+    set a value, ``git remote add|remove|rm|set-url`` change the remote table, and
+    ``git fetch origin +refs/heads/main:refs/heads/main`` force-updates a local ref. A
+    ``config`` segment mutates unless an explicit read-only flag (``--get``/``--list``
+    and the rest of ALL_GIT_CONFIG_READ_ONLY_FLAGS) is present; a ``remote`` segment
+    mutates unless the first positional verb after ``remote`` is a read-only one
+    (``show``, ``get-url``); a ``fetch`` segment mutates when it carries a ``+``-prefixed
+    force refspec. The remote verb is read positionally rather than by scanning the whole
+    segment for any read-only token, because ``git`` accepts the global ``-v``/``--verbose``
+    flag before a write verb (``git remote -v add evil url``), so the presence of a
+    read-only flag anywhere does not make the segment read-only.
 
     Args:
         all_positional_tokens: The non-flag tokens after the leading ``git`` program.
         all_segment_tokens: Shlex tokens of the whole ``git`` segment.
 
     Returns:
-        True when the segment runs a mutating ``config`` or ``remote`` mode.
+        True when the segment runs a mutating ``config``, ``remote`` or ``fetch`` mode.
     """
     all_lowercased_positional_tokens = [each_token.lower() for each_token in all_positional_tokens]
     if "config" in all_lowercased_positional_tokens:
@@ -935,6 +1004,8 @@ def _git_segment_runs_a_mutating_mode(all_positional_tokens: list[str], all_segm
         if not all_remote_verbs:
             return False
         return all_remote_verbs[0] not in ALL_GIT_REMOTE_READ_ONLY_VERBS
+    if "fetch" in all_lowercased_positional_tokens:
+        return _git_fetch_segment_carries_a_force_refspec(all_positional_tokens)
     return False
 
 
@@ -1114,8 +1185,9 @@ def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
         all_command_tokens = _split_command_preserving_windows_backslashes(command)
     except ValueError:
         return False
+    all_pipe_both_split_tokens = _explode_glued_pipe_both_operator(all_command_tokens)
     has_seen_rm_segment = False
-    for each_segment in _split_tokens_into_shell_segments(all_command_tokens):
+    for each_segment in _split_tokens_into_shell_segments(all_pipe_both_split_tokens):
         if not each_segment:
             continue
         if _command_executes_a_string_argument(each_segment):

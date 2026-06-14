@@ -1,6 +1,6 @@
 """Segment-splitting and command-name constants for the destructive command blocker compound rm guard."""
 
-ALL_SHELL_CONTROL_OPERATOR_TOKENS: frozenset[str] = frozenset({"&&", "||", ";", "|", "&", "\n", "\r"})
+ALL_SHELL_CONTROL_OPERATOR_TOKENS: frozenset[str] = frozenset({"&&", "||", ";", "|&", "|", "&", "\n", "\r"})
 ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS: frozenset[str] = frozenset(
     {
         "timeout",
@@ -10,6 +10,13 @@ ALL_COMMAND_LAUNCHER_WRAPPER_COMMANDS: frozenset[str] = frozenset(
         "stdbuf",
         "time",
         "setsid",
+        "chrt",
+        "taskset",
+    }
+)
+ALL_LAUNCHERS_REQUIRING_A_POSITIONAL_VALUE: frozenset[str] = frozenset(
+    {
+        "timeout",
         "chrt",
         "taskset",
     }

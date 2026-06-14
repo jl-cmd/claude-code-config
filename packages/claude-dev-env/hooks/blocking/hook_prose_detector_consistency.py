@@ -21,6 +21,11 @@ hook module is flagged when it also keys a detection regex off a path-separator
 character class (a `[...\\...]`/`[.../...]` class), proving the co-located
 detector is path-shape only and the docstring claim overstates it.
 
+This detector's own three source files -- the hook module, its `*_constants.py`
+companion, and its `test_*` module -- carry the forbidden phrase and the
+separator-class shape as load-bearing description, so they are exempt by basename
+and stay editable through the harness this rule runs in.
+
 Fails OPEN (approves) on malformed input or a non-hook path; the invariant is
 narrow enough that a false negative is preferable to blocking unrelated edits.
 """
@@ -42,6 +47,7 @@ from hooks_constants.hook_prose_detector_consistency_constants import (  # noqa:
     OVERSTATED_OUTPUT_KEY_PHRASE_PATTERN,
     PATH_SEPARATOR_CLASS_PATTERN,
     PYTHON_FILE_SUFFIX,
+    TEST_MODULE_PREFIX,
     WRITE_TOOL_NAME,
 )
 
@@ -73,6 +79,18 @@ def is_constants_module(file_path: str) -> bool:
     return normalized_path.endswith(CONSTANTS_MODULE_SUFFIX)
 
 
+def is_own_detector_family(file_path: str) -> bool:
+    own_module_stem = Path(__file__).stem
+    own_family_basenames = {
+        f"{own_module_stem}{PYTHON_FILE_SUFFIX}",
+        f"{own_module_stem}{CONSTANTS_MODULE_SUFFIX}",
+        f"{TEST_MODULE_PREFIX}{own_module_stem}{PYTHON_FILE_SUFFIX}",
+    }
+    normalized_path = file_path.replace("\\", "/")
+    edited_basename = normalized_path.rsplit("/", 1)[-1]
+    return edited_basename in own_family_basenames
+
+
 def detects_only_path_shape(content: str) -> bool:
     separator_class_pattern = re.compile(PATH_SEPARATOR_CLASS_PATTERN)
     return bool(separator_class_pattern.search(content))
@@ -84,6 +102,8 @@ def claims_output_key_trigger(content: str) -> bool:
 
 
 def content_has_violation(content: str, file_path: str) -> bool:
+    if is_own_detector_family(file_path):
+        return False
     if not claims_output_key_trigger(content):
         return False
     if is_constants_module(file_path):

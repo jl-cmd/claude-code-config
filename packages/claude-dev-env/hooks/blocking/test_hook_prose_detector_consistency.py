@@ -27,10 +27,17 @@ claims_output_key_trigger = hook_module.claims_output_key_trigger
 detects_only_path_shape = hook_module.detects_only_path_shape
 is_constants_module = hook_module.is_constants_module
 is_hook_python_module = hook_module.is_hook_python_module
+is_own_detector_family = hook_module.is_own_detector_family
 written_content = hook_module.written_content
 
 _BLOCKER_MODULE_PATH = "/repo/hooks/blocking/some_blocker.py"
 _CONSTANTS_MODULE_PATH = "/repo/hooks/hooks_constants/some_blocker_constants.py"
+
+_OWN_HOOK_PATH = "/repo/packages/x/hooks/blocking/hook_prose_detector_consistency.py"
+_OWN_CONSTANTS_PATH = (
+    "/repo/packages/x/hooks/hooks_constants/hook_prose_detector_consistency_constants.py"
+)
+_OWN_TEST_PATH = "/repo/packages/x/hooks/blocking/test_hook_prose_detector_consistency.py"
 
 
 _OVERSTATED_MESSAGE_MODULE = (
@@ -89,6 +96,47 @@ def test_space_separated_output_key_phrase_is_flagged() -> None:
     assert content_has_violation(space_variant, _BLOCKER_MODULE_PATH) is True
 
 
+def test_own_hook_module_is_exempt_from_self_lockout() -> None:
+    own_hook_content = pathlib.Path(hook_module.__file__).read_text(encoding="utf-8")
+    assert content_has_violation(own_hook_content, _OWN_HOOK_PATH) is False
+
+
+def test_own_constants_module_is_exempt_from_self_lockout() -> None:
+    own_constants_path = (
+        _HOOKS_ROOT
+        / "hooks_constants"
+        / "hook_prose_detector_consistency_constants.py"
+    )
+    own_constants_content = own_constants_path.read_text(encoding="utf-8")
+    assert content_has_violation(own_constants_content, _OWN_CONSTANTS_PATH) is False
+
+
+def test_own_test_module_is_exempt_from_self_lockout() -> None:
+    own_test_content = pathlib.Path(__file__).read_text(encoding="utf-8")
+    assert content_has_violation(own_test_content, _OWN_TEST_PATH) is False
+
+
+def test_is_own_detector_family_recognizes_hook_module() -> None:
+    assert is_own_detector_family(_OWN_HOOK_PATH) is True
+
+
+def test_is_own_detector_family_recognizes_constants_companion() -> None:
+    assert is_own_detector_family(_OWN_CONSTANTS_PATH) is True
+
+
+def test_is_own_detector_family_recognizes_test_module() -> None:
+    assert is_own_detector_family(_OWN_TEST_PATH) is True
+
+
+def test_is_own_detector_family_rejects_unrelated_blocker() -> None:
+    assert is_own_detector_family(_BLOCKER_MODULE_PATH) is False
+
+
+def test_unrelated_constants_module_still_flagged_after_exemption() -> None:
+    constants_only = 'CORRECTIVE_MESSAGE = "appears as a path or output-key segment"\n'
+    assert content_has_violation(constants_only, _CONSTANTS_MODULE_PATH) is True
+
+
 def test_is_constants_module_accepts_constants_suffix() -> None:
     assert is_constants_module(_CONSTANTS_MODULE_PATH) is True
 
@@ -107,6 +155,10 @@ def test_claims_output_key_trigger_ignores_unrelated_output_word() -> None:
 
 def test_detects_only_path_shape_finds_separator_class() -> None:
     assert detects_only_path_shape('re.compile(r"[\\\\/]token")') is True
+
+
+def test_detects_only_path_shape_finds_backslash_only_class() -> None:
+    assert detects_only_path_shape(r'pat = re.compile(r"[\\]token")') is True
 
 
 def test_detects_only_path_shape_false_without_separator_class() -> None:

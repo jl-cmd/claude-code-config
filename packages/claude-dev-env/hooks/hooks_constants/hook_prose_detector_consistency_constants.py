@@ -6,8 +6,11 @@ EDIT_TOOL_NAME: str = "Edit"
 HOOK_MODULE_PATH_SEGMENT: str = "/hooks/"
 PYTHON_FILE_SUFFIX: str = ".py"
 CONSTANTS_MODULE_SUFFIX: str = "_constants.py"
+TEST_MODULE_PREFIX: str = "test_"
 
-PATH_SEPARATOR_CLASS_PATTERN: str = r"\[[^\]]*\\\\?/[^\]]*\]|\[[^\]]*/\\\\?[^\]]*\]"
+PATH_SEPARATOR_CLASS_PATTERN: str = (
+    r"\[[^\]/]*\\\\[^\]/]*\]|\[[^\]]*\\\\?/[^\]]*\]|\[[^\]]*/\\\\?[^\]]*\]"
+)
 OVERSTATED_OUTPUT_KEY_PHRASE_PATTERN: str = r"output[- ]key\s+segment"
 
 CORRECTIVE_MESSAGE: str = (

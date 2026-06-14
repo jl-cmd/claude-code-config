@@ -346,6 +346,23 @@ function classifyCopilotOutcome(copilot) {
 }
 
 /**
+ * Decide whether the Copilot review gate is bypassed for this COPILOT pass from
+ * the gate outcome, mirroring resolveBugbotDown so the flag is recomputed every
+ * pass rather than left sticky. Only a 'down' outcome (Copilot out of quota or
+ * unreachable after the poll cap) bypasses the convergence Copilot gate; an
+ * 'approved', 'fix', or 'retry' outcome means Copilot answered this pass, so the
+ * gate must be evaluated against its review and is never bypassed. Recomputing
+ * from the current outcome is what lets a recovered Copilot — one that returns
+ * standards-only findings after an earlier down pass — reach FINALIZE without
+ * the stale bypass that would skip its non-clean review.
+ * @param {{kind: string}} copilotOutcome a classifyCopilotOutcome result
+ * @returns {boolean} true only when this pass's Copilot gate is bypassed
+ */
+function resolveCopilotDown(copilotOutcome) {
+  return copilotOutcome.kind === 'down'
+}
+
+/**
  * Classify a convergence-check result into the loop's next action. A dead check
  * agent (null/undefined result) is a retry rather than a failure: with no FAIL
  * lines to act on, running the convergence repair (which may rebase and
@@ -752,6 +769,8 @@ while (iterations < CONFIG.maxIterations) {
   if (phase === 'COPILOT') {
     const copilot = await runCopilotGate(head)
     const copilotOutcome = classifyCopilotOutcome(copilot)
+    copilotDown = resolveCopilotDown(copilotOutcome)
+    copilotNote = null
     if (copilotOutcome.kind === 'retry') {
       log('Copilot gate agent died or returned an unreliable not-clean result with no findings — re-running the gate on the same HEAD')
       continue
@@ -768,6 +787,8 @@ while (iterations < CONFIG.maxIterations) {
         log(`Copilot raised ${copilotOutcome.findings.length} code-standard-only finding(s) — deferring to follow-up PRs and treating the gate as passed`)
         await spawnStandardsFollowUp(head, copilotOutcome.findings, 'copilot')
         standardsNote = `${copilotOutcome.findings.length} code-standard finding(s) deferred to a follow-up fix issue plus an environment-hardening PR — verify both land`
+        copilotDown = false
+        copilotNote = null
         phase = 'FINALIZE'
         continue
       }

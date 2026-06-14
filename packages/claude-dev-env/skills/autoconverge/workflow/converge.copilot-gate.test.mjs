@@ -17,9 +17,10 @@ function functionBody(functionName) {
 
 const productionModule = new Function(
   `${functionBody('classifyCopilotOutcome')}\n` +
-    'return { classifyCopilotOutcome };',
+    `${functionBody('resolveCopilotDown')}\n` +
+    'return { classifyCopilotOutcome, resolveCopilotDown };',
 )();
-const { classifyCopilotOutcome } = productionModule;
+const { classifyCopilotOutcome, resolveCopilotDown } = productionModule;
 
 function copilotResult(overrides) {
   return {
@@ -143,10 +144,90 @@ test('checkConvergence wires the --copilot-down flag from a copilotDown argument
 });
 
 test('the COPILOT phase routes a down outcome to FINALIZE with the gate bypassed', () => {
-  const downBranchStart = convergeSource.indexOf("copilotOutcome.kind === 'down'");
+  const copilotPhaseStart = convergeSource.indexOf("if (phase === 'COPILOT') {");
+  assert.notEqual(copilotPhaseStart, -1, 'expected a COPILOT phase block');
+  const downBranchStart = convergeSource.indexOf("copilotOutcome.kind === 'down'", copilotPhaseStart);
   assert.notEqual(downBranchStart, -1, 'expected the COPILOT phase to handle a down outcome');
   const downBranch = convergeSource.slice(downBranchStart, downBranchStart + 400);
   assert.match(downBranch, /copilotDown = true/);
   assert.match(downBranch, /copilotNote =/);
   assert.match(downBranch, /phase = 'FINALIZE'/);
 });
+
+test('resolveCopilotDown reports down only for a down outcome', () => {
+  assert.equal(resolveCopilotDown({ kind: 'down' }), true);
+});
+
+test('resolveCopilotDown clears the bypass for an approved outcome', () => {
+  assert.equal(resolveCopilotDown({ kind: 'approved' }), false);
+});
+
+test('resolveCopilotDown clears the bypass for a fix outcome carrying findings', () => {
+  assert.equal(
+    resolveCopilotDown({
+      kind: 'fix',
+      findings: [
+        {
+          file: 'a.py',
+          line: 1,
+          severity: 'P1',
+          category: 'bug',
+          title: 't',
+          detail: 'd',
+          replyToCommentId: null,
+        },
+      ],
+    }),
+    false,
+  );
+});
+
+test('resolveCopilotDown clears the bypass for a retry outcome', () => {
+  assert.equal(resolveCopilotDown({ kind: 'retry' }), false);
+});
+
+test('the standards-only Copilot sub-path resets copilotDown before FINALIZE', () => {
+  const standardsBranchStart = convergeSource.indexOf(
+    'isStandardsOnlyRound(copilotOutcome.findings)',
+  );
+  assert.notEqual(
+    standardsBranchStart,
+    -1,
+    'expected the COPILOT phase to handle a standards-only Copilot fix outcome',
+  );
+  const standardsBranch = convergeSource.slice(standardsBranchStart, standardsBranchStart + 600);
+  const resetIndex = standardsBranch.indexOf('copilotDown = false');
+  const finalizeIndex = standardsBranch.indexOf("phase = 'FINALIZE'");
+  assert.notEqual(
+    resetIndex,
+    -1,
+    'expected the standards-only sub-path to reset copilotDown so a recovered Copilot is not bypassed',
+  );
+  assert.notEqual(finalizeIndex, -1, 'expected the standards-only sub-path to reach FINALIZE');
+  assert.ok(
+    resetIndex < finalizeIndex,
+    'expected copilotDown to be cleared before the transition to FINALIZE',
+  );
+  assert.match(
+    standardsBranch.slice(0, finalizeIndex),
+    /copilotNote = null/,
+    'expected the standards-only sub-path to clear the stale copilotNote alongside copilotDown',
+  );
+});
+
+test('the COPILOT phase recomputes copilotDown from each gate outcome via resolveCopilotDown', () => {
+  const copilotPhaseStart = convergeSource.indexOf("if (phase === 'COPILOT') {");
+  assert.notEqual(copilotPhaseStart, -1, 'expected a COPILOT phase block');
+  const finalizePhaseStart = convergeSource.indexOf(
+    "if (phase === 'FINALIZE') {",
+    copilotPhaseStart,
+  );
+  assert.notEqual(finalizePhaseStart, -1, 'expected a FINALIZE phase block after COPILOT');
+  const copilotPhase = convergeSource.slice(copilotPhaseStart, finalizePhaseStart);
+  assert.match(
+    copilotPhase,
+    /copilotDown = resolveCopilotDown\(copilotOutcome\)/,
+    'expected the COPILOT phase to recompute copilotDown from the current outcome so a recovered Copilot is never bypassed',
+  );
+});
+

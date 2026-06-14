@@ -116,6 +116,16 @@ def test_own_test_module_is_exempt_from_self_lockout() -> None:
     assert content_has_violation(own_test_content, _OWN_TEST_PATH) is False
 
 
+def test_slot_blocker_constants_companion_passes_at_its_real_path() -> None:
+    slot_constants_path = (
+        _HOOKS_ROOT
+        / "hooks_constants"
+        / "workflow_substitution_slot_blocker_constants.py"
+    )
+    slot_constants_content = slot_constants_path.read_text(encoding="utf-8")
+    assert content_has_violation(slot_constants_content, str(slot_constants_path)) is False
+
+
 def test_is_own_detector_family_recognizes_hook_module() -> None:
     assert is_own_detector_family(_OWN_HOOK_PATH) is True
 

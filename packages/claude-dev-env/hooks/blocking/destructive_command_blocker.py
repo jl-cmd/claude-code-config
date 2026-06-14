@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import datetime
+import enum
 import json
 import os
 import re
@@ -270,11 +271,14 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
     """Return True when command is a single rm invocation whose every target is inside an ephemeral directory.
 
     Refuses compound commands so operators like && / || / ; / | / backticks /
-    $(...) cannot piggy-back non-rm work on the ephemeral auto-allow. Rejects
-    bare ephemeral roots (/tmp, system temp dir) and bare directories named
-    worktrees/worktree so we never auto-approve wiping those roots. Only
-    allows common short flags and a small set of long options before ``--``;
-    tokens with ``=`` or unknown long options disable auto-allow.
+    $(...) cannot piggy-back non-rm work on the ephemeral auto-allow. Refuses an
+    output redirection (``rm -rf /tmp/x>/etc/passwd`` truncates ``/etc/passwd``
+    even though the deletion targets an ephemeral path; shlex keeps the ``>`` glued
+    to the target token when no whitespace separates them). Rejects bare ephemeral
+    roots (/tmp, system temp dir) and bare directories named worktrees/worktree so
+    we never auto-approve wiping those roots. Only allows common short flags and a
+    small set of long options before ``--``; tokens with ``=`` or unknown long
+    options disable auto-allow.
     """
     compound_shell_operator_pattern = re.compile(r'(?:&&|\|\||;|\||`|\$\()')
     if compound_shell_operator_pattern.search(command):
@@ -282,6 +286,8 @@ def rm_targets_only_ephemeral_paths(command: str) -> bool:
     try:
         all_command_tokens = _split_command_preserving_windows_backslashes(command)
     except ValueError:
+        return False
+    if _segment_redirects_output_to_a_file(all_command_tokens):
         return False
     if len(all_command_tokens) < 2 or all_command_tokens[0] != "rm":
         return False
@@ -528,9 +534,13 @@ def _explode_glued_shell_control_operators(all_command_tokens: list[str]) -> lis
     on the POSIX command terminators newline and carriage return, so the operator
     becomes its own token and segment boundaries are visible. The ``|&`` pipe (stdout
     and stderr both into the next command) is matched before the single ``|`` so a
-    glued ``cat foo|&tee x`` splits on ``|&`` rather than leaving ``&tee`` joined.
-    shlex has already removed quoting, so any operator character still present in a
-    token came from unquoted shell source and is a real boundary.
+    glued ``cat foo|&tee x`` splits on ``|&`` rather than leaving ``&tee`` joined. The
+    lone background ``&`` is split only when it neighbors no ``>`` redirection
+    character, so a file-descriptor duplication such as a stderr-to-stdout redirect
+    stays one token and is left for the redirection guard rather than torn into a
+    dangling redirect fragment that would misread as a hidden segment boundary. shlex
+    has already removed quoting, so any operator character still present in a token
+    came from unquoted shell source and is a real boundary.
 
     Args:
         all_command_tokens: Tokens produced by shlex tokenization.
@@ -538,37 +548,10 @@ def _explode_glued_shell_control_operators(all_command_tokens: list[str]) -> lis
     Returns:
         Tokens with glued control operators separated into standalone tokens.
     """
-    control_operator_split_pattern = re.compile(r"(&&|\|\||;|\|&|\||&|\n|\r)")
+    control_operator_split_pattern = re.compile(r"(&&|\|\||;|\|&|\||(?<!>)&(?!>)|\n|\r)")
     all_exploded_tokens: list[str] = []
     for each_token in all_command_tokens:
         for each_fragment in control_operator_split_pattern.split(each_token):
-            if each_fragment:
-                all_exploded_tokens.append(each_fragment)
-    return all_exploded_tokens
-
-
-def _explode_glued_pipe_both_operator(all_command_tokens: list[str]) -> list[str]:
-    """Split the ``|&`` pipe-both operator off shlex tokens that glue it to a program.
-
-    shlex keeps a ``|&`` operator joined to an adjacent program when no whitespace
-    separates them, so ``cat foo|&tee x`` tokenizes to ``['cat', 'foo|&tee', 'x']``
-    with the ``|&`` hidden inside ``foo|&tee``. This re-splits each token on ``|&``
-    so the operator becomes its own token and the program after it (``tee``) leads its
-    own segment. Only ``|&`` is split here, never a lone ``&`` or ``|``, so a
-    file-descriptor duplication such as the ``&`` inside a stderr-to-stdout redirect
-    stays intact. shlex has already removed quoting, so a ``|&`` still present in a
-    token came from unquoted shell source and is a real boundary.
-
-    Args:
-        all_command_tokens: Tokens produced by shlex tokenization.
-
-    Returns:
-        Tokens with glued ``|&`` operators separated into standalone tokens.
-    """
-    pipe_both_split_pattern = re.compile(r"(\|&)")
-    all_exploded_tokens: list[str] = []
-    for each_token in all_command_tokens:
-        for each_fragment in pipe_both_split_pattern.split(each_token):
             if each_fragment:
                 all_exploded_tokens.append(each_fragment)
     return all_exploded_tokens
@@ -753,7 +736,10 @@ def _rm_segment_targets_only_absolute_ephemeral_paths(all_rm_segment_tokens: lis
     """Return True when an ``rm`` segment's every target is an absolute ephemeral path.
 
     ``all_rm_segment_tokens`` is one shell segment beginning at its ``rm`` command
-    token. Rejects the segment (returns False) when an unsafe flag precedes ``--``,
+    token. Rejects the segment (returns False) when the segment carries an output
+    redirection (``rm -rf /tmp/x>/etc/passwd`` truncates ``/etc/passwd`` even though
+    the deletion targets an ephemeral path; shlex keeps the ``>`` glued to the target
+    token when no whitespace separates them), when an unsafe flag precedes ``--``,
     when there are no targets, when a target is relative (the compound auto-allow
     refuses to resolve relative targets without a trusted working directory), when
     a target basename is a glob wildcard, when a target is a bare ephemeral root or
@@ -767,6 +753,8 @@ def _rm_segment_targets_only_absolute_ephemeral_paths(all_rm_segment_tokens: lis
     Returns:
         True when every target is an absolute ephemeral path safe to auto-allow.
     """
+    if _segment_redirects_output_to_a_file(all_rm_segment_tokens):
+        return False
     tokens_after_rm = all_rm_segment_tokens[1:]
     if _rm_flags_before_double_dash_are_unsafe(tokens_after_rm):
         return False
@@ -1182,6 +1170,56 @@ def _segment_leading_program_is_benign(all_segment_tokens: list[str]) -> bool:
     return True
 
 
+class CompoundSegmentVerdict(enum.Enum):
+    """Auto-allow classification of one segment in a compound ``rm`` chain."""
+
+    DECLINES_AUTO_ALLOW = enum.auto()
+    IS_EPHEMERAL_RM = enum.auto()
+    IS_BENIGN = enum.auto()
+
+
+def _compound_segment_auto_allow_verdict(
+    all_segment_tokens: list[str],
+) -> CompoundSegmentVerdict:
+    """Classify one compound-chain segment for the ephemeral ``rm`` auto-allow.
+
+    Returns DECLINES_AUTO_ALLOW when the segment's leading program executes a quoted
+    string argument as code, when an ``rm`` segment targets a non-ephemeral path, or
+    when a non-``rm`` segment is not a benign reporting command. Returns
+    IS_EPHEMERAL_RM when the segment is an ``rm`` deletion whose every target is an
+    absolute ephemeral path. Returns IS_BENIGN for an empty segment or a benign
+    non-``rm`` segment.
+
+    Args:
+        all_segment_tokens: Shlex tokens of one shell segment with control operators
+            removed.
+
+    Returns:
+        The CompoundSegmentVerdict for the segment.
+    """
+    if not all_segment_tokens:
+        return CompoundSegmentVerdict.IS_BENIGN
+    if _command_executes_a_string_argument(all_segment_tokens):
+        return CompoundSegmentVerdict.DECLINES_AUTO_ALLOW
+    each_rm_token_index = next(
+        (
+            index
+            for index, token in enumerate(all_segment_tokens)
+            if Path(token).name == "rm"
+        ),
+        None,
+    )
+    if each_rm_token_index is None:
+        if _segment_leading_program_is_benign(all_segment_tokens):
+            return CompoundSegmentVerdict.IS_BENIGN
+        return CompoundSegmentVerdict.DECLINES_AUTO_ALLOW
+    if _rm_segment_targets_only_absolute_ephemeral_paths(
+        all_segment_tokens[each_rm_token_index:]
+    ):
+        return CompoundSegmentVerdict.IS_EPHEMERAL_RM
+    return CompoundSegmentVerdict.DECLINES_AUTO_ALLOW
+
+
 def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
     """Return True when a compound command's every ``rm`` segment is safe to auto-allow.
 
@@ -1216,34 +1254,19 @@ def rm_compound_targets_only_absolute_ephemeral_paths(command: str) -> bool:
         return False
     if _command_contains_non_rm_family_destructive_pattern(command):
         return False
-    try:
-        all_command_tokens = _split_command_preserving_windows_backslashes(command)
-    except ValueError:
-        return False
-    all_pipe_both_split_tokens = _explode_glued_pipe_both_operator(all_command_tokens)
     has_seen_rm_segment = False
-    for each_segment in _split_tokens_into_shell_segments(all_pipe_both_split_tokens):
-        if not each_segment:
-            continue
-        if _command_executes_a_string_argument(each_segment):
+    for each_command_line in re.split(r"[\n\r]+", command):
+        try:
+            all_command_tokens = _split_command_preserving_windows_backslashes(each_command_line)
+        except ValueError:
             return False
-        each_rm_token_index = next(
-            (
-                index
-                for index, token in enumerate(each_segment)
-                if Path(token).name == "rm"
-            ),
-            None,
-        )
-        if each_rm_token_index is None:
-            if not _segment_leading_program_is_benign(each_segment):
+        all_operator_split_tokens = _explode_glued_shell_control_operators(all_command_tokens)
+        for each_segment in _split_tokens_into_shell_segments(all_operator_split_tokens):
+            each_verdict = _compound_segment_auto_allow_verdict(each_segment)
+            if each_verdict == CompoundSegmentVerdict.DECLINES_AUTO_ALLOW:
                 return False
-            continue
-        has_seen_rm_segment = True
-        if not _rm_segment_targets_only_absolute_ephemeral_paths(
-            each_segment[each_rm_token_index:]
-        ):
-            return False
+            if each_verdict == CompoundSegmentVerdict.IS_EPHEMERAL_RM:
+                has_seen_rm_segment = True
     return has_seen_rm_segment
 
 

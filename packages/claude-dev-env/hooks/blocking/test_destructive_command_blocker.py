@@ -1130,6 +1130,18 @@ def test_compound_rm_asks_when_sort_writes_output_file_to_non_ephemeral_path() -
     _assert_hook_asks("rm -rf /tmp/x && sort -o /etc/important.conf /etc/passwd")
 
 
+def test_compound_rm_asks_when_rm_target_glues_redirect_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x>/etc/passwd")
+
+
+def test_compound_rm_asks_when_rm_target_glues_append_redirect_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/x>>/etc/passwd")
+
+
+def test_compound_rm_asks_when_second_rm_target_glues_redirect_to_non_ephemeral_file() -> None:
+    _assert_hook_asks("rm -rf /tmp/a /tmp/b>/etc/hosts")
+
+
 def test_compound_rm_asks_when_git_config_sets_value_after_ephemeral_rm() -> None:
     _assert_hook_asks("rm -rf /tmp/x && git config --global user.name evil")
 
@@ -1683,6 +1695,38 @@ def test_find_non_force_push_hazard_detects_tee_after_pipe_both_operator() -> No
     assert not _hook_module.rm_compound_targets_only_absolute_ephemeral_paths(
         "rm -rf /tmp/x && cat foo |& tee /etc/passwd"
     )
+
+
+def test_compound_rm_asks_when_glued_semicolon_hides_shred_segment() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo hi;shred -u /etc/passwd")
+
+
+def test_compound_rm_asks_when_glued_and_operator_hides_rm_on_non_ephemeral() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo a&&rm -rf /etc")
+
+
+def test_compound_rm_asks_when_glued_semicolon_hides_interpreter_running_rm() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo a;bash -c 'rm -rf /etc'")
+
+
+def test_compound_rm_asks_when_glued_semicolon_hides_gh_repo_delete() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo a;gh repo delete jl-cmd/foo --yes")
+
+
+def test_compound_rm_asks_when_glued_semicolon_hides_rm_after_gh_view() -> None:
+    _assert_hook_asks("rm -rf /tmp/reply && gh pr view 1;rm -rf /etc")
+
+
+def test_compound_rm_asks_when_glued_background_operator_hides_shred_segment() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo a&shred -u /etc/passwd")
+
+
+def test_compound_rm_asks_when_glued_or_operator_hides_rm_on_non_ephemeral() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo a||rm -rf /etc")
+
+
+def test_compound_rm_asks_when_newline_terminator_hides_shred_segment() -> None:
+    _assert_hook_asks("rm -rf /tmp/x && echo a\nshred -u /etc/passwd")
 
 
 def test_compound_rm_asks_when_git_fetch_force_refspec_rewrites_local_branch() -> None:

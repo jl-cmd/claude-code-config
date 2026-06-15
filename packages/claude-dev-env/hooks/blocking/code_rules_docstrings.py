@@ -165,7 +165,24 @@ def _statement_subtree_has_unconditional_break(statement: ast.stmt) -> bool:
         return _statement_list_has_unconditional_break(statement.body)
     if isinstance(statement, ast.With):
         return _statement_list_has_unconditional_break(statement.body)
+    if isinstance(statement, ast.Match):
+        return any(
+            _match_case_is_wildcard(each_case)
+            and _statement_list_has_unconditional_break(each_case.body)
+            for each_case in statement.cases
+        )
     return False
+
+
+def _match_case_is_wildcard(match_case: ast.match_case) -> bool:
+    if match_case.guard is not None:
+        return False
+    pattern = match_case.pattern
+    return (
+        isinstance(pattern, ast.MatchAs)
+        and pattern.name is None
+        and pattern.pattern is None
+    )
 
 
 def _any_loop_has_unconditional_break(
@@ -177,11 +194,15 @@ def _any_loop_has_unconditional_break(
     )
 
 
-def _function_loops_contain_continue(
+def _statement_subtree_is_loop_skip_path(node: ast.AST) -> bool:
+    return isinstance(node, (ast.Continue, ast.If, ast.Match))
+
+
+def _function_loops_have_skip_path(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
     return any(
-        isinstance(each_descendant, ast.Continue)
+        _statement_subtree_is_loop_skip_path(each_descendant)
         for each_descendant in _walk_skipping_nested_functions(function_node)
     )
 
@@ -218,12 +239,12 @@ def _loop_control_flow_claim_issues(
             "conditional — describe the actual condition that ends the loop"
         )
     if _docstring_asserts_fall_through(docstring_text) and not (
-        _function_loops_contain_continue(function_node)
+        _function_loops_have_skip_path(function_node)
     ):
         contradictions.append(
             f"Line {function_node.lineno}: {function_node.name}() docstring claims a loop "
-            "will 'fall through' to the next entry, but no loop uses continue — describe "
-            "the actual control flow"
+            "will 'fall through' to the next entry, but every loop processes each entry with "
+            "no skip path — describe the actual control flow"
         )
     return contradictions
 
@@ -233,11 +254,14 @@ def check_docstring_loop_control_flow_claims(content: str, file_path: str) -> li
 
     A docstring that asserts a function "breaks out of each loop the moment" a
     step runs, or that on a failure the loop "falls through to the next entry",
-    is making a checkable claim. When every loop break is conditional (guarded
-    by an ``if`` test or living in an ``except`` handler) the unconditional-break
-    claim is false; when no loop uses ``continue`` the fall-through claim is
-    false. Both phrasings drift out of sync with the body after a refactor and
-    mislead the next reader, so each contradiction is reported.
+    is making a checkable claim. The unconditional-break claim is false when
+    every loop break is conditional — guarded by an ``if`` test, sitting under a
+    guarded ``case``, or living in an ``except`` handler; a break under a
+    wildcard ``case _:`` counts as unconditional. The fall-through claim is
+    false only when every loop processes each entry straight through with no
+    skip path: no ``continue``, no ``if``, and no ``match``. Both phrasings drift
+    out of sync with the body after a refactor and mislead the next reader, so
+    each contradiction is reported.
 
     Args:
         content: The source text to inspect.

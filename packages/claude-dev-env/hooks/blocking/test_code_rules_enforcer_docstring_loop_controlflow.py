@@ -2,12 +2,14 @@
 
 A docstring that asserts a loop "breaks out of each loop the moment" a step
 runs, or that on a failure the loop "falls through to the next entry", makes a
-checkable claim about the function's loop control flow. When every ``break`` in
-the function's loops is conditional (guarded by an ``if`` test or living in an
-``except`` handler) the unconditional-break claim is false, and when the loops
-contain no ``continue`` the fall-through claim is false. Both phrasings are the
-ones a reviewer flagged on a budget-estimating helper whose loops break only on
-success and only continue on a missing command.
+checkable claim about the function's loop control flow. The unconditional-break
+claim is false when every ``break`` that ends a loop is conditional — guarded by
+an ``if`` test, sitting under a guarded ``case``, or living in an ``except``
+handler. The fall-through claim is false only when every loop processes each
+entry straight through with no skip path: no ``continue``, no ``if``, and no
+``match``. A break inside a wildcard ``case _:`` always fires, so it satisfies
+the unconditional-break claim; an ``if``-guarded branch is itself a skip path,
+so it satisfies the fall-through claim.
 
 Exemptions match the sibling docstring checks: private/dunder names,
 exempt decorators, trivial bodies, test files, and hook infrastructure.
@@ -67,12 +69,13 @@ def test_should_flag_unconditional_break_claim_when_break_is_conditional() -> No
     )
 
 
-def test_should_flag_fall_through_claim_when_loop_has_no_continue() -> None:
+def test_should_not_flag_fall_through_claim_when_loop_has_guarded_break() -> None:
     issues = check_docstring_loop_control_flow_claims(
         _conditional_break_only_source(), PRODUCTION_FILE_PATH
     )
-    assert any("fall through" in each for each in issues), (
-        f"Expected the false fall-through claim to be flagged, got: {issues!r}"
+    assert not any("fall through" in each for each in issues), (
+        "An if-guarded break is itself a skip path that lets control reach the "
+        f"next iteration, so the fall-through claim is accurate, got: {issues!r}"
     )
 
 
@@ -107,6 +110,87 @@ def test_should_not_flag_fall_through_claim_when_loop_has_continue() -> None:
     )
     issues = check_docstring_loop_control_flow_claims(source, PRODUCTION_FILE_PATH)
     assert issues == [], f"A real continue-driven fall-through must not be flagged, got: {issues!r}"
+
+
+def test_should_not_flag_fall_through_claim_when_loop_has_conditional_skip_path() -> None:
+    source = (
+        "def budgeted_seconds() -> int:\n"
+        '    """Return the budget for the happy path.\n'
+        "\n"
+        "    A failed command makes the loop fall through to the next entry.\n"
+        '    """\n'
+        "    for each_command in all_commands:\n"
+        "        run = invoke(each_command)\n"
+        "        if run.returncode == 0:\n"
+        "            record(run)\n"
+        "    return budget\n"
+    )
+    issues = check_docstring_loop_control_flow_claims(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        "A loop whose conditional branch lets control reach the next iteration "
+        f"satisfies a fall-through claim, got: {issues!r}"
+    )
+
+
+def test_should_flag_fall_through_claim_when_loop_processes_every_entry() -> None:
+    source = (
+        "def budgeted_seconds() -> int:\n"
+        '    """Return the budget for the happy path.\n'
+        "\n"
+        "    Each iteration makes the loop fall through to the next entry.\n"
+        '    """\n'
+        "    for each_command in all_commands:\n"
+        "        run = invoke(each_command)\n"
+        "        record(run)\n"
+        "    return budget\n"
+    )
+    issues = check_docstring_loop_control_flow_claims(source, PRODUCTION_FILE_PATH)
+    assert any("fall through" in each for each in issues), (
+        "A loop that unconditionally processes every entry with no skip path "
+        f"contradicts a fall-through claim, got: {issues!r}"
+    )
+
+
+def test_should_not_flag_unconditional_break_claim_when_break_is_in_wildcard_case() -> None:
+    source = (
+        "def budgeted_seconds() -> int:\n"
+        '    """Return the budget for the happy path.\n'
+        "\n"
+        "    The branch breaks out of each loop the moment a step runs.\n"
+        '    """\n'
+        "    for each_command in all_commands:\n"
+        "        invoke(each_command)\n"
+        "        match each_command:\n"
+        "            case _:\n"
+        "                break\n"
+        "    return budget\n"
+    )
+    issues = check_docstring_loop_control_flow_claims(source, PRODUCTION_FILE_PATH)
+    assert issues == [], (
+        "A break inside a wildcard match case always fires, so the "
+        f"unconditional-break claim is accurate, got: {issues!r}"
+    )
+
+
+def test_should_flag_unconditional_break_claim_when_match_has_no_wildcard() -> None:
+    source = (
+        "def budgeted_seconds() -> int:\n"
+        '    """Return the budget for the happy path.\n'
+        "\n"
+        "    The branch breaks out of each loop the moment a step runs.\n"
+        '    """\n'
+        "    for each_command in all_commands:\n"
+        "        invoke(each_command)\n"
+        "        match each_command:\n"
+        "            case _ if is_done(each_command):\n"
+        "                break\n"
+        "    return budget\n"
+    )
+    issues = check_docstring_loop_control_flow_claims(source, PRODUCTION_FILE_PATH)
+    assert any("breaks out of each loop" in each for each in issues), (
+        "A guarded match case only breaks conditionally, so the false "
+        f"unconditional-break claim must still flag, got: {issues!r}"
+    )
 
 
 def test_should_not_flag_docstring_without_loop_control_claim() -> None:

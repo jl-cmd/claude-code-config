@@ -45,6 +45,24 @@ ALL_DOCSTRING_FALL_THROUGH_CLAIM_PHRASES: frozenset[str] = frozenset(
         "falls through to the next command",
     }
 )
+ALL_DOCSTRING_CLAIM_NEGATION_TOKENS: frozenset[str] = frozenset(
+    {
+        "not",
+        "never",
+        "no",
+        "without",
+        "won't",
+        "wont",
+        "doesn't",
+        "doesnt",
+        "does not",
+        "will not",
+        "no longer",
+        "cannot",
+        "can't",
+        "cant",
+    }
+)
 ALL_DOCSTRING_EXEMPT_DECORATOR_NAMES: frozenset[str] = frozenset(
     {"property", "abstractmethod", "abstractproperty", "abc.abstractmethod", "overload"}
 )

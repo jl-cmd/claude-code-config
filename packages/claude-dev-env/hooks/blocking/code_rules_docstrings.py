@@ -20,6 +20,7 @@ from code_rules_shared import (  # noqa: E402
 )
 
 from hooks_constants.blocking_check_limits import (  # noqa: E402
+    ALL_DOCSTRING_CLAIM_NEGATION_TOKENS,
     ALL_DOCSTRING_EXEMPT_DECORATOR_NAMES,
     ALL_DOCSTRING_FALL_THROUGH_CLAIM_PHRASES,
     ALL_DOCSTRING_IMPLICIT_INSTANCE_PARAMETER_NAMES,
@@ -198,28 +199,75 @@ def _statement_subtree_is_loop_skip_path(node: ast.AST) -> bool:
     return isinstance(node, (ast.Continue, ast.If, ast.Match))
 
 
+def _loop_body_has_skip_path(all_loop_statements: list[ast.stmt]) -> bool:
+    for each_statement in all_loop_statements:
+        if _statement_subtree_is_loop_skip_path(each_statement):
+            return True
+        for each_descendant in _walk_skipping_nested_functions(each_statement):
+            if isinstance(each_descendant, (ast.For, ast.AsyncFor, ast.While)):
+                continue
+            if _statement_subtree_is_loop_skip_path(each_descendant):
+                return True
+    return False
+
+
 def _function_loops_have_skip_path(
     function_node: ast.FunctionDef | ast.AsyncFunctionDef,
 ) -> bool:
     return any(
-        _statement_subtree_is_loop_skip_path(each_descendant)
-        for each_descendant in _walk_skipping_nested_functions(function_node)
+        _loop_body_has_skip_path(each_body)
+        for each_body in _loop_bodies(function_node)
     )
 
 
-def _docstring_asserts_unconditional_break(docstring_text: str) -> bool:
-    lowered_text = docstring_text.lower()
+def _sentences_containing_phrase(lowered_text: str, phrase: str) -> list[str]:
+    return [
+        each_sentence
+        for each_sentence in _split_into_sentences(lowered_text)
+        if phrase in each_sentence
+    ]
+
+
+def _split_into_sentences(lowered_text: str) -> list[str]:
+    sentences = lowered_text.replace("\n", " ")
+    for each_terminator in (".", ";", ":"):
+        sentences = sentences.replace(each_terminator, "\x00")
+    return [each_segment for each_segment in sentences.split("\x00") if each_segment.strip()]
+
+
+def _phrase_is_negated_in_sentence(sentence: str, phrase: str) -> bool:
+    text_before_phrase = sentence.split(phrase, 1)[0]
+    words_before_phrase = _words_in(text_before_phrase)
+    if any(each_word in ALL_DOCSTRING_CLAIM_NEGATION_TOKENS for each_word in words_before_phrase):
+        return True
     return any(
-        each_phrase in lowered_text
-        for each_phrase in ALL_DOCSTRING_UNCONDITIONAL_BREAK_CLAIM_PHRASES
+        " " in each_token and each_token in text_before_phrase
+        for each_token in ALL_DOCSTRING_CLAIM_NEGATION_TOKENS
+    )
+
+
+def _words_in(text: str) -> list[str]:
+    return [each_word.strip(",") for each_word in text.split() if each_word.strip(",")]
+
+
+def _docstring_affirms_phrase(docstring_text: str, all_claim_phrases: frozenset[str]) -> bool:
+    lowered_text = docstring_text.lower()
+    for each_phrase in all_claim_phrases:
+        for each_sentence in _sentences_containing_phrase(lowered_text, each_phrase):
+            if not _phrase_is_negated_in_sentence(each_sentence, each_phrase):
+                return True
+    return False
+
+
+def _docstring_asserts_unconditional_break(docstring_text: str) -> bool:
+    return _docstring_affirms_phrase(
+        docstring_text, ALL_DOCSTRING_UNCONDITIONAL_BREAK_CLAIM_PHRASES
     )
 
 
 def _docstring_asserts_fall_through(docstring_text: str) -> bool:
-    lowered_text = docstring_text.lower()
-    return any(
-        each_phrase in lowered_text
-        for each_phrase in ALL_DOCSTRING_FALL_THROUGH_CLAIM_PHRASES
+    return _docstring_affirms_phrase(
+        docstring_text, ALL_DOCSTRING_FALL_THROUGH_CLAIM_PHRASES
     )
 
 
@@ -254,14 +302,19 @@ def check_docstring_loop_control_flow_claims(content: str, file_path: str) -> li
 
     A docstring that asserts a function "breaks out of each loop the moment" a
     step runs, or that on a failure the loop "falls through to the next entry",
-    is making a checkable claim. The unconditional-break claim is false when
-    every loop break is conditional — guarded by an ``if`` test, sitting under a
-    guarded ``case``, or living in an ``except`` handler; a break under a
-    wildcard ``case _:`` counts as unconditional. The fall-through claim is
-    false only when every loop processes each entry straight through with no
-    skip path: no ``continue``, no ``if``, and no ``match``. Both phrasings drift
-    out of sync with the body after a refactor and mislead the next reader, so
-    each contradiction is reported.
+    is making a checkable claim. A claim phrase only counts as asserted when it
+    appears affirmatively: a negation token (``not``, ``never``, ``does not``,
+    ``will not``, and the like) before the phrase in the same sentence states
+    the opposite, so the docstring is accurate and is left alone. The
+    unconditional-break claim is false when every loop break is conditional —
+    guarded by an ``if`` test, sitting under a guarded ``case``, or living in an
+    ``except`` handler; a break under a wildcard ``case _:`` counts as
+    unconditional. The fall-through claim is false only when every loop body
+    runs each entry straight through with no skip path inside that body: no
+    ``continue``, no ``if``, and no ``match`` within the loop. A skip path that
+    sits before, after, or beside the loop does not satisfy the claim. Both
+    phrasings drift out of sync with the body after a refactor and mislead the
+    next reader, so each contradiction is reported.
 
     Args:
         content: The source text to inspect.

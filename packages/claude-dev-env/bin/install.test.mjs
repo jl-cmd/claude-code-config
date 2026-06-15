@@ -18,6 +18,7 @@ import {
     commandReferencesManagedHook,
     mergeHooksIntoSettings,
     pruneManagedHooksFromSettings,
+    removedManagedHookRelativePaths,
 } from './install.mjs';
 
 
@@ -646,4 +647,120 @@ test('purge set sourced from package hooks.json prunes standalone managed script
     } finally {
         rmSync(sourceRoot, { recursive: true, force: true });
     }
+});
+
+
+test('removedManagedHookRelativePaths returns a hook present in prior files but absent from current files and the current managed set', () => {
+    const claudeHome = '/home/test/.claude';
+    const priorInstalledFiles = [
+        '/home/test/.claude/hooks/blocking/removed_hook.py',
+        '/home/test/.claude/hooks/notification/still_present.py',
+        '/home/test/.claude/rules/some_rule.md',
+    ];
+    const currentInstalledFiles = [
+        '/home/test/.claude/hooks/notification/still_present.py',
+        '/home/test/.claude/rules/some_rule.md',
+    ];
+    const currentManagedHookRelativePaths = new Set(['notification/still_present.py']);
+
+    const removedRelativePaths = removedManagedHookRelativePaths(
+        priorInstalledFiles,
+        currentInstalledFiles,
+        currentManagedHookRelativePaths,
+        claudeHome,
+    );
+
+    assert.ok(removedRelativePaths.has('blocking/removed_hook.py'), 'removed hook should appear in result');
+    assert.equal(removedRelativePaths.size, 1, 'only the removed hook should appear');
+});
+
+
+test('removedManagedHookRelativePaths excludes a hook that is still present in currentInstalledFiles', () => {
+    const claudeHome = '/home/test/.claude';
+    const priorInstalledFiles = [
+        '/home/test/.claude/hooks/blocking/still_here.py',
+    ];
+    const currentInstalledFiles = [
+        '/home/test/.claude/hooks/blocking/still_here.py',
+    ];
+    const currentManagedHookRelativePaths = new Set(['blocking/still_here.py']);
+
+    const removedRelativePaths = removedManagedHookRelativePaths(
+        priorInstalledFiles,
+        currentInstalledFiles,
+        currentManagedHookRelativePaths,
+        claudeHome,
+    );
+
+    assert.equal(removedRelativePaths.size, 0, 'no hooks removed when all prior hooks are still present');
+});
+
+
+test('removedManagedHookRelativePaths excludes non-hook prior files such as rules', () => {
+    const claudeHome = '/home/test/.claude';
+    const priorInstalledFiles = [
+        '/home/test/.claude/rules/dropped_rule.md',
+        '/home/test/.claude/hooks/blocking/also_dropped.py',
+    ];
+    const currentInstalledFiles = [];
+    const currentManagedHookRelativePaths = new Set();
+
+    const removedRelativePaths = removedManagedHookRelativePaths(
+        priorInstalledFiles,
+        currentInstalledFiles,
+        currentManagedHookRelativePaths,
+        claudeHome,
+    );
+
+    assert.ok(!removedRelativePaths.has('rules/dropped_rule.md'), 'rules/ path must not appear — hooks pruner is hooks-only');
+    assert.ok(removedRelativePaths.has('blocking/also_dropped.py'), 'hook file dropped from package must appear');
+});
+
+
+test('removedManagedHookRelativePaths excludes a prior hook still declared in the current managed set even when absent from currentInstalledFiles', () => {
+    const claudeHome = '/home/test/.claude';
+    const priorInstalledFiles = [
+        '/home/test/.claude/hooks/blocking/partial_install_hook.py',
+    ];
+    const currentInstalledFiles = [];
+    const currentManagedHookRelativePaths = new Set(['blocking/partial_install_hook.py']);
+
+    const removedRelativePaths = removedManagedHookRelativePaths(
+        priorInstalledFiles,
+        currentInstalledFiles,
+        currentManagedHookRelativePaths,
+        claudeHome,
+    );
+
+    assert.equal(removedRelativePaths.size, 0, 'hook still in the current managed set must not be treated as removed even when a partial install did not copy it this run');
+});
+
+
+test('pruneManagedHooksFromSettings strips the settings.json entry for a removed hook path while keeping user and other managed hooks intact', () => {
+    const removedRelativePaths = new Set(['blocking/removed_hook.py']);
+    const survivingManagedCommand = 'python ~/.claude/hooks/notification/still_present.py';
+    const userHookCommand = 'python /home/me/custom-tools/my_own_hook.py';
+    const settings = {
+        hooks: {
+            PreToolUse: [
+                {
+                    matcher: 'Write|Edit',
+                    hooks: [
+                        { command: 'python ~/.claude/hooks/blocking/removed_hook.py', timeout: 30 },
+                        { command: survivingManagedCommand, timeout: 15 },
+                        { command: userHookCommand, timeout: 5 },
+                    ],
+                },
+            ],
+        },
+    };
+
+    pruneManagedHooksFromSettings(settings, removedRelativePaths);
+
+    const writeEditGroup = settings.hooks.PreToolUse.find(group => group.matcher === 'Write|Edit');
+    assert.equal(writeEditGroup.hooks.length, 2);
+    const survivingCommands = writeEditGroup.hooks.map(hook => hook.command);
+    assert.ok(survivingCommands.includes(survivingManagedCommand), 'still-present managed hook must survive');
+    assert.ok(survivingCommands.includes(userHookCommand), 'user hook must survive');
+    assert.ok(!survivingCommands.includes('python ~/.claude/hooks/blocking/removed_hook.py'), 'removed hook must be pruned');
 });

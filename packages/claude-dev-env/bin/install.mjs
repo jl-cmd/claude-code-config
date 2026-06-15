@@ -519,6 +519,89 @@ function mergeHooks(hooksSourceRoot, pythonCommand) {
     return groupCount;
 }
 
+/**
+ * Computes the set of hook-relative paths (e.g. 'blocking/foo.py') that were
+ * installed in a prior run but are no longer shipped by any active package
+ * source. A prior hook file is "removed" only when its relative path is both
+ * absent from currentInstalledFiles AND absent from currentManagedHookRelativePaths,
+ * so a partial --only install that simply did not copy hooks from a non-selected
+ * group never falsely flags those hooks as removed.
+ *
+ * @param {string[]} priorInstalledFiles Absolute paths from the previous manifest.
+ * @param {string[]} currentInstalledFiles Absolute paths installed during this run.
+ * @param {Set<string>} currentManagedHookRelativePaths Forward-slash relative paths
+ *   under hooks/ declared in the current package source's hooks.json files.
+ * @param {string} claudeHome Absolute path to ~/.claude.
+ * @returns {Set<string>} Forward-slash hook-relative paths that were removed from the package.
+ */
+export function removedManagedHookRelativePaths(
+    priorInstalledFiles,
+    currentInstalledFiles,
+    currentManagedHookRelativePaths,
+    claudeHome,
+) {
+    const hooksDirectory = join(claudeHome, 'hooks').replace(/\\/g, '/');
+    const normalizedCurrentFiles = currentInstalledFiles.map(normalizePathForComparison);
+
+    const removedRelativePaths = new Set();
+    for (const priorPath of priorInstalledFiles) {
+        const normalizedPriorPath = normalizePathForComparison(priorPath);
+        const normalizedHooksDirectory = normalizePathForComparison(hooksDirectory);
+        const isUnderHooksDirectory = normalizedPriorPath.startsWith(normalizedHooksDirectory + '/');
+        if (!isUnderHooksDirectory) continue;
+
+        const hookRelativePath = normalizedPriorPath.slice(normalizedHooksDirectory.length + 1);
+        const isStillInCurrentInstall = normalizedCurrentFiles.some(
+            currentFile => currentFile === normalizedPriorPath
+        );
+        if (isStillInCurrentInstall) continue;
+
+        const isStillDeclaredInPackage = currentManagedHookRelativePaths.has(hookRelativePath);
+        if (isStillDeclaredInPackage) continue;
+
+        removedRelativePaths.add(hookRelativePath);
+    }
+    return removedRelativePaths;
+}
+
+/**
+ * Removes hook files and settings.json entries for hooks that were installed
+ * in a prior run but are no longer shipped by any active package source. When
+ * the removed set is empty this function does nothing.
+ *
+ * @param {Set<string>} removedHookRelativePaths Forward-slash paths under hooks/
+ *   returned by removedManagedHookRelativePaths.
+ * @param {string[]} priorInstalledFiles Absolute paths from the previous manifest,
+ *   used to resolve the absolute path of each removed hook file on disk.
+ * @param {string} claudeHome Absolute path to ~/.claude.
+ * @returns {void}
+ */
+function pruneRemovedManagedHooks(removedHookRelativePaths, priorInstalledFiles, claudeHome) {
+    if (removedHookRelativePaths.size === 0) return;
+
+    const hooksDirectory = normalizePathForComparison(join(claudeHome, 'hooks'));
+    for (const hookRelativePath of removedHookRelativePaths) {
+        const absoluteHookPath = priorInstalledFiles.find(priorPath => {
+            const normalizedPrior = normalizePathForComparison(priorPath);
+            return normalizedPrior === `${hooksDirectory}/${hookRelativePath}`;
+        });
+        const resolvedPath = absoluteHookPath || join(claudeHome, 'hooks', hookRelativePath);
+        if (existsSync(resolvedPath)) {
+            unlinkSync(resolvedPath);
+        }
+    }
+
+    const settingsPath = join(claudeHome, 'settings.json');
+    if (!existsSync(settingsPath)) return;
+
+    const rawSettings = readFileSync(settingsPath, 'utf8').trim();
+    if (!rawSettings) return;
+
+    const settings = JSON.parse(rawSettings);
+    pruneManagedHooksFromSettings(settings, removedHookRelativePaths);
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 4) + '\n');
+}
+
 function writeManifest(installedFiles) {
     const manifest = { package: PACKAGE_NAME, version: PACKAGE_VERSION, installedAt: new Date().toISOString(), files: installedFiles };
     writeFileSync(MANIFEST_FILE, JSON.stringify(manifest, null, 2) + '\n');
@@ -545,6 +628,15 @@ function install(selectedGroups, options = {}) {
     }
     console.log(`  Python: ${pythonCommand}`);
     mkdirSync(CLAUDE_HOME, { recursive: true });
+    let priorInstalledFiles = [];
+    if (existsSync(MANIFEST_FILE)) {
+        try {
+            const priorManifest = JSON.parse(readFileSync(MANIFEST_FILE, 'utf8'));
+            if (Array.isArray(priorManifest.files)) {
+                priorInstalledFiles = priorManifest.files;
+            }
+        } catch { /* malformed prior manifest — treat as empty */ }
+    }
 
     const activeGroups = selectedGroups
         ? selectedGroups.map(groupName => ({ groupName, ...INSTALL_GROUPS[groupName] }))
@@ -668,6 +760,18 @@ function install(selectedGroups, options = {}) {
         summary.hookGroups = totalHookGroups;
         console.log(`  Hook groups: ${totalHookGroups} merged into settings.json`);
 
+        const currentManagedHookPaths = managedHookScriptRelativePathsFromSourceRoots(allSourceRoots);
+        const removedHookRelativePaths = removedManagedHookRelativePaths(
+            priorInstalledFiles,
+            allInstalledFiles,
+            currentManagedHookPaths,
+            CLAUDE_HOME,
+        );
+        if (removedHookRelativePaths.size > 0) {
+            pruneRemovedManagedHooks(removedHookRelativePaths, priorInstalledFiles, CLAUDE_HOME);
+            console.log(`  Removed ${removedHookRelativePaths.size} hook file(s) dropped from the package: ${[...removedHookRelativePaths].join(', ')}`);
+        }
+
         console.warn(
             '  Warning: git hook installation sets core.hooksPath globally — '
             + 'the hook will run in every git repo on this machine.',
@@ -735,7 +839,7 @@ function install(selectedGroups, options = {}) {
     console.log(`  python: ${pythonCommand}\n`);
 }
 
-function normalizePathForComparison(rawPath) {
+export function normalizePathForComparison(rawPath) {
     return rawPath.trim().replaceAll('\\', '/');
 }
 

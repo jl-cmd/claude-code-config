@@ -67,6 +67,7 @@ from code_rules_dead_module_constant import (  # noqa: E402
 from code_rules_docstrings import (  # noqa: E402
     check_docstring_args_match_signature,
     check_docstring_format,
+    check_docstring_loop_control_flow_claims,
 )
 from code_rules_duplicate_body import (  # noqa: E402
     advise_cross_skill_duplicate_helper,
@@ -248,6 +249,9 @@ def validate_content(
         all_issues.extend(check_boundary_types(effective_content, file_path))
         all_issues.extend(check_docstring_format(effective_content, file_path))
         all_issues.extend(check_docstring_args_match_signature(effective_content, file_path))
+        all_issues.extend(
+            check_docstring_loop_control_flow_claims(effective_content, file_path)
+        )
         all_issues.extend(
             check_boolean_naming(
                 effective_content,

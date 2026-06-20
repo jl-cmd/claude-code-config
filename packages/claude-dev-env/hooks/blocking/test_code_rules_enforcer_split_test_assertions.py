@@ -18,16 +18,19 @@ if _HOOKS_DIRECTORY not in sys.path:
 from code_rules_test_assertions import (  # noqa: E402
     check_constant_equality_tests,
     check_flag_gated_scenario_test_naming,
+    check_stale_renamed_symbol_in_test_name,
 )
 
 code_rules_enforcer = SimpleNamespace(
     check_constant_equality_tests=check_constant_equality_tests,
     check_flag_gated_scenario_test_naming=check_flag_gated_scenario_test_naming,
+    check_stale_renamed_symbol_in_test_name=check_stale_renamed_symbol_in_test_name,
 )
 
 
 CONSTANT_EQUALITY_TEST_FILE_PATH = "packages/app/tests/test_constants.py"
 SCENARIO_TEST_FILE_PATH = "packages/app/tests/test_submission_runner_loop.py"
+STALE_RENAME_TEST_FILE_PATH = "packages/app/tests/test_scan_priority_queue.py"
 
 _THREE_SIBLINGS_PATCH_THE_FLAG_ONE_SCENARIO_TEST_DOES_NOT = (
     "def test_should_submit_when_gate_passes(monkeypatch) -> None:\n"
@@ -144,3 +147,83 @@ def test_should_not_advise_for_production_file() -> None:
         "packages/app/services/submission_pipeline.py",
     )
     assert issues == []
+
+
+def test_should_flag_test_name_carrying_pre_rename_token() -> None:
+    source = (
+        "from queue_scan import collect_skip_clean_names\n"
+        "\n"
+        "def test_collect_skip_theme_names_keeps_only_sorted_at_risk() -> None:\n"
+        "    all_skip_names = collect_skip_clean_names(all_assessments)\n"
+        "    assert all_skip_names == ['Apple Dawn', 'Zebra Dusk']\n"
+    )
+    issues = code_rules_enforcer.check_stale_renamed_symbol_in_test_name(
+        source, STALE_RENAME_TEST_FILE_PATH
+    )
+    assert any("collect_skip_theme_names" in issue for issue in issues), (
+        f"Expected the stale pre-rename token to be flagged, got: {issues}"
+    )
+    assert any("collect_skip_clean_names" in issue for issue in issues), (
+        f"Expected the issue to name the function actually called, got: {issues}"
+    )
+
+
+def test_should_not_flag_test_name_matching_the_function_it_calls() -> None:
+    source = (
+        "from queue_scan import collect_skip_clean_names\n"
+        "\n"
+        "def test_collect_skip_clean_names_keeps_only_sorted_at_risk() -> None:\n"
+        "    all_skip_names = collect_skip_clean_names(all_assessments)\n"
+        "    assert all_skip_names == ['Apple Dawn', 'Zebra Dusk']\n"
+    )
+    issues = code_rules_enforcer.check_stale_renamed_symbol_in_test_name(
+        source, STALE_RENAME_TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A test name matching the called function must not flag, got: {issues}"
+    )
+
+
+def test_should_not_flag_descriptive_test_name_without_a_stale_sibling_token() -> None:
+    source = (
+        "from queue_scan import collect_skip_clean_names\n"
+        "\n"
+        "def test_returns_empty_list_when_nothing_is_at_risk() -> None:\n"
+        "    assert collect_skip_clean_names([]) == []\n"
+    )
+    issues = code_rules_enforcer.check_stale_renamed_symbol_in_test_name(
+        source, STALE_RENAME_TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A descriptive name with no sibling-rename token must not flag, got: {issues}"
+    )
+
+
+def test_should_not_flag_when_the_embedded_token_is_still_referenced() -> None:
+    source = (
+        "from queue_scan import collect_skip_clean_names, collect_skip_theme_names\n"
+        "\n"
+        "def test_collect_skip_theme_names_and_clean_names_agree() -> None:\n"
+        "    assert collect_skip_clean_names(rows) == collect_skip_theme_names(rows)\n"
+    )
+    issues = code_rules_enforcer.check_stale_renamed_symbol_in_test_name(
+        source, STALE_RENAME_TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A token still imported in the file is not stale, got: {issues}"
+    )
+
+
+def test_should_not_flag_stale_token_in_production_file() -> None:
+    source = (
+        "from queue_scan import collect_skip_clean_names\n"
+        "\n"
+        "def test_collect_skip_theme_names_keeps_only_sorted_at_risk() -> None:\n"
+        "    assert collect_skip_clean_names(rows) == ['Apple Dawn']\n"
+    )
+    issues = code_rules_enforcer.check_stale_renamed_symbol_in_test_name(
+        source, "packages/app/services/queue_scan.py"
+    )
+    assert issues == [], (
+        f"Production files are exempt from the test-name check, got: {issues}"
+    )

@@ -122,6 +122,7 @@ from code_rules_test_assertions import (  # noqa: E402
     check_existence_check_tests,
     check_flag_gated_scenario_test_naming,
     check_skip_decorators_in_tests,
+    check_stale_renamed_symbol_in_test_name,
 )
 from code_rules_test_branching_except import (  # noqa: E402
     check_bare_except,
@@ -282,6 +283,7 @@ def validate_content(
         )
         all_issues.extend(check_existence_check_tests(content, file_path))
         all_issues.extend(check_constant_equality_tests(content, file_path))
+        all_issues.extend(check_stale_renamed_symbol_in_test_name(content, file_path))
         check_flag_gated_scenario_test_naming(content, file_path)
         all_issues.extend(check_unused_optional_parameters(content, file_path))
         all_issues.extend(check_collection_prefix(content, file_path))

@@ -1,4 +1,4 @@
-"""Skip-decorator, existence-only, constant-equality, and flag-gated scenario test-quality checks."""
+"""Skip-decorator, existence-only, constant-equality, stale-renamed-name, and flag-gated scenario test-quality checks."""
 
 import ast
 import sys
@@ -225,6 +225,151 @@ def check_constant_equality_tests(content: str, file_path: str) -> list[str]:
                 f"Line {each_node.lineno}: constant-value test"
                 f" — delete; tests must cover behavior"
             )
+
+    return issues
+
+
+def _collect_referenced_symbol_names(module_tree: ast.Module) -> set[str]:
+    """Return every callable-shaped name the module imports, defines, or references.
+
+    A name counts as referenced when it is imported (``import``/``from import``,
+    honoring the bound alias), defined as a top-level function or class, used as a
+    direct call target (``name(...)``), or read anywhere as an ``ast.Name`` load.
+    The union is the set of symbols that still live in the file, so a token absent
+    from it names a symbol the file no longer references.
+    """
+    referenced_names: set[str] = set()
+    for each_node in ast.walk(module_tree):
+        if isinstance(each_node, ast.Import):
+            for each_alias in each_node.names:
+                referenced_names.add(each_alias.asname or each_alias.name.split(".", 1)[0])
+        elif isinstance(each_node, ast.ImportFrom):
+            for each_alias in each_node.names:
+                referenced_names.add(each_alias.asname or each_alias.name)
+        elif isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            referenced_names.add(each_node.name)
+        elif isinstance(each_node, ast.Name):
+            referenced_names.add(each_node.id)
+        elif isinstance(each_node, ast.Attribute):
+            referenced_names.add(each_node.attr)
+    return referenced_names
+
+
+def _direct_call_names_in_body(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> set[str]:
+    """Return the names of every direct ``name(...)`` call inside a function body."""
+    called_names: set[str] = set()
+    for each_node in ast.walk(function_node):
+        if isinstance(each_node, ast.Call) and isinstance(each_node.func, ast.Name):
+            called_names.add(each_node.func.id)
+    return called_names
+
+
+_MINIMUM_SHARED_PREFIX_SEGMENTS = 2
+
+
+def _stale_renamed_token_in_test_name(
+    test_name: str,
+    called_name: str,
+    referenced_names: set[str],
+) -> str | None:
+    """Return a stale renamed-symbol token a test name carries, or None.
+
+    A called function ``called_name`` of two or more snake_case segments names the
+    symbol the test exercises. Starting at the called function's leading segments
+    inside the test name, the shortest prefix-anchored token ending in the called
+    function's final segment is the sibling candidate. The test carries a stale
+    token when that shortest candidate differs from the called name, shares its
+    leading segments, ends in its final segment, and is referenced nowhere in the
+    file. A candidate equal to the called name or still referenced clears the test,
+    so a name that names its function — or embeds a token the file still imports —
+    does not flag. That stale token is the signature of an incomplete rename: the
+    call site moved to the new name while the test identifier kept the old one.
+
+    Args:
+        test_name: The ``test_*`` function identifier under inspection.
+        called_name: A direct-call target inside that test's body.
+        referenced_names: Every name the module imports, defines, or references.
+
+    Returns:
+        The stale token embedded in the test name, or None when none is present.
+    """
+    called_segments = called_name.split("_")
+    if len(called_segments) < _MINIMUM_SHARED_PREFIX_SEGMENTS:
+        return None
+    if called_name in test_name:
+        return None
+    shared_prefix = "_".join(called_segments[:_MINIMUM_SHARED_PREFIX_SEGMENTS]) + "_"
+    prefix_start = test_name.find(shared_prefix)
+    if prefix_start == -1:
+        return None
+    token_remainder = test_name[prefix_start:]
+    token_segments = token_remainder.split("_")
+    final_segment = called_segments[-1]
+    for each_token_length in range(
+        _MINIMUM_SHARED_PREFIX_SEGMENTS + 1, len(token_segments) + 1
+    ):
+        candidate_segments = token_segments[:each_token_length]
+        if candidate_segments[-1] != final_segment:
+            continue
+        candidate_token = "_".join(candidate_segments)
+        if candidate_token == called_name:
+            return None
+        if candidate_token in referenced_names:
+            return None
+        if candidate_segments[:_MINIMUM_SHARED_PREFIX_SEGMENTS] == called_segments[:_MINIMUM_SHARED_PREFIX_SEGMENTS]:
+            return candidate_token
+    return None
+
+
+def check_stale_renamed_symbol_in_test_name(content: str, file_path: str) -> list[str]:
+    """Flag a test whose name embeds a renamed symbol the file no longer references.
+
+    After a production function is renamed, its import, call site, and docstrings
+    move to the new name, but a test function identifier can keep the old token —
+    ``test_collect_skip_theme_names_keeps_only_x`` still calls the renamed
+    ``collect_skip_clean_names``. The stale token names a symbol that exists nowhere
+    in the file, so the test name no longer names the function it exercises. This
+    check fires when a test calls a multi-segment function, embeds a sibling token
+    that shares the called function's leading segments and final segment but ends in
+    a different middle, and that embedded token is referenced nowhere in the file.
+    Only applies to test files; production files are exempt.
+
+    Args:
+        content: The file body under validation.
+        file_path: Path to the file, used for the test-file gate.
+
+    Returns:
+        A list of issue strings, one per stale-token test name found.
+    """
+    if not is_test_file(file_path):
+        return []
+
+    try:
+        syntax_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+
+    referenced_names = _collect_referenced_symbol_names(syntax_tree)
+    issues: list[str] = []
+    for each_node in ast.walk(syntax_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not each_node.name.startswith("test"):
+            continue
+        for each_called_name in sorted(_direct_call_names_in_body(each_node)):
+            stale_token = _stale_renamed_token_in_test_name(
+                each_node.name, each_called_name, referenced_names
+            )
+            if stale_token is not None:
+                issues.append(
+                    f"Line {each_node.lineno}: test name {each_node.name!r} embeds"
+                    f" {stale_token!r}, a symbol the file no longer references;"
+                    f" the test calls {each_called_name!r}. Rename the test to match"
+                    f" the function it exercises."
+                )
+                break
 
     return issues
 

@@ -277,15 +277,18 @@ def _stale_renamed_token_in_test_name(
     """Return a stale renamed-symbol token a test name carries, or None.
 
     A called function ``called_name`` of two or more snake_case segments names the
-    symbol the test exercises. Starting at the called function's leading segments
-    inside the test name, the shortest prefix-anchored token ending in the called
-    function's final segment is the sibling candidate. The test carries a stale
-    token when that shortest candidate differs from the called name, shares its
-    leading segments, ends in its final segment, and is referenced nowhere in the
-    file. A candidate equal to the called name or still referenced clears the test,
-    so a name that names its function — or embeds a token the file still imports —
-    does not flag. That stale token is the signature of an incomplete rename: the
-    call site moved to the new name while the test identifier kept the old one.
+    symbol the test exercises. A genuine rename leaves behind a sibling token of the
+    same segment count, sharing the called function's leading segments and final
+    segment while differing in a middle segment. The prefix-anchored token of that
+    exact segment count inside the test name is the sibling candidate; the test
+    carries a stale token when that candidate differs from the called name in a
+    middle segment and is referenced nowhere in the file. A candidate equal to the
+    called name or still referenced clears the test, so a name that names its
+    function — or embeds a token the file still imports — does not flag. A token of
+    a different segment count (an added or dropped word, such as a descriptive
+    abbreviation) is not a rename sibling and clears the test. That stale token is
+    the signature of an incomplete rename: the call site moved to the new name
+    while the test identifier kept the old one.
 
     Args:
         test_name: The ``test_*`` function identifier under inspection.
@@ -306,21 +309,17 @@ def _stale_renamed_token_in_test_name(
         return None
     token_remainder = test_name[prefix_start:]
     token_segments = token_remainder.split("_")
-    final_segment = called_segments[-1]
-    for each_token_length in range(
-        _MINIMUM_SHARED_PREFIX_SEGMENTS + 1, len(token_segments) + 1
-    ):
-        candidate_segments = token_segments[:each_token_length]
-        if candidate_segments[-1] != final_segment:
-            continue
-        candidate_token = "_".join(candidate_segments)
-        if candidate_token == called_name:
-            return None
-        if candidate_token in referenced_names:
-            return None
-        if candidate_segments[:_MINIMUM_SHARED_PREFIX_SEGMENTS] == called_segments[:_MINIMUM_SHARED_PREFIX_SEGMENTS]:
-            return candidate_token
-    return None
+    if len(token_segments) < len(called_segments):
+        return None
+    candidate_segments = token_segments[: len(called_segments)]
+    if candidate_segments[-1] != called_segments[-1]:
+        return None
+    candidate_token = "_".join(candidate_segments)
+    if candidate_token == called_name:
+        return None
+    if candidate_token in referenced_names:
+        return None
+    return candidate_token
 
 
 def check_stale_renamed_symbol_in_test_name(content: str, file_path: str) -> list[str]:
@@ -331,10 +330,13 @@ def check_stale_renamed_symbol_in_test_name(content: str, file_path: str) -> lis
     ``test_collect_skip_theme_names_keeps_only_x`` still calls the renamed
     ``collect_skip_clean_names``. The stale token names a symbol that exists nowhere
     in the file, so the test name no longer names the function it exercises. This
-    check fires when a test calls a multi-segment function, embeds a sibling token
-    that shares the called function's leading segments and final segment but ends in
-    a different middle, and that embedded token is referenced nowhere in the file.
-    Only applies to test files; production files are exempt.
+    check fires when a test calls a multi-segment function, embeds a same-length
+    sibling token that shares the called function's leading segments and final
+    segment but differs in a middle segment, and that embedded token is referenced
+    nowhere in the file. A test whose name contains any function it calls is exempt:
+    the name already names a function it exercises, so a sibling token derived from
+    a different call is coincidental, not a stale rename. Only applies to test files;
+    production files are exempt.
 
     Args:
         content: The file body under validation.
@@ -358,7 +360,10 @@ def check_stale_renamed_symbol_in_test_name(content: str, file_path: str) -> lis
             continue
         if not each_node.name.startswith("test"):
             continue
-        for each_called_name in sorted(_direct_call_names_in_body(each_node)):
+        all_called_names = _direct_call_names_in_body(each_node)
+        if any(each_call in each_node.name for each_call in all_called_names):
+            continue
+        for each_called_name in sorted(all_called_names):
             stale_token = _stale_renamed_token_in_test_name(
                 each_node.name, each_called_name, referenced_names
             )

@@ -20,6 +20,12 @@ reason, or appear in VOID_ADVISORY_CHECK_FUNCTION_NAMES when the function is
 annotated ``-> None`` and never contributes issues to the blocking payload
 (stderr-only advisories). New check_* functions added to the module without
 consideration will trip this test.
+
+check_stale_renamed_symbol_in_test_name is on the pending-review list because it
+emits at most one issue per test function (its loop breaks on the first stale
+token found in a test), so its payload is bounded by the count of test functions
+rather than by a fixed ceiling — the same pending-review category as the sibling
+test-name and naming checks already on the list.
 """
 
 from __future__ import annotations
@@ -76,6 +82,7 @@ KNOWN_UNCAPPED_CHECKS_PENDING_REVIEW: frozenset[str] = frozenset(
         "check_parameter_annotations",
         "check_return_annotations",
         "check_skip_decorators_in_tests",
+        "check_stale_renamed_symbol_in_test_name",
         "check_string_literal_magic",
         "check_unused_known_pytest_fixture_parameters",
         "check_unused_optional_parameters",

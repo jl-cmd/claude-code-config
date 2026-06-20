@@ -227,3 +227,50 @@ def test_should_not_flag_stale_token_in_production_file() -> None:
     assert issues == [], (
         f"Production files are exempt from the test-name check, got: {issues}"
     )
+
+
+def test_should_not_flag_test_whose_name_already_contains_a_called_function() -> None:
+    source = (
+        "from queue_scan import collect_skip_clean_names, build_user_profile\n"
+        "\n"
+        "def test_collect_skip_clean_names_and_build_user_account_profile() -> None:\n"
+        "    assert collect_skip_clean_names(r) == build_user_profile(r)\n"
+    )
+    issues = code_rules_enforcer.check_stale_renamed_symbol_in_test_name(
+        source, STALE_RENAME_TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A test name containing a called function must not flag a sibling token "
+        f"from another called function, got: {issues}"
+    )
+
+
+def test_should_not_flag_descriptive_name_sharing_a_prefix_with_its_only_call() -> None:
+    source = (
+        "from queue_scan import build_user_profile\n"
+        "\n"
+        "def test_build_user_account_profile_is_valid() -> None:\n"
+        "    assert build_user_profile(x).is_valid\n"
+    )
+    issues = code_rules_enforcer.check_stale_renamed_symbol_in_test_name(
+        source, STALE_RENAME_TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A plain descriptive name sharing a prefix with its only call must not "
+        f"flag when the call is named in the test, got: {issues}"
+    )
+
+
+def test_should_not_flag_abbreviated_descriptive_name_naming_its_call() -> None:
+    source = (
+        "from queue_scan import collect_skip_clean_names\n"
+        "\n"
+        "def test_collect_skip_names_only() -> None:\n"
+        "    assert collect_skip_clean_names(rows) == ['Apple Dawn']\n"
+    )
+    issues = code_rules_enforcer.check_stale_renamed_symbol_in_test_name(
+        source, STALE_RENAME_TEST_FILE_PATH
+    )
+    assert issues == [], (
+        f"A descriptive abbreviation is not a stale renamed symbol, got: {issues}"
+    )

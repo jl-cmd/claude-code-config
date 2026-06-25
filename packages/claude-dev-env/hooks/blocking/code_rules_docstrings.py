@@ -1,4 +1,4 @@
-"""Google-style docstring presence and docstring Args-versus-signature checks."""
+"""Google-style docstring presence, docstring Args-versus-signature, and predicate-breadth name checks."""
 
 import ast
 import re
@@ -22,6 +22,7 @@ from code_rules_shared import (  # noqa: E402
 )
 
 from hooks_constants.blocking_check_limits import (  # noqa: E402
+    ALL_COUNTABLE_ARGUMENT_NOUN_WORDS,
     ALL_DOCSTRING_EXCLUSIVE_SCOPE_PHRASES,
     ALL_DOCSTRING_EXEMPT_DECORATOR_NAMES,
     ALL_DOCSTRING_FILE_REFERENCE_SUFFIXES,
@@ -31,6 +32,7 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
     ALL_DOCSTRING_NO_CONSUMER_CLAIM_PHRASES,
     ALL_DOCSTRING_NO_INLINE_LITERAL_CLAIM_PHRASES,
     ALL_DOCSTRING_NON_CONSTANT_REFERENCE_MARKERS,
+    ALL_EXACT_COUNT_NAME_CARDINAL_WORDS,
     ALL_GENERIC_CHECK_NAME_TOKENS,
     ALL_NAMING_CONVENTION_DESCRIPTOR_TOKENS,
     DOCSTRING_FALLBACK_BRANCH_MINIMUM_ROUTE_COUNT,
@@ -47,6 +49,7 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
     MAX_DOCSTRING_TUPLE_ENUMERATION_ISSUES,
     MAX_DOCSTRING_UNDEFINED_CONSTANT_ISSUES,
     MAX_DOCSTRING_UNGUARDED_PAYLOAD_CLAIM_ISSUES,
+    MAX_EXACT_COUNT_PREDICATE_BREADTH_ISSUES,
     MAX_MODULE_DOCSTRING_CHECK_ROSTER_ISSUES,
     MINIMUM_NAMED_LINEAR_STEPS_FOR_DISPATCH_CHECK,
     MINIMUM_PUBLIC_CHECKS_FOR_MODULE_DOCSTRING_ROSTER,
@@ -1458,3 +1461,107 @@ def check_docstring_names_undefined_constant(content: str, file_path: str) -> li
             if len(issues) >= MAX_DOCSTRING_UNDEFINED_CONSTANT_ISSUES:
                 return issues[:MAX_DOCSTRING_UNDEFINED_CONSTANT_ISSUES]
     return issues[:MAX_DOCSTRING_UNDEFINED_CONSTANT_ISSUES]
+
+
+def _name_claims_exact_count(function_name: str) -> bool:
+    name_tokens = function_name.lower().split("_")
+    for each_index in range(len(name_tokens) - 1):
+        if (
+            name_tokens[each_index] in ALL_EXACT_COUNT_NAME_CARDINAL_WORDS
+            and name_tokens[each_index + 1] in ALL_COUNTABLE_ARGUMENT_NOUN_WORDS
+        ):
+            return True
+    return False
+
+
+def _comparison_operand_is_length_call(operand_node: ast.expr) -> bool:
+    return (
+        isinstance(operand_node, ast.Call)
+        and isinstance(operand_node.func, ast.Name)
+        and operand_node.func.id == "len"
+    )
+
+
+def _compare_node_tests_a_length(compare_node: ast.Compare) -> bool:
+    if _comparison_operand_is_length_call(compare_node.left):
+        return True
+    return any(
+        _comparison_operand_is_length_call(each_operand)
+        for each_operand in compare_node.comparators
+    )
+
+
+def _function_returns_bool(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    return isinstance(function_node.returns, ast.Name) and function_node.returns.id == "bool"
+
+
+def _function_body_has_open_length_without_exact_length(
+    function_node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> bool:
+    has_open_length_test = False
+    has_exact_length_test = False
+    for each_node in _walk_skipping_nested_functions(function_node):
+        if not isinstance(each_node, ast.Compare):
+            continue
+        if not _compare_node_tests_a_length(each_node):
+            continue
+        for each_operator in each_node.ops:
+            if isinstance(each_operator, (ast.Gt, ast.GtE, ast.Lt, ast.LtE)):
+                has_open_length_test = True
+            if isinstance(each_operator, (ast.Eq, ast.NotEq)):
+                has_exact_length_test = True
+    return has_open_length_test and not has_exact_length_test
+
+
+def check_predicate_exact_count_name_breadth(content: str, file_path: str) -> list[str]:
+    """Flag a boolean helper whose name claims an exact count over an open-ended body.
+
+    A predicate named for an exact cardinal of a countable noun — ``two_argument``,
+    ``three_element`` — promises that exact count. When its body tests a length with
+    an open-ended comparison (``>=`` / ``>`` / ``<=`` / ``<``) and never with
+    equality, the predicate accepts a broader input class than the name names, so a
+    reader trusting the name is misled. This is the deterministic slice of Category
+    O6 predicate-breadth docstring-vs-implementation drift for an exact-count name
+    over a body that scopes by an open-ended length test. A body that compares a
+    length with equality (``==`` / ``!=``) anywhere is left alone, and test files
+    are exempt; hook infrastructure is in scope.
+
+    Args:
+        content: The source text the write would leave on disk.
+        file_path: The destination path, used to exempt test files.
+
+    Returns:
+        One issue per boolean helper whose exact-count name disagrees with an
+        open-ended length body, capped at the module limit.
+    """
+    if is_test_file(file_path):
+        return []
+    try:
+        parsed_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    issues: list[str] = []
+    for each_node in _walk_skipping_type_checking_blocks(parsed_tree):
+        if not isinstance(each_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if _function_has_exempt_decorator(each_node):
+            continue
+        if not _function_returns_bool(each_node):
+            continue
+        if not _name_claims_exact_count(each_node.name):
+            continue
+        if not _function_body_has_open_length_without_exact_length(each_node):
+            continue
+        issues.append(
+            f"Line {each_node.lineno}: {each_node.name}() names an exact count "
+            "(a cardinal word like 'two_argument') while its body scopes a length with "
+            "an open-ended comparison (>=, >, <=, <) and never with equality — the name "
+            "promises an exact count but the body accepts a broader range; narrow the "
+            "body to an equality length test or restate the name to the actual breadth "
+            "(Category O6 predicate-breadth docstring-vs-implementation drift)"
+        )
+        if len(issues) >= MAX_EXACT_COUNT_PREDICATE_BREADTH_ISSUES:
+            return issues[:MAX_EXACT_COUNT_PREDICATE_BREADTH_ISSUES]
+    return issues[:MAX_EXACT_COUNT_PREDICATE_BREADTH_ISSUES]

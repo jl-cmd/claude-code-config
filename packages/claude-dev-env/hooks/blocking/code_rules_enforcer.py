@@ -77,6 +77,7 @@ from code_rules_docstrings import (  # noqa: E402
     check_docstring_tuple_enumeration_match,
     check_docstring_unguarded_malformed_payload_claim,
     check_module_docstring_names_public_checks,
+    check_predicate_exact_count_name_breadth,
 )
 from code_rules_duplicate_body import (  # noqa: E402
     advise_cross_skill_duplicate_helper,
@@ -311,6 +312,9 @@ def validate_content(
         )
         all_issues.extend(
             check_docstring_names_undefined_constant(effective_content, file_path)
+        )
+        all_issues.extend(
+            check_predicate_exact_count_name_breadth(effective_content, file_path)
         )
         all_issues.extend(
             check_boolean_naming(

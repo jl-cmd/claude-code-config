@@ -177,3 +177,26 @@ ALL_TEST_INDICATING_ENVIRONMENT_VARIABLE_NAMES: frozenset[str] = frozenset(
         "UNIT_TEST",
     }
 )
+
+MAX_EXACT_COUNT_PREDICATE_BREADTH_ISSUES: int = 3
+ALL_EXACT_COUNT_NAME_CARDINAL_WORDS: frozenset[str] = frozenset(
+    {"two", "three", "four", "five", "six"}
+)
+ALL_COUNTABLE_ARGUMENT_NOUN_WORDS: frozenset[str] = frozenset(
+    {
+        "arg",
+        "args",
+        "argument",
+        "arguments",
+        "element",
+        "elements",
+        "item",
+        "items",
+        "value",
+        "values",
+        "field",
+        "fields",
+        "parameter",
+        "parameters",
+    }
+)

@@ -560,3 +560,156 @@ def test_should_not_flag_when_comprehension_variable_matches_import_used_after()
     assert issues == [], (
         f"Comprehension iteration variables must not shadow enclosing scope bindings, got: {issues}"
     )
+
+
+def test_should_flag_import_orphaned_when_edit_removes_last_usage() -> None:
+    fragment = (
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    prior_full_file = (
+        "from portal.config import portal_timeouts\n"
+        "\n"
+        "def run() -> float:\n"
+        "    return portal_timeouts.delay\n"
+    )
+    post_edit_full_file = (
+        "from portal.config import portal_timeouts\n"
+        "\n"
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any("portal_timeouts" in each_issue for each_issue in issues), (
+        "An edit that deletes an import's last usage must flag the now-orphaned "
+        f"import even though the import line sits outside the fragment, got: {issues}"
+    )
+
+
+def test_should_not_flag_pre_existing_unused_import_on_unrelated_edit() -> None:
+    fragment = (
+        "def run() -> str:\n"
+        "    return 'changed'\n"
+    )
+    prior_full_file = (
+        "from portal.config import already_unused\n"
+        "\n"
+        "def run() -> str:\n"
+        "    return 'original'\n"
+    )
+    post_edit_full_file = (
+        "from portal.config import already_unused\n"
+        "\n"
+        "def run() -> str:\n"
+        "    return 'changed'\n"
+    )
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert issues == [], (
+        "An import already unused before the edit must not be flagged on an "
+        f"unrelated edit — the edit did not orphan it, got: {issues}"
+    )
+
+
+def test_should_not_flag_orphan_candidate_still_used_elsewhere() -> None:
+    fragment = (
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    prior_full_file = (
+        "from portal.config import portal_timeouts\n"
+        "\n"
+        "def run() -> float:\n"
+        "    return portal_timeouts.delay\n"
+        "\n"
+        "def other() -> float:\n"
+        "    return portal_timeouts.pause\n"
+    )
+    post_edit_full_file = (
+        "from portal.config import portal_timeouts\n"
+        "\n"
+        "def run() -> None:\n"
+        "    return None\n"
+        "\n"
+        "def other() -> float:\n"
+        "    return portal_timeouts.pause\n"
+    )
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert issues == [], (
+        "An import whose other usage survives the edit is still referenced — "
+        f"must not flag, got: {issues}"
+    )
+
+
+def test_should_skip_noqa_marked_orphaned_import() -> None:
+    fragment = (
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    prior_full_file = (
+        "from portal.config import portal_timeouts  # noqa: F401\n"
+        "\n"
+        "def run() -> float:\n"
+        "    return portal_timeouts.delay\n"
+    )
+    post_edit_full_file = (
+        "from portal.config import portal_timeouts  # noqa: F401\n"
+        "\n"
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert issues == [], (
+        "A noqa: F401 on the orphaned import line marks it deliberate — skip, "
+        f"got: {issues}"
+    )
+
+
+def test_orphan_pass_reports_full_file_line_number() -> None:
+    fragment = (
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    prior_full_file = (
+        "import os\n"
+        "from portal.config import portal_timeouts\n"
+        "\n"
+        "def run() -> float:\n"
+        "    return os.getpid() + portal_timeouts.delay\n"
+    )
+    post_edit_full_file = (
+        "import os\n"
+        "from portal.config import portal_timeouts\n"
+        "\n"
+        "def run() -> int:\n"
+        "    return os.getpid()\n"
+    )
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any("Line 2" in each_issue and "portal_timeouts" in each_issue for each_issue in issues), (
+        "The orphan finding must carry the import's line number in the post-edit "
+        f"file, got: {issues}"
+    )

@@ -101,6 +101,7 @@ from code_rules_imports_logging import (  # noqa: E402
     check_e2e_test_naming,
     check_import_block_sorted,
     check_imports_at_top,
+    check_js_jsdoc_object_return_schema_coverage,
     check_js_resume_task_enumeration_coverage,
     check_library_print,
     check_logging_fstrings,
@@ -467,6 +468,9 @@ def validate_content(
         all_issues.extend(check_e2e_test_naming(content, file_path))
         all_issues.extend(
             check_js_resume_task_enumeration_coverage(content, file_path)
+        )
+        all_issues.extend(
+            check_js_jsdoc_object_return_schema_coverage(content, file_path)
         )
 
     if extension in ALL_CODE_EXTENSIONS:

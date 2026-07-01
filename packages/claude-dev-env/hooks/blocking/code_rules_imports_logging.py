@@ -33,6 +33,7 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
     IMPORT_BLOCK_SORT_RULE_CODE,
     MAX_E2E_TEST_NAMING_ISSUES,
     MAX_IMPORT_BLOCK_SORT_ISSUES,
+    MAX_JS_JSDOC_OBJECT_RETURN_SCHEMA_ISSUES,
     MAX_JS_RESUME_TASK_ENUMERATION_ISSUES,
     MAX_LOGGING_FSTRING_ISSUES,
     MAX_LOGGING_PRINTF_TOKEN_ISSUES,
@@ -45,6 +46,7 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
 from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ADVISORY_LINE_THRESHOLD_HARD,
     ADVISORY_LINE_THRESHOLD_SOFT,
+    AGENT_SCHEMA_OPTION_KEY_PATTERN,
     ALL_CLI_FILE_PATH_MARKERS,
     ALL_IMPORT_STATEMENT_PREFIXES,
     ALL_JAVASCRIPT_EXTENSIONS,
@@ -61,11 +63,14 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     JAVASCRIPT_LINE_COMMENT_OPENER,
     JAVASCRIPT_REGEX_DELIMITER,
     JAVASCRIPT_STRING_ESCAPE_CHARACTER,
+    JSDOC_DOCUMENTED_FUNCTION_PATTERN,
+    JSDOC_PROMISE_OBJECT_RETURN_PATTERN,
     LOGGING_FSTRING_PATTERN,
     LOGGING_PRINTF_TOKEN_PATTERN,
     MINIMUM_FORMAT_LOGGER_ARGUMENT_COUNT,
     NOT_INSIDE_TYPE_CHECKING_BLOCK,
     RESUME_TASK_ENUMERATION_PATTERN,
+    RETURNED_CALL_CALLEE_PATTERN,
     SPAWN_AGENT_WITH_JSDOC_PATTERN,
     TASK_DISPATCH_NAME_PATTERN,
     TRIPLE_DOUBLE_QUOTE_DELIMITER,
@@ -917,6 +922,120 @@ def check_js_resume_task_enumeration_coverage(
             if len(issues) >= MAX_JS_RESUME_TASK_ENUMERATION_ISSUES:
                 return issues[:MAX_JS_RESUME_TASK_ENUMERATION_ISSUES]
     return issues[:MAX_JS_RESUME_TASK_ENUMERATION_ISSUES]
+
+
+def _balanced_call_argument_text(blanked_body: str, open_paren_index: int) -> str | None:
+    """Return the blanked argument text between a call's balanced parentheses.
+
+    ``open_paren_index`` points at the ``(`` that opens the call. The scan walks
+    the blanked body — where string, comment, and regex regions are already
+    spaces — so a parenthesis inside a prompt string never skews the depth. The
+    returned span excludes the outer parentheses and carries only structural
+    code, which is what a caller inspects for an option key.
+    """
+    if open_paren_index >= len(blanked_body) or blanked_body[open_paren_index] != "(":
+        return None
+    depth = 0
+    for each_position in range(open_paren_index, len(blanked_body)):
+        character = blanked_body[each_position]
+        if character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return blanked_body[open_paren_index + 1 : each_position]
+    return None
+
+
+def _mixed_schema_returned_callees(function_body: str) -> set[str]:
+    """Return callees a function returns both with and without a schema option.
+
+    A returned ``convergeAgent(prompt, { schema: X })`` call resolves to a
+    structured object, while the same callee returned with an options object that
+    carries no ``schema`` key resolves to a transcript string. A callee that
+    appears in both forms inside one body proves — from the file itself — that
+    this callee's return shape depends on the schema option, so a schemaless
+    return branch of it yields a string. The scan reads a blanked copy of the
+    body, so a ``schema`` word inside a prompt string is not counted as an option
+    key and a brace or parenthesis inside a prompt string never skews the scan.
+    """
+    blanked_body = _blank_non_code_regions(function_body)
+    schema_bearing_callees: set[str] = set()
+    schemaless_callees: set[str] = set()
+    for each_match in RETURNED_CALL_CALLEE_PATTERN.finditer(blanked_body):
+        argument_text = _balanced_call_argument_text(blanked_body, each_match.end() - 1)
+        if argument_text is None:
+            continue
+        callee_name = each_match.group("callee")
+        if AGENT_SCHEMA_OPTION_KEY_PATTERN.search(argument_text):
+            schema_bearing_callees.add(callee_name)
+        else:
+            schemaless_callees.add(callee_name)
+    return schema_bearing_callees & schemaless_callees
+
+
+def check_js_jsdoc_object_return_schema_coverage(
+    content: str, file_path: str
+) -> list[str]:
+    """Flag a Promise<object> JSDoc whose body returns a schemaless agent call.
+
+    The drift this catches: a function carries a JSDoc that declares
+    ``@returns {Promise<object>}`` while a branch returns an agent-spawn call
+    (``convergeAgent(prompt, options)``) whose options object omits the
+    ``schema`` key. Without a schema the agent resolves to a transcript string,
+    not the object the JSDoc promises, so a reader who trusts the return type
+    hands the string to object-shaped code. This is the JS/.mjs slice of
+    Category O6 docstring-prose-vs-implementation drift; the Python enforcer's
+    AST docstring checks never inspect JavaScript source.
+
+    A function is flagged only when the same callee is returned both with a
+    ``schema`` option and without one inside that one body: the with-schema
+    return proves — from the file itself — that the callee yields an object when
+    handed a schema, and the schemaless return is the string branch the JSDoc
+    omits. A return type that already covers the string case
+    (``Promise<object|string>``) never matches, because the pattern requires a
+    bare ``Promise<object>``. The body is read as the brace-balanced span after
+    the function header, and each ``schema`` option key is read from a blanked
+    copy so a ``schema`` word inside a prompt string is not mistaken for the
+    option.
+
+    Args:
+        content: The source text to inspect.
+        file_path: The path the source will be written to, used for exemptions.
+
+    Returns:
+        One issue per function whose Promise<object> JSDoc omits the
+        transcript-string case a schemaless return branch produces, capped at
+        the module limit.
+    """
+    if is_test_file(file_path) or is_hook_infrastructure(file_path):
+        return []
+    if get_file_extension(file_path) not in ALL_JAVASCRIPT_EXTENSIONS:
+        return []
+    issues: list[str] = []
+    for each_match in JSDOC_DOCUMENTED_FUNCTION_PATTERN.finditer(content):
+        if not JSDOC_PROMISE_OBJECT_RETURN_PATTERN.search(each_match.group("jsdoc")):
+            continue
+        function_body = _balanced_brace_body(content, each_match.end())
+        if function_body is None:
+            continue
+        mixed_callees = _mixed_schema_returned_callees(function_body)
+        if not mixed_callees:
+            continue
+        function_name = each_match.group("name")
+        line_number = content.count("\n", 0, each_match.start("name")) + 1
+        offending_callee = sorted(mixed_callees)[0]
+        issues.append(
+            f"Line {line_number}: {function_name}() JSDoc declares "
+            f"@returns {{Promise<object>}} but a returned {offending_callee}(...) "
+            "branch omits the schema option, so it resolves to a transcript "
+            "string, not an object - broaden the @returns to "
+            "Promise<object|string> or pass a schema (Category O6 "
+            "docstring-vs-implementation drift)"
+        )
+        if len(issues) >= MAX_JS_JSDOC_OBJECT_RETURN_SCHEMA_ISSUES:
+            return issues[:MAX_JS_JSDOC_OBJECT_RETURN_SCHEMA_ISSUES]
+    return issues[:MAX_JS_JSDOC_OBJECT_RETURN_SCHEMA_ISSUES]
 
 
 def _is_cli_entry_point(file_path: str) -> bool:

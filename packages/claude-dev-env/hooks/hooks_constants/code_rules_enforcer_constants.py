@@ -198,6 +198,20 @@ RESUME_TASK_ENUMERATION_PATTERN: re.Pattern[str] = re.compile(
 TASK_DISPATCH_NAME_PATTERN: re.Pattern[str] = re.compile(
     r"""(?<![A-Za-z0-9_])task\s*===\s*['"](?P<task>[a-z0-9-]+)['"]"""
 )
+JSDOC_DOCUMENTED_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
+    r"/\*\*(?P<jsdoc>(?:(?!\*/).)*?)\*/\s*"
+    r"(?:export\s+)?(?:async\s+)?function\s+(?P<name>\w+)\s*\(",
+    re.DOTALL,
+)
+JSDOC_PROMISE_OBJECT_RETURN_PATTERN: re.Pattern[str] = re.compile(
+    r"@returns?\s*\{\s*Promise\s*<\s*[Oo]bject\s*>\s*\}"
+)
+RETURNED_CALL_CALLEE_PATTERN: re.Pattern[str] = re.compile(
+    r"(?<![A-Za-z0-9_$])return\s+(?:await\s+)?(?P<callee>[A-Za-z_$][A-Za-z0-9_$]*)\s*\("
+)
+AGENT_SCHEMA_OPTION_KEY_PATTERN: re.Pattern[str] = re.compile(
+    r"(?<![A-Za-z0-9_$])schema\s*:"
+)
 ENUMERATION_LIST_ITEM_SEPARATOR_PATTERN: re.Pattern[str] = re.compile(
     r"\s*,\s*|\s+and\s+"
 )

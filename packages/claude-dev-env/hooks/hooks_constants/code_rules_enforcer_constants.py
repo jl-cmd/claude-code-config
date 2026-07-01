@@ -198,6 +198,19 @@ RESUME_TASK_ENUMERATION_PATTERN: re.Pattern[str] = re.compile(
 TASK_DISPATCH_NAME_PATTERN: re.Pattern[str] = re.compile(
     r"""(?<![A-Za-z0-9_])task\s*===\s*['"](?P<task>[a-z0-9-]+)['"]"""
 )
+JSDOC_OBJECT_RETURN_FUNCTION_PATTERN: re.Pattern[str] = re.compile(
+    r"/\*\*(?P<jsdoc>(?:(?!\*/).)*?)\*/\s*"
+    r"(?:export\s+)?(?:async\s+)?(?P<funckw>function)\s+(?P<name>\w+)\s*\(",
+    re.DOTALL,
+)
+PROMISE_OBJECT_RETURN_TYPE_PATTERN: re.Pattern[str] = re.compile(
+    r"@returns?\s*\{\s*Promise\s*<\s*[Oo]bject\s*>\s*\}"
+)
+AGENT_RETURN_CALL_PATTERN: re.Pattern[str] = re.compile(
+    r"\breturn\s+(?P<call>convergeAgent|agent)\s*\("
+)
+SCHEMA_OPTION_KEY_PATTERN: re.Pattern[str] = re.compile(r"\bschema\b")
+AGENT_OPTIONS_SPREAD_TOKEN: str = "..."
 ENUMERATION_LIST_ITEM_SEPARATOR_PATTERN: re.Pattern[str] = re.compile(
     r"\s*,\s*|\s+and\s+"
 )

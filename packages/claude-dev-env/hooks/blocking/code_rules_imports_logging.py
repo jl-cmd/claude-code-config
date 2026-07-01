@@ -33,6 +33,7 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
     IMPORT_BLOCK_SORT_RULE_CODE,
     MAX_E2E_TEST_NAMING_ISSUES,
     MAX_IMPORT_BLOCK_SORT_ISSUES,
+    MAX_JS_JSDOC_OBJECT_RETURN_ISSUES,
     MAX_JS_RESUME_TASK_ENUMERATION_ISSUES,
     MAX_LOGGING_FSTRING_ISSUES,
     MAX_LOGGING_PRINTF_TOKEN_ISSUES,
@@ -45,6 +46,8 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
 from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ADVISORY_LINE_THRESHOLD_HARD,
     ADVISORY_LINE_THRESHOLD_SOFT,
+    AGENT_OPTIONS_SPREAD_TOKEN,
+    AGENT_RETURN_CALL_PATTERN,
     ALL_CLI_FILE_PATH_MARKERS,
     ALL_IMPORT_STATEMENT_PREFIXES,
     ALL_JAVASCRIPT_EXTENSIONS,
@@ -61,11 +64,14 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     JAVASCRIPT_LINE_COMMENT_OPENER,
     JAVASCRIPT_REGEX_DELIMITER,
     JAVASCRIPT_STRING_ESCAPE_CHARACTER,
+    JSDOC_OBJECT_RETURN_FUNCTION_PATTERN,
     LOGGING_FSTRING_PATTERN,
     LOGGING_PRINTF_TOKEN_PATTERN,
     MINIMUM_FORMAT_LOGGER_ARGUMENT_COUNT,
     NOT_INSIDE_TYPE_CHECKING_BLOCK,
+    PROMISE_OBJECT_RETURN_TYPE_PATTERN,
     RESUME_TASK_ENUMERATION_PATTERN,
+    SCHEMA_OPTION_KEY_PATTERN,
     SPAWN_AGENT_WITH_JSDOC_PATTERN,
     TASK_DISPATCH_NAME_PATTERN,
     TRIPLE_DOUBLE_QUOTE_DELIMITER,
@@ -917,6 +923,148 @@ def check_js_resume_task_enumeration_coverage(
             if len(issues) >= MAX_JS_RESUME_TASK_ENUMERATION_ISSUES:
                 return issues[:MAX_JS_RESUME_TASK_ENUMERATION_ISSUES]
     return issues[:MAX_JS_RESUME_TASK_ENUMERATION_ISSUES]
+
+
+def _matching_delimiter_end(
+    blanked_content: str, open_index: int, open_delimiter: str, close_delimiter: str
+) -> int:
+    """Return the index just past the delimiter that closes the one at open_index.
+
+    Scans the blanked JavaScript source (string, comment, and regex regions
+    already replaced with spaces) so only structural delimiters move the depth.
+    Returns the source length when the opener is never balanced.
+
+    Args:
+        blanked_content: JavaScript source with non-code regions blanked to spaces.
+        open_index: The index of the opening delimiter to match.
+        open_delimiter: The opening delimiter character.
+        close_delimiter: The closing delimiter character.
+
+    Returns:
+        The index one past the matching closing delimiter, or the source length
+        when the opener stays unbalanced.
+    """
+    depth = 0
+    for each_position in range(open_index, len(blanked_content)):
+        current_character = blanked_content[each_position]
+        if current_character == open_delimiter:
+            depth += 1
+        elif current_character == close_delimiter:
+            depth -= 1
+            if depth == 0:
+                return each_position + 1
+    return len(blanked_content)
+
+
+def _has_schemaless_agent_return(
+    blanked_content: str, body_open_index: int, body_end_index: int
+) -> bool:
+    """Return whether a function body returns a schema-less agent call.
+
+    Scans the body span for each ``return convergeAgent(...)`` / ``return
+    agent(...)`` and reads that call's argument span. A call whose options object
+    spreads another object is skipped, since the spread may carry the schema. A
+    call whose argument span holds no ``schema`` key resolves to a string
+    transcript, so the body has a schema-less agent return.
+
+    Args:
+        blanked_content: JavaScript source with non-code regions blanked to spaces.
+        body_open_index: The index of the body's opening brace.
+        body_end_index: The index one past the body's closing brace.
+
+    Returns:
+        True when the body has at least one schema-less agent return.
+    """
+    for each_return_match in AGENT_RETURN_CALL_PATTERN.finditer(
+        blanked_content, body_open_index, body_end_index
+    ):
+        call_open_index = each_return_match.end() - 1
+        arguments_end_index = _matching_delimiter_end(
+            blanked_content, call_open_index, "(", ")"
+        )
+        arguments_span = blanked_content[call_open_index:arguments_end_index]
+        if AGENT_OPTIONS_SPREAD_TOKEN in arguments_span:
+            continue
+        if SCHEMA_OPTION_KEY_PATTERN.search(arguments_span) is None:
+            return True
+    return False
+
+
+def check_js_jsdoc_object_return_schemaless_agent(
+    content: str, file_path: str
+) -> list[str]:
+    """Flag a function JSDoc that promises an object over a schema-less agent call.
+
+    The drift this catches: a ``function`` declaration carries a JSDoc
+    ``@returns {Promise<object>}`` while a ``return`` branch in its body calls
+    ``convergeAgent(...)`` or ``agent(...)`` with an options object that has no
+    ``schema`` key. A schema-less agent call resolves to a string transcript
+    rather than a structured object, so the object return type misdescribes that
+    branch. A reader who trusts the JSDoc to promise an object misses the
+    string-transcript branch. This is the JS/.mjs slice of Category O6
+    docstring-prose-vs-implementation drift; the Python enforcer's AST docstring
+    checks never inspect JavaScript source.
+
+    The check binds each ``@returns {Promise<object>}`` JSDoc to the ``function``
+    declaration that immediately follows it, confirms the ``function`` keyword
+    sits in structural code, then reads that function's brace-balanced body.
+    Braces, parentheses, and the ``schema`` token are read at structural-code
+    positions only: a ``schema`` mention inside a prompt string, a comment, or a
+    regex literal is blanked to spaces first, so prose never masks a schema-less
+    call. A ``return convergeAgent(...)`` / ``return agent(...)`` whose argument
+    span carries no ``schema`` key flags the function. A call whose options spread
+    another object (``...``) is skipped, since the spread may supply the schema.
+    Only a ``function`` declaration is inspected; an arrow-assigned function is
+    left to the O6 audit lane.
+
+    Args:
+        content: The source text to inspect.
+        file_path: The path the source will be written to, used for exemptions.
+
+    Returns:
+        One issue per function whose object-return JSDoc covers a schema-less
+        agent return, capped at the module limit.
+    """
+    if is_test_file(file_path) or is_hook_infrastructure(file_path):
+        return []
+    if get_file_extension(file_path) not in ALL_JAVASCRIPT_EXTENSIONS:
+        return []
+    blanked_content = _blank_non_code_regions(content)
+    issues: list[str] = []
+    for each_function_match in JSDOC_OBJECT_RETURN_FUNCTION_PATTERN.finditer(content):
+        keyword_index = each_function_match.start("funckw")
+        if blanked_content[keyword_index] != content[keyword_index]:
+            continue
+        if not PROMISE_OBJECT_RETURN_TYPE_PATTERN.search(
+            each_function_match.group("jsdoc")
+        ):
+            continue
+        parameters_open_index = each_function_match.end() - 1
+        parameters_end_index = _matching_delimiter_end(
+            blanked_content, parameters_open_index, "(", ")"
+        )
+        body_open_index = blanked_content.find("{", parameters_end_index)
+        if body_open_index == -1:
+            continue
+        body_end_index = _matching_delimiter_end(
+            blanked_content, body_open_index, "{", "}"
+        )
+        if not _has_schemaless_agent_return(
+            blanked_content, body_open_index, body_end_index
+        ):
+            continue
+        function_name = each_function_match.group("name")
+        issues.append(
+            f"{function_name}() JSDoc declares @returns {{Promise<object>}} but a "
+            "return branch calls a schema-less agent(), which resolves to a string "
+            "transcript, not an object — widen the return type to "
+            "Promise<object|string> (or attach a schema to that branch) so the "
+            "JSDoc matches the return (Category O6 docstring-vs-implementation "
+            "drift)"
+        )
+        if len(issues) >= MAX_JS_JSDOC_OBJECT_RETURN_ISSUES:
+            return issues[:MAX_JS_JSDOC_OBJECT_RETURN_ISSUES]
+    return issues[:MAX_JS_JSDOC_OBJECT_RETURN_ISSUES]
 
 
 def _is_cli_entry_point(file_path: str) -> bool:

@@ -277,6 +277,42 @@ def _orphaned_import_issues(
     return issues
 
 
+def _fragment_import_issues(
+    content: str,
+    all_referenced_names: set[str],
+    all_flagged_names: set[str],
+) -> list[str]:
+    """Flag imports the edit fragment introduces that the post-edit file never uses.
+
+    An Edit fragment taken from inside a function body does not parse as a
+    module. It carries no module-level import to flag, so the empty list it
+    yields lets the orphaned-import pass still run against the full file.
+    """
+    try:
+        fragment_tree = ast.parse(content)
+    except SyntaxError:
+        return []
+    fragment_lines = content.splitlines()
+    issues: list[str] = []
+    for each_name, each_line_number, each_from_keyword_line in (
+        _module_level_import_bindings(fragment_tree)
+    ):
+        if _import_line_is_noqa_suppressed(
+            fragment_lines, each_line_number, each_from_keyword_line
+        ):
+            continue
+        if each_name in all_referenced_names:
+            continue
+        issues.append(
+            f"Line {each_line_number}: unused module-level import {each_name!r}"
+            f" — {UNUSED_IMPORT_GUIDANCE}"
+        )
+        all_flagged_names.add(each_name)
+        if len(issues) >= MAX_UNUSED_IMPORT_ISSUES:
+            break
+    return issues
+
+
 def check_unused_module_level_imports(
     content: str,
     file_path: str,
@@ -310,10 +346,6 @@ def check_unused_module_level_imports(
         return []
     if is_workflow_registry_file(file_path) or is_migration_file(file_path):
         return []
-    try:
-        fragment_tree = ast.parse(content)
-    except SyntaxError:
-        return []
     reference_source = full_file_content if full_file_content is not None else content
     try:
         reference_tree = ast.parse(reference_source)
@@ -323,26 +355,9 @@ def check_unused_module_level_imports(
         return []
     if _module_body_declares_type_checking_gate(reference_tree):
         return []
-    fragment_lines = content.splitlines()
     referenced_names = _referenced_names_in_tree(reference_tree)
     flagged_names: set[str] = set()
-    issues: list[str] = []
-    for each_name, each_line_number, each_from_keyword_line in (
-        _module_level_import_bindings(fragment_tree)
-    ):
-        if _import_line_is_noqa_suppressed(
-            fragment_lines, each_line_number, each_from_keyword_line
-        ):
-            continue
-        if each_name in referenced_names:
-            continue
-        issues.append(
-            f"Line {each_line_number}: unused module-level import {each_name!r}"
-            f" — {UNUSED_IMPORT_GUIDANCE}"
-        )
-        flagged_names.add(each_name)
-        if len(issues) >= MAX_UNUSED_IMPORT_ISSUES:
-            return issues
+    issues = _fragment_import_issues(content, referenced_names, flagged_names)
     if full_file_content is not None and prior_full_file_content:
         issues.extend(
             _orphaned_import_issues(

@@ -713,3 +713,30 @@ def test_orphan_pass_reports_full_file_line_number() -> None:
         "The orphan finding must carry the import's line number in the post-edit "
         f"file, got: {issues}"
     )
+
+
+def test_should_flag_orphaned_import_when_edit_fragment_is_indented_body_line() -> None:
+    fragment = "    return None\n"
+    prior_full_file = (
+        "from portal.config import portal_timeouts\n"
+        "\n"
+        "def run() -> float:\n"
+        "    return portal_timeouts.delay\n"
+    )
+    post_edit_full_file = (
+        "from portal.config import portal_timeouts\n"
+        "\n"
+        "def run() -> None:\n"
+        "    return None\n"
+    )
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any("portal_timeouts" in each_issue for each_issue in issues), (
+        "An indented body-line Edit fragment that removes an import's last usage "
+        "must still flag the orphaned import; the fragment alone does not parse as "
+        f"a module, yet the orphan pass keys on the full file, got: {issues}"
+    )

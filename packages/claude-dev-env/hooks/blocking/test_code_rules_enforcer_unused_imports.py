@@ -560,3 +560,180 @@ def test_should_not_flag_when_comprehension_variable_matches_import_used_after()
     assert issues == [], (
         f"Comprehension iteration variables must not shadow enclosing scope bindings, got: {issues}"
     )
+
+
+def test_should_flag_import_orphaned_when_edit_removes_last_consumer() -> None:
+    prior_full_file = (
+        "from config import timeouts\n"
+        "\n"
+        "def act() -> None:\n"
+        "    sleep(timeouts.delay)\n"
+    )
+    post_edit_full_file = (
+        "from config import timeouts\n"
+        "\n"
+        "def act() -> None:\n"
+        "    return None\n"
+    )
+    fragment = "def act() -> None:\n    return None\n"
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any("timeouts" in each_issue for each_issue in issues), (
+        "An import the edit orphaned by removing its last consumer must flag, "
+        f"got: {issues}"
+    )
+
+
+def test_should_report_post_edit_line_for_orphaned_import() -> None:
+    prior_full_file = (
+        "import audit_logger\n"
+        "from config import timeouts\n"
+        "\n"
+        "def act() -> None:\n"
+        "    audit_logger.record()\n"
+        "    sleep(timeouts.delay)\n"
+    )
+    post_edit_full_file = (
+        "import audit_logger\n"
+        "from config import timeouts\n"
+        "\n"
+        "def act() -> None:\n"
+        "    audit_logger.record()\n"
+        "    return None\n"
+    )
+    fragment = "    audit_logger.record()\n    return None\n"
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert any("Line 2" in each_issue and "timeouts" in each_issue for each_issue in issues), (
+        "The orphaned import must report its post-edit line number, "
+        f"got: {issues}"
+    )
+
+
+def test_should_not_flag_preexisting_unused_import_on_unrelated_edit() -> None:
+    prior_full_file = (
+        "from config import ALREADY_UNUSED\n"
+        "\n"
+        "def act() -> str:\n"
+        "    return 'x'\n"
+    )
+    post_edit_full_file = (
+        "from config import ALREADY_UNUSED\n"
+        "\n"
+        "def act() -> str:\n"
+        "    return 'y'\n"
+    )
+    fragment = "def act() -> str:\n    return 'y'\n"
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert issues == [], (
+        "A pre-existing unused import (unreferenced before and after) must not "
+        f"flag on an unrelated edit, got: {issues}"
+    )
+
+
+def test_should_not_flag_orphaned_import_without_prior_full_file_content() -> None:
+    post_edit_full_file = (
+        "from config import timeouts\n"
+        "\n"
+        "def act() -> None:\n"
+        "    return None\n"
+    )
+    fragment = "def act() -> None:\n    return None\n"
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+    )
+    assert issues == [], (
+        "Without prior content, an out-of-fragment import must stay unflagged so "
+        f"the fragment-only scan is preserved, got: {issues}"
+    )
+
+
+def test_should_not_flag_orphaned_import_when_prior_content_unparseable() -> None:
+    post_edit_full_file = (
+        "from config import timeouts\n"
+        "\n"
+        "def act() -> None:\n"
+        "    return None\n"
+    )
+    fragment = "def act() -> None:\n    return None\n"
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content="from config import (\n  not python\n",
+    )
+    assert issues == [], (
+        "An unparseable prior file must not raise and must skip the orphan scan, "
+        f"got: {issues}"
+    )
+
+
+def test_should_skip_noqa_marked_orphaned_import() -> None:
+    prior_full_file = (
+        "from config import timeouts  # noqa: F401\n"
+        "\n"
+        "def act() -> None:\n"
+        "    sleep(timeouts.delay)\n"
+    )
+    post_edit_full_file = (
+        "from config import timeouts  # noqa: F401\n"
+        "\n"
+        "def act() -> None:\n"
+        "    return None\n"
+    )
+    fragment = "def act() -> None:\n    return None\n"
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert issues == [], (
+        "A noqa on the orphaned import line must suppress the orphan finding, "
+        f"got: {issues}"
+    )
+
+
+def test_should_skip_orphan_scan_when_post_edit_declares_dunder_all() -> None:
+    prior_full_file = (
+        "from config import timeouts\n"
+        "\n"
+        "__all__ = ['timeouts']\n"
+        "\n"
+        "def act() -> None:\n"
+        "    sleep(timeouts.delay)\n"
+    )
+    post_edit_full_file = (
+        "from config import timeouts\n"
+        "\n"
+        "__all__ = ['timeouts']\n"
+        "\n"
+        "def act() -> None:\n"
+        "    return None\n"
+    )
+    fragment = "def act() -> None:\n    return None\n"
+    issues = check_unused_module_level_imports(
+        fragment,
+        PRODUCTION_FILE_PATH,
+        full_file_content=post_edit_full_file,
+        prior_full_file_content=prior_full_file,
+    )
+    assert issues == [], (
+        "A post-edit file that declares __all__ may re-export the name, so the "
+        f"orphan scan must skip it, got: {issues}"
+    )

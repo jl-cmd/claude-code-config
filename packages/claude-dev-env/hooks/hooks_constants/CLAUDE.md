@@ -11,6 +11,7 @@ Shared constant modules imported by hooks throughout the `hooks/` tree. Each fil
 | `banned_identifiers_constants.py` | The set of banned short identifiers and banned function-name prefixes |
 | `blocking_check_limits.py` | Max issue counts and preview lengths for blocking hooks |
 | `bot_mention_comment_blocker_constants.py` | Patterns for detecting bot @-mentions in PR comments |
+| `cardinal_count_prose_direction_blocker_constants.py` | Target rule basename, cardinal-gate anchor token, directional-phrase patterns, symmetry-marker pattern and window radius, issue budget, and block-message text for the cardinal-count directional-prose blocker |
 | `claude_md_orphan_file_blocker_constants.py` | Table patterns, file extensions, scan budget, and block-message text for the CLAUDE.md orphan-file blocker |
 | `code_rules_enforcer_constants.py` | File-extension sets, test-path patterns, advisory line thresholds, boolean-name prefixes |
 | `env_var_table_code_drift_constants.py` | Table patterns, env-var-name and code-file recognizers, scan budget, and block-message text for the env-var-table code-drift blocker |

@@ -60,6 +60,7 @@ The check modules it calls are the `code_rules_<concern>.py` files below.
 |---|---|---|
 | `block_main_commit.py` | PreToolUse (Bash) | `git commit`/`git push` directly to `main` |
 | `bot_mention_comment_blocker.py` | PreToolUse (Write/Edit) | PR review comments that @-mention a bot |
+| `cardinal_count_prose_direction_blocker.py` | PreToolUse (Write/Edit/MultiEdit) | Directional phrasing in `docstring-prose-matches-implementation.md` that narrows the cardinal-count gate's symmetric any-mismatch condition to one direction (a count "below the family size" or "more members ... than the count names") with no symmetry marker beside it |
 | `claude_md_orphan_file_blocker.py` | PreToolUse (Write/Edit/MultiEdit) | Per-directory `CLAUDE.md` table cells naming a bare filename absent from the directory subtree |
 | `code_verifier_spawn_preflight_gate.py` | PreToolUse (Agent) | Spawning the `code-verifier` subagent when the branch has a merge conflict vs its base or a CODE_RULES violation on a working-tree-added line |
 | `convergence_gate_blocker.py` | PreToolUse (Bash) | Convergence workflow actions on a conflicting PR |

@@ -8,6 +8,7 @@ Shared constant modules imported by hooks throughout the `hooks/` tree. Each fil
 |---|---|
 | `__init__.py` | Package marker (`# pragma: no-tdd-gate`) |
 | `any_type_config.py` | Config for the `Any`-type escape-hatch check |
+| `autoconverge_cap_terminology_constants.py` | Inconsistent cap-terminology patterns, markdown extensions, skill-path marker, and block-message text for the autoconverge cap-terminology blocker |
 | `banned_identifiers_constants.py` | The set of banned short identifiers and banned function-name prefixes |
 | `blocking_check_limits.py` | Max issue counts and preview lengths for blocking hooks |
 | `bot_mention_comment_blocker_constants.py` | Patterns for detecting bot @-mentions in PR comments |

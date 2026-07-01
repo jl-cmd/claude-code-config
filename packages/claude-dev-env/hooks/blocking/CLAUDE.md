@@ -58,6 +58,7 @@ The check modules it calls are the `code_rules_<concern>.py` files below.
 
 | File | Event | What it blocks |
 |---|---|---|
+| `autoconverge_cap_terminology_blocker.py` | PreToolUse (Write/Edit/MultiEdit) | Autoconverge markdown surfaces that name the Copilot review-poll limit inconsistently (`poll cap` or a bare `after the cap`); the canonical term is `configured cap` |
 | `block_main_commit.py` | PreToolUse (Bash) | `git commit`/`git push` directly to `main` |
 | `bot_mention_comment_blocker.py` | PreToolUse (Write/Edit) | PR review comments that @-mention a bot |
 | `claude_md_orphan_file_blocker.py` | PreToolUse (Write/Edit/MultiEdit) | Per-directory `CLAUDE.md` table cells naming a bare filename absent from the directory subtree |

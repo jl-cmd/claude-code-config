@@ -19,6 +19,11 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/pre_tool_use_dispatcher.py",
             "timeout": 60
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/blocking/autoconverge_cap_terminology_blocker.py",
+            "timeout": 10
           }
         ]
       },

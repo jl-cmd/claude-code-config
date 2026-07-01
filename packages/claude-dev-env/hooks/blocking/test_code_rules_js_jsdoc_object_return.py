@@ -58,6 +58,24 @@ def _schemaless_object_return_source() -> str:
     )
 
 
+def _shipped_converge_source() -> str:
+    converge_path = (
+        _HOOK_DIRECTORY.parent.parent
+        / "skills"
+        / "autoconverge"
+        / "workflow"
+        / "converge.mjs"
+    )
+    return converge_path.read_text(encoding="utf-8")
+
+
+def test_shipped_converge_mjs_passes_the_object_return_gate() -> None:
+    issues = check_js_jsdoc_object_return_schemaless_agent(
+        _shipped_converge_source(), _MJS_PATH
+    )
+    assert issues == []
+
+
 def test_flags_object_return_over_schemaless_agent_branch() -> None:
     issues = check_js_jsdoc_object_return_schemaless_agent(
         _schemaless_object_return_source(), _MJS_PATH

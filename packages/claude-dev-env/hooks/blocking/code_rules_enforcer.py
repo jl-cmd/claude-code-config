@@ -425,7 +425,9 @@ def validate_content(
         all_issues.extend(check_hardcoded_user_paths(content, file_path))
         all_issues.extend(check_sys_path_insert_deduplication_guard(content, file_path))
         all_issues.extend(
-            check_unused_module_level_imports(content, file_path, full_file_content)
+            check_unused_module_level_imports(
+                content, file_path, full_file_content, prior_full_file_content
+            )
         )
         all_issues.extend(
             check_dead_dataclass_fields(content, file_path, full_file_content)

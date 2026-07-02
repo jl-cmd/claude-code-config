@@ -125,10 +125,113 @@ def _module_declares_dunder_all(tree: ast.Module) -> bool:
     )
 
 
+def _parse_module_or_none(source: str) -> ast.Module | None:
+    """Return the parsed module, or None when the source is not valid Python."""
+    try:
+        return ast.parse(source)
+    except SyntaxError:
+        return None
+
+
+def _whole_file_import_bindings(
+    tree: ast.Module,
+) -> list[tuple[str, int, int | None]]:
+    """Return every module-level import binding in the tree, skipping ``__future__``."""
+    bindings: list[tuple[str, int, int | None]] = []
+    for each_node in tree.body:
+        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
+            if isinstance(each_node, ast.ImportFrom) and each_node.module == "__future__":
+                continue
+            bindings.extend(_import_alias_pairs(each_node))
+    return bindings
+
+
+def _import_binding_is_noqa_suppressed(
+    alias_line: int,
+    from_keyword_line: int | None,
+    all_source_lines: list[str],
+) -> bool:
+    """Return True when a noqa on the alias line or the from-keyword line suppresses it."""
+    if 1 <= alias_line <= len(all_source_lines):
+        if line_suppresses_unused_import_via_noqa(all_source_lines[alias_line - 1]):
+            return True
+    if from_keyword_line is not None and 1 <= from_keyword_line <= len(all_source_lines):
+        if line_suppresses_unused_import_via_noqa(all_source_lines[from_keyword_line - 1]):
+            return True
+    return False
+
+
+def _orphaned_import_issues(
+    post_edit_tree: ast.Module,
+    post_edit_source: str,
+    prior_full_file_content: str,
+    all_post_referenced_names: set[str],
+    all_flagged_binding_names: set[str],
+    remaining_issue_budget: int,
+) -> list[str]:
+    """Flag whole-file imports the edit orphaned by dropping their last consumer.
+
+    An import present in the post-edit file, unreferenced after the edit yet
+    referenced before it, was left dangling by the edit that removed its last
+    consumer. A pre-existing unused import — unreferenced both before and after —
+    is left alone so an unrelated edit is never blocked on a problem it did not
+    introduce.
+
+    Args:
+        post_edit_tree: The parsed post-edit module.
+        post_edit_source: The post-edit file body, for noqa line lookup.
+        prior_full_file_content: The file body before the edit applied.
+        all_post_referenced_names: Names referenced outside import ranges after the edit.
+        all_flagged_binding_names: Binding names the fragment scan reported,
+            skipped here so no import is flagged twice.
+        remaining_issue_budget: The number of further issues the caller accepts.
+
+    Returns:
+        One issue string per import the edit orphaned, up to the budget.
+    """
+    prior_tree = _parse_module_or_none(prior_full_file_content)
+    if prior_tree is None:
+        return []
+    all_prior_referenced_names = _collect_load_names_outside_import_ranges(
+        prior_tree,
+        _import_statement_line_ranges(prior_tree),
+    )
+    all_post_edit_lines = post_edit_source.splitlines()
+    issues: list[str] = []
+    all_names_flagged_in_this_scan: set[str] = set()
+    for each_name, each_alias_line, each_from_keyword_line in _whole_file_import_bindings(
+        post_edit_tree
+    ):
+        if (
+            each_name in all_flagged_binding_names
+            or each_name in all_names_flagged_in_this_scan
+        ):
+            continue
+        if each_name in all_post_referenced_names:
+            continue
+        if each_name not in all_prior_referenced_names:
+            continue
+        if _import_binding_is_noqa_suppressed(
+            each_alias_line,
+            each_from_keyword_line,
+            all_post_edit_lines,
+        ):
+            continue
+        issues.append(
+            f"Line {each_alias_line}: unused module-level import {each_name!r}"
+            f" — {UNUSED_IMPORT_GUIDANCE}"
+        )
+        all_names_flagged_in_this_scan.add(each_name)
+        if len(issues) >= remaining_issue_budget:
+            break
+    return issues
+
+
 def check_unused_module_level_imports(
     content: str,
     file_path: str,
     full_file_content: str | None = None,
+    prior_full_file_content: str = "",
 ) -> list[str]:
     """Flag module-level imports that are never referenced in the rest of the file.
 
@@ -147,17 +250,20 @@ def check_unused_module_level_imports(
     against ``full_file_content`` (the post-edit file as it will look once the
     Edit applies). This prevents false-positive flags on imports added in the
     same Edit as their consumers.
+
+    When ``prior_full_file_content`` is also provided (the file body before the
+    Edit), a second pass flags any whole-file import the Edit orphaned: an import
+    referenced before the Edit yet unreferenced after it, whose last consumer the
+    Edit removed while leaving the import line itself untouched. A pre-existing
+    unused import — unreferenced both before and after — is left alone so an
+    unrelated Edit is never blocked on a problem it did not introduce.
     """
     if is_migration_file(file_path):
         return []
-    try:
-        fragment_tree = ast.parse(content)
-    except SyntaxError:
-        return []
+    fragment_tree = _parse_module_or_none(content)
     reference_source = full_file_content if full_file_content is not None else content
-    try:
-        reference_tree = ast.parse(reference_source)
-    except SyntaxError:
+    reference_tree = _parse_module_or_none(reference_source)
+    if reference_tree is None:
         return []
     if _module_declares_dunder_all(reference_tree):
         return []
@@ -167,31 +273,38 @@ def check_unused_module_level_imports(
         reference_tree,
         reference_import_ranges,
     )
-    import_bindings: list[tuple[str, int, int | None]] = []
-    for each_node in fragment_tree.body:
-        if isinstance(each_node, (ast.Import, ast.ImportFrom)):
-            if isinstance(each_node, ast.ImportFrom) and each_node.module == "__future__":
-                continue
-            for each_binding in _import_alias_pairs(each_node):
-                import_bindings.append(each_binding)
     issues: list[str] = []
-    for each_name, each_line_number, each_from_keyword_line in import_bindings:
-        if 1 <= each_line_number <= len(fragment_lines):
-            if line_suppresses_unused_import_via_noqa(fragment_lines[each_line_number - 1]):
-                continue
-        if each_from_keyword_line is not None and 1 <= each_from_keyword_line <= len(
-            fragment_lines
+    flagged_binding_names: set[str] = set()
+    fragment_bindings = (
+        _whole_file_import_bindings(fragment_tree) if fragment_tree is not None else []
+    )
+    for each_name, each_line_number, each_from_keyword_line in fragment_bindings:
+        if _import_binding_is_noqa_suppressed(
+            each_line_number,
+            each_from_keyword_line,
+            fragment_lines,
         ):
-            if line_suppresses_unused_import_via_noqa(
-                fragment_lines[each_from_keyword_line - 1]
-            ):
-                continue
+            continue
         if each_name in referenced_names:
             continue
         issues.append(
             f"Line {each_line_number}: unused module-level import {each_name!r}"
             f" — {UNUSED_IMPORT_GUIDANCE}"
         )
+        flagged_binding_names.add(each_name)
         if len(issues) >= MAX_UNUSED_IMPORT_ISSUES:
             break
+    if full_file_content is not None and prior_full_file_content:
+        remaining_issue_budget = MAX_UNUSED_IMPORT_ISSUES - len(issues)
+        if remaining_issue_budget > 0:
+            issues.extend(
+                _orphaned_import_issues(
+                    reference_tree,
+                    full_file_content,
+                    prior_full_file_content,
+                    referenced_names,
+                    flagged_binding_names,
+                    remaining_issue_budget,
+                )
+            )
     return issues

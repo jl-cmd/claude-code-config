@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.83.0](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.82.0...claude-dev-env-v1.83.0) (2026-07-02)
+
+
+### Features
+
+* **autoconverge:** gate reviewer spawns on shared availability check ([4e43eeb](https://github.com/jl-cmd/claude-code-config/commit/4e43eeb587b5aa1d63553d865f7575103ad1cf09))
+* **autoconverge:** gate reviewer spawns on shared availability check ([e632832](https://github.com/jl-cmd/claude-code-config/commit/e632832a5a6878d07c020768f8c4428f3114aecb))
+
+
+### Bug Fixes
+
+* address Copilot review findings ([fcf07f4](https://github.com/jl-cmd/claude-code-config/commit/fcf07f439190fef1c265897969504e83dec357d2))
+* apply code-review findings ([7f9cd95](https://github.com/jl-cmd/claude-code-config/commit/7f9cd959fa3130e93f30167e082c135e4fbbe99d))
+
 ## [1.82.0](https://github.com/jl-cmd/claude-code-config/compare/claude-dev-env-v1.81.0...claude-dev-env-v1.82.0) (2026-07-02)
 
 

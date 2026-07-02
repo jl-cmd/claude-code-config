@@ -1,4 +1,4 @@
-"""Imports-at-top, import-block-sorted, logging f-string, win32gui None, E2E spec naming, JS resume-task enumeration coverage, JS returns-object schema-less branch, file-length advisory, and library-print checks."""
+"""Imports-at-top, import-block-sorted, logging f-string, win32gui None, E2E spec naming, JS resume-task enumeration coverage, JS returns-object schema-less branch, JS bare-flag return-directive, line-count advisory, and library-print checks."""
 
 import ast
 import json
@@ -33,6 +33,7 @@ from hooks_constants.blocking_check_limits import (  # noqa: E402
     IMPORT_BLOCK_SORT_RULE_CODE,
     MAX_E2E_TEST_NAMING_ISSUES,
     MAX_IMPORT_BLOCK_SORT_ISSUES,
+    MAX_JS_BARE_FLAG_RETURN_DIRECTIVE_ISSUES,
     MAX_JS_RESUME_TASK_ENUMERATION_ISSUES,
     MAX_JS_RETURNS_OBJECT_SCHEMALESS_ISSUES,
     MAX_LOGGING_FSTRING_ISSUES,
@@ -53,6 +54,8 @@ from hooks_constants.code_rules_enforcer_constants import (  # noqa: E402
     ALL_JAVASCRIPT_REGEX_PRECEDING_KEYWORDS,
     ALL_JAVASCRIPT_STRING_DELIMITERS,
     ALL_PYTHON_EXTENSIONS,
+    BARE_FLAG_CONTRACT_PATTERN,
+    BARE_FLAG_RETURN_DIRECTIVE_PATTERN,
     ENUMERATION_LEADING_CONJUNCTION_PATTERN,
     ENUMERATION_LIST_ITEM_SEPARATOR_PATTERN,
     ENUMERATION_TASK_ITEM_PATTERN,
@@ -1052,6 +1055,64 @@ def check_js_returns_object_schemaless_branch(content: str, file_path: str) -> l
         if len(issues) >= MAX_JS_RETURNS_OBJECT_SCHEMALESS_ISSUES:
             break
     return issues[:MAX_JS_RETURNS_OBJECT_SCHEMALESS_ISSUES]
+
+
+def check_js_bare_flag_return_directive(content: str, file_path: str) -> list[str]:
+    """Flag a prose directive that returns a bare status flag a converge workflow rules out.
+
+    Picture the converge workflow preamble. It states the whole contract: the
+    Copilot gate time-out value must be the full down result
+    ``{sha, clean:false, down:true, findings:[]}``, and it adds "never a bare
+    down flag". A later poll step then tells the agent to "return down: true"
+    once the attempt budget runs out. That parenthetical repeats the bare flag
+    the preamble rules out. A StructuredOutput run whose schema needs every
+    field would reject a lone ``{down:true}``, so the shorthand drifts from the
+    contract stated earlier in the same file.
+
+    The sweep reads every flag name any preamble in the file rules out ("never
+    a bare <name> flag") and reports every ``return <name>: true`` or
+    ``return <name>: false`` directive anywhere in the file that repeats one of
+    them, with no proximity or ordering check between the two.
+    ``return <word>: <bool>`` never forms valid JavaScript, so a match always
+    marks agent-prompt prose rather than control flow. A full
+    ``return {sha:..., down:true, ...}`` object literal
+    stays untouched, and so does a source that states no such contract. This
+    belongs to the JS/.mjs slice of Category O6 docstring-prose-versus-body
+    drift, which the Python enforcer's syntax-tree checks never reach.
+
+    Args:
+        content: The source text to inspect.
+        file_path: The path the source will be written to, used for exemptions.
+
+    Returns:
+        One issue per bare-flag return directive that repeats a status flag the
+        preamble rules out, capped at the module limit.
+    """
+    if is_test_file(file_path) or is_hook_infrastructure(file_path):
+        return []
+    if get_file_extension(file_path) not in ALL_JAVASCRIPT_EXTENSIONS:
+        return []
+    forbidden_flags = {
+        each_contract.group("flag").casefold()
+        for each_contract in BARE_FLAG_CONTRACT_PATTERN.finditer(content)
+    }
+    if not forbidden_flags:
+        return []
+    issues: list[str] = []
+    for each_directive in BARE_FLAG_RETURN_DIRECTIVE_PATTERN.finditer(content):
+        forbidden_flag = each_directive.group("flag")
+        if forbidden_flag.casefold() not in forbidden_flags:
+            continue
+        offending_line = content.count("\n", 0, each_directive.start()) + 1
+        issues.append(
+            f"Line {offending_line}: 'return {forbidden_flag}: ...' repeats a bare "
+            f"{forbidden_flag} status the same converge workflow forbids "
+            f"('never a bare {forbidden_flag} flag'); return the whole result object "
+            "with every StructuredOutput field set (Category O6 docstring drift)"
+        )
+        if len(issues) >= MAX_JS_BARE_FLAG_RETURN_DIRECTIVE_ISSUES:
+            break
+    return issues[:MAX_JS_BARE_FLAG_RETURN_DIRECTIVE_ISSUES]
 
 
 def _is_cli_entry_point(file_path: str) -> bool:
